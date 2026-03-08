@@ -544,6 +544,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
 function detectSplitMonth(
   header: SettlementHeader,
   summary: SettlementSummary,
+  allLines: SettlementLine[],
   gstDivisor: number,
   auSalesGstBaseTotal: number,
   intlSalesExcludedFromGstBase: number,
