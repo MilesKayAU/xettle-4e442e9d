@@ -1,0 +1,303 @@
+/**
+ * Settlement Engine — Shared types and helpers for all marketplace settlements.
+ * 
+ * Flow: Marketplace File → Marketplace Parser → StandardSettlement → Engine → Xero
+ * 
+ * Every marketplace parser converts its native format into a StandardSettlement.
+ * The engine handles saving to the database and syncing to Xero.
+ */
+
+import { supabase } from '@/integrations/supabase/client';
+
+// ─── Standard Settlement Type ────────────────────────────────────────────────
+
+export interface StandardSettlement {
+  marketplace: string;       // 'amazon_au' | 'bunnings' | 'catch' | 'mydeal' | 'kogan'
+  settlement_id: string;     // Unique ID from the marketplace
+  period_start: string;      // YYYY-MM-DD
+  period_end: string;        // YYYY-MM-DD
+  sales_ex_gst: number;      // Gross sales excluding GST (positive)
+  gst_on_sales: number;      // GST collected on sales (positive)
+  fees_ex_gst: number;       // Marketplace fees excluding GST (negative)
+  gst_on_fees: number;       // GST on fees (positive absolute value)
+  net_payout: number;        // Amount deposited to bank
+  source: 'manual' | 'api';  // How this settlement was ingested
+  reconciles: boolean;       // Whether calculated total ≈ net_payout
+  // Optional marketplace-specific metadata
+  metadata?: Record<string, any>;
+}
+
+// ─── Marketplace Contact Names (for Xero invoices) ──────────────────────────
+
+export const MARKETPLACE_CONTACTS: Record<string, string> = {
+  amazon_au: 'Amazon.com.au',
+  bunnings: 'Bunnings Marketplace',
+  catch: 'Catch Marketplace',
+  mydeal: 'MyDeal Marketplace',
+  kogan: 'Kogan Marketplace',
+  woolworths: 'Woolworths Marketplace',
+};
+
+export const MARKETPLACE_LABELS: Record<string, string> = {
+  amazon_au: 'Amazon AU',
+  bunnings: 'Bunnings',
+  catch: 'Catch',
+  mydeal: 'MyDeal',
+  kogan: 'Kogan',
+  woolworths: 'Woolworths',
+};
+
+// ─── Xero Invoice Line Builder ──────────────────────────────────────────────
+
+export interface XeroLineItem {
+  Description: string;
+  AccountCode: string;
+  TaxType: string;
+  UnitAmount: number;
+  Quantity: number;
+}
+
+/**
+ * Build standard 2-line Xero invoice from a StandardSettlement.
+ * Line 1: Marketplace Sales (Account 200, GST on Income)
+ * Line 2: Marketplace Fees (Account 407, GST on Expenses)
+ * 
+ * For Amazon, the AccountingDashboard builds its own multi-line invoices
+ * due to the complexity of FBA fees, storage, refunds, etc.
+ */
+export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLineItem[] {
+  return [
+    {
+      Description: 'Marketplace Sales',
+      AccountCode: '200',
+      TaxType: 'OUTPUT',
+      UnitAmount: Math.round(settlement.sales_ex_gst * 100) / 100,
+      Quantity: 1,
+    },
+    {
+      Description: 'Marketplace Commission',
+      AccountCode: '407',
+      TaxType: 'INPUT',
+      UnitAmount: Math.round(settlement.fees_ex_gst * 100) / 100,
+      Quantity: 1,
+    },
+  ];
+}
+
+/**
+ * Build Xero invoice reference string
+ */
+export function buildInvoiceReference(settlement: StandardSettlement): string {
+  const label = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
+  const periodLabel = `${formatSettlementDate(settlement.period_start)} – ${formatSettlementDate(settlement.period_end)}`;
+  return `${label} Settlement ${periodLabel} (${settlement.settlement_id})`;
+}
+
+// ─── Save to Database ───────────────────────────────────────────────────────
+
+export interface SaveResult {
+  success: boolean;
+  error?: string;
+  duplicate?: boolean;
+}
+
+/**
+ * Save a StandardSettlement to the settlements table.
+ * Checks for duplicates first.
+ */
+export async function saveSettlement(settlement: StandardSettlement): Promise<SaveResult> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    // Check for duplicate
+    const { data: existing } = await supabase
+      .from('settlements')
+      .select('id')
+      .eq('settlement_id', settlement.settlement_id)
+      .eq('user_id', user.id)
+      .eq('marketplace', settlement.marketplace)
+      .maybeSingle();
+
+    if (existing) {
+      return { success: false, error: 'This settlement has already been saved.', duplicate: true };
+    }
+
+    const { error } = await supabase.from('settlements').insert({
+      user_id: user.id,
+      settlement_id: settlement.settlement_id,
+      marketplace: settlement.marketplace,
+      period_start: settlement.period_start,
+      period_end: settlement.period_end,
+      sales_principal: settlement.sales_ex_gst,
+      seller_fees: settlement.fees_ex_gst,
+      gst_on_income: settlement.gst_on_sales,
+      gst_on_expenses: settlement.gst_on_fees,
+      bank_deposit: settlement.net_payout,
+      source: settlement.source,
+      status: 'saved',
+      reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
+    } as any);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
+  }
+}
+
+// ─── Sync to Xero ───────────────────────────────────────────────────────────
+
+export interface SyncResult {
+  success: boolean;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  error?: string;
+}
+
+/**
+ * Push a settlement to Xero as an invoice using the sync-settlement-to-xero edge function.
+ * For simple marketplaces (Bunnings, Catch, etc.) uses the 2-line invoice model.
+ * Amazon uses its own multi-line logic in AccountingDashboard.
+ */
+export async function syncSettlementToXero(
+  settlementId: string,
+  marketplace: string,
+  options?: {
+    lineItems?: XeroLineItem[];
+    reference?: string;
+    contactName?: string;
+  }
+): Promise<SyncResult> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    // Get settlement from DB
+    const { data: settlement, error: fetchErr } = await supabase
+      .from('settlements')
+      .select('*')
+      .eq('settlement_id', settlementId)
+      .eq('user_id', user.id)
+      .eq('marketplace', marketplace)
+      .single();
+
+    if (fetchErr || !settlement) return { success: false, error: 'Settlement not found' };
+
+    const s = settlement as any;
+    const contactName = options?.contactName || MARKETPLACE_CONTACTS[marketplace] || `${marketplace} Marketplace`;
+    
+    // Build reference
+    const periodLabel = `${formatSettlementDate(s.period_start)} – ${formatSettlementDate(s.period_end)}`;
+    const label = MARKETPLACE_LABELS[marketplace] || marketplace;
+    const reference = options?.reference || `${label} Settlement ${periodLabel} (${s.settlement_id})`;
+
+    // Build line items (use provided or default 2-line)
+    const lineItems = options?.lineItems || [
+      {
+        Description: 'Marketplace Sales',
+        AccountCode: '200',
+        TaxType: 'OUTPUT',
+        UnitAmount: Math.round(s.sales_principal * 100) / 100,
+        Quantity: 1,
+      },
+      {
+        Description: 'Marketplace Commission',
+        AccountCode: '407',
+        TaxType: 'INPUT',
+        UnitAmount: Math.round(s.seller_fees * 100) / 100,
+        Quantity: 1,
+      },
+    ];
+
+    const { data: result, error: fnErr } = await supabase.functions.invoke('sync-settlement-to-xero', {
+      body: {
+        userId: user.id,
+        action: 'create',
+        reference,
+        date: s.period_end,
+        dueDate: s.period_end,
+        lineItems,
+        contactName,
+      },
+    });
+
+    if (fnErr) return { success: false, error: fnErr.message };
+    if (!result?.success) return { success: false, error: result?.error || 'Xero push failed' };
+
+    // Update settlement status
+    await supabase
+      .from('settlements')
+      .update({
+        status: 'synced',
+        xero_journal_id: result.invoiceId,
+      } as any)
+      .eq('settlement_id', settlementId)
+      .eq('user_id', user.id);
+
+    return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
+  }
+}
+
+// ─── Rollback (Void) Xero Invoice ───────────────────────────────────────────
+
+export interface RollbackResult {
+  success: boolean;
+  error?: string;
+}
+
+export async function rollbackSettlementFromXero(
+  settlementId: string,
+  marketplace: string,
+  invoiceIds: string[],
+  rollbackScope: 'all' | 'journal_1' | 'journal_2' = 'all'
+): Promise<RollbackResult> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    const { data: result, error: fnErr } = await supabase.functions.invoke('sync-settlement-to-xero', {
+      body: {
+        userId: user.id,
+        action: 'rollback',
+        invoiceIds,
+        settlementId,
+        rollbackScope,
+      },
+    });
+
+    if (fnErr) return { success: false, error: fnErr.message };
+    if (!result?.success) return { success: false, error: result?.error || 'Rollback failed' };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
+  }
+}
+
+// ─── Delete Settlement ──────────────────────────────────────────────────────
+
+export async function deleteSettlement(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('settlements').delete().eq('id', id);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+export function formatSettlementDate(d: string): string {
+  if (!d) return '—';
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+export function formatAUD(amount: number): string {
+  const abs = Math.abs(amount);
+  const formatted = abs.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return amount < 0 ? `-$${formatted}` : `$${formatted}`;
+}
