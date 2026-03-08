@@ -1935,6 +1935,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [rollbackConfirm, setRollbackConfirm] = useState<{ settlement: SettlementRecord; scope: 'all' | 'journal_1' | 'journal_2' } | null>(null);
+  const [markingSynced, setMarkingSynced] = useState(false);
 
   const handleRollback = async (settlement: SettlementRecord, scope: 'all' | 'journal_1' | 'journal_2' = 'all') => {
     let journalIds: string[] = [];
