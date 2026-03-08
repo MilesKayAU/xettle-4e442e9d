@@ -37,7 +37,7 @@ const features = [
   {
     icon: Store,
     title: 'Multi-Marketplace',
-    description: 'Amazon and Bunnings supported today. Catch, MyDeal, Kogan and more coming soon — all with the same simple workflow.',
+    description: 'Amazon and Bunnings supported today. Kogan, MyDeal, Woolworths, Big W and more coming soon.',
     free: true,
   },
 ];
@@ -45,9 +45,10 @@ const features = [
 const marketplaces = [
   { name: 'Amazon', status: 'live' },
   { name: 'Bunnings', status: 'live' },
-  { name: 'Catch', status: 'soon' },
-  { name: 'MyDeal', status: 'soon' },
   { name: 'Kogan', status: 'soon' },
+  { name: 'MyDeal', status: 'soon' },
+  { name: 'Woolworths', status: 'soon' },
+  { name: 'Big W', status: 'soon' },
 ];
 
 const trustSignals = [
