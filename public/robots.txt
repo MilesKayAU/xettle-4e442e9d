@@ -1,21 +1,6 @@
 User-agent: *
 Allow: /
-
-Sitemap: https://sellerbooks.app/sitemap.xml
-
-# Block access to admin areas
-User-agent: *
 Disallow: /admin
+Disallow: /dashboard
 
-# Allow specific search engines
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
+Sitemap: https://xettle.app/sitemap.xml
