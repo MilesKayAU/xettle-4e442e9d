@@ -3716,7 +3716,7 @@ const REQUIRED_XERO_ACCOUNTS = Object.entries(DEFAULT_ACCOUNT_CODES).map(([, val
 
 // ─── Settings Screen ────────────────────────────────────────────────
 
-function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: number) => void }) {
+function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRateChanged?: (rate: number) => void; onSyncCutoffChanged?: (date: string) => void }) {
   const [accountCodes, setAccountCodes] = useState<Record<string, string>>(() => {
     const codes: Record<string, string> = {};
     Object.entries(DEFAULT_ACCOUNT_CODES).forEach(([key, val]) => {
@@ -3725,6 +3725,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
     return codes;
   });
   const [gstRate, setGstRate] = useState('10');
+  const [syncCutoffDate, setSyncCutoffDate] = useState<Date | undefined>(undefined);
   
   const [savingSettings, setSavingSettings] = useState(false);
   const [checking, setChecking] = useState(false);
