@@ -48,7 +48,9 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deletingBulk, setDeletingBulk] = useState(false);
   const [marking, setMarking] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const loadApiSettlements = useCallback(async () => {
     setLoading(true);
