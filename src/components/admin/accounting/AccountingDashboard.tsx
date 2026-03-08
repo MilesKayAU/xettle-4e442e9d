@@ -1570,6 +1570,7 @@ function BulkUploadProcessor({
       case 'unmapped_warning': return <AlertTriangle className="h-4 w-4 text-amber-500" />;
       case 'recon_failed': return <XCircle className="h-4 w-4 text-destructive" />;
       case 'duplicate': return <span className="h-4 w-4 flex items-center justify-center text-muted-foreground text-sm">↩</span>;
+      case 'batch_duplicate': return <span className="h-4 w-4 flex items-center justify-center text-muted-foreground text-sm">↩</span>;
       case 'error': case 'save_error': return <XCircle className="h-4 w-4 text-destructive" />;
       case 'processing': return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
       default: return <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30" />;
@@ -1582,7 +1583,8 @@ function BulkUploadProcessor({
       case 'saved': return <span className="text-green-700 font-medium">Saved ✓</span>;
       case 'unmapped_warning': return <span className="text-amber-600 font-medium">Parsed with warnings</span>;
       case 'recon_failed': return <span className="text-destructive font-semibold">RECONCILIATION FAILED</span>;
-      case 'duplicate': return <span className="text-muted-foreground">Already processed — skipped</span>;
+      case 'duplicate': return <span className="text-muted-foreground">Already saved — skipped</span>;
+      case 'batch_duplicate': return <span className="text-muted-foreground">Duplicate file in batch — skipped</span>;
       case 'error': case 'save_error': return <span className="text-destructive">Error: {r.message}</span>;
       case 'processing': return <span className="text-primary">Processing...</span>;
       default: return <span className="text-muted-foreground">Pending</span>;
