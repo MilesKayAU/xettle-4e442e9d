@@ -3123,22 +3123,74 @@ function SettlementReview({
   );
 }
 
-// ─── Xero Account Setup Wizard ──────────────────────────────────────
+// ─── Account Code Defaults & Descriptions ───────────────────────────
 
-const REQUIRED_XERO_ACCOUNTS = [
-  { code: '200', name: 'Amazon Sales AU', type: 'Revenue', taxType: 'OUTPUT', note: 'Usually exists (Link My Books)' },
-  { code: '205', name: 'Amazon Refunds AU', type: 'Revenue', taxType: 'OUTPUT', note: 'Usually exists (Link My Books)' },
-  { code: '271', name: 'Amazon FBA Inventory Reimbursement AU', type: 'Other Income', taxType: 'OUTPUT', note: 'Preferred for reimbursements' },
-  { code: '407', name: 'Amazon Seller Fees', type: 'Expense', taxType: 'INPUT', note: 'Usually exists (Link My Books)' },
-  { code: '408', name: 'Amazon FBA Fees', type: 'Expense', taxType: 'INPUT', note: 'Usually exists (Link My Books)' },
-  { code: '409', name: 'Amazon Storage Fees', type: 'Expense', taxType: 'INPUT', note: 'Usually exists (Link My Books)' },
-  { code: '612', name: 'Amazon Split Month Rollovers', type: 'Current Asset', taxType: 'BASEXCLUDED', note: 'Usually exists (Link My Books)' },
-  { code: '824', name: 'Amazon Sales Tax AU', type: 'Revenue', taxType: 'BASEXCLUDED', note: 'Tax pass-through (nets to zero)' },
-];
+const DEFAULT_ACCOUNT_CODES: Record<string, { code: string; name: string; type: string; taxType: string; description: string }> = {
+  'Sales': { code: '200', name: 'Amazon Sales AU', type: 'Revenue', taxType: 'OUTPUT', description: 'Revenue, GST on Income' },
+  'Refunds': { code: '205', name: 'Amazon Refunds AU', type: 'Revenue', taxType: 'OUTPUT', description: 'Revenue, GST on Income' },
+  'Reimbursements': { code: '271', name: 'Amazon FBA Inventory Reimbursement AU', type: 'Other Income', taxType: 'OUTPUT', description: 'Other Income, GST on Income' },
+  'Seller Fees': { code: '407', name: 'Amazon Seller Fees AU', type: 'Expense', taxType: 'INPUT', description: 'Expense, GST on Expenses' },
+  'FBA Fees': { code: '408', name: 'Amazon FBA Fees AU', type: 'Expense', taxType: 'INPUT', description: 'Expense, GST on Expenses' },
+  'Storage Fees': { code: '409', name: 'Amazon Storage Fees AU', type: 'Expense', taxType: 'INPUT', description: 'Expense, GST on Expenses' },
+  'Tax Collected by Amazon': { code: '824', name: 'Amazon Sales Tax AU', type: 'Current Liability', taxType: 'BASEXCLUDED', description: 'Current Liability, BAS Excluded' },
+  'Split Month Rollover': { code: '612', name: 'Amazon Split Month Rollovers', type: 'Current Asset', taxType: 'BASEXCLUDED', description: 'Current Asset, BAS Excluded' },
+};
 
-function XeroAccountSetupWizard({ onAccountsVerified }: { onAccountsVerified: (codes: Record<string, string>) => void }) {
+const REQUIRED_XERO_ACCOUNTS = Object.entries(DEFAULT_ACCOUNT_CODES).map(([, val]) => ({
+  code: val.code,
+  name: val.name,
+  type: val.type,
+  taxType: val.taxType,
+}));
+
+// ─── Settings Screen ────────────────────────────────────────────────
+
+function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: number) => void }) {
+  const [accountCodes, setAccountCodes] = useState<Record<string, string>>(() => {
+    const codes: Record<string, string> = {};
+    Object.entries(DEFAULT_ACCOUNT_CODES).forEach(([key, val]) => {
+      codes[key] = val.code;
+    });
+    return codes;
+  });
+  const [gstRate, setGstRate] = useState('10');
+  const [savingSettings, setSavingSettings] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [results, setResults] = useState<Array<{ code: string; name: string; found: boolean; xeroName?: string }> | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [checkResults, setCheckResults] = useState<Array<{ code: string; name: string; found: boolean; xeroName?: string }> | null>(null);
+
+  // Load saved settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const { data } = await supabase
+          .from('app_settings')
+          .select('key, value')
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+
+        if (data) {
+          for (const row of data) {
+            if (row.key === 'accounting_xero_account_codes' && row.value) {
+              try { setAccountCodes(JSON.parse(row.value)); } catch {}
+            }
+            if (row.key === 'accounting_gst_rate' && row.value) {
+              setGstRate(row.value);
+            }
+          }
+        }
+      } catch {}
+    };
+    loadSettings();
+  }, []);
+
+  const handleResetDefaults = () => {
+    const codes: Record<string, string> = {};
+    Object.entries(DEFAULT_ACCOUNT_CODES).forEach(([key, val]) => {
+      codes[key] = val.code;
+    });
+    setAccountCodes(codes);
+    toast.success('Account codes reset to defaults');
+  };
 
   const handleCheckAccounts = async () => {
     setChecking(true);
@@ -3146,7 +3198,6 @@ function XeroAccountSetupWizard({ onAccountsVerified }: { onAccountsVerified: (c
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Call Xero to get chart of accounts
       const { data, error } = await supabase.functions.invoke('xero-auth', {
         body: { action: 'get_accounts', userId: user.id }
       });
@@ -3156,136 +3207,81 @@ function XeroAccountSetupWizard({ onAccountsVerified }: { onAccountsVerified: (c
       const xeroAccounts: Array<{ Code: string; Name: string; Status: string }> = data?.accounts || [];
       const activeAccounts = xeroAccounts.filter(a => a.Status === 'ACTIVE');
 
-      const checkResults = REQUIRED_XERO_ACCOUNTS.map(req => {
-        const match = activeAccounts.find(a => a.Code === req.code);
+      // Check each configured account code against Xero
+      const results = Object.entries(DEFAULT_ACCOUNT_CODES).map(([category, defaults]) => {
+        const codeToCheck = accountCodes[category] || defaults.code;
+        const match = activeAccounts.find(a => a.Code === codeToCheck);
         return {
-          code: req.code,
-          name: req.name,
+          code: codeToCheck,
+          name: defaults.name,
           found: !!match,
           xeroName: match?.Name,
         };
       });
 
-      setResults(checkResults);
+      setCheckResults(results);
 
-      // Auto-populate account codes from verified accounts
-      const allFound = checkResults.every(r => r.found);
+      const allFound = results.every(r => r.found);
       if (allFound) {
-        const codes: Record<string, string> = {};
-        Object.entries(XERO_ACCOUNT_MAP).forEach(([category, defaults]) => {
-          codes[category] = defaults.code;
-        });
-        onAccountsVerified(codes);
-        toast.success('All required Xero accounts verified!');
+        toast.success('All account codes verified in Xero ✓');
       } else {
-        const missing = checkResults.filter(r => !r.found);
-        toast.warning(`${missing.length} account(s) missing in Xero. Create them manually, then re-check.`);
+        const missing = results.filter(r => !r.found);
+        toast.warning(`${missing.length} account(s) not found in Xero`);
       }
     } catch (err: any) {
-      console.error('Account check error:', err);
       toast.error(`Failed to check accounts: ${err.message}`);
     } finally {
       setChecking(false);
     }
   };
 
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Globe className="h-4 w-4" />
-          Xero Account Setup
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Verify that all required chart-of-accounts codes exist in your Xero organisation. Missing accounts must be created in Xero before pushing settlements.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Button onClick={handleCheckAccounts} disabled={checking} variant="outline" size="sm" className="gap-2">
-          {checking ? (
-            <><Loader2 className="h-3 w-3 animate-spin" /> Checking Xero...</>
-          ) : (
-            <><CheckCircle2 className="h-3 w-3" /> Verify Accounts in Xero</>
-          )}
-        </Button>
+  const handleCreateMissingAccounts = async () => {
+    if (!checkResults) return;
+    const missing = checkResults.filter(r => !r.found);
+    if (missing.length === 0) {
+      toast.info('No missing accounts to create');
+      return;
+    }
 
-        {results && (
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="text-left px-3 py-1.5 font-medium">Code</th>
-                  <th className="text-left px-3 py-1.5 font-medium">Required Name</th>
-                  <th className="text-left px-3 py-1.5 font-medium">Xero Name</th>
-                  <th className="text-center px-3 py-1.5 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map(r => (
-                  <tr key={r.code} className="border-t">
-                    <td className="px-3 py-1.5 font-mono font-semibold">{r.code}</td>
-                    <td className="px-3 py-1.5">{r.name}</td>
-                    <td className="px-3 py-1.5 text-muted-foreground">{r.xeroName || '—'}</td>
-                    <td className="px-3 py-1.5 text-center">
-                      {r.found ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-red-500 inline" />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {results.some(r => !r.found) && (
-              <div className="px-3 py-2 bg-amber-50 border-t text-xs text-amber-800 flex items-start gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                <span>Create the missing accounts in Xero (type and tax code shown in the required accounts list), then click "Verify" again.</span>
-              </div>
-            )}
-            {results.every(r => r.found) && (
-              <div className="px-3 py-2 bg-green-50 border-t text-xs text-green-800 flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
-                <span>All accounts verified. Account codes have been auto-populated in the mapping below.</span>
-              </div>
-            )}
-          </div>
-        )}
+    setCreating(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
-        {!results && (
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p className="font-medium">Required accounts (AU):</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-              {REQUIRED_XERO_ACCOUNTS.map(a => (
-                <div key={a.code} className="flex items-center gap-2">
-                  <span className="font-mono font-semibold w-8">{a.code}</span>
-                  <span className="truncate">{a.name}</span>
-                  <span className="text-[10px] text-muted-foreground/60 ml-auto hidden sm:inline">{a.type}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+      // Build the accounts to create from DEFAULT_ACCOUNT_CODES matching the missing codes
+      const accountsToCreate = missing.map(m => {
+        const entry = Object.values(DEFAULT_ACCOUNT_CODES).find(d => d.code === m.code);
+        return {
+          Code: m.code,
+          Name: entry?.name || m.name,
+          Type: entry?.type || 'Expense',
+          TaxType: entry?.taxType || 'NONE',
+        };
+      });
 
-// ─── Settings Screen (Fix 7) ────────────────────────────────────────
+      const { data, error } = await supabase.functions.invoke('xero-auth', {
+        body: { action: 'create_accounts', userId: user.id, accounts: accountsToCreate }
+      });
 
-function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: number) => void }) {
-  const [accountCodes, setAccountCodes] = useState(() => {
-    const codes: Record<string, string> = {};
-    Object.entries(XERO_ACCOUNT_MAP).forEach(([key, val]) => {
-      codes[key] = val.code;
-    });
-    return codes;
-  });
-  const [gstRate, setGstRate] = useState('10');
-  const [savingSettings, setSavingSettings] = useState(false);
+      if (error) throw error;
 
-  const handleAccountsVerified = (codes: Record<string, string>) => {
-    setAccountCodes(codes);
+      const results = data?.results || [];
+      const succeeded = results.filter((r: any) => r.success);
+      const failed = results.filter((r: any) => !r.success);
+
+      if (failed.length > 0) {
+        toast.warning(`Created ${succeeded.length} account(s), ${failed.length} failed. Check Xero for details.`);
+      } else {
+        toast.success(`Created ${succeeded.length} account(s) in Xero ✓`);
+      }
+
+      // Re-check after creating
+      await handleCheckAccounts();
+    } catch (err: any) {
+      toast.error(`Failed to create accounts: ${err.message}`);
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleSaveSettings = async () => {
@@ -3326,57 +3322,122 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
     }
   };
 
-  // Load saved settings on mount
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const { data } = await supabase
-          .from('app_settings')
-          .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
-
-        if (data) {
-          for (const row of data) {
-            if (row.key === 'accounting_xero_account_codes' && row.value) {
-              try { setAccountCodes(JSON.parse(row.value)); } catch {}
-            }
-            if (row.key === 'accounting_gst_rate' && row.value) {
-              setGstRate(row.value);
-            }
-          }
-        }
-      } catch {}
-    };
-    loadSettings();
-  }, []);
-
   return (
     <div className="space-y-4">
-      {/* Xero Account Setup Wizard — sits ABOVE manual mapping */}
-      <XeroAccountSetupWizard onAccountsVerified={handleAccountsVerified} />
+      {/* ★ Prominent Banner */}
+      <Card className="border-2 border-primary/30 bg-primary/5">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+            <div className="space-y-2 flex-1">
+              <p className="text-sm font-medium">
+                These account codes must exist in your Xero chart of accounts before pushing settlements.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCheckAccounts}
+                  disabled={checking}
+                  className="gap-1.5"
+                >
+                  {checking ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking...</>
+                  ) : (
+                    <><CheckCircle2 className="h-3.5 w-3.5" /> Check My Xero Accounts</>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleCreateMissingAccounts}
+                  disabled={creating || !checkResults || checkResults.every(r => r.found)}
+                  className="gap-1.5"
+                >
+                  {creating ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating...</>
+                  ) : (
+                    <><ArrowRight className="h-3.5 w-3.5" /> Create Missing Accounts</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Account Code Mapping — manual override */}
+      {/* Verification Results */}
+      {checkResults && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-hidden rounded-lg">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left px-4 py-2 font-medium">Code</th>
+                    <th className="text-left px-4 py-2 font-medium">Expected Name</th>
+                    <th className="text-left px-4 py-2 font-medium">Xero Name</th>
+                    <th className="text-center px-4 py-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {checkResults.map(r => (
+                    <tr key={r.code} className="border-t">
+                      <td className="px-4 py-2 font-mono font-semibold">{r.code}</td>
+                      <td className="px-4 py-2 text-sm">{r.name}</td>
+                      <td className="px-4 py-2 text-sm text-muted-foreground">{r.xeroName || '—'}</td>
+                      <td className="px-4 py-2 text-center">
+                        {r.found ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500 inline" />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {checkResults.every(r => r.found) && (
+                <div className="px-4 py-2 bg-green-50 border-t text-xs text-green-800 flex items-center gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  All accounts verified. Ready to push settlements.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ★ Account Code Fields with helper text */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Xero Account Code Mapping</CardTitle>
-          <CardDescription className="text-xs">
-            Manual overrides for account codes. Auto-populated by the wizard above, but editable.
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Xero Account Codes</CardTitle>
+              <CardDescription className="text-xs">
+                Pre-filled with AU defaults. Edit if your Xero uses different account codes.
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleResetDefaults} className="text-xs gap-1">
+              <Settings className="h-3 w-3" /> Reset to Defaults
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.entries(XERO_ACCOUNT_MAP).map(([category, defaults]) => (
-              <div key={category} className="flex items-center gap-3">
-                <Label className="text-xs w-36 flex-shrink-0">{category}</Label>
-                <Input
-                  value={accountCodes[category] || defaults.code}
-                  onChange={(e) => setAccountCodes(prev => ({ ...prev, [category]: e.target.value }))}
-                  className="h-8 text-xs font-mono w-20"
-                  placeholder={defaults.code}
-                />
-                <span className="text-[10px] text-muted-foreground truncate">
-                  {accountCodes[category] || defaults.code} — {defaults.name}
-                </span>
+          <div className="space-y-4">
+            {Object.entries(DEFAULT_ACCOUNT_CODES).map(([category, defaults]) => (
+              <div key={category} className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-medium w-48 flex-shrink-0">{category}</Label>
+                  <Input
+                    value={accountCodes[category] || defaults.code}
+                    onChange={(e) => setAccountCodes(prev => ({ ...prev, [category]: e.target.value }))}
+                    className="h-9 text-sm font-mono w-24"
+                    placeholder={defaults.code}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground ml-0 sm:ml-48 sm:pl-3">
+                  {defaults.code} — {defaults.name} ({defaults.description})
+                </p>
               </div>
             ))}
           </div>
