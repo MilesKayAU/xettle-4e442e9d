@@ -3890,7 +3890,8 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase.functions.invoke('xero-auth', {
-        body: { action: 'get_accounts', userId: user.id }
+        body: {},
+        headers: { 'x-action': 'get_accounts' },
       });
 
       if (error) throw error;
@@ -3951,7 +3952,8 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
       });
 
       const { data, error } = await supabase.functions.invoke('xero-auth', {
-        body: { action: 'create_accounts', userId: user.id, accounts: accountsToCreate }
+        body: { accounts: accountsToCreate },
+        headers: { 'x-action': 'create_accounts' },
       });
 
       if (error) throw error;

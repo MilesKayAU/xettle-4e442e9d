@@ -17,8 +17,17 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url)
-    // Support both query param and header for action
-    const action = url.searchParams.get('action') || req.headers.get('x-action')
+    // Support query param, header, or body for action
+    let action = url.searchParams.get('action') || req.headers.get('x-action')
+    
+    // Clone request for potential body parsing later; peek at body for action if not found yet
+    let parsedBody: any = null
+    if (!action && req.method === 'POST') {
+      try {
+        parsedBody = await req.clone().json()
+        action = parsedBody?.action
+      } catch {}
+    }
     
     const XERO_CLIENT_ID = Deno.env.get('XERO_CLIENT_ID')
     const XERO_CLIENT_SECRET = Deno.env.get('XERO_CLIENT_SECRET')
@@ -367,16 +376,29 @@ Deno.serve(async (req) => {
 
     // Action: Get chart of accounts from Xero
     if (action === 'get_accounts') {
-      let body: any = {};
-      try { body = await req.json(); } catch {}
-      const userId = body?.userId;
-
-      if (!userId) {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
         return new Response(
-          JSON.stringify({ error: 'userId is required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+
+      const supabaseUser = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+
+      const token = authHeader.replace('Bearer ', '')
+      const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token)
+      if (claimsError || !claimsData?.claims) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const userId = claimsData.claims.sub
 
       const supabaseAdmin = createClient(
         Deno.env.get('SUPABASE_URL')!,
@@ -462,14 +484,37 @@ Deno.serve(async (req) => {
 
     // Action: Create missing accounts in Xero
     if (action === 'create_accounts') {
-      let body: any = {};
-      try { body = await req.json(); } catch {}
-      const userId = body?.userId;
-      const accounts = body?.accounts; // Array of { Code, Name, Type, TaxType }
-
-      if (!userId || !accounts || !Array.isArray(accounts) || accounts.length === 0) {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
         return new Response(
-          JSON.stringify({ error: 'userId and accounts array are required' }),
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const supabaseUser = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+
+      const token = authHeader.replace('Bearer ', '')
+      const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token)
+      if (claimsError || !claimsData?.claims) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const userId = claimsData.claims.sub
+
+      let body: any = parsedBody || {};
+      try { if (!parsedBody) body = await req.json(); } catch {}
+      const accounts = body?.accounts;
+
+      if (!accounts || !Array.isArray(accounts) || accounts.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'accounts array is required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
