@@ -273,6 +273,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
 
       const parts = [];
       if (importedCount > 0) parts.push(`${importedCount} imported`);
+      if (cutoffCount > 0) parts.push(`${cutoffCount} auto-marked as already in Xero (before cutoff)`);
       if (skippedCount > 0) parts.push(`${skippedCount} duplicates skipped`);
       toast.success(`Done! ${parts.join(', ')}. Check the Auto-Imported tab.`);
       
