@@ -33,7 +33,7 @@ export default function Admin() {
     }
     async function checkAdmin() {
       if (!user) return;
-      const { data } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' });
+      const { data } = await supabase.rpc('has_role', { _role: 'admin' });
       setIsAdmin(!!data);
       if (!data) navigate('/dashboard');
     }
