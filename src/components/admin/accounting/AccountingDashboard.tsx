@@ -124,6 +124,9 @@ export default function AccountingDashboard() {
   const [isPaidUser, setIsPaidUser] = useState(false);
   const [syncCutoffDate, setSyncCutoffDate] = useState<string>('');
   
+  // Global fetch state — visible across all tabs
+  const [amazonFetching, setAmazonFetching] = useState(false);
+  const [amazonFetchStatus, setAmazonFetchStatus] = useState<string | null>(null);
   // Bulk upload state
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
   const [bulkProcessing, setBulkProcessing] = useState(false);
