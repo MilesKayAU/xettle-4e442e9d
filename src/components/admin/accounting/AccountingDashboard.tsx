@@ -3642,6 +3642,32 @@ function SettlementSettings({ onGstRateChanged, onGapThresholdChanged }: { onGst
         </CardContent>
       </Card>
 
+      {/* Gap Detection Threshold */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Gap Detection</CardTitle>
+          <CardDescription className="text-xs">
+            During bulk uploads, flag gaps between consecutive settlements exceeding this threshold.
+            Amazon AU cycles are typically ~14 days.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Label className="text-xs w-36">Threshold (days)</Label>
+            <Input
+              type="number"
+              value={gapThreshold}
+              onChange={(e) => setGapThreshold(e.target.value)}
+              className="h-8 text-xs font-mono w-24"
+              min="1"
+              max="90"
+              step="1"
+            />
+            <span className="text-xs text-muted-foreground">Gaps over {gapThreshold} days will be flagged</span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Country support */}
       <Card>
         <CardHeader className="pb-3">
