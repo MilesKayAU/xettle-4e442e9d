@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw, CloudDownload, ShieldCheck, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw, CloudDownload, ShieldCheck, AlertTriangle, CheckSquare, Square } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
@@ -48,7 +48,9 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deletingBulk, setDeletingBulk] = useState(false);
   const [marking, setMarking] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const loadApiSettlements = useCallback(async () => {
     setLoading(true);
@@ -90,6 +92,49 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       toast.error(`Delete failed: ${err.message}`);
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === settlements.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(settlements.map(s => s.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    const toDelete = settlements.filter(s => selected.has(s.id));
+    if (toDelete.length === 0) return;
+    if (!confirm(`Delete ${toDelete.length} auto-imported settlement(s)?`)) return;
+    setDeletingBulk(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      for (const s of toDelete) {
+        await supabase.from('settlement_lines').delete()
+          .eq('user_id', user.id).eq('settlement_id', s.settlement_id);
+        await supabase.from('settlement_unmapped').delete()
+          .eq('user_id', user.id).eq('settlement_id', s.settlement_id);
+        await supabase.from('settlements').delete().eq('id', s.id);
+      }
+
+      toast.success(`${toDelete.length} settlement(s) deleted`);
+      setSelected(new Set());
+      await loadApiSettlements();
+    } catch (err: any) {
+      toast.error(`Delete failed: ${err.message}`);
+    } finally {
+      setDeletingBulk(false);
     }
   };
 
@@ -224,9 +269,36 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                 {settlements.length} settlement(s) fetched from Amazon SP-API. Review and sync to Xero.
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={loadApiSettlements} className="gap-1.5">
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              {settlements.length > 0 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    onClick={toggleSelectAll}
+                  >
+                    {selected.size === settlements.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                    {selected.size === settlements.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                  {selected.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={handleDeleteSelected}
+                      disabled={deletingBulk}
+                    >
+                      {deletingBulk ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Delete {selected.size}
+                    </Button>
+                  )}
+                </>
+              )}
+              <Button variant="outline" size="sm" onClick={loadApiSettlements} className="gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -247,6 +319,12 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
+                    <button
+                      className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => toggleSelect(s.id)}
+                    >
+                      {selected.has(s.id) ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                    </button>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
