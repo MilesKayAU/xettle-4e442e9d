@@ -719,6 +719,36 @@ export default function AccountingDashboard() {
           Quantity: 1,
         };
         const invoiceLines2 = [rolloverLine, ...lines2Month2];
+
+        // Rounding adjustment for Invoice 2 so it matches the bank deposit exactly
+        const bankDeposit = parsed.summary.bankDeposit;
+        let inv2XeroTotal = 0;
+        for (const item of invoiceLines2) {
+          if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
+            inv2XeroTotal += round2(round2(item.UnitAmount) * 1.1);
+          } else {
+            inv2XeroTotal += round2(item.UnitAmount);
+          }
+        }
+        inv2XeroTotal = round2(inv2XeroTotal);
+        const inv2Diff = round2(bankDeposit - inv2XeroTotal);
+        if (inv2Diff !== 0 && Math.abs(inv2Diff) <= 0.05) {
+          console.info('[Split Month Rounding Adjustment]', { bankDeposit, inv2XeroTotal, inv2Diff });
+          invoiceLines2.push({
+            Description: `Rounding adjustment ${m2.monthLabel}`,
+            AccountCode: getAccountCode('Sales'),
+            TaxType: 'BASEXCLUDED',
+            UnitAmount: inv2Diff,
+            Quantity: 1,
+          });
+        } else if (inv2Diff !== 0 && Math.abs(inv2Diff) > 0.05) {
+          console.error('[Split Month Rounding BLOCKED]', { bankDeposit, inv2XeroTotal, inv2Diff });
+          throw new Error(
+            `Split month rounding discrepancy of ${formatAUD(Math.abs(inv2Diff))} exceeds ±$0.05. ` +
+            `Bank deposit: ${formatAUD(bankDeposit)}, Invoice 2 total: ${formatAUD(inv2XeroTotal)}.`
+          );
+        }
+
         const reference2 = `Amazon AU Settlement ${header.settlementId} - Part 2 (${m2.monthLabel})`;
         const date2 = m2.start;
 
