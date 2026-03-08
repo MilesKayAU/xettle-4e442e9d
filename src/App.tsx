@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import LoadingSpinner from "@/components/ui/loading-spinner";
+import PinGate from "@/components/PinGate";
 
 const Landing = lazy(() => import("@/pages/Landing"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -30,22 +31,24 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <BrowserRouter>
-            <Suspense fallback={
-              <div className="flex items-center justify-center min-h-screen">
-                <LoadingSpinner size="lg" text="Loading..." />
-              </div>
-            }>
-              <Routes>
-                <Route path="/" element={<Landing />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/xero/callback" element={<XeroCallback />} />
-                <Route path="/privacy" element={<Privacy />} />
-                <Route path="/terms" element={<Terms />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
+            <PinGate>
+              <Suspense fallback={
+                <div className="flex items-center justify-center min-h-screen">
+                  <LoadingSpinner size="lg" text="Loading..." />
+                </div>
+              }>
+                <Routes>
+                  <Route path="/" element={<Landing />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/xero/callback" element={<XeroCallback />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </PinGate>
             <Toaster />
           </BrowserRouter>
         </TooltipProvider>
