@@ -319,7 +319,12 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
+                    <button
+                      className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => toggleSelect(s.id)}
+                    >
+                      {selected.has(s.id) ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                    </button>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
                         {getStatusBadge(s)}
