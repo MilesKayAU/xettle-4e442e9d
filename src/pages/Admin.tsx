@@ -35,6 +35,7 @@ interface UserRow {
   created_at: string;
   last_sign_in_at: string | null;
   xero_connected: boolean;
+  amazon_connected: boolean;
   settlement_count: number;
 }
 
