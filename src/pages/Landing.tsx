@@ -1,19 +1,19 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Shield, Zap, DollarSign, FileSpreadsheet, RefreshCw, Users, CheckCircle, Upload, Bot, Crown, Rocket } from 'lucide-react';
+import { ArrowRight, Shield, Zap, DollarSign, FileSpreadsheet, RefreshCw, Users, CheckCircle, Upload, Bot, Crown, Rocket, Store } from 'lucide-react';
 
 const features = [
   {
     icon: FileSpreadsheet,
     title: 'Settlement Parsing',
-    description: 'Upload Amazon settlement TSV files and automatically categorise every transaction into proper accounting buckets.',
+    description: 'Upload marketplace settlement files and automatically categorise every transaction into proper accounting buckets.',
     free: true,
   },
   {
     icon: RefreshCw,
     title: 'One-Click Xero Sync',
-    description: 'Push parsed settlements directly to Xero as invoices with correct account codes, GST handling, and split-month support.',
+    description: 'Push parsed settlements directly to Xero as invoices with correct account codes and GST handling.',
     free: true,
   },
   {
@@ -35,16 +35,25 @@ const features = [
     free: true,
   },
   {
-    icon: Users,
+    icon: Store,
     title: 'Multi-Marketplace',
-    description: 'Starting with Amazon AU, with support for UK, US, and EU regions coming soon.',
+    description: 'Amazon AU today. Bunnings, Catch, MyDeal, Kogan and more coming soon — all with the same simple workflow.',
     free: true,
   },
 ];
 
+const marketplaces = [
+  { name: 'Amazon', status: 'live' },
+  { name: 'Bunnings', status: 'live' },
+  { name: 'Catch', status: 'soon' },
+  { name: 'MyDeal', status: 'soon' },
+  { name: 'Kogan', status: 'soon' },
+];
+
 const trustSignals = [
-  'Built by Amazon AU sellers',
+  'Built for Australian sellers',
   'Australian GST handled correctly',
+  'Works with Xero AU tax rules',
   'Your data stays in your own Xero',
   'Review every settlement before it posts',
   'Free plan — no time limits, no trial',
@@ -76,22 +85,42 @@ export default function Landing() {
       <section className="pt-32 pb-20 px-4">
         <div className="container-custom text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6">
-            <Upload className="h-4 w-4" />
-            Free manual uploads · Paid auto-sync
+            <Store className="h-4 w-4" />
+            The settlement layer for Xero
           </div>
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6">
-            Amazon settlements,
+            Marketplace settlements,
             <br />
             <span className="text-primary">Xettled.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-            Turn Amazon settlement reports into clean Xero invoices.
+            Turn marketplace settlement reports into clean Xero invoices.
             <br />
-            Upload manually for free, or auto-sync with a paid plan.
+            Amazon, Bunnings, Catch and more.
           </p>
-          <p className="text-sm text-muted-foreground/70 mb-10 font-medium">
+          <p className="text-sm text-muted-foreground/70 mb-8 font-medium">
             <span className="text-primary font-semibold">X</span>ero + Se<span className="text-primary font-semibold">ttle</span> = <span className="text-primary font-semibold">Xettle</span>
           </p>
+
+          {/* Marketplace strip */}
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
+            {marketplaces.map((m) => (
+              <span
+                key={m.name}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border ${
+                  m.status === 'live'
+                    ? 'bg-primary/10 text-primary border-primary/20'
+                    : 'bg-muted text-muted-foreground border-border'
+                }`}
+              >
+                {m.name}
+                {m.status === 'soon' && (
+                  <span className="text-[10px] opacity-60">soon</span>
+                )}
+              </span>
+            ))}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" className="text-lg px-8 py-6" asChild>
               <Link to="/auth?tab=signup">
@@ -112,7 +141,7 @@ export default function Landing() {
             Simple pricing
           </h2>
           <p className="text-muted-foreground text-center mb-10 max-w-xl mx-auto">
-            Manual uploads are free forever. Upgrade when you want Amazon to sync automatically.
+            Manual uploads are free forever. Upgrade when you want automation.
           </p>
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {/* Free */}
@@ -125,10 +154,10 @@ export default function Landing() {
               <p className="text-sm text-muted-foreground mb-6">forever</p>
               <ul className="space-y-3 text-sm mb-8">
                 {[
-                  'Upload settlement CSVs manually',
-                  'Full settlement parsing & categorisation',
+                  'Upload settlement files manually',
+                  'Full parsing & categorisation',
                   'Push to Xero with one click',
-                  'Split-month support & GST handling',
+                  'GST handling for AU sellers',
                   'Smart reconciliation checks',
                   'Unlimited settlements',
                 ].map(item => (
@@ -218,7 +247,7 @@ export default function Landing() {
               Everything you need to Xettle
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Built by Amazon sellers, for Amazon sellers. No bloat, no complexity.
+              Marketplace accounting for Xero. No bloat, no complexity.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -249,7 +278,7 @@ export default function Landing() {
         <div className="container-custom max-w-3xl mx-auto">
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12">
             <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-8">
-              Built for Australian Amazon sellers
+              Built for Australian Sellers
             </h2>
             <div className="grid sm:grid-cols-2 gap-4">
               {trustSignals.map((signal) => (
@@ -272,7 +301,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { step: '01', title: 'Connect Xero', desc: 'Securely link your Xero organisation with one click. Your tokens are encrypted per-user.' },
-              { step: '02', title: 'Upload or Auto-Sync', desc: 'Download your settlement CSV from Seller Central and upload it — or let Pro auto-fetch it for you.' },
+              { step: '02', title: 'Upload or Auto-Sync', desc: 'Upload your marketplace settlement file — or let Pro auto-fetch from Amazon for you.' },
               { step: '03', title: 'Xettle It', desc: 'Review the breakdown, confirm reconciliation, and push. Your invoice appears in Xero instantly.' },
             ].map((item) => (
               <div key={item.step} className="text-center">
@@ -289,7 +318,7 @@ export default function Landing() {
       <section className="py-20 px-4">
         <div className="container-custom max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
-            From Amazon to Xero — Xettled.
+            Marketplace settlements — Xettled.
           </h2>
           <p className="text-lg text-muted-foreground mb-10">
             Start with free manual uploads. Upgrade to Pro when you're ready to automate.
@@ -307,7 +336,7 @@ export default function Landing() {
         <div className="container-custom flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Xettle. Amazon settlements, sorted.
+              © {new Date().getFullYear()} Xettle. Marketplace accounting for Xero.
             </p>
             <div className="flex gap-6">
               <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
