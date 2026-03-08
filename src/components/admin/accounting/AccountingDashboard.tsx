@@ -1103,6 +1103,7 @@ export default function AccountingDashboard() {
                   <BulkUploadProcessor
                     files={bulkFiles}
                     gstRate={settingsGstRate}
+                    gapThresholdDays={settingsGapThreshold}
                     selectedCountry={selectedCountry}
                     existingSettlements={settlements}
                     onComplete={() => {
@@ -1188,7 +1189,7 @@ export default function AccountingDashboard() {
             <TabsContent value="settings">
               <div className="space-y-4">
                 <XeroConnectionStatus />
-                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
+                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onGapThresholdChanged={(days) => setSettingsGapThreshold(days)} />
               </div>
             </TabsContent>
           </Tabs>
@@ -1236,6 +1237,7 @@ interface BulkFileResult {
 function BulkUploadProcessor({
   files,
   gstRate,
+  gapThresholdDays = 16,
   selectedCountry,
   existingSettlements,
   onComplete,
@@ -1245,6 +1247,7 @@ function BulkUploadProcessor({
 }: {
   files: File[];
   gstRate: number;
+  gapThresholdDays?: number;
   selectedCountry: string;
   existingSettlements: SettlementRecord[];
   onComplete: () => void;
@@ -1518,9 +1521,8 @@ function BulkUploadProcessor({
       const startDate = new Date(next.start + 'T00:00:00Z');
       const diffMs = startDate.getTime() - endDate.getTime();
       const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-      // Amazon settlements typically overlap by ~1 day or are back-to-back (0-1 day gap)
-      // Flag gaps of 2+ days as potential missing settlements
-      if (diffDays > 2) {
+      // Flag gaps exceeding the configurable threshold (default 16 days)
+      if (diffDays > gapThresholdDays) {
         detected.push({
           afterId: current.id,
           afterEnd: current.end,
