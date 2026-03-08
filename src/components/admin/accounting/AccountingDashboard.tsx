@@ -1482,6 +1482,52 @@ function BulkUploadProcessor({
 
   const firstParsedResult = results.find(r => (r.status === 'parsed' || r.status === 'unmapped_warning') && r.parsed);
 
+  // ─── Gap detection: find missing periods between consecutive settlements ───
+  const gaps = useMemo(() => {
+    if (!done) return [];
+    // Collect all successfully parsed settlements (including existing ones)
+    const allParsed = results
+      .filter(r => r.parsed && (r.status === 'parsed' || r.status === 'unmapped_warning' || r.status === 'saved'))
+      .map(r => r.parsed!);
+    // Also include existing settlements from DB for complete picture
+    const allPeriods = [
+      ...existingSettlements.map(s => ({ id: s.settlement_id, start: s.period_start, end: s.period_end })),
+      ...allParsed.map(p => ({ id: p.header.settlementId, start: p.header.periodStart, end: p.header.periodEnd })),
+    ];
+    // Deduplicate by settlement_id
+    const seen = new Set<string>();
+    const unique = allPeriods.filter(p => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+    // Sort by start date
+    unique.sort((a, b) => a.start.localeCompare(b.start));
+    
+    const detected: Array<{ afterId: string; afterEnd: string; beforeId: string; beforeStart: string; gapDays: number }> = [];
+    for (let i = 0; i < unique.length - 1; i++) {
+      const current = unique[i];
+      const next = unique[i + 1];
+      // Calculate gap in days between current end and next start
+      const endDate = new Date(current.end + 'T00:00:00Z');
+      const startDate = new Date(next.start + 'T00:00:00Z');
+      const diffMs = startDate.getTime() - endDate.getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      // Amazon settlements typically overlap by ~1 day or are back-to-back (0-1 day gap)
+      // Flag gaps of 2+ days as potential missing settlements
+      if (diffDays > 2) {
+        detected.push({
+          afterId: current.id,
+          afterEnd: current.end,
+          beforeId: next.id,
+          beforeStart: next.start,
+          gapDays: diffDays,
+        });
+      }
+    }
+    return detected;
+  }, [done, results, existingSettlements]);
+
   const statusIcon = (status: BulkFileStatus) => {
     switch (status) {
       case 'parsed': return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
