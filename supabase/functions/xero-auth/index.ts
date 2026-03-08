@@ -44,7 +44,16 @@ Deno.serve(async (req) => {
         )
       }
 
-      const scopes = 'openid profile email offline_access accounting.transactions accounting.contacts'
+      const scopes = [
+        'openid',
+        'profile',
+        'email',
+        'offline_access',
+        'accounting.invoices',
+        'accounting.contacts',
+        'accounting.settings',
+        'accounting.settings.read'
+      ].join(' ')
 
       const authUrl = new URL(XERO_AUTH_URL)
       authUrl.searchParams.set('response_type', 'code')
