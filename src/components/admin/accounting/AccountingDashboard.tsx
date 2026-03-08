@@ -873,10 +873,10 @@ export default function AccountingDashboard() {
         reconciliationMatch: s.reconciliation_status === 'matched',
         reconciliationDiff: round2((s.bank_deposit || 0) - grossTotal),
         debugBreakdown: [],
-        auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0) - (s.international_sales || 0)),
-        auFees: round2((s.seller_fees || 0) + (s.fba_fees || 0) + (s.storage_fees || 0) - (s.international_fees || 0)),
-        internationalSales: s.international_sales || 0,
-        internationalFees: s.international_fees || 0,
+        auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0)),
+        auFees: round2((s.seller_fees || 0) + (s.fba_fees || 0) + (s.storage_fees || 0)),
+        internationalSales: 0,
+        internationalFees: 0,
       };
 
       let splitMonth: ParsedSettlement['splitMonth'] = {
@@ -890,7 +890,7 @@ export default function AccountingDashboard() {
           isSplitMonth: true,
           month1: s.split_month_1_data ? JSON.parse(s.split_month_1_data) : null,
           month2: s.split_month_2_data ? JSON.parse(s.split_month_2_data) : null,
-          rolloverAmount: s.split_rollover_amount || 0,
+          rolloverAmount: 0,
         };
       }
 
