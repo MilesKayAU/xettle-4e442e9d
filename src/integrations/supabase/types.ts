@@ -14,16 +14,291 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_settings: {
+        Row: {
+          created_at: string
+          id: string
+          key: string
+          updated_at: string
+          user_id: string
+          value: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key: string
+          updated_at?: string
+          user_id: string
+          value?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key?: string
+          updated_at?: string
+          user_id?: string
+          value?: string | null
+        }
+        Relationships: []
+      }
+      settlement_lines: {
+        Row: {
+          accounting_category: string | null
+          amount: number | null
+          amount_description: string | null
+          amount_type: string | null
+          created_at: string
+          id: string
+          marketplace_name: string | null
+          order_id: string | null
+          posted_date: string | null
+          settlement_id: string
+          sku: string | null
+          transaction_type: string | null
+          user_id: string
+        }
+        Insert: {
+          accounting_category?: string | null
+          amount?: number | null
+          amount_description?: string | null
+          amount_type?: string | null
+          created_at?: string
+          id?: string
+          marketplace_name?: string | null
+          order_id?: string | null
+          posted_date?: string | null
+          settlement_id: string
+          sku?: string | null
+          transaction_type?: string | null
+          user_id: string
+        }
+        Update: {
+          accounting_category?: string | null
+          amount?: number | null
+          amount_description?: string | null
+          amount_type?: string | null
+          created_at?: string
+          id?: string
+          marketplace_name?: string | null
+          order_id?: string | null
+          posted_date?: string | null
+          settlement_id?: string
+          sku?: string | null
+          transaction_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      settlement_unmapped: {
+        Row: {
+          amount: number | null
+          amount_description: string | null
+          amount_type: string | null
+          created_at: string
+          id: string
+          raw_row: Json | null
+          settlement_id: string
+          transaction_type: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          amount_description?: string | null
+          amount_type?: string | null
+          created_at?: string
+          id?: string
+          raw_row?: Json | null
+          settlement_id: string
+          transaction_type?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          amount_description?: string | null
+          amount_type?: string | null
+          created_at?: string
+          id?: string
+          raw_row?: Json | null
+          settlement_id?: string
+          transaction_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      settlements: {
+        Row: {
+          bank_deposit: number | null
+          created_at: string
+          deposit_date: string | null
+          fba_fees: number | null
+          gst_on_expenses: number | null
+          gst_on_income: number | null
+          id: string
+          is_split_month: boolean | null
+          marketplace: string | null
+          net_ex_gst: number | null
+          other_fees: number | null
+          period_end: string
+          period_start: string
+          promotional_discounts: number | null
+          reconciliation_status: string | null
+          refunds: number | null
+          reimbursements: number | null
+          sales_principal: number | null
+          sales_shipping: number | null
+          seller_fees: number | null
+          settlement_id: string
+          split_month_1_data: Json | null
+          split_month_2_data: Json | null
+          status: string | null
+          storage_fees: number | null
+          updated_at: string
+          user_id: string
+          xero_journal_id: string | null
+          xero_journal_id_1: string | null
+          xero_journal_id_2: string | null
+        }
+        Insert: {
+          bank_deposit?: number | null
+          created_at?: string
+          deposit_date?: string | null
+          fba_fees?: number | null
+          gst_on_expenses?: number | null
+          gst_on_income?: number | null
+          id?: string
+          is_split_month?: boolean | null
+          marketplace?: string | null
+          net_ex_gst?: number | null
+          other_fees?: number | null
+          period_end: string
+          period_start: string
+          promotional_discounts?: number | null
+          reconciliation_status?: string | null
+          refunds?: number | null
+          reimbursements?: number | null
+          sales_principal?: number | null
+          sales_shipping?: number | null
+          seller_fees?: number | null
+          settlement_id: string
+          split_month_1_data?: Json | null
+          split_month_2_data?: Json | null
+          status?: string | null
+          storage_fees?: number | null
+          updated_at?: string
+          user_id: string
+          xero_journal_id?: string | null
+          xero_journal_id_1?: string | null
+          xero_journal_id_2?: string | null
+        }
+        Update: {
+          bank_deposit?: number | null
+          created_at?: string
+          deposit_date?: string | null
+          fba_fees?: number | null
+          gst_on_expenses?: number | null
+          gst_on_income?: number | null
+          id?: string
+          is_split_month?: boolean | null
+          marketplace?: string | null
+          net_ex_gst?: number | null
+          other_fees?: number | null
+          period_end?: string
+          period_start?: string
+          promotional_discounts?: number | null
+          reconciliation_status?: string | null
+          refunds?: number | null
+          reimbursements?: number | null
+          sales_principal?: number | null
+          sales_shipping?: number | null
+          seller_fees?: number | null
+          settlement_id?: string
+          split_month_1_data?: Json | null
+          split_month_2_data?: Json | null
+          status?: string | null
+          storage_fees?: number | null
+          updated_at?: string
+          user_id?: string
+          xero_journal_id?: string | null
+          xero_journal_id_1?: string | null
+          xero_journal_id_2?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      xero_tokens: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string
+          id: string
+          refresh_token: string
+          scope: string | null
+          tenant_id: string
+          tenant_name: string | null
+          token_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          refresh_token: string
+          scope?: string | null
+          tenant_id: string
+          tenant_name?: string | null
+          token_type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          refresh_token?: string
+          scope?: string | null
+          tenant_id?: string
+          tenant_name?: string | null
+          token_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: { _role: Database["public"]["Enums"]["app_role"] }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +425,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const

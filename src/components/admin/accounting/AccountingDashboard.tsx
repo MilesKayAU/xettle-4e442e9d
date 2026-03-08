@@ -3304,12 +3304,13 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
           .from('app_settings')
           .select('id')
           .eq('key', setting.key)
+          .eq('user_id', user.id)
           .limit(1);
 
         if (existing && existing.length > 0) {
-          await supabase.from('app_settings').update({ value: setting.value }).eq('key', setting.key);
+          await supabase.from('app_settings').update({ value: setting.value }).eq('key', setting.key).eq('user_id', user.id);
         } else {
-          await supabase.from('app_settings').insert(setting);
+          await supabase.from('app_settings').insert({ user_id: user.id, key: setting.key, value: setting.value });
         }
       }
 
