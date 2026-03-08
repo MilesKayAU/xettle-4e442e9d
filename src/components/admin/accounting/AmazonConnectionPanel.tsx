@@ -308,7 +308,6 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
 
       toast.success('Amazon token saved successfully');
       setManualToken('');
-      setManualSellerId('');
       setShowManualToken(false);
       await checkStatus();
     } catch (err: any) {
