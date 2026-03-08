@@ -1,54 +1,53 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Shield, Zap, DollarSign, FileSpreadsheet, RefreshCw, Users, CheckCircle } from 'lucide-react';
+import { ArrowRight, Shield, Zap, DollarSign, FileSpreadsheet, RefreshCw, Users, CheckCircle, Upload, Bot, Crown } from 'lucide-react';
 
 const features = [
   {
     icon: FileSpreadsheet,
     title: 'Settlement Parsing',
     description: 'Upload Amazon settlement TSV files and automatically categorise every transaction into proper accounting buckets.',
+    free: true,
   },
   {
     icon: RefreshCw,
     title: 'One-Click Xero Sync',
     description: 'Push parsed settlements directly to Xero as invoices with correct account codes, GST handling, and split-month support.',
+    free: true,
+  },
+  {
+    icon: Bot,
+    title: 'Auto-Import from Amazon',
+    description: 'Connect your Seller Central account and let Xettle automatically fetch new settlement reports every 6 hours.',
+    free: false,
   },
   {
     icon: Shield,
     title: 'Your Data, Your Account',
     description: 'Each user connects their own Xero org. Your tokens are encrypted and isolated — nobody else can access your books.',
-  },
-  {
-    icon: DollarSign,
-    title: 'Completely Free',
-    description: 'No per-order fees, no monthly subscriptions. Full settlement sync without paying $20-80/month to competitors.',
+    free: true,
   },
   {
     icon: Zap,
     title: 'Smart Reconciliation',
     description: 'Automatic reconciliation checks ensure your parsed data matches the bank deposit before syncing to Xero.',
+    free: true,
   },
   {
     icon: Users,
     title: 'Multi-Marketplace',
     description: 'Starting with Amazon AU, with support for UK, US, and EU regions coming soon.',
+    free: true,
   },
-];
-
-const competitors = [
-  { name: 'Link My Books', price: '$$$' },
-  { name: 'A2X', price: '$$$' },
-  { name: 'Taxomate', price: '$$' },
-  { name: 'Xettle', price: 'Free', highlight: true },
 ];
 
 const trustSignals = [
   'Built by Amazon AU sellers',
   'Australian GST handled correctly',
   'Your data stays in your own Xero',
-  'No Amazon API connection needed',
   'Review every settlement before it posts',
+  'Free plan — no time limits, no trial',
 ];
 
 export default function Landing() {
@@ -66,7 +65,7 @@ export default function Landing() {
             </Button>
             <Button asChild>
               <Link to="/auth?tab=signup">
-                Get Started <ArrowRight className="ml-2 h-4 w-4" />
+                Get Started Free <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
           </div>
@@ -77,8 +76,8 @@ export default function Landing() {
       <section className="pt-32 pb-20 px-4">
         <div className="container-custom text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6">
-            <Zap className="h-4 w-4" />
-            100% Free — No hidden fees
+            <Upload className="h-4 w-4" />
+            Free manual uploads · Paid auto-sync
           </div>
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6">
             Amazon settlements,
@@ -88,7 +87,7 @@ export default function Landing() {
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
             Turn Amazon settlement reports into clean Xero invoices.
             <br />
-            Automatically categorised, GST-handled, Xero-ready.
+            Upload manually for free, or auto-sync with a paid plan.
           </p>
           <p className="text-sm text-muted-foreground/70 mb-10 font-medium">
             <span className="text-primary font-semibold">X</span>ero + Se<span className="text-primary font-semibold">ttle</span> = <span className="text-primary font-semibold">Xettle</span>
@@ -96,47 +95,89 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" className="text-lg px-8 py-6" asChild>
               <Link to="/auth?tab=signup">
-                Start Xettling — It's Free <ArrowRight className="ml-2 h-5 w-5" />
+                Start Free <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="text-lg px-8 py-6" asChild>
-              <a href="#features">See How It Works</a>
+              <a href="#pricing">See Plans</a>
             </Button>
           </div>
         </div>
       </section>
 
-      {/* Competitor comparison */}
-      <section className="py-16 px-4 bg-card border-y border-border">
-        <div className="container-custom max-w-3xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-3 text-foreground">
-            Not everyone needs API automation
+      {/* Pricing / Plans */}
+      <section id="pricing" className="py-16 px-4 bg-card border-y border-border">
+        <div className="container-custom max-w-4xl mx-auto">
+          <h2 className="text-2xl md:text-3xl font-bold text-center text-foreground mb-3">
+            Simple pricing
           </h2>
-          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-            Most sellers just want their Amazon settlements synced to Xero — accurately, with GST handled right. No marketplace API keys, no complex setup. Just upload, review, and push.
+          <p className="text-muted-foreground text-center mb-10 max-w-xl mx-auto">
+            Manual uploads are free forever. Upgrade when you want Amazon to sync automatically.
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {competitors.map((c) => (
-              <div
-                key={c.name}
-                className={`rounded-xl p-4 border-2 transition-all ${
-                  c.highlight
-                    ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
-                    : 'border-border bg-background'
-                }`}
-              >
-                <p className="text-sm text-muted-foreground mb-1">{c.name}</p>
-                {c.highlight ? (
-                  <p className="text-5xl md:text-6xl font-black text-primary leading-none">
-                    Free
-                  </p>
-                ) : (
-                  <p className="text-xl font-bold text-foreground">
-                    {c.price}
-                  </p>
-                )}
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            {/* Free */}
+            <div className="rounded-2xl border-2 border-border bg-background p-8">
+              <div className="flex items-center gap-2 mb-1">
+                <Upload className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-bold text-foreground">Free</h3>
               </div>
-            ))}
+              <p className="text-4xl font-black text-foreground mb-1">$0</p>
+              <p className="text-sm text-muted-foreground mb-6">forever</p>
+              <ul className="space-y-3 text-sm mb-8">
+                {[
+                  'Upload settlement CSVs manually',
+                  'Full settlement parsing & categorisation',
+                  'Push to Xero with one click',
+                  'Split-month support & GST handling',
+                  'Smart reconciliation checks',
+                  'Unlimited settlements',
+                ].map(item => (
+                  <li key={item} className="flex items-start gap-2">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    <span className="text-foreground">{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button variant="outline" className="w-full" asChild>
+                <Link to="/auth?tab=signup">Get Started Free</Link>
+              </Button>
+            </div>
+
+            {/* Paid */}
+            <div className="rounded-2xl border-2 border-primary bg-primary/5 p-8 relative">
+              <div className="absolute -top-3 right-6">
+                <span className="bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
+                  POPULAR
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mb-1">
+                <Crown className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-bold text-foreground">Pro</h3>
+              </div>
+              <p className="text-4xl font-black text-foreground mb-1">
+                <span className="text-muted-foreground text-lg font-normal line-through mr-2">$29</span>
+                Coming Soon
+              </p>
+              <p className="text-sm text-muted-foreground mb-6">per month</p>
+              <ul className="space-y-3 text-sm mb-8">
+                {[
+                  'Everything in Free, plus:',
+                  'Auto-import from Amazon SP-API',
+                  'New settlements fetched every 6 hours',
+                  'No more downloading CSVs',
+                  'Priority support',
+                  'Early access to new platforms',
+                ].map((item, i) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <CheckCircle className={`h-4 w-4 shrink-0 mt-0.5 ${i === 0 ? 'text-muted-foreground' : 'text-primary'}`} />
+                    <span className={`${i === 0 ? 'text-muted-foreground font-medium' : 'text-foreground'}`}>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
+            </div>
           </div>
         </div>
       </section>
@@ -154,7 +195,14 @@ export default function Landing() {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature) => (
-              <Card key={feature.title} className="border-border hover:border-primary/30 transition-colors">
+              <Card key={feature.title} className="border-border hover:border-primary/30 transition-colors relative">
+                {!feature.free && (
+                  <div className="absolute top-3 right-3">
+                    <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Crown className="h-3 w-3" /> PRO
+                    </span>
+                  </div>
+                )}
                 <CardContent className="pt-6">
                   <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                     <feature.icon className="h-6 w-6 text-primary" />
@@ -196,7 +244,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { step: '01', title: 'Connect Xero', desc: 'Securely link your Xero organisation with one click. Your tokens are encrypted per-user.' },
-              { step: '02', title: 'Upload Settlement', desc: 'Download your settlement TSV from Amazon Seller Central and upload it. We parse every line.' },
+              { step: '02', title: 'Upload or Auto-Sync', desc: 'Download your settlement CSV from Seller Central and upload it — or let Pro auto-fetch it for you.' },
               { step: '03', title: 'Xettle It', desc: 'Review the breakdown, confirm reconciliation, and push. Your invoice appears in Xero instantly.' },
             ].map((item) => (
               <div key={item.step} className="text-center">
@@ -216,7 +264,7 @@ export default function Landing() {
             From Amazon to Xero — Xettled.
           </h2>
           <p className="text-lg text-muted-foreground mb-10">
-            Join sellers who are Xettling their Amazon settlements into Xero for free.
+            Start with free manual uploads. Upgrade to Pro when you're ready to automate.
           </p>
           <Button size="lg" className="text-lg px-10 py-6" asChild>
             <Link to="/auth?tab=signup">
