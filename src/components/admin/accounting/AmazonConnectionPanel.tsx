@@ -107,6 +107,10 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
   const handleFetchNow = async () => {
     setFetching(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Step 1: List available reports
       const { data, error } = await supabase.functions.invoke('fetch-amazon-settlements', {
         headers: { 'x-action': 'list' },
         body: {},
@@ -123,13 +127,25 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
 
       toast.success(`Found ${reports.length} settlement report(s). Downloading...`);
 
-      // Download each report (with delay to avoid rate limiting)
-      let downloadedCount = 0;
+      // Step 2: Check which settlements already exist
+      const { data: existingData } = await supabase
+        .from('settlements')
+        .select('settlement_id')
+        .eq('user_id', user.id);
+      const existingIds = new Set((existingData || []).map(s => s.settlement_id));
+
+      // Step 3: Download and parse each report (with delay for rate limiting)
+      let importedCount = 0;
+      let skippedCount = 0;
+      const parserOpts: ParserOptions = { gstRate };
+
       for (let i = 0; i < reports.length; i++) {
         const report = reports[i];
         if (!report.reportDocumentId) continue;
+
         // Wait 3 seconds between downloads to respect rate limits
         if (i > 0) await new Promise(r => setTimeout(r, 3000));
+
         try {
           const { data: dlData, error: dlError } = await supabase.functions.invoke('fetch-amazon-settlements', {
             headers: { 'x-action': 'download' },
@@ -141,18 +157,114 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
             continue;
           }
 
-          downloadedCount++;
-        } catch (dlErr) {
-          console.error('Download error:', dlErr);
+          const content = dlData?.content;
+          if (!content) continue;
+
+          // Parse the TSV content
+          let parsed;
+          try {
+            parsed = parseSettlementTSV(content, parserOpts);
+          } catch (parseErr: any) {
+            console.error('Failed to parse report:', report.reportId, parseErr.message);
+            toast.error(`Failed to parse report ${report.reportId}: ${parseErr.message}`);
+            continue;
+          }
+
+          // Check for duplicates
+          if (existingIds.has(parsed.header.settlementId)) {
+            skippedCount++;
+            console.info(`Skipping duplicate settlement ${parsed.header.settlementId}`);
+            continue;
+          }
+
+          // Save to database with source='api'
+          const { header, summary, lines, unmapped } = parsed;
+          const splitMonth = parsed.splitMonth;
+
+          const { error: settError } = await supabase.from('settlements').insert({
+            user_id: user.id,
+            settlement_id: header.settlementId,
+            marketplace: 'AU',
+            period_start: header.periodStart,
+            period_end: header.periodEnd,
+            deposit_date: header.depositDate,
+            sales_principal: summary.salesPrincipal,
+            sales_shipping: summary.salesShipping,
+            promotional_discounts: summary.promotionalDiscounts,
+            seller_fees: summary.sellerFees,
+            fba_fees: summary.fbaFees,
+            storage_fees: summary.storageFees,
+            refunds: summary.refunds,
+            reimbursements: summary.reimbursements,
+            other_fees: summary.otherFees,
+            net_ex_gst: summary.netExGst,
+            gst_on_income: summary.gstOnIncome,
+            gst_on_expenses: summary.gstOnExpenses,
+            bank_deposit: summary.bankDeposit,
+            reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
+            status: 'saved',
+            source: 'api',
+            is_split_month: splitMonth.isSplitMonth,
+            split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
+            split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
+            parser_version: parsed.header.settlementId ? `${parsed.splitMonth ? 'v1.7.0' : 'v1.7.0'}` : 'v1.7.0',
+          } as any);
+          if (settError) throw settError;
+
+          // Insert lines in chunks
+          if (lines.length > 0) {
+            const lineRows = lines.map(l => ({
+              user_id: user.id,
+              settlement_id: header.settlementId,
+              transaction_type: l.transactionType,
+              amount_type: l.amountType,
+              amount_description: l.amountDescription,
+              accounting_category: l.accountingCategory,
+              amount: l.amount,
+              order_id: l.orderId || null,
+              sku: l.sku || null,
+              posted_date: l.postedDate || null,
+              marketplace_name: l.marketplaceName || null,
+            }));
+            for (let j = 0; j < lineRows.length; j += 500) {
+              const chunk = lineRows.slice(j, j + 500);
+              const { error: lineErr } = await supabase.from('settlement_lines').insert(chunk);
+              if (lineErr) throw lineErr;
+            }
+          }
+
+          // Insert unmapped
+          if (unmapped.length > 0) {
+            const unmappedRows = unmapped.map(u => ({
+              user_id: user.id,
+              settlement_id: header.settlementId,
+              transaction_type: u.transactionType,
+              amount_type: u.amountType,
+              amount_description: u.amountDescription,
+              amount: u.amount,
+              raw_row: u.rawRow,
+            }));
+            const { error: unmappedErr } = await supabase.from('settlement_unmapped').insert(unmappedRows);
+            if (unmappedErr) throw unmappedErr;
+          }
+
+          existingIds.add(parsed.header.settlementId);
+          importedCount++;
+        } catch (dlErr: any) {
+          console.error('Download/parse error:', dlErr);
+          toast.error(`Error processing report: ${dlErr.message}`);
         }
       }
 
-      if (downloadedCount > 0) {
-        toast.success(`Downloaded ${downloadedCount} settlement report(s). They'll appear in your Upload tab for review.`);
+      const parts = [];
+      if (importedCount > 0) parts.push(`${importedCount} imported`);
+      if (skippedCount > 0) parts.push(`${skippedCount} duplicates skipped`);
+      toast.success(`Done! ${parts.join(', ')}. Check the Auto-Imported tab.`);
+      
+      if (importedCount > 0) {
         onSettlementsAutoFetched?.();
       }
 
-      // Update last sync time
       setLastSync(new Date().toISOString());
     } catch (err: any) {
       toast.error(`Fetch failed: ${err.message}`);
