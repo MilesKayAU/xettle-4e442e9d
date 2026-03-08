@@ -532,8 +532,8 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     internationalFees,
   };
 
-  // Split month detection
-  const splitMonth = detectSplitMonth(header, summary, gstDivisor, round2(auSalesGstBaseTotal), round2(intlSalesExcludedFromGstBase));
+  // Split month detection — uses actual posted dates per line
+  const splitMonth = detectSplitMonth(header, summary, lines, gstDivisor, round2(auSalesGstBaseTotal), round2(intlSalesExcludedFromGstBase));
 
   return { header, lines, unmapped, summary, splitMonth };
 }
