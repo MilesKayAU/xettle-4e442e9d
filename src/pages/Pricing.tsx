@@ -29,8 +29,8 @@ const tiers = [
   {
     name: 'Starter',
     icon: Rocket,
-    yearlyPrice: 99,
-    monthlyPrice: 10,
+    yearlyPrice: 129,
+    monthlyPrice: 12.99,
     description: 'Connect Amazon. Stop downloading files manually.',
     features: [
       'Everything in Free',
@@ -46,8 +46,8 @@ const tiers = [
   {
     name: 'Pro',
     icon: Crown,
-    yearlyPrice: 199,
-    monthlyPrice: 20,
+    yearlyPrice: 229,
+    monthlyPrice: 22.99,
     description: 'Fully hands-off. Open your laptop, books are done.',
     features: [
       'Everything in Starter',
@@ -104,7 +104,7 @@ export default function Pricing() {
             </Label>
             {isYearly && (
               <Badge variant="secondary" className="ml-1 text-xs bg-primary/10 text-primary border-primary/20">
-                Save 20%
+                Save ~17%
               </Badge>
             )}
           </div>
@@ -155,6 +155,11 @@ export default function Pricing() {
                     )}
                     {price === 0 && (
                       <span className="text-muted-foreground text-sm ml-1">forever</span>
+                    )}
+                    {isYearly && tier.yearlyPrice > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        That's ${(tier.yearlyPrice / 12).toFixed(2)}/mo
+                      </p>
                     )}
                   </div>
 
