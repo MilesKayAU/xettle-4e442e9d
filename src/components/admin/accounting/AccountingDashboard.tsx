@@ -1319,6 +1319,10 @@ export default function AccountingDashboard() {
                 <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={() => {
                   loadSettlements();
                   setActiveTab('auto-imported');
+                }} onRequestSettings={() => {
+                  setTimeout(() => {
+                    document.getElementById('sync-cutoff-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 100);
                 }} />
                 <XeroConnectionStatus />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
@@ -4083,7 +4087,7 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
       </Card>
 
       {/* Sync Cutoff Date */}
-      <Card>
+      <Card id="sync-cutoff-card">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
