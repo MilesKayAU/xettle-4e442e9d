@@ -7,7 +7,27 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 interface UserRow {
   id: string;
@@ -24,8 +44,11 @@ export default function Admin() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
 
-  // Check admin role
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/auth');
@@ -40,7 +63,6 @@ export default function Admin() {
     if (user) checkAdmin();
   }, [isLoading, isAuthenticated, user, navigate]);
 
-  // Load users via edge function (admin-only)
   const loadUsers = async () => {
     if (!user) return;
     setLoadingUsers(true);
@@ -60,6 +82,58 @@ export default function Admin() {
   useEffect(() => {
     if (isAdmin) loadUsers();
   }, [isAdmin]);
+
+  const handleDeleteUser = async () => {
+    if (!deleteTarget) return;
+    setActionLoading(deleteTarget.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-manage-users', {
+        body: { action: 'delete_user', userId: deleteTarget.id },
+      });
+      if (error) throw error;
+      toast({ title: 'User Deleted', description: `${deleteTarget.email} has been removed.` });
+      setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to delete user', variant: 'destructive' });
+    } finally {
+      setActionLoading(null);
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleSendReset = async (targetUser: UserRow) => {
+    setActionLoading(targetUser.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-manage-users', {
+        body: { action: 'send_password_reset', email: targetUser.email },
+      });
+      if (error) throw error;
+      toast({ title: 'Reset Sent', description: `Password reset email sent to ${targetUser.email}` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to send reset', variant: 'destructive' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleInviteUser = async () => {
+    if (!inviteEmail.trim()) return;
+    setActionLoading('invite');
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-manage-users', {
+        body: { action: 'invite_user', email: inviteEmail.trim() },
+      });
+      if (error) throw error;
+      toast({ title: 'Invite Sent', description: `Invitation sent to ${inviteEmail}` });
+      setInviteEmail('');
+      setInviteOpen(false);
+      loadUsers();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to invite user', variant: 'destructive' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   if (isLoading || isAdmin === null) {
     return (
@@ -102,10 +176,16 @@ export default function Admin() {
             <h1 className="text-3xl font-bold text-foreground">Admin Panel</h1>
             <p className="text-muted-foreground mt-1">Manage users and monitor connections</p>
           </div>
-          <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loadingUsers ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="default" size="sm" onClick={() => setInviteOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-1" />
+              Invite User
+            </Button>
+            <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${loadingUsers ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -154,6 +234,7 @@ export default function Admin() {
                     <TableHead>Last Sign In</TableHead>
                     <TableHead>Xero</TableHead>
                     <TableHead className="text-right">Settlements</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -176,6 +257,29 @@ export default function Admin() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">{u.settlement_count}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Send password reset"
+                            disabled={actionLoading === u.id}
+                            onClick={() => handleSendReset(u)}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Delete user"
+                            disabled={actionLoading === u.id || u.id === user?.id}
+                            onClick={() => setDeleteTarget(u)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -184,6 +288,50 @@ export default function Admin() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{deleteTarget?.email}</strong> and all their data (settlements, Xero tokens, settings). This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Invite dialog */}
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite New User</DialogTitle>
+            <DialogDescription>
+              Send an invitation email with a setup link to a new user.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="email"
+            placeholder="user@example.com"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleInviteUser()}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+            <Button onClick={handleInviteUser} disabled={actionLoading === 'invite' || !inviteEmail.trim()}>
+              <Mail className="h-4 w-4 mr-1" />
+              Send Invite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
