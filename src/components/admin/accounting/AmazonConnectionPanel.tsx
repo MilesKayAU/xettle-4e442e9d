@@ -110,6 +110,12 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
   };
 
   const handleFetchNow = async () => {
+    if (!syncCutoffDate) {
+      toast.error('Sync cutoff date required', {
+        description: 'Go to Settings and set a "Don\'t sync before" date first. This prevents old settlements already in Xero from being synced again.',
+      });
+      return;
+    }
     setFetching(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -384,14 +390,15 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
             </div>
             <div className="flex gap-2">
               <Button
-                variant="outline"
+                variant={!syncCutoffDate ? "destructive" : "outline"}
                 size="sm"
                 onClick={handleFetchNow}
                 disabled={fetching}
                 className="gap-1.5"
+                title={!syncCutoffDate ? 'Set a sync cutoff date in Settings first' : undefined}
               >
                 {fetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                {fetching ? 'Fetching...' : 'Fetch Now'}
+                {fetching ? 'Fetching...' : !syncCutoffDate ? '⚠ Set Cutoff Date' : 'Fetch Now'}
               </Button>
               <Button
                 variant="outline"
