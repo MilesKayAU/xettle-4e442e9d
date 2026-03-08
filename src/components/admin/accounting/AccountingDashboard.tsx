@@ -13,6 +13,7 @@ import { parseSettlementTSV, formatDisplayDate, formatAUD, XERO_ACCOUNT_MAP, rou
 import { Scissors } from "lucide-react";
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 
 const COUNTRIES = [
   { code: 'AU', label: 'Australia', flag: '🇦🇺', active: true },
