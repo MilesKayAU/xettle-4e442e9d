@@ -156,6 +156,11 @@ export default function Pricing() {
                     {price === 0 && (
                       <span className="text-muted-foreground text-sm ml-1">forever</span>
                     )}
+                    {isYearly && tier.yearlyPrice > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        That's ${(tier.yearlyPrice / 12).toFixed(2)}/mo
+                      </p>
+                    )}
                   </div>
 
                   <ul className="space-y-2.5">
