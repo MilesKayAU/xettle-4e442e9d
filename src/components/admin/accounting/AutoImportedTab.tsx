@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw, CloudDownload, ShieldCheck, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw, CloudDownload, ShieldCheck, AlertTriangle, CheckSquare, Square } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
