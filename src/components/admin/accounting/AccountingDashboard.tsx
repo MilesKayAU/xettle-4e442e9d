@@ -1293,7 +1293,7 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-                <AmazonConnectionPanel />
+                <AmazonConnectionPanel isPaid={isPaidUser} />
                 <XeroConnectionStatus />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
               </div>
