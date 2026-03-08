@@ -904,6 +904,15 @@ export default function AccountingDashboard() {
         </div>
       </div>
 
+      {/* Onboarding Checklist */}
+      <OnboardingChecklist
+        xeroConnected={xeroConnected}
+        accountsVerified={!!settingsAccountCodes}
+        hasSettlements={settlements.length > 0}
+        onGoToSettings={() => { setSelectedPlatform('amazon'); setActiveTab('settings'); }}
+        onConnectXero={() => { setSelectedPlatform('amazon'); setActiveTab('settings'); }}
+      />
+
       {selectedPlatform === 'amazon' ? (
         <div className="space-y-6">
           {/* Amazon sub-header with country selector */}
