@@ -1,17 +1,22 @@
 import { useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
+import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
+import MarketplaceSwitcher, { MARKETPLACE_CATALOG, type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
+  const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
+  const [marketplacesLoading, setMarketplacesLoading] = useState(true);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -28,6 +33,60 @@ export default function Dashboard() {
     checkAdmin();
   }, [user]);
 
+  const loadMarketplaces = useCallback(async () => {
+    if (!user) return;
+    setMarketplacesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('marketplace_connections')
+        .select('*')
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        setUserMarketplaces(data as UserMarketplace[]);
+        // If currently selected marketplace isn't in their list, switch to first
+        if (!data.find((m: any) => m.marketplace_code === selectedMarketplace)) {
+          setSelectedMarketplace(data[0].marketplace_code);
+        }
+      } else {
+        // Auto-create Amazon AU for existing users
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          const { error: insertErr } = await supabase
+            .from('marketplace_connections')
+            .insert({
+              user_id: authUser.id,
+              marketplace_code: 'amazon_au',
+              marketplace_name: 'Amazon AU',
+              country_code: 'AU',
+              connection_type: 'sp_api',
+              connection_status: 'active',
+            } as any);
+          
+          if (!insertErr) {
+            // Re-load
+            const { data: reloaded } = await supabase
+              .from('marketplace_connections')
+              .select('*')
+              .order('created_at', { ascending: true });
+            if (reloaded) setUserMarketplaces(reloaded as UserMarketplace[]);
+          }
+        }
+        setSelectedMarketplace('amazon_au');
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setMarketplacesLoading(false);
+    }
+  }, [user, selectedMarketplace]);
+
+  useEffect(() => {
+    if (user) loadMarketplaces();
+  }, [user]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -37,6 +96,9 @@ export default function Dashboard() {
   }
 
   if (!isAuthenticated) return null;
+
+  const isAmazonAU = selectedMarketplace === 'amazon_au';
+  const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
 
   return (
     <div className="min-h-screen bg-background">
@@ -77,7 +139,24 @@ export default function Dashboard() {
       </header>
 
       <div className="container-custom py-8">
-        <AccountingDashboard />
+        {/* Marketplace Switcher */}
+        <div className="mb-6">
+          {!marketplacesLoading && (
+            <MarketplaceSwitcher
+              selectedMarketplace={selectedMarketplace}
+              onMarketplaceChange={setSelectedMarketplace}
+              userMarketplaces={userMarketplaces}
+              onMarketplacesChanged={loadMarketplaces}
+            />
+          )}
+        </div>
+
+        {/* Marketplace Dashboard Content */}
+        {isAmazonAU ? (
+          <AccountingDashboard />
+        ) : selectedUserMarketplace ? (
+          <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} />
+        ) : null}
       </div>
     </div>
   );

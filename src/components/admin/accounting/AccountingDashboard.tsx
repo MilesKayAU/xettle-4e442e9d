@@ -26,19 +26,8 @@ import { CurrentPlanCard, UpgradeNudgeDialog, incrementManualUploadCount, should
 import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting/SyncComponents';
 import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
 
-const PLATFORMS = [
-  { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
-  { code: 'shopify', label: 'Shopify', icon: '🛍️', active: false },
-  { code: 'ebay', label: 'eBay', icon: '🏷️', active: false },
-  { code: 'kogan', label: 'Kogan', icon: '🛒', active: false },
-  { code: 'bunnings', label: 'Bunnings', icon: '🔨', active: false },
-] as const;
-
-const COUNTRIES = [
-  { code: 'AU', label: 'Australia', flag: '🇦🇺', active: true },
-  { code: 'UK', label: 'United Kingdom', flag: '🇬🇧', active: false },
-  { code: 'US', label: 'United States', flag: '🇺🇸', active: false },
-] as const;
+// Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
+const SELECTED_COUNTRY = 'AU';
 
 interface SettlementRecord {
   id: string;
@@ -107,7 +96,7 @@ async function removeExistingSettlementForUser(userId: string, settlementId: str
 
 export default function AccountingDashboard() {
   const [selectedPlatform, setSelectedPlatform] = useState('amazon');
-  const [selectedCountry, setSelectedCountry] = useState('AU');
+  const selectedCountry = SELECTED_COUNTRY;
   const [activeTab, setActiveTab] = useState('upload');
   const [settlementFile, setSettlementFile] = useState<File | null>(null);
   const [transactionFile, setTransactionFile] = useState<File | null>(null);
@@ -1078,14 +1067,13 @@ export default function AccountingDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Amazon Settlements — direct entry */}
+      {/* Amazon AU Settlements */}
         <div className="space-y-6">
-          {/* Amazon sub-header with country selector */}
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-primary" />
-                Amazon Settlements
+                Amazon AU Settlements
               </h3>
               <p className="text-sm text-muted-foreground mt-0.5">
                 Upload settlement data, reconcile, and sync to Xero.
@@ -1093,29 +1081,7 @@ export default function AccountingDashboard() {
             </div>
           </div>
 
-          {/* Country Selector */}
-          <div className="flex gap-2">
-            {COUNTRIES.map((country) => (
-              <button
-                key={country.code}
-                onClick={() => country.active && setSelectedCountry(country.code)}
-                disabled={!country.active}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md border transition-all text-sm
-                  ${selectedCountry === country.code
-                    ? 'border-primary bg-primary/5 text-foreground font-medium'
-                    : country.active
-                      ? 'border-border bg-background text-muted-foreground hover:bg-muted cursor-pointer'
-                      : 'border-border bg-muted/50 text-muted-foreground cursor-not-allowed opacity-60'
-                  }`}
-              >
-                <span>{country.flag}</span>
-                {country.label}
-                {!country.active && <Badge variant="outline" className="text-[10px] px-1 py-0">Soon</Badge>}
-              </button>
-            ))}
-          </div>
-
-      {selectedCountry === 'AU' ? (
+      {(() => (
         <>
           <SettlementGuidancePanel
             lastSettlement={lastSettlement}
@@ -1433,16 +1399,7 @@ export default function AccountingDashboard() {
             />
           </Tabs>
         </>
-      ) : (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Globe className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-muted-foreground">
-              Support for {COUNTRIES.find(c => c.code === selectedCountry)?.label} is coming soon.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      ))()}
         </div>
     </div>
   );
