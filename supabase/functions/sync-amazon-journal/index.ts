@@ -357,10 +357,9 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { reference, date, dueDate, lineItems, country } = body;
+    const { reference, date, dueDate, lineItems, country, contactName } = body;
 
-    console.log('Create invoice request:', { userId, reference, date, country, lineItemCount: lineItems?.length });
-
+    console.log('Create invoice request:', { userId, reference, date, country, contactName, lineItemCount: lineItems?.length });
     if (!reference) throw new Error('Missing reference');
     if (!date) throw new Error('Missing date');
     if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
@@ -383,7 +382,7 @@ serve(async (req) => {
     const invoicePayload = {
       Invoices: [{
         Type: "ACCREC",
-        Contact: { Name: "Amazon.com.au" },
+        Contact: { Name: contactName || "Amazon.com.au" },
         Date: date,
         DueDate: dueDate || date,
         CurrencyCode: "AUD",
