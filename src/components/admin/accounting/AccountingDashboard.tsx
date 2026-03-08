@@ -1244,7 +1244,7 @@ export default function AccountingDashboard() {
 
 // ─── Bulk Upload Processor ────────────────────────────────────────────
 
-type BulkFileStatus = 'pending' | 'processing' | 'parsed' | 'unmapped_warning' | 'recon_failed' | 'duplicate' | 'error' | 'saved' | 'save_error';
+type BulkFileStatus = 'pending' | 'processing' | 'parsed' | 'unmapped_warning' | 'recon_failed' | 'duplicate' | 'batch_duplicate' | 'error' | 'saved' | 'save_error';
 
 interface BulkFileResult {
   file: File;
