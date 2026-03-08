@@ -48,9 +48,11 @@ Deno.serve(async (req) => {
         'openid',
         'profile',
         'email',
+        'offline_access',
         'accounting.transactions',
-        'accounting.contacts',
-        'offline_access'
+        'accounting.settings',
+        'accounting.settings.read',
+        'accounting.contacts'
       ].join(' ')
 
       const authUrl = new URL(XERO_AUTH_URL)
