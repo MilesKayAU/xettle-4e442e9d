@@ -1079,6 +1079,9 @@ export default function AccountingDashboard() {
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">{settlements.length}</Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="auto-imported" className="gap-1.5">
+                <CloudDownload className="h-3.5 w-3.5" /> Auto-Imported
+              </TabsTrigger>
               <TabsTrigger value="settings" className="gap-1.5">
                 <Settings className="h-3.5 w-3.5" /> Settings
               </TabsTrigger>
