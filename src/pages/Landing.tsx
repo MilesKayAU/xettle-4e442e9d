@@ -37,10 +37,18 @@ const features = [
 ];
 
 const competitors = [
-  { name: 'Link My Books', price: '$17–49/mo' },
-  { name: 'A2X', price: '$25–79/mo' },
-  { name: 'Taxomate', price: '$19–49/mo' },
+  { name: 'Link My Books', price: 'from $17/mo' },
+  { name: 'A2X', price: 'from $25/mo' },
+  { name: 'Taxomate', price: 'from $9/mo' },
   { name: 'Xettle', price: 'Free', highlight: true },
+];
+
+const trustSignals = [
+  'Built by Amazon AU sellers',
+  'Australian GST handled correctly',
+  'Your data stays in your own Xero',
+  'No Amazon API connection needed',
+  'Review every settlement before it posts',
 ];
 
 export default function Landing() {
@@ -78,7 +86,9 @@ export default function Landing() {
             <span className="text-primary">Xettled.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-            Xettle your Amazon sales into Xero — automatically. Upload settlement reports, review the breakdown, and push to Xero as properly categorised invoices.
+            Turn Amazon settlement reports into clean Xero invoices.
+            <br />
+            Automatically categorised, GST-handled, Xero-ready.
           </p>
           <p className="text-sm text-muted-foreground/70 mb-10 font-medium">
             <span className="text-primary font-semibold">X</span>ero + Se<span className="text-primary font-semibold">ttle</span> = <span className="text-primary font-semibold">Xettle</span>
@@ -113,9 +123,15 @@ export default function Landing() {
                 }`}
               >
                 <p className="text-sm text-muted-foreground mb-1">{c.name}</p>
-                <p className={`text-2xl font-bold ${c.highlight ? 'text-primary' : 'text-foreground'}`}>
-                  {c.price}
-                </p>
+                {c.highlight ? (
+                  <p className="text-5xl md:text-6xl font-black text-primary leading-none">
+                    Free
+                  </p>
+                ) : (
+                  <p className="text-xl font-bold text-foreground">
+                    {c.price}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -145,6 +161,25 @@ export default function Landing() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Trust Signals */}
+      <section className="py-16 px-4">
+        <div className="container-custom max-w-3xl mx-auto">
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12">
+            <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-8">
+              Built for Australian Amazon sellers
+            </h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {trustSignals.map((signal) => (
+                <div key={signal} className="flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
+                  <span className="text-foreground font-medium">{signal}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -190,15 +225,29 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t border-border py-8 px-4">
-        <div className="container-custom flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Xettle. Amazon settlements, sorted.
-          </p>
-          <div className="flex gap-6">
-            <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Sign In
-            </Link>
+        <div className="container-custom flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} Xettle. Amazon settlements, sorted.
+            </p>
+            <div className="flex gap-6">
+              <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Privacy Policy
+              </Link>
+              <Link to="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Terms of Service
+              </Link>
+              <a href="mailto:hello@xettle.app" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Contact
+              </a>
+              <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Sign In
+              </Link>
+            </div>
           </div>
+          <p className="text-xs text-muted-foreground/60 text-center sm:text-left">
+            Xero is a trademark of Xero Limited. Xettle is not affiliated with Xero Limited.
+          </p>
         </div>
       </footer>
     </div>
