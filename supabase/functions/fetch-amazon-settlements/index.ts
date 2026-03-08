@@ -297,9 +297,9 @@ async function refreshAccessToken(amazonToken: any): Promise<string> {
 async function downloadReport(baseUrl: string, accessToken: string, reportDocumentId: string): Promise<string> {
   const docUrl = `${baseUrl}/reports/2021-06-30/documents/${reportDocumentId}`;
   let docResponse: Response | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     if (attempt > 0) {
-      const delay = Math.min(2000 * Math.pow(2, attempt), 10000);
+      const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
       console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
       await new Promise(r => setTimeout(r, delay));
     }
