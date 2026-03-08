@@ -620,6 +620,14 @@ export default function AccountingDashboard() {
           UnitAmount: diff,
           Quantity: 1,
         });
+      } else if (diff !== 0 && Math.abs(diff) > 0.05) {
+        // Hard stop — discrepancy too large, block the push
+        console.error('[Rounding BLOCKED]', { bankDeposit, xeroTotal, diff });
+        throw new Error(
+          `Rounding discrepancy of ${formatAUD(Math.abs(diff))} exceeds ±$0.05 tolerance. ` +
+          `Bank deposit: ${formatAUD(bankDeposit)}, Calculated total: ${formatAUD(xeroTotal)}. ` +
+          `This settlement cannot be pushed to Xero until the discrepancy is resolved.`
+        );
       }
     }
 
@@ -693,23 +701,40 @@ export default function AccountingDashboard() {
         if (err1) throw err1;
         if (!data1?.success) throw new Error(data1?.error || 'Invoice 1 failed');
 
+        // Immediately save Invoice 1 ID so it can be rolled back if Invoice 2 fails
+        const invoice1Id = data1.invoiceId || data1.journalId;
+        await supabase
+          .from('settlements')
+          .update({
+            status: 'partial_push',
+            xero_journal_id_1: invoice1Id,
+          } as any)
+          .eq('settlement_id', header.settlementId);
+
         const { data: data2, error: err2 } = await supabase.functions.invoke('sync-amazon-journal', {
           body: { userId: user.id, reference: reference2, date: date2, dueDate: date2, lineItems: invoiceLines2, country: selectedCountry },
         });
-        if (err2) throw err2;
-        if (!data2?.success) throw new Error(data2?.error || 'Invoice 2 failed');
+        if (err2 || !data2?.success) {
+          // Invoice 2 failed but Invoice 1 exists in Xero — offer targeted rollback
+          const errorMsg = err2?.message || data2?.error || 'Invoice 2 failed';
+          toast.error(`Invoice 1 created (${invoice1Id}) but Invoice 2 failed: ${errorMsg}. Use rollback on this settlement to void Invoice 1.`);
+          await loadSettlements();
+          setPushing(false);
+          return;
+        }
 
+        const invoice2Id = data2.invoiceId || data2.journalId;
         await supabase
           .from('settlements')
           .update({
             status: 'pushed_to_xero',
-            xero_journal_id_1: data1.invoiceId || data1.journalId,
-            xero_journal_id_2: data2.invoiceId || data2.journalId,
+            xero_journal_id_1: invoice1Id,
+            xero_journal_id_2: invoice2Id,
           } as any)
           .eq('settlement_id', header.settlementId);
 
         setPushed(true);
-        toast.success(`Split settlement posted: ${m1.monthLabel} (${data1.invoiceId || data1.journalId}) + ${m2.monthLabel} (${data2.invoiceId || data2.journalId})`);
+        toast.success(`Split settlement posted: ${m1.monthLabel} (${invoice1Id}) + ${m2.monthLabel} (${invoice2Id})`);
       } else {
         // SINGLE MONTH: Post one invoice with marketplace-aware TaxType
         const lineItems = buildInvoiceLineItems(parsedLines, period, header.settlementId, undefined, parsed.summary.bankDeposit);
@@ -1492,37 +1517,32 @@ function BulkUploadProcessor({
 
   // ─── Gap detection: find missing periods between consecutive settlements ───
   const gaps = useMemo(() => {
-    if (!done) return [];
-    // Collect all successfully parsed settlements (including existing ones)
+    if (!done) return { gaps: [] as Array<{ afterId: string; afterEnd: string; beforeId: string; beforeStart: string; gapDays: number }>, timeline: [] as Array<{ id: string; start: string; end: string }> };
     const allParsed = results
       .filter(r => r.parsed && (r.status === 'parsed' || r.status === 'unmapped_warning' || r.status === 'saved'))
       .map(r => r.parsed!);
-    // Also include existing settlements from DB for complete picture
     const allPeriods = [
       ...existingSettlements.map(s => ({ id: s.settlement_id, start: s.period_start, end: s.period_end })),
       ...allParsed.map(p => ({ id: p.header.settlementId, start: p.header.periodStart, end: p.header.periodEnd })),
     ];
-    // Deduplicate by settlement_id
     const seen = new Set<string>();
     const unique = allPeriods.filter(p => {
       if (seen.has(p.id)) return false;
       seen.add(p.id);
       return true;
     });
-    // Sort by start date
     unique.sort((a, b) => a.start.localeCompare(b.start));
     
     const detected: Array<{ afterId: string; afterEnd: string; beforeId: string; beforeStart: string; gapDays: number }> = [];
     for (let i = 0; i < unique.length - 1; i++) {
       const current = unique[i];
       const next = unique[i + 1];
-      // Calculate gap in days between current end and next start
       const endDate = new Date(current.end + 'T00:00:00Z');
       const startDate = new Date(next.start + 'T00:00:00Z');
       const diffMs = startDate.getTime() - endDate.getTime();
       const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-      // Flag gaps exceeding the configurable threshold (default 16 days)
-      if (diffDays > gapThresholdDays) {
+      // Flag ANY gap (>0 days) between settlements
+      if (diffDays > 0) {
         detected.push({
           afterId: current.id,
           afterEnd: current.end,
@@ -1532,7 +1552,7 @@ function BulkUploadProcessor({
         });
       }
     }
-    return detected;
+    return { gaps: detected, timeline: unique };
   }, [done, results, existingSettlements]);
 
   const statusIcon = (status: BulkFileStatus) => {
@@ -1599,29 +1619,51 @@ function BulkUploadProcessor({
           ))}
         </div>
 
-        {/* Gap detection alert */}
-        {done && gaps.length > 0 && (
-          <Card className="border-amber-400 bg-amber-50/50">
-            <CardContent className="py-3 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
-                <AlertTriangle className="h-4 w-4" />
-                {gaps.length} gap{gaps.length !== 1 ? 's' : ''} detected in settlement timeline
+        {/* Gap detection + coverage timeline */}
+        {done && gaps.timeline.length > 0 && (
+          <Card className={gaps.gaps.length > 0 ? "border-amber-400 bg-amber-50/50" : "border-green-300 bg-green-50/30"}>
+            <CardContent className="py-3 space-y-3">
+              {/* Coverage summary */}
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                {gaps.gaps.length > 0 ? (
+                  <>
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <span className="text-amber-800">{gaps.gaps.length} gap{gaps.gaps.length !== 1 ? 's' : ''} detected in settlement timeline</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span className="text-green-800">Complete coverage — no gaps detected</span>
+                  </>
+                )}
               </div>
-              <div className="text-xs space-y-1.5">
-                {gaps.map((g, i) => (
-                  <div key={i} className="flex items-center gap-2 text-amber-700 bg-amber-100/60 rounded px-2 py-1.5">
-                    <Clock className="h-3.5 w-3.5 flex-shrink-0" />
-                    <span>
-                      <span className="font-medium">{g.gapDays} days missing</span> between{' '}
-                      <span className="font-mono text-[11px]">{formatDisplayDate(g.afterEnd)}</span> and{' '}
-                      <span className="font-mono text-[11px]">{formatDisplayDate(g.beforeStart)}</span>
-                    </span>
-                  </div>
-                ))}
+
+              {/* Timeline: show coverage range */}
+              <div className="text-xs text-muted-foreground">
+                Coverage: <span className="font-mono">{formatDisplayDate(gaps.timeline[0].start)}</span> → <span className="font-mono">{formatDisplayDate(gaps.timeline[gaps.timeline.length - 1].end)}</span> ({gaps.timeline.length} settlement{gaps.timeline.length !== 1 ? 's' : ''})
               </div>
-              <p className="text-[10px] text-amber-600 mt-1">
-                Download the missing settlement report(s) from Seller Central to fill these gaps before pushing to Xero.
-              </p>
+
+              {/* Gap details */}
+              {gaps.gaps.length > 0 && (
+                <div className="text-xs space-y-1.5">
+                  {gaps.gaps.map((g, i) => (
+                    <div key={i} className="flex items-center gap-2 text-amber-700 bg-amber-100/60 rounded px-2 py-1.5">
+                      <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>
+                        <span className="font-medium">{g.gapDays} day{g.gapDays !== 1 ? 's' : ''} gap</span> between{' '}
+                        <span className="font-mono text-[11px]">{formatDisplayDate(g.afterEnd)}</span> and{' '}
+                        <span className="font-mono text-[11px]">{formatDisplayDate(g.beforeStart)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {gaps.gaps.length > 0 && (
+                <p className="text-[10px] text-amber-600">
+                  Download the missing settlement report(s) from Seller Central to fill these gaps before pushing to Xero.
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
