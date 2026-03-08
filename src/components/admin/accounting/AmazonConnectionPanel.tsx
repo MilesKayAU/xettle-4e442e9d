@@ -15,9 +15,10 @@ interface AmazonConnectionPanelProps {
   isPaid?: boolean;
   gstRate?: number;
   syncCutoffDate?: string;
+  onFetchStateChange?: (fetching: boolean, progress: string | null) => void;
 }
 
-export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequestSettings, isPaid = false, gstRate = 10, syncCutoffDate }: AmazonConnectionPanelProps) {
+export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequestSettings, isPaid = false, gstRate = 10, syncCutoffDate, onFetchStateChange }: AmazonConnectionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
@@ -111,7 +112,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
     }
   };
 
-  const handleFetchNow = async () => {
+  const handleFetchNow = () => {
     if (!syncCutoffDate) {
       toast.error('Sync cutoff date required', {
         description: 'Set a "Don\'t sync before" date in Settings first.',
@@ -121,34 +122,34 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
     }
     setFetching(true);
     setFetchProgress({ current: 0, total: 0, status: 'Syncing all reports server-side...' });
-    try {
-      // Call the server-side sync action — it handles everything
-      const { data, error } = await supabase.functions.invoke('fetch-amazon-settlements', {
-        headers: { 'x-action': 'sync' },
-      });
+    onFetchStateChange?.(true, 'Fetching settlement reports from Amazon...');
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      const { imported = 0, skipped = 0, errors = 0, details = [] } = data || {};
-
-      const parts = [];
-      if (imported > 0) parts.push(`${imported} imported`);
-      if (skipped > 0) parts.push(`${skipped} duplicates skipped`);
-      if (errors > 0) parts.push(`${errors} errors (will retry next sync)`);
-      toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'All reports already synced.');
-
-      if (imported > 0) onSettlementsAutoFetched?.();
-      setLastSync(new Date().toISOString());
-
-      // Log details for debugging
-      if (details.length > 0) console.log('[Sync Details]', details);
-    } catch (err: any) {
+    // Fire-and-forget: don't block UI
+    supabase.functions.invoke('fetch-amazon-settlements', {
+      headers: { 'x-action': 'sync' },
+    }).then(({ data, error }) => {
+      if (error || data?.error) {
+        toast.error(`Sync failed: ${error?.message || data?.error}`);
+        onFetchStateChange?.(false, null);
+      } else {
+        const { imported = 0, skipped = 0, errors = 0, details = [] } = data || {};
+        const parts = [];
+        if (imported > 0) parts.push(`${imported} imported`);
+        if (skipped > 0) parts.push(`${skipped} duplicates skipped`);
+        if (errors > 0) parts.push(`${errors} errors (will retry next sync)`);
+        toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'All reports already synced.');
+        if (imported > 0) onSettlementsAutoFetched?.();
+        setLastSync(new Date().toISOString());
+        if (details.length > 0) console.log('[Sync Details]', details);
+        onFetchStateChange?.(false, null);
+      }
+    }).catch((err) => {
       toast.error(`Sync failed: ${err.message}`);
-    } finally {
+      onFetchStateChange?.(false, null);
+    }).finally(() => {
       setFetching(false);
       setFetchProgress(null);
-    }
+    });
   };
 
   const handleSaveManualToken = async () => {

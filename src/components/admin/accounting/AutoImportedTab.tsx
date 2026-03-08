@@ -73,6 +73,30 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     loadApiSettlements();
   }, [loadApiSettlements]);
 
+  // Realtime subscription: auto-update when new api settlements are inserted/deleted
+  useEffect(() => {
+    const channel = supabase
+      .channel('auto-imported-settlements')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'settlements',
+          filter: 'source=eq.api',
+        },
+        () => {
+          // Reload when any change happens to api settlements
+          loadApiSettlements();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadApiSettlements]);
+
   const handleDelete = async (settlement: AutoImportedSettlement) => {
     if (!confirm(`Delete auto-imported settlement ${settlement.settlement_id}?`)) return;
     setDeleting(settlement.id);
