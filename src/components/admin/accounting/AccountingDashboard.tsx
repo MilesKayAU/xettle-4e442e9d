@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2 } from "lucide-react";
+import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseSettlementTSV, formatDisplayDate, formatAUD, XERO_ACCOUNT_MAP, round2, PARSER_VERSION, type ParsedSettlement, type DebugBreakdownRow, type ParserOptions, type SplitMonthData } from '@/utils/settlement-parser';
@@ -1935,6 +1935,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [rollbackConfirm, setRollbackConfirm] = useState<{ settlement: SettlementRecord; scope: 'all' | 'journal_1' | 'journal_2' } | null>(null);
+  const [markingSynced, setMarkingSynced] = useState(false);
 
   const handleRollback = async (settlement: SettlementRecord, scope: 'all' | 'journal_1' | 'journal_2' = 'all') => {
     let journalIds: string[] = [];
@@ -2113,6 +2114,40 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     }
   };
 
+  const handleMarkSyncedOne = async (settlement: SettlementRecord) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await supabase.from('settlements').update({ status: 'synced_external' } as any).eq('id', settlement.id).eq('user_id', user.id);
+      if (error) throw error;
+      toast.success(`Marked ${settlement.settlement_id} as already in Xero`);
+      onDeleted(); // reloads
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    }
+  };
+
+
+  const handleMarkSyncedBulk = async () => {
+    if (selectedIds.size === 0) return;
+    setMarkingSynced(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      for (const uuid of Array.from(selectedIds)) {
+        const { error } = await supabase.from('settlements').update({ status: 'synced_external' } as any).eq('id', uuid).eq('user_id', user.id);
+        if (error) throw error;
+      }
+      toast.success(`Marked ${selectedIds.size} settlement(s) as already in Xero`);
+      setSelectedIds(new Set());
+      onDeleted(); // reloads
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    } finally {
+      setMarkingSynced(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -2138,6 +2173,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
   const statusBadge = (status: string) => {
     switch (status) {
       case 'pushed_to_xero': return <Badge className="bg-emerald-600 text-white border-emerald-600 text-[10px]">Posted ✓</Badge>;
+      case 'synced_external': return <Badge className="bg-gray-200 text-gray-700 border-gray-300 text-[10px]">Synced ↗</Badge>;
       case 'voided': return <Badge variant="destructive" className="text-[10px]">Voided</Badge>;
       case 'saved': return <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px]">Saved</Badge>;
       case 'pending': return <Badge variant="outline" className="text-[10px] text-muted-foreground">Unsaved</Badge>;
@@ -2221,15 +2257,27 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
             </CardDescription>
           </div>
           {someSelected && !confirmDelete && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setConfirmDelete(true)}
-              className="gap-1.5"
-            >
-              <XCircle className="h-3.5 w-3.5" />
-              Delete {selectedIds.size === settlements.length ? 'All' : selectedIds.size}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMarkSyncedBulk}
+                disabled={markingSynced}
+                className="gap-1.5"
+              >
+                {markingSynced ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckSquare className="h-3.5 w-3.5" />}
+                Mark {selectedIds.size} as Synced
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setConfirmDelete(true)}
+                className="gap-1.5"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                Delete {selectedIds.size === settlements.length ? 'All' : selectedIds.size}
+              </Button>
+            </div>
           )}
           {confirmDelete && (
             <div className="flex items-center gap-2">
@@ -2374,7 +2422,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                               <FileText className="h-3.5 w-3.5 mr-2" /> Download Audit Data
                             </DropdownMenuItem>
 
-                            {/* Saved: Push to Xero + Delete */}
+                            {/* Saved: Push to Xero + Mark as Synced + Delete */}
                             {s.status === 'saved' && (
                               <>
                                 <DropdownMenuSeparator />
@@ -2383,6 +2431,34 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                                     <ExternalLink className="h-3.5 w-3.5 mr-2" /> Push to Xero
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem onClick={() => handleMarkSyncedOne(s)}>
+                                  <CheckSquare className="h-3.5 w-3.5 mr-2" /> Mark as Already in Xero
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteOne(s)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
+                            {/* Synced External: Undo + Delete */}
+                            {s.status === 'synced_external' && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={async () => {
+                                  try {
+                                    const { data: { user } } = await supabase.auth.getUser();
+                                    if (!user) throw new Error('Not authenticated');
+                                    await supabase.from('settlements').update({ status: 'saved' } as any).eq('id', s.id).eq('user_id', user.id);
+                                    toast.success('Reverted to Saved');
+                                    onDeleted();
+                                  } catch (err: any) { toast.error(err.message); }
+                                }}>
+                                  <Undo2 className="h-3.5 w-3.5 mr-2" /> Revert to Saved
+                                </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() => handleDeleteOne(s)}
