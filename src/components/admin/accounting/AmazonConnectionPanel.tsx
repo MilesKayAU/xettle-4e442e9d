@@ -2,15 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug, RefreshCw } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug, RefreshCw, Lock } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
+  isPaid?: boolean;
 }
 
-export default function AmazonConnectionPanel({ onSettlementsAutoFetched }: AmazonConnectionPanelProps) {
+export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false }: AmazonConnectionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
