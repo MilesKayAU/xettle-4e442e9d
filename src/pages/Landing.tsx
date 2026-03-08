@@ -97,7 +97,7 @@ export default function Landing() {
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
             Turn marketplace settlement reports into clean Xero invoices in seconds.
             <br />
-            Amazon today. Bunnings and more marketplaces coming soon.
+            Amazon today. Bunnings and more marketplaces soon.
           </p>
           <p className="text-sm text-muted-foreground/70 mb-8 font-medium">
             <span className="text-primary font-semibold">X</span>ero + Se<span className="text-primary font-semibold">ttle</span> = <span className="text-primary font-semibold">Xettle</span>
@@ -190,7 +190,7 @@ export default function Landing() {
               <ul className="space-y-3 text-sm mb-8">
                 {[
                   'Everything in Free, plus:',
-                  'Amazon auto-import (SP-API)',
+                  'Automatic Amazon settlement import',
                   'New settlements fetched daily',
                   'Manual review & push to Xero',
                   'No more downloading CSVs',
