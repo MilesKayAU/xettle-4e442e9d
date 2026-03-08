@@ -41,6 +41,8 @@ function App() {
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/auth/xero/callback" element={<XeroCallback />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
