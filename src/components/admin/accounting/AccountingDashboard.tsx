@@ -124,9 +124,24 @@ export default function AccountingDashboard() {
   const [isPaidUser, setIsPaidUser] = useState(false);
   const [syncCutoffDate, setSyncCutoffDate] = useState<string>('');
   
-  // Global fetch state — visible across all tabs
-  const [amazonFetching, setAmazonFetching] = useState(false);
-  const [amazonFetchStatus, setAmazonFetchStatus] = useState<string | null>(null);
+  // Global fetch state — visible across all tabs, persisted across refresh
+  const [amazonFetching, setAmazonFetching] = useState(() => {
+    const stored = localStorage.getItem('xettle_fetch_started');
+    if (stored) {
+      const elapsed = Date.now() - parseInt(stored, 10);
+      // Consider fetch alive for up to 5 minutes
+      if (elapsed < 5 * 60 * 1000) return true;
+      localStorage.removeItem('xettle_fetch_started');
+    }
+    return false;
+  });
+  const [amazonFetchStatus, setAmazonFetchStatus] = useState<string | null>(() => {
+    const stored = localStorage.getItem('xettle_fetch_started');
+    if (stored && Date.now() - parseInt(stored, 10) < 5 * 60 * 1000) {
+      return 'Fetching settlement reports from Amazon...';
+    }
+    return null;
+  });
   // Bulk upload state
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
   const [bulkProcessing, setBulkProcessing] = useState(false);
@@ -138,6 +153,28 @@ export default function AccountingDashboard() {
   const settlementInputRef = useRef<HTMLInputElement>(null);
   const transactionInputRef = useRef<HTMLInputElement>(null);
    const pendingPushRef = useRef(false);
+
+  // Poll localStorage to detect fetch completion/timeout (e.g. after page refresh)
+  useEffect(() => {
+    if (!amazonFetching) return;
+    const interval = setInterval(() => {
+      const stored = localStorage.getItem('xettle_fetch_started');
+      if (!stored) {
+        // Fetch was completed (localStorage cleared by the response handler)
+        setAmazonFetching(false);
+        setAmazonFetchStatus(null);
+        return;
+      }
+      const elapsed = Date.now() - parseInt(stored, 10);
+      if (elapsed > 5 * 60 * 1000) {
+        // Timeout — assume fetch completed or failed silently
+        localStorage.removeItem('xettle_fetch_started');
+        setAmazonFetching(false);
+        setAmazonFetchStatus(null);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [amazonFetching]);
 
   // Warn before navigating away with unsaved data
   useEffect(() => {
@@ -249,6 +286,17 @@ export default function AccountingDashboard() {
   }, [selectedCountry]);
 
   useEffect(() => { loadSettlements(); }, [loadSettlements]);
+
+  // Realtime subscription: auto-refresh settlements list when rows change (insert/delete/update)
+  useEffect(() => {
+    const channel = supabase
+      .channel('settlements-status-refresh')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => {
+        loadSettlements();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadSettlements]);
 
   // Reload settlements whenever the user switches to the history tab
   useEffect(() => {

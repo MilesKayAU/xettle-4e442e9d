@@ -122,6 +122,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
     }
     setFetching(true);
     setFetchProgress({ current: 0, total: 0, status: 'Syncing all reports server-side...' });
+    localStorage.setItem('xettle_fetch_started', Date.now().toString());
     onFetchStateChange?.(true, 'Fetching settlement reports from Amazon...');
 
     // Fire-and-forget: don't block UI
@@ -130,7 +131,6 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
     }).then(({ data, error }) => {
       if (error || data?.error) {
         toast.error(`Sync failed: ${error?.message || data?.error}`);
-        onFetchStateChange?.(false, null);
       } else {
         const { imported = 0, skipped = 0, errors = 0, details = [] } = data || {};
         const parts = [];
@@ -141,14 +141,14 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         if (imported > 0) onSettlementsAutoFetched?.();
         setLastSync(new Date().toISOString());
         if (details.length > 0) console.log('[Sync Details]', details);
-        onFetchStateChange?.(false, null);
       }
     }).catch((err) => {
       toast.error(`Sync failed: ${err.message}`);
-      onFetchStateChange?.(false, null);
     }).finally(() => {
       setFetching(false);
       setFetchProgress(null);
+      localStorage.removeItem('xettle_fetch_started');
+      onFetchStateChange?.(false, null);
     });
   };
 
