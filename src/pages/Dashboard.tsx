@@ -3,7 +3,7 @@ import { useAdminAuth } from '@/hooks/use-admin-auth';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,6 +47,12 @@ export default function Dashboard() {
             <span className="text-primary">X</span>ettle
           </Link>
           <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/pricing">
+                <Sparkles className="h-4 w-4 mr-1" />
+                Plans
+              </Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => window.dispatchEvent(new Event('xettle:open-settings'))}>
               <Settings className="h-4 w-4 mr-1" />
               Settings
