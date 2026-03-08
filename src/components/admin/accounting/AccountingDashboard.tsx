@@ -693,11 +693,11 @@ export default function AccountingDashboard() {
           settlementId: header.settlementId,
           month1: m1.monthLabel,
           month2: m2.monthLabel,
-          lines1Sum: round2(lines1Sum),
+          xeroInclusiveTotal: round2(xeroInclusiveTotal),
           rolloverAmount,
         });
 
-        // Add Account 612 balancing line: negative of lines1Sum → invoice nets to $0
+        // Add Account 612 balancing line: negative of rolloverAmount → invoice nets to $0
         lines1.push({
           Description: `Split month rollover to ${m2.monthLabel}`,
           AccountCode: XERO_ACCOUNT_MAP['Split Month Rollover'].code,
