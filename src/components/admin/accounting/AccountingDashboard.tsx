@@ -3484,6 +3484,10 @@ function SettlementSettings({ onGstRateChanged, onGapThresholdChanged }: { onGst
       if (!isNaN(parsedRate) && parsedRate > 0 && onGstRateChanged) {
         onGstRateChanged(parsedRate);
       }
+      const parsedGap = parseInt(gapThreshold, 10);
+      if (!isNaN(parsedGap) && parsedGap > 0 && onGapThresholdChanged) {
+        onGapThresholdChanged(parsedGap);
+      }
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
     } finally {
