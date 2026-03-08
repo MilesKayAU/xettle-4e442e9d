@@ -1,10 +1,1 @@
-project_id = "wtxqdzcihxjaiosmffvm"
-
-[functions.xero-auth]
-verify_jwt = false
-
-[functions.sync-amazon-journal]
-verify_jwt = false
-
-[functions.admin-list-users]
-verify_jwt = false
+project_id = "cegwclxbqvitkqxikpss"
