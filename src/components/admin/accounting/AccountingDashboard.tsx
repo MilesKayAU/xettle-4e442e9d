@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
+import OnboardingChecklist from '@/components/admin/accounting/OnboardingChecklist';
 
 const PLATFORMS = [
   { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
@@ -112,6 +113,7 @@ export default function AccountingDashboard() {
   const [pushed, setPushed] = useState(false);
   const [settingsGstRate, setSettingsGstRate] = useState<number>(10);
   const [settingsAccountCodes, setSettingsAccountCodes] = useState<Record<string, string> | null>(null);
+  const [xeroConnected, setXeroConnected] = useState(false);
   
   // Bulk upload state
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
@@ -172,6 +174,20 @@ export default function AccountingDashboard() {
       } catch {}
     };
     loadAccountingSettings();
+  }, []);
+
+  // Check Xero connection status
+  useEffect(() => {
+    const checkXero = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('xero-auth', {
+          method: 'GET',
+          headers: { 'x-action': 'status' }
+        });
+        if (!error && data?.connected) setXeroConnected(true);
+      } catch {}
+    };
+    checkXero();
   }, []);
 
   const loadSettlements = useCallback(async () => {
@@ -887,6 +903,15 @@ export default function AccountingDashboard() {
           ))}
         </div>
       </div>
+
+      {/* Onboarding Checklist */}
+      <OnboardingChecklist
+        xeroConnected={xeroConnected}
+        accountsVerified={!!settingsAccountCodes}
+        hasSettlements={settlements.length > 0}
+        onGoToSettings={() => { setSelectedPlatform('amazon'); setActiveTab('settings'); }}
+        onConnectXero={() => { setSelectedPlatform('amazon'); setActiveTab('settings'); }}
+      />
 
       {selectedPlatform === 'amazon' ? (
         <div className="space-y-6">
