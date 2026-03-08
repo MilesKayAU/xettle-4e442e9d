@@ -18,8 +18,8 @@ const features = [
   },
   {
     icon: Bot,
-    title: 'Auto-Import from Amazon',
-    description: 'Connect your Seller Central account and let Xettle automatically fetch new settlement reports every 12–24 hours.',
+    title: 'Auto-Import from Amazon (SP-API)',
+    description: 'Connect your Seller Central account and let Xettle automatically fetch new settlement reports. More marketplaces coming soon.',
     free: false,
   },
   {
@@ -37,7 +37,7 @@ const features = [
   {
     icon: Store,
     title: 'Multi-Marketplace',
-    description: 'Amazon AU today. Bunnings, Catch, MyDeal, Kogan and more coming soon — all with the same simple workflow.',
+    description: 'Amazon and Bunnings supported today. Catch, MyDeal, Kogan and more coming soon — all with the same simple workflow.',
     free: true,
   },
 ];
@@ -51,12 +51,12 @@ const marketplaces = [
 ];
 
 const trustSignals = [
-  'Built for Australian sellers',
+  'Built by Australian marketplace sellers',
   'Australian GST handled correctly',
   'Works with Xero AU tax rules',
   'Your data stays in your own Xero',
   'Review every settlement before it posts',
-  'Free plan — no time limits, no trial',
+  'Manual settlement uploads free forever',
 ];
 
 export default function Landing() {
@@ -86,7 +86,7 @@ export default function Landing() {
         <div className="container-custom text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6">
             <Store className="h-4 w-4" />
-            The settlement layer for Xero
+            Marketplace settlement uploads · Paid auto-sync
           </div>
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6">
             Marketplace settlements,
@@ -96,7 +96,7 @@ export default function Landing() {
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
             Turn marketplace settlement reports into clean Xero invoices.
             <br />
-            Amazon, Bunnings, Catch and more.
+            Works with Amazon today — Bunnings and more coming soon.
           </p>
           <p className="text-sm text-muted-foreground/70 mb-8 font-medium">
             <span className="text-primary font-semibold">X</span>ero + Se<span className="text-primary font-semibold">ttle</span> = <span className="text-primary font-semibold">Xettle</span>
@@ -247,7 +247,7 @@ export default function Landing() {
               Everything you need to Xettle
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Marketplace accounting for Xero. No bloat, no complexity.
+              Built by marketplace sellers, for marketplace sellers. No bloat, no complexity.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -278,7 +278,7 @@ export default function Landing() {
         <div className="container-custom max-w-3xl mx-auto">
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12">
             <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-8">
-              Built for Australian Sellers
+              Built for Australian Marketplace Sellers
             </h2>
             <div className="grid sm:grid-cols-2 gap-4">
               {trustSignals.map((signal) => (
