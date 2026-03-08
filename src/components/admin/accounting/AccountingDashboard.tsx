@@ -1244,7 +1244,7 @@ export default function AccountingDashboard() {
 
 // ─── Bulk Upload Processor ────────────────────────────────────────────
 
-type BulkFileStatus = 'pending' | 'processing' | 'parsed' | 'unmapped_warning' | 'recon_failed' | 'duplicate' | 'error' | 'saved' | 'save_error';
+type BulkFileStatus = 'pending' | 'processing' | 'parsed' | 'unmapped_warning' | 'recon_failed' | 'duplicate' | 'batch_duplicate' | 'error' | 'saved' | 'save_error';
 
 interface BulkFileResult {
   file: File;
@@ -1287,6 +1287,7 @@ function BulkUploadProcessor({
   const [savingAll, setSavingAll] = useState(false);
   const [saveComplete, setSaveComplete] = useState(false);
   const processingRef = useRef(false);
+  const batchSeenIds = useRef(new Set<string>());
 
   const extractId = (name: string): string => {
     const match = name.match(/(\d{9,15})/);
@@ -1409,7 +1410,21 @@ function BulkUploadProcessor({
 
       const parserOpts: ParserOptions = { gstRate };
       const parsed = parseSettlementTSV(text, parserOpts);
-      const existsAlready = existingSettlements.some(s => s.settlement_id === parsed.header.settlementId);
+      const parsedId = parsed.header.settlementId;
+      const existsAlready = existingSettlements.some(s => s.settlement_id === parsedId);
+
+      // In-batch duplicate detection: skip if we already parsed this ID in this batch
+      if (batchSeenIds.current.has(parsedId)) {
+        setResults(prev => prev.map((r, i) => i === index ? {
+          ...r, status: 'batch_duplicate' as BulkFileStatus,
+          message: `Duplicate file in batch — already parsed as ${parsedId}`,
+          settlementId: parsedId,
+        } : r));
+        setCurrentIndex(index + 1);
+        setTimeout(() => processNext(index + 1), 100);
+        return;
+      }
+      batchSeenIds.current.add(parsedId);
 
       if (!parsed.summary.reconciliationMatch) {
         setResults(prev => prev.map((r, i) => i === index ? {
@@ -1500,7 +1515,7 @@ function BulkUploadProcessor({
   const unmappedCount = results.filter(r => r.status === 'unmapped_warning').length;
   const savedCount = results.filter(r => r.status === 'saved').length;
   const failedCount = results.filter(r => r.status === 'recon_failed').length;
-  const duplicateCount = results.filter(r => r.status === 'duplicate').length;
+  const duplicateCount = results.filter(r => r.status === 'duplicate' || r.status === 'batch_duplicate').length;
   const errorCount = results.filter(r => r.status === 'error' || r.status === 'save_error').length;
   const processedCount = results.filter(r => r.status !== 'pending' && r.status !== 'processing').length;
   const progressPct = files.length > 0 ? (processedCount / files.length) * 100 : 0;
@@ -1555,6 +1570,7 @@ function BulkUploadProcessor({
       case 'unmapped_warning': return <AlertTriangle className="h-4 w-4 text-amber-500" />;
       case 'recon_failed': return <XCircle className="h-4 w-4 text-destructive" />;
       case 'duplicate': return <span className="h-4 w-4 flex items-center justify-center text-muted-foreground text-sm">↩</span>;
+      case 'batch_duplicate': return <span className="h-4 w-4 flex items-center justify-center text-muted-foreground text-sm">↩</span>;
       case 'error': case 'save_error': return <XCircle className="h-4 w-4 text-destructive" />;
       case 'processing': return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
       default: return <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30" />;
@@ -1567,7 +1583,8 @@ function BulkUploadProcessor({
       case 'saved': return <span className="text-green-700 font-medium">Saved ✓</span>;
       case 'unmapped_warning': return <span className="text-amber-600 font-medium">Parsed with warnings</span>;
       case 'recon_failed': return <span className="text-destructive font-semibold">RECONCILIATION FAILED</span>;
-      case 'duplicate': return <span className="text-muted-foreground">Already processed — skipped</span>;
+      case 'duplicate': return <span className="text-muted-foreground">Already saved — skipped</span>;
+      case 'batch_duplicate': return <span className="text-muted-foreground">Duplicate file in batch — skipped</span>;
       case 'error': case 'save_error': return <span className="text-destructive">Error: {r.message}</span>;
       case 'processing': return <span className="text-primary">Processing...</span>;
       default: return <span className="text-muted-foreground">Pending</span>;
@@ -1586,17 +1603,48 @@ function BulkUploadProcessor({
         )}
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* Last uploaded settlement marker */}
+        {existingSettlements.length > 0 && (
+          <div className="text-xs bg-muted/50 rounded px-3 py-2 flex items-center gap-2">
+            <History className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Last saved settlement:</span>
+            <span className="font-mono font-medium">
+              {(() => {
+                const sorted = [...existingSettlements].sort((a, b) => b.period_end.localeCompare(a.period_end));
+                return `${sorted[0].settlement_id} (${formatDisplayDate(sorted[0].period_start)} → ${formatDisplayDate(sorted[0].period_end)})`;
+              })()}
+            </span>
+          </div>
+        )}
+
         <div className="max-h-64 overflow-y-auto space-y-1">
-          {results.map((r, i) => (
-            <div key={i} className={`flex items-center gap-3 py-1.5 px-2 rounded text-sm ${
+          {/* Sort chronologically by parsed period when done, otherwise show in processing order */}
+          {(done
+            ? [...results].sort((a, b) => {
+                const aStart = a.parsed?.header.periodStart || '';
+                const bStart = b.parsed?.header.periodStart || '';
+                if (aStart && bStart) return aStart.localeCompare(bStart);
+                if (aStart) return -1;
+                if (bStart) return 1;
+                return 0;
+              })
+            : results
+          ).map((r, i) => (
+            <div key={`${r.settlementId}-${i}`} className={`flex items-center gap-3 py-1.5 px-2 rounded text-sm ${
               r.status === 'recon_failed' ? 'bg-destructive/10' :
               r.status === 'unmapped_warning' ? 'bg-amber-50' :
               r.status === 'processing' ? 'bg-primary/5' :
               r.status === 'parsed' ? 'bg-blue-50/50' :
+              r.status === 'batch_duplicate' ? 'bg-muted/30' :
               ''
             }`}>
               {statusIcon(r.status)}
               <span className="font-mono text-xs w-32 flex-shrink-0">{r.settlementId}</span>
+              {r.parsed && (
+                <span className="font-mono text-[10px] text-muted-foreground w-36 flex-shrink-0">
+                  {formatDisplayDate(r.parsed.header.periodStart)} → {formatDisplayDate(r.parsed.header.periodEnd)}
+                </span>
+              )}
               <span className="text-xs flex-1">{statusLabel(r)}</span>
               {r.parsed && (r.status === 'parsed' || r.status === 'unmapped_warning') && (
                 <Button
