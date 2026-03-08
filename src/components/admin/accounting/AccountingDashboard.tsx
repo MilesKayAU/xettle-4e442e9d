@@ -4074,6 +4074,45 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
         </CardContent>
       </Card>
 
+      {/* Sync Cutoff Date */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            Sync Cutoff Date
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Settlements with a period ending <strong>before</strong> this date will be automatically marked as "Already in Xero" when fetched via the API. Set this to the date you started using Xettle to prevent old data being pushed to Xero.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className={cn("w-[200px] justify-start text-left font-normal", !syncCutoffDate && "text-muted-foreground")}>
+                  <CalendarIcon className="h-3.5 w-3.5 mr-2" />
+                  {syncCutoffDate ? format(syncCutoffDate, 'dd MMM yyyy') : 'No cutoff set'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={syncCutoffDate}
+                  onSelect={setSyncCutoffDate}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+            {syncCutoffDate && (
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => setSyncCutoffDate(undefined)}>
+                Clear
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Save */}
       <Button onClick={handleSaveSettings} disabled={savingSettings} className="gap-2">
         {savingSettings ? (
