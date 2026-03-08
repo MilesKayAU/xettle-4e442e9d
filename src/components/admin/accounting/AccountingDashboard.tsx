@@ -112,6 +112,7 @@ export default function AccountingDashboard() {
   const [pushing, setPushing] = useState(false);
   const [pushed, setPushed] = useState(false);
   const [settingsGstRate, setSettingsGstRate] = useState<number>(10);
+  const [settingsGapThreshold, setSettingsGapThreshold] = useState<number>(16);
   const [settingsAccountCodes, setSettingsAccountCodes] = useState<Record<string, string> | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
   
@@ -159,7 +160,7 @@ export default function AccountingDashboard() {
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'gap_threshold_days']);
         if (data) {
           for (const row of data) {
             if (row.key === 'accounting_gst_rate' && row.value) {
@@ -168,6 +169,10 @@ export default function AccountingDashboard() {
             }
             if (row.key === 'accounting_xero_account_codes' && row.value) {
               try { setSettingsAccountCodes(JSON.parse(row.value)); } catch {}
+            }
+            if (row.key === 'gap_threshold_days' && row.value) {
+              const parsed = parseInt(row.value, 10);
+              if (!isNaN(parsed) && parsed > 0) setSettingsGapThreshold(parsed);
             }
           }
         }
