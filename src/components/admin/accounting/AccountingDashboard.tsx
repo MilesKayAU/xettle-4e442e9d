@@ -3331,7 +3331,7 @@ function SettlementSettings({ onGstRateChanged, onGapThresholdChanged }: { onGst
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'gap_threshold_days']);
 
         if (data) {
           for (const row of data) {
@@ -3340,6 +3340,9 @@ function SettlementSettings({ onGstRateChanged, onGapThresholdChanged }: { onGst
             }
             if (row.key === 'accounting_gst_rate' && row.value) {
               setGstRate(row.value);
+            }
+            if (row.key === 'gap_threshold_days' && row.value) {
+              setGapThreshold(row.value);
             }
           }
         }
