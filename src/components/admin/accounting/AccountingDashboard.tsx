@@ -1212,15 +1212,36 @@ export default function AccountingDashboard() {
               )}
               {/* Single mode */}
               {parsed && parsedBatch.length === 0 && (
-                <SettlementReview
-                  parsed={parsed}
-                  onSave={handleSave}
-                  saving={saving}
-                  saved={saved}
-                  onPushToXero={handlePushToXero}
-                  pushing={pushing}
-                  pushed={pushed}
-                />
+                <div className="space-y-2">
+                  {!saved && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setParsed(null);
+                          setSaved(false);
+                          setPushed(false);
+                          clearSettlementFiles();
+                          clearTransactionFile();
+                          setActiveTab('upload');
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        Discard
+                      </Button>
+                    </div>
+                  )}
+                  <SettlementReview
+                    parsed={parsed}
+                    onSave={handleSave}
+                    saving={saving}
+                    saved={saved}
+                    onPushToXero={handlePushToXero}
+                    pushing={pushing}
+                    pushed={pushed}
+                  />
+                </div>
               )}
             </TabsContent>
 
@@ -2616,7 +2637,8 @@ function BatchSettlementReview({
         is_split_month: splitMonth.isSplitMonth,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
         split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-      });
+        parser_version: PARSER_VERSION,
+      } as any);
 
       if (lines.length > 0) {
         const lineRows = lines.map(l => ({
@@ -2692,7 +2714,7 @@ function BatchSettlementReview({
                 {savedCount} saved • {unsavedCount} pending • Click to expand details
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
@@ -2702,10 +2724,31 @@ function BatchSettlementReview({
                 {reviewSortDir === 'desc' ? '▼ Newest first' : '▲ Oldest first'}
               </Button>
               {unsavedCount > 0 && (
-                <Button onClick={handleSaveAll} disabled={savingAll} className="gap-2">
-                  {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {savingAll ? 'Saving...' : `Save All ${unsavedCount}`}
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const unsavedItems = batch.filter(b => !b.saved);
+                      if (unsavedItems.length === batch.length) {
+                        // All unsaved — discard everything
+                        onBatchUpdate([]);
+                        onAllSaved();
+                      } else {
+                        // Keep only saved items
+                        onBatchUpdate(batch.filter(b => b.saved));
+                      }
+                    }}
+                    className="gap-1.5 text-xs text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Discard Unsaved ({unsavedCount})
+                  </Button>
+                  <Button onClick={handleSaveAll} disabled={savingAll} className="gap-2">
+                    {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {savingAll ? 'Saving...' : `Save All ${unsavedCount}`}
+                  </Button>
+                </>
               )}
               {allSaved && (
                 <Badge className="bg-green-100 text-green-800 text-sm px-3 py-1.5 gap-1">
@@ -2779,16 +2822,37 @@ function BatchSettlementReview({
                   {item.saved ? (
                     <Badge variant="secondary" className="text-[10px]">Saved</Badge>
                   ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      disabled={item.saving || !p.summary.reconciliationMatch}
-                      onClick={(e) => { e.stopPropagation(); saveOne(index); }}
-                    >
-                      {item.saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                      Save
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const updated = batch.filter((_, i) => i !== index);
+                          if (updated.length === 0) {
+                            onBatchUpdate([]);
+                            onAllSaved();
+                          } else {
+                            onBatchUpdate(updated);
+                            if (expandedIndex === index) setExpandedIndex(null);
+                          }
+                        }}
+                        title="Remove from review"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        disabled={item.saving || !p.summary.reconciliationMatch}
+                        onClick={(e) => { e.stopPropagation(); saveOne(index); }}
+                      >
+                        {item.saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                        Save
+                      </Button>
+                    </>
                   )}
                   <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                 </div>
