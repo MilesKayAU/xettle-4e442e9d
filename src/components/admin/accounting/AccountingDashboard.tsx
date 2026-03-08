@@ -3896,8 +3896,6 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
       if (onSyncCutoffChanged) {
         onSyncCutoffChanged(syncCutoffDate ? syncCutoffDate.toISOString().split('T')[0] : '');
       }
-        onGstRateChanged(parsedRate);
-      }
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
     } finally {
