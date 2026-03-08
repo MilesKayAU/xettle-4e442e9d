@@ -1603,17 +1603,48 @@ function BulkUploadProcessor({
         )}
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* Last uploaded settlement marker */}
+        {existingSettlements.length > 0 && (
+          <div className="text-xs bg-muted/50 rounded px-3 py-2 flex items-center gap-2">
+            <History className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Last saved settlement:</span>
+            <span className="font-mono font-medium">
+              {(() => {
+                const sorted = [...existingSettlements].sort((a, b) => b.period_end.localeCompare(a.period_end));
+                return `${sorted[0].settlement_id} (${formatDisplayDate(sorted[0].period_start)} → ${formatDisplayDate(sorted[0].period_end)})`;
+              })()}
+            </span>
+          </div>
+        )}
+
         <div className="max-h-64 overflow-y-auto space-y-1">
-          {results.map((r, i) => (
-            <div key={i} className={`flex items-center gap-3 py-1.5 px-2 rounded text-sm ${
+          {/* Sort chronologically by parsed period when done, otherwise show in processing order */}
+          {(done
+            ? [...results].sort((a, b) => {
+                const aStart = a.parsed?.header.periodStart || '';
+                const bStart = b.parsed?.header.periodStart || '';
+                if (aStart && bStart) return aStart.localeCompare(bStart);
+                if (aStart) return -1;
+                if (bStart) return 1;
+                return 0;
+              })
+            : results
+          ).map((r, i) => (
+            <div key={`${r.settlementId}-${i}`} className={`flex items-center gap-3 py-1.5 px-2 rounded text-sm ${
               r.status === 'recon_failed' ? 'bg-destructive/10' :
               r.status === 'unmapped_warning' ? 'bg-amber-50' :
               r.status === 'processing' ? 'bg-primary/5' :
               r.status === 'parsed' ? 'bg-blue-50/50' :
+              r.status === 'batch_duplicate' ? 'bg-muted/30' :
               ''
             }`}>
               {statusIcon(r.status)}
               <span className="font-mono text-xs w-32 flex-shrink-0">{r.settlementId}</span>
+              {r.parsed && (
+                <span className="font-mono text-[10px] text-muted-foreground w-36 flex-shrink-0">
+                  {formatDisplayDate(r.parsed.header.periodStart)} → {formatDisplayDate(r.parsed.header.periodEnd)}
+                </span>
+              )}
               <span className="text-xs flex-1">{statusLabel(r)}</span>
               {r.parsed && (r.status === 'parsed' || r.status === 'unmapped_warning') && (
                 <Button
