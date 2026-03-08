@@ -2127,7 +2127,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     }
   };
 
-  const [markingSynced, setMarkingSynced] = useState(false);
+
   const handleMarkSyncedBulk = async () => {
     if (selectedIds.size === 0) return;
     setMarkingSynced(true);
