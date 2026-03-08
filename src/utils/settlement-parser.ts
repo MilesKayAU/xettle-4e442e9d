@@ -621,11 +621,11 @@ function detectSplitMonth(
   const m1Agg = aggregateLines(month1Lines);
   const m2Agg = aggregateLines(month2Lines);
 
-  const formatDateStr2 = (d: Date) => d.toISOString().split('T')[0];
+  
 
   const month1: SplitMonthData = {
     start: header.periodStart,
-    end: formatDateStr2(lastDayMonth1),
+    end: formatDateStr(lastDayMonth1),
     ratio: round2(ratio1 * 100) / 100,
     days: daysMonth1,
     monthLabel: MONTH_NAMES[startM - 1],
@@ -633,7 +633,7 @@ function detectSplitMonth(
   };
 
   const month2: SplitMonthData = {
-    start: formatDateStr2(firstDayMonth2),
+    start: formatDateStr(firstDayMonth2),
     end: header.periodEnd,
     ratio: round2(ratio2 * 100) / 100,
     days: daysMonth2,
