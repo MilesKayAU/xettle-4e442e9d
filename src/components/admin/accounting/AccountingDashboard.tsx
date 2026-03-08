@@ -265,6 +265,17 @@ export default function AccountingDashboard() {
 
   useEffect(() => { loadSettlements(); }, [loadSettlements]);
 
+  // Realtime subscription: auto-refresh settlements list when rows change (insert/delete/update)
+  useEffect(() => {
+    const channel = supabase
+      .channel('settlements-status-refresh')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => {
+        loadSettlements();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadSettlements]);
+
   // Reload settlements whenever the user switches to the history tab
   useEffect(() => {
     if (activeTab === 'history') {
