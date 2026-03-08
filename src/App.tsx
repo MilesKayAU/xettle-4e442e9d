@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 
+const Landing = lazy(() => import("@/pages/Landing"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Admin = lazy(() => import("@/pages/Admin"));
 const Auth = lazy(() => import("@/pages/Auth"));
 const XeroCallback = lazy(() => import("@/pages/XeroCallback"));
@@ -32,7 +34,9 @@ function App() {
               </div>
             }>
               <Routes>
-                <Route path="/" element={<Admin />} />
+                <Route path="/" element={<Landing />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/admin" element={<Admin />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/auth/xero/callback" element={<XeroCallback />} />
                 <Route path="*" element={<NotFound />} />

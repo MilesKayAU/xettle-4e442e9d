@@ -71,12 +71,7 @@ const XeroConnectionStatus = () => {
         return;
       }
 
-      // Use hardcoded production URL to match Xero Developer Portal config
-      const isProduction = window.location.hostname === 'mileskay.com.au' || 
-                           window.location.hostname === 'www.mileskay.com.au';
-      const redirectUri = isProduction 
-        ? 'https://www.mileskay.com.au/auth/xero/callback'
-        : `${window.location.origin}/auth/xero/callback`;
+      const redirectUri = `${window.location.origin}/auth/xero/callback`;
       
       // Use supabase.functions.invoke
       const { data: result, error } = await supabase.functions.invoke('xero-auth', {

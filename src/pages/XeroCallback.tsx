@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,6 @@ const XeroCallback = () => {
       const errorDescription = searchParams.get('error_description');
       const state = searchParams.get('state');
 
-      // Validate state if we stored it
       const storedState = sessionStorage.getItem('xero_oauth_state');
       if (storedState && state !== storedState) {
         setStatus('error');
@@ -40,41 +39,26 @@ const XeroCallback = () => {
       }
 
       try {
-        // Get the current session
         const { data: { session } } = await supabase.auth.getSession();
-        
         if (!session) {
           setStatus('error');
           setMessage('You must be logged in to complete Xero authorization.');
           return;
         }
 
-        // Get the redirect URI (must match what was used in the authorize request)
         const redirectUri = `${window.location.origin}/auth/xero/callback`;
-
-        // Exchange code for tokens via edge function using supabase.functions.invoke
         const { data: result, error: funcError } = await supabase.functions.invoke('xero-auth', {
           body: { code, redirectUri },
-          headers: {
-            'x-action': 'callback'
-          }
+          headers: { 'x-action': 'callback' },
         });
 
-        if (funcError) {
-          throw new Error(funcError.message || 'Failed to complete authorization');
-        }
-
-        if (result?.error) {
-          throw new Error(result.error || result.details || 'Failed to complete authorization');
-        }
+        if (funcError) throw new Error(funcError.message || 'Failed to complete authorization');
+        if (result?.error) throw new Error(result.error || 'Failed to complete authorization');
 
         setTenants(result?.tenants || []);
         setStatus('success');
         setMessage('Successfully connected to Xero!');
-        
-        // Clear the stored state
         sessionStorage.removeItem('xero_oauth_state');
-
       } catch (err: any) {
         console.error('Xero callback error:', err);
         setStatus('error');
@@ -90,15 +74,9 @@ const XeroCallback = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-            {status === 'loading' && (
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            )}
-            {status === 'success' && (
-              <CheckCircle className="h-12 w-12 text-green-500" />
-            )}
-            {status === 'error' && (
-              <XCircle className="h-12 w-12 text-destructive" />
-            )}
+            {status === 'loading' && <Loader2 className="h-12 w-12 animate-spin text-primary" />}
+            {status === 'success' && <CheckCircle className="h-12 w-12 text-green-500" />}
+            {status === 'error' && <XCircle className="h-12 w-12 text-destructive" />}
           </div>
           <CardTitle>
             {status === 'loading' && 'Connecting to Xero...'}
@@ -121,25 +99,9 @@ const XeroCallback = () => {
               </ul>
             </div>
           )}
-          
-          <div className="flex flex-col gap-2">
-            <Button 
-              onClick={() => navigate('/admin')}
-              className="w-full"
-            >
-              {status === 'success' ? 'Continue to Admin' : 'Back to Admin'}
-            </Button>
-            
-            {status === 'error' && (
-              <Button 
-                variant="outline"
-                onClick={() => navigate('/admin')}
-                className="w-full"
-              >
-                Try Again
-              </Button>
-            )}
-          </div>
+          <Button onClick={() => navigate('/dashboard')} className="w-full">
+            {status === 'success' ? 'Continue to Dashboard' : 'Back to Dashboard'}
+          </Button>
         </CardContent>
       </Card>
     </div>
