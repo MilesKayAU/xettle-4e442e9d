@@ -402,12 +402,15 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         continue;
       }
 
-      // 4. Check which settlements already exist
+      // 4. Check which settlements already exist (by ID and by fingerprint: dates + deposit)
       const { data: existingData } = await supabaseAdmin
         .from('settlements')
-        .select('settlement_id')
+        .select('settlement_id, period_start, period_end, bank_deposit')
         .eq('user_id', userId);
       const existingIds = new Set((existingData || []).map((s: any) => s.settlement_id));
+      const existingFingerprints = new Set(
+        (existingData || []).map((s: any) => `${s.period_start}|${s.period_end}|${round2(s.bank_deposit)}`)
+      );
 
       // 5. Process reports newest-first so fresh data gets imported even if we hit rate limits
       const sorted = [...allReports].sort((a: any, b: any) => {
@@ -430,10 +433,18 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
           // Parse
           const parsed = parseSettlementTSV(content, gstRate);
 
-          // Dedup check
+          // Dedup check 1: exact settlement ID match
           if (existingIds.has(parsed.header.settlementId)) {
             userSkipped++;
-            console.log(`[Sync] Skipping duplicate ${parsed.header.settlementId}`);
+            console.log(`[Sync] Skipping duplicate ${parsed.header.settlementId} (ID match)`);
+            continue;
+          }
+
+          // Dedup check 2: fingerprint match (dates + deposit amount)
+          const fingerprint = `${parsed.header.periodStart}|${parsed.header.periodEnd}|${round2(parsed.header.totalAmount)}`;
+          if (existingFingerprints.has(fingerprint)) {
+            userSkipped++;
+            console.log(`[Sync] Skipping duplicate ${parsed.header.settlementId} (fingerprint match: ${fingerprint})`);
             continue;
           }
 
