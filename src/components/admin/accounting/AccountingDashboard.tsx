@@ -649,14 +649,34 @@ export default function AccountingDashboard() {
 
       if (splitMonth.isSplitMonth && splitMonth.month1 && splitMonth.month2) {
         // SPLIT MONTH — Account 612 Rollover Method (matches Link My Books)
-        // Invoice 1: ALL transactions at full amounts + CR 612 → nets to $0.00
-        // Invoice 2: DR 612 (clears rollover) + month2 proportional transactions → nets to bank deposit
+        // Split lines by ACTUAL posted date, not proportional ratio.
+        // Journal 1: Month-1 lines only + CR 612 → nets to $0.00
+        // Journal 2: DR 612 (clears rollover) + Month-2 lines → nets to bank deposit
 
         const m1 = splitMonth.month1;
         const m2 = splitMonth.month2;
-        
-        // Invoice 1: Full amounts (no ratio) + balancing 612 line
-        const lines1 = buildInvoiceLineItems(parsedLines, `${m1.monthLabel} (full)`, header.settlementId);
+
+        // Split parsed lines by posted_date month
+        const m1EndDate = m1.end; // YYYY-MM-DD last day of month 1
+        const month1Lines = parsedLines.filter(l => {
+          if (!l.postedDate) return true; // lines without date default to month 1
+          return l.postedDate <= m1EndDate;
+        });
+        const month2Lines = parsedLines.filter(l => {
+          if (!l.postedDate) return false;
+          return l.postedDate > m1EndDate;
+        });
+
+        console.info('[Split Month By Date]', {
+          settlementId: header.settlementId,
+          month1Lines: month1Lines.length,
+          month2Lines: month2Lines.length,
+          totalLines: parsedLines.length,
+          m1End: m1EndDate,
+        });
+
+        // Invoice 1: Month-1 actual lines + balancing 612 line
+        const lines1 = buildInvoiceLineItems(month1Lines, `${m1.monthLabel}`, header.settlementId);
         const lines1Sum = lines1.reduce((sum, l) => sum + l.UnitAmount, 0);
         const rolloverAmount = round2(lines1Sum);
 
@@ -679,8 +699,8 @@ export default function AccountingDashboard() {
         const reference1 = `Amazon AU Settlement ${header.settlementId} - Part 1 (${m1.monthLabel})`;
         const date1 = m1.end;
 
-        // Invoice 2: DR 612 (clear rollover) + month2 proportional transactions
-        const lines2Month2 = buildInvoiceLineItems(parsedLines, `${m2.monthLabel} portion`, header.settlementId, m2.ratio);
+        // Invoice 2: DR 612 (clear rollover) + Month-2 actual lines
+        const lines2Month2 = buildInvoiceLineItems(month2Lines, `${m2.monthLabel}`, header.settlementId);
         const rolloverLine = {
           Description: `Split month rollover from ${m1.monthLabel}`,
           AccountCode: XERO_ACCOUNT_MAP['Split Month Rollover'].code,
