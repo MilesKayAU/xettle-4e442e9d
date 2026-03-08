@@ -95,6 +95,49 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === settlements.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(settlements.map(s => s.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    const toDelete = settlements.filter(s => selected.has(s.id));
+    if (toDelete.length === 0) return;
+    if (!confirm(`Delete ${toDelete.length} auto-imported settlement(s)?`)) return;
+    setDeletingBulk(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      for (const s of toDelete) {
+        await supabase.from('settlement_lines').delete()
+          .eq('user_id', user.id).eq('settlement_id', s.settlement_id);
+        await supabase.from('settlement_unmapped').delete()
+          .eq('user_id', user.id).eq('settlement_id', s.settlement_id);
+        await supabase.from('settlements').delete().eq('id', s.id);
+      }
+
+      toast.success(`${toDelete.length} settlement(s) deleted`);
+      setSelected(new Set());
+      await loadApiSettlements();
+    } catch (err: any) {
+      toast.error(`Delete failed: ${err.message}`);
+    } finally {
+      setDeletingBulk(false);
+    }
+  };
+
   const handleMarkAsInXero = async (settlement: AutoImportedSettlement) => {
     setMarking(settlement.id);
     try {
