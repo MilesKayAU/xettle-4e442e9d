@@ -1189,7 +1189,21 @@ export default function AccountingDashboard() {
               <SettlementHistory
                 settlements={settlements}
                 loading={loadingSettlements}
-                onDeleted={loadSettlements}
+                onDeleted={() => {
+                  // Clear review tab if the deleted settlement was being viewed
+                  if (parsed) {
+                    // Reload settlements list, then check if current parsed settlement still exists
+                    loadSettlements().then(() => {
+                      // Clear parsed state — the settlement was deleted
+                      setParsed(null);
+                      setSaved(false);
+                      setPushed(false);
+                      setParsedBatch([]);
+                    });
+                  } else {
+                    loadSettlements();
+                  }
+                }}
                 onReview={handleReviewFromHistory}
                 onPushToXero={async (settlementTextId, settlementUuid) => {
                   pendingPushRef.current = true;
