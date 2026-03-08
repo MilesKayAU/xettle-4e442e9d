@@ -3061,7 +3061,7 @@ function SettlementReview({
               ⚠ Split Month Settlement — {formatDisplayDate(header.periodStart)} to {formatDisplayDate(header.periodEnd)}
             </CardTitle>
             <CardDescription className="text-xs">
-              Uses Account 612 (Split Month Rollovers) to match Link My Books method. Journal 1 nets to $0, Journal 2 nets to full deposit.
+              Uses Account 612 (Split Month Rollovers) to match Link My Books method. Lines split by actual posted dates. Journal 1 nets to $0, Journal 2 nets to full deposit.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -3071,11 +3071,11 @@ function SettlementReview({
                   Journal 1 ({formatDisplayDate(splitMonth.month1.end)}) — nets to $0.00
                 </h4>
                 <div className="space-y-0.5 text-xs">
-                  <div className="flex justify-between"><span>Sales:</span><span className="font-mono text-green-700">{formatAUD(summary.totalSales)}</span></div>
-                  <div className="flex justify-between"><span>Fees:</span><span className="font-mono text-red-600">{formatAUD(summary.sellerFees + summary.fbaFees + summary.storageFees)}</span></div>
-                  <div className="flex justify-between"><span>Refunds:</span><span className="font-mono text-amber-600">{formatAUD(summary.refunds)}</span></div>
-                  {summary.promotionalDiscounts !== 0 && <div className="flex justify-between"><span>Promo Discounts:</span><span className="font-mono">{formatAUD(summary.promotionalDiscounts)}</span></div>}
-                  {summary.reimbursements !== 0 && <div className="flex justify-between"><span>Reimbursements:</span><span className="font-mono">{formatAUD(summary.reimbursements)}</span></div>}
+                  <div className="flex justify-between"><span>Sales:</span><span className="font-mono text-green-700">{formatAUD(splitMonth.month1.totalSales)}</span></div>
+                  <div className="flex justify-between"><span>Fees:</span><span className="font-mono text-red-600">{formatAUD(splitMonth.month1.sellerFees + splitMonth.month1.fbaFees + splitMonth.month1.storageFees)}</span></div>
+                  <div className="flex justify-between"><span>Refunds:</span><span className="font-mono text-amber-600">{formatAUD(splitMonth.month1.refunds)}</span></div>
+                  {splitMonth.month1.promotionalDiscounts !== 0 && <div className="flex justify-between"><span>Promo Discounts:</span><span className="font-mono">{formatAUD(splitMonth.month1.promotionalDiscounts)}</span></div>}
+                  {splitMonth.month1.reimbursements !== 0 && <div className="flex justify-between"><span>Reimbursements:</span><span className="font-mono">{formatAUD(splitMonth.month1.reimbursements)}</span></div>}
                   <div className="border-t border-purple-200 my-1" />
                   <div className="flex justify-between text-purple-700 font-medium">
                     <span>Rollover to 612:</span>
@@ -3096,7 +3096,7 @@ function SettlementReview({
                   </div>
                   <div className="border-t border-purple-200 my-1" />
                   <p className="text-muted-foreground text-[10px] italic">
-                    + {splitMonth.month2.monthLabel} transactions ({Math.round(splitMonth.month2.ratio * 100)}% by days)
+                    + {splitMonth.month2.monthLabel} transactions ({month2Lines.length} lines by posted date)
                   </p>
                   <div className="flex justify-between"><span>Sales:</span><span className="font-mono text-green-700">{formatAUD(splitMonth.month2.totalSales)}</span></div>
                   <div className="flex justify-between"><span>Fees:</span><span className="font-mono text-red-600">{formatAUD(splitMonth.month2.sellerFees + splitMonth.month2.fbaFees + splitMonth.month2.storageFees)}</span></div>
