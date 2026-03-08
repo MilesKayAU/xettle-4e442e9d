@@ -1515,7 +1515,7 @@ function BulkUploadProcessor({
   const unmappedCount = results.filter(r => r.status === 'unmapped_warning').length;
   const savedCount = results.filter(r => r.status === 'saved').length;
   const failedCount = results.filter(r => r.status === 'recon_failed').length;
-  const duplicateCount = results.filter(r => r.status === 'duplicate').length;
+  const duplicateCount = results.filter(r => r.status === 'duplicate' || r.status === 'batch_duplicate').length;
   const errorCount = results.filter(r => r.status === 'error' || r.status === 'save_error').length;
   const processedCount = results.filter(r => r.status !== 'pending' && r.status !== 'processing').length;
   const progressPct = files.length > 0 ? (processedCount / files.length) * 100 : 0;
