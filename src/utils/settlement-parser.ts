@@ -580,80 +580,77 @@ function detectSplitMonth(
   const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
 
-  // Calculate AU vs intl SALES ratio for GST split in split months (v1.4.3 GST base)
-  const totalSalesForGstBase = round2(auSalesGstBaseTotal + intlSalesExcludedFromGstBase);
-  const auSalesRatio = totalSalesForGstBase !== 0 ? auSalesGstBaseTotal / totalSalesForGstBase : 1;
-
-  const applySplit = (ratio: number): Omit<SplitMonthData, 'start' | 'end' | 'ratio' | 'days' | 'monthLabel'> => {
-    const sp = round2(summary.salesPrincipal * ratio);
-    const ss = round2(summary.salesShipping * ratio);
-    const ts = round2(summary.totalSales * ratio);
-    const pd = round2(summary.promotionalDiscounts * ratio);
-    const sf = round2(summary.sellerFees * ratio);
-    const ff = round2(summary.fbaFees * ratio);
-    const stf = round2(summary.storageFees * ratio);
-    const ref = round2(summary.refunds * ratio);
-    const reim = round2(summary.reimbursements * ratio);
-    const oth = round2(summary.otherFees * ratio);
+  // Aggregate lines by actual posted date into month buckets
+  const lastDayMonth1Str = formatDateStr(lastDayMonth1); // YYYY-MM-DD
+  const aggregateLines = (monthLines: SettlementLine[]) => {
+    let sp = 0, ss = 0, pd = 0, sf = 0, ff = 0, stf = 0, ref = 0, reim = 0, oth = 0;
+    for (const line of monthLines) {
+      const cat = line.accountingCategory;
+      const amt = line.amount;
+      if (cat === 'Sales' && line.amountDescription === 'Principal') sp += amt;
+      else if (cat === 'Sales' && line.amountDescription === 'Shipping') ss += amt;
+      else if (cat === 'Sales') sp += amt; // default sub-category
+      else if (cat === 'Promotional Discounts') pd += amt;
+      else if (cat === 'Seller Fees') sf += amt;
+      else if (cat === 'FBA Fees') ff += amt;
+      else if (cat === 'Storage Fees') stf += amt;
+      else if (cat === 'Refunds') ref += amt;
+      else if (cat === 'Reimbursements') reim += amt;
+      else oth += amt;
+    }
+    const ts = round2(sp + ss);
     const gross = round2(ts + pd + sf + ff + stf + ref + reim + oth);
-    // GST on income uses SALES only (principal + shipping), excluding promotions/refunds/reimbursements
-    const splitSalesGstBase = round2(sp + ss);
-    const splitAuIncome = round2(splitSalesGstBase * auSalesRatio);
-    const splitExpenseTotal = round2(sf + ff + stf);
-    const gstInc = round2(splitAuIncome / gstDivisor);
-    const gstExp = round2(splitExpenseTotal / gstDivisor);
+    const expenseTotal = round2(sf + ff + stf);
+    const gstInc = round2(round2(sp + ss) / gstDivisor); // simplified
+    const gstExp = round2(expenseTotal / gstDivisor);
     const net = round2(gross - gstInc - gstExp);
     return {
-      salesPrincipal: sp, salesShipping: ss, totalSales: ts,
-      promotionalDiscounts: pd, sellerFees: sf, fbaFees: ff,
-      storageFees: stf, refunds: ref, reimbursements: reim,
-      otherFees: oth, grossTotal: gross, netExGst: net,
+      salesPrincipal: round2(sp), salesShipping: round2(ss), totalSales: ts,
+      promotionalDiscounts: round2(pd), sellerFees: round2(sf), fbaFees: round2(ff),
+      storageFees: round2(stf), refunds: round2(ref), reimbursements: round2(reim),
+      otherFees: round2(oth), grossTotal: gross, netExGst: net,
       gstOnIncome: gstInc, gstOnExpenses: gstExp,
     };
   };
 
-  const formatDateStr = (d: Date) => d.toISOString().split('T')[0];
+  // Split lines by posted_date
+  const month1Lines = allLines.filter(l => !l.postedDate || l.postedDate <= lastDayMonth1Str);
+  const month2Lines = allLines.filter(l => l.postedDate && l.postedDate > lastDayMonth1Str);
+
+  const m1Agg = aggregateLines(month1Lines);
+  const m2Agg = aggregateLines(month2Lines);
+
+  const formatDateStr2 = (d: Date) => d.toISOString().split('T')[0];
 
   const month1: SplitMonthData = {
     start: header.periodStart,
-    end: formatDateStr(lastDayMonth1),
+    end: formatDateStr2(lastDayMonth1),
     ratio: round2(ratio1 * 100) / 100,
     days: daysMonth1,
     monthLabel: MONTH_NAMES[startM - 1],
-    ...applySplit(ratio1),
+    ...m1Agg,
   };
 
   const month2: SplitMonthData = {
-    start: formatDateStr(firstDayMonth2),
+    start: formatDateStr2(firstDayMonth2),
     end: header.periodEnd,
     ratio: round2(ratio2 * 100) / 100,
     days: daysMonth2,
     monthLabel: MONTH_NAMES[endM - 1],
-    ...applySplit(ratio2),
+    ...m2Agg,
   };
 
-  // Rollover amount = net of full-settlement transaction categories (before 612 line)
-  // journalOneNet = sales + promo + fees + refunds + reimbursements
-  // Journal 1 posts CR 612 for -rolloverAmount to net to $0
-  // Journal 2 posts DR 612 for +rolloverAmount + month2 transactions to net to bank deposit
-  const toCents = (value: number) => Math.round((value || 0) * 100);
-  const fromCents = (value: number) => round2(value / 100);
+  // Rollover amount = gross total of month 1 lines (Journal 1 CR 612 to net to $0)
+  const rolloverAmount = m1Agg.grossTotal;
 
-  const salesTotalCents = toCents(summary.salesPrincipal) + toCents(summary.salesShipping) + toCents(summary.promotionalDiscounts);
-  const feesTotalCents = toCents(summary.sellerFees) + toCents(summary.fbaFees) + toCents(summary.storageFees);
-  const refundsTotalCents = toCents(summary.refunds);
-  const reimbursementsTotalCents = toCents(summary.reimbursements);
-  const journalOneNetCents = salesTotalCents + feesTotalCents + refundsTotalCents + reimbursementsTotalCents;
-  const rolloverAmount = fromCents(journalOneNetCents);
-
-  console.info('[Split Month Parser Rollover]', {
+  console.info('[Split Month By Posted Date]', {
     settlementId: header.settlementId,
-    salesTotal: fromCents(salesTotalCents),
-    feesTotal: fromCents(feesTotalCents),
-    refundsTotal: fromCents(refundsTotalCents),
-    reimbursementsTotal: fromCents(reimbursementsTotalCents),
-    journalOneNet: fromCents(journalOneNetCents),
+    month1Lines: month1Lines.length,
+    month2Lines: month2Lines.length,
+    m1Gross: m1Agg.grossTotal,
+    m2Gross: m2Agg.grossTotal,
     rolloverAmount,
+    bankDeposit: summary.bankDeposit,
   });
 
   return { isSplitMonth: true, month1, month2, rolloverAmount };
