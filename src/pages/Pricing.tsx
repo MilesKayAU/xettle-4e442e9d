@@ -30,7 +30,7 @@ const tiers = [
     name: 'Starter',
     icon: Rocket,
     yearlyPrice: 129,
-    monthlyPrice: 12.99,
+    monthlyPrice: 14.99,
     description: 'Connect Amazon. Stop downloading files manually.',
     features: [
       'Everything in Free',
@@ -47,7 +47,7 @@ const tiers = [
     name: 'Pro',
     icon: Crown,
     yearlyPrice: 229,
-    monthlyPrice: 22.99,
+    monthlyPrice: 26.99,
     description: 'Fully hands-off. Open your laptop, books are done.',
     features: [
       'Everything in Starter',
@@ -104,7 +104,7 @@ export default function Pricing() {
             </Label>
             {isYearly && (
               <Badge variant="secondary" className="ml-1 text-xs bg-primary/10 text-primary border-primary/20">
-                Save ~17%
+                Save ~28%
               </Badge>
             )}
           </div>
