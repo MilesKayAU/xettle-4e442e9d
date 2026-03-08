@@ -112,7 +112,7 @@ export default function AccountingDashboard() {
   const [pushing, setPushing] = useState(false);
   const [pushed, setPushed] = useState(false);
   const [settingsGstRate, setSettingsGstRate] = useState<number>(10);
-  const [settingsGapThreshold, setSettingsGapThreshold] = useState<number>(16);
+  const [settingsGapThreshold] = useState<number>(0); // kept for compat but no longer used
   const [settingsAccountCodes, setSettingsAccountCodes] = useState<Record<string, string> | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
   
@@ -1214,7 +1214,7 @@ export default function AccountingDashboard() {
             <TabsContent value="settings">
               <div className="space-y-4">
                 <XeroConnectionStatus />
-                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onGapThresholdChanged={(days) => setSettingsGapThreshold(days)} />
+                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
               </div>
             </TabsContent>
           </Tabs>
