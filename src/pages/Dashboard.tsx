@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
-import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield } from 'lucide-react';
@@ -68,9 +67,6 @@ export default function Dashboard() {
       </header>
 
       <div className="container-custom py-8">
-        <div className="mb-6">
-          <XeroConnectionStatus />
-        </div>
         <AccountingDashboard />
       </div>
     </div>
