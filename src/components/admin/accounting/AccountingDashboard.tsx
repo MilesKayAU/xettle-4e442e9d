@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare } from "lucide-react";
+import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseSettlementTSV, formatDisplayDate, formatAUD, XERO_ACCOUNT_MAP, round2, PARSER_VERSION, type ParsedSettlement, type DebugBreakdownRow, type ParserOptions, type SplitMonthData } from '@/utils/settlement-parser';
@@ -17,6 +17,7 @@ import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
 import OnboardingChecklist from '@/components/admin/accounting/OnboardingChecklist';
 import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
+import AutoImportedTab from '@/components/admin/accounting/AutoImportedTab';
 
 const PLATFORMS = [
   { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
@@ -1078,6 +1079,9 @@ export default function AccountingDashboard() {
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">{settlements.length}</Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="auto-imported" className="gap-1.5">
+                <CloudDownload className="h-3.5 w-3.5" /> Auto-Imported
+              </TabsTrigger>
               <TabsTrigger value="settings" className="gap-1.5">
                 <Settings className="h-3.5 w-3.5" /> Settings
               </TabsTrigger>
@@ -1290,10 +1294,24 @@ export default function AccountingDashboard() {
               />
             </TabsContent>
 
+            {/* AUTO-IMPORTED TAB */}
+            <TabsContent value="auto-imported">
+              <AutoImportedTab
+                existingSettlementIds={new Set(settlements.filter(s => (s as any).source !== 'api').map(s => s.settlement_id))}
+                onSyncToXero={(settlementId) => {
+                  // TODO: Implement sync-to-Xero from auto-imported
+                  toast.info(`Sync to Xero for ${settlementId} — coming soon`);
+                }}
+              />
+            </TabsContent>
+
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-                <AmazonConnectionPanel isPaid={isPaidUser} />
+                <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} onSettlementsAutoFetched={() => {
+                  loadSettlements();
+                  setActiveTab('auto-imported');
+                }} />
                 <XeroConnectionStatus />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
               </div>
