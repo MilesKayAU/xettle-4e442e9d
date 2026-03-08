@@ -2422,7 +2422,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                               <FileText className="h-3.5 w-3.5 mr-2" /> Download Audit Data
                             </DropdownMenuItem>
 
-                            {/* Saved: Push to Xero + Delete */}
+                            {/* Saved: Push to Xero + Mark as Synced + Delete */}
                             {s.status === 'saved' && (
                               <>
                                 <DropdownMenuSeparator />
@@ -2431,6 +2431,34 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                                     <ExternalLink className="h-3.5 w-3.5 mr-2" /> Push to Xero
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem onClick={() => handleMarkSyncedOne(s)}>
+                                  <CheckSquare className="h-3.5 w-3.5 mr-2" /> Mark as Already in Xero
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteOne(s)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
+                            {/* Synced External: Undo + Delete */}
+                            {s.status === 'synced_external' && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={async () => {
+                                  try {
+                                    const { data: { user } } = await supabase.auth.getUser();
+                                    if (!user) throw new Error('Not authenticated');
+                                    await supabase.from('settlements').update({ status: 'saved' } as any).eq('id', s.id).eq('user_id', user.id);
+                                    toast.success('Reverted to Saved');
+                                    onDeleted();
+                                  } catch (err: any) { toast.error(err.message); }
+                                }}>
+                                  <Undo2 className="h-3.5 w-3.5 mr-2" /> Revert to Saved
+                                </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() => handleDeleteOne(s)}
