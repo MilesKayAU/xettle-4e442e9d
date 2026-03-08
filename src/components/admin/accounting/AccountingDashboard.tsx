@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
 import OnboardingChecklist from '@/components/admin/accounting/OnboardingChecklist';
+import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
 
 const PLATFORMS = [
   { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
@@ -1277,6 +1278,7 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
+                <AmazonConnectionPanel />
                 <XeroConnectionStatus />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
               </div>
