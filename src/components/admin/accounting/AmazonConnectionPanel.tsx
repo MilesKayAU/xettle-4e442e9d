@@ -13,9 +13,10 @@ interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
   isPaid?: boolean;
   gstRate?: number;
+  syncCutoffDate?: string;
 }
 
-export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false, gstRate = 10 }: AmazonConnectionPanelProps) {
+export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false, gstRate = 10, syncCutoffDate }: AmazonConnectionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
@@ -146,6 +147,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
       // Step 3: Download and parse each report (with delay for rate limiting)
       let importedCount = 0;
       let skippedCount = 0;
+      let cutoffCount = 0;
       const parserOpts: ParserOptions = { gstRate };
 
       for (let i = 0; i < reports.length; i++) {
@@ -186,6 +188,9 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
             continue;
           }
 
+          // Check if settlement is before cutoff date → auto-mark as already in Xero
+          const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd < syncCutoffDate;
+
           // Save to database with source='api'
           const { header, summary, lines, unmapped } = parsed;
           const splitMonth = parsed.splitMonth;
@@ -211,7 +216,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
             gst_on_expenses: summary.gstOnExpenses,
             bank_deposit: summary.bankDeposit,
             reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
-            status: 'saved',
+            status: isBeforeCutoff ? 'synced_external' : 'saved',
             source: 'api',
             is_split_month: splitMonth.isSplitMonth,
             split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
@@ -259,6 +264,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
 
           existingIds.add(parsed.header.settlementId);
           importedCount++;
+          if (isBeforeCutoff) cutoffCount++;
         } catch (dlErr: any) {
           console.error('Download/parse error:', dlErr);
           toast.error(`Error processing report: ${dlErr.message}`);
@@ -267,6 +273,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
 
       const parts = [];
       if (importedCount > 0) parts.push(`${importedCount} imported`);
+      if (cutoffCount > 0) parts.push(`${cutoffCount} auto-marked as already in Xero (before cutoff)`);
       if (skippedCount > 0) parts.push(`${skippedCount} duplicates skipped`);
       toast.success(`Done! ${parts.join(', ')}. Check the Auto-Imported tab.`);
       

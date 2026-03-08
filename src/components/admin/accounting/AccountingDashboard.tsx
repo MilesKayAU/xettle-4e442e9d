@@ -6,11 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload } from "lucide-react";
+import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseSettlementTSV, formatDisplayDate, formatAUD, XERO_ACCOUNT_MAP, round2, PARSER_VERSION, type ParsedSettlement, type DebugBreakdownRow, type ParserOptions, type SplitMonthData } from '@/utils/settlement-parser';
 import { Scissors } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
@@ -118,6 +122,7 @@ export default function AccountingDashboard() {
   const [settingsAccountCodes, setSettingsAccountCodes] = useState<Record<string, string> | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
   const [isPaidUser, setIsPaidUser] = useState(false);
+  const [syncCutoffDate, setSyncCutoffDate] = useState<string>('');
   
   // Bulk upload state
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
@@ -175,7 +180,7 @@ export default function AccountingDashboard() {
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'sync_cutoff_date']);
         if (data) {
           for (const row of data) {
             if (row.key === 'accounting_gst_rate' && row.value) {
@@ -184,6 +189,9 @@ export default function AccountingDashboard() {
             }
             if (row.key === 'accounting_xero_account_codes' && row.value) {
               try { setSettingsAccountCodes(JSON.parse(row.value)); } catch {}
+            }
+            if (row.key === 'sync_cutoff_date' && row.value) {
+              setSyncCutoffDate(row.value);
             }
           }
         }
@@ -1308,12 +1316,12 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-                <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} onSettlementsAutoFetched={() => {
+                <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={() => {
                   loadSettlements();
                   setActiveTab('auto-imported');
                 }} />
                 <XeroConnectionStatus />
-                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
+                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
               </div>
             </TabsContent>
           </Tabs>
@@ -3716,7 +3724,7 @@ const REQUIRED_XERO_ACCOUNTS = Object.entries(DEFAULT_ACCOUNT_CODES).map(([, val
 
 // ─── Settings Screen ────────────────────────────────────────────────
 
-function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: number) => void }) {
+function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRateChanged?: (rate: number) => void; onSyncCutoffChanged?: (date: string) => void }) {
   const [accountCodes, setAccountCodes] = useState<Record<string, string>>(() => {
     const codes: Record<string, string> = {};
     Object.entries(DEFAULT_ACCOUNT_CODES).forEach(([key, val]) => {
@@ -3725,6 +3733,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
     return codes;
   });
   const [gstRate, setGstRate] = useState('10');
+  const [syncCutoffDate, setSyncCutoffDate] = useState<Date | undefined>(undefined);
   
   const [savingSettings, setSavingSettings] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -3738,7 +3747,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'sync_cutoff_date']);
 
         if (data) {
           for (const row of data) {
@@ -3747,6 +3756,10 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
             }
             if (row.key === 'accounting_gst_rate' && row.value) {
               setGstRate(row.value);
+            }
+            if (row.key === 'sync_cutoff_date' && row.value) {
+              setSyncCutoffDate(new Date(row.value));
+              onSyncCutoffChanged?.(row.value);
             }
           }
         }
@@ -3865,6 +3878,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
       const settingsToSave = [
         { key: 'accounting_xero_account_codes', value: JSON.stringify(accountCodes) },
         { key: 'accounting_gst_rate', value: gstRate },
+        { key: 'sync_cutoff_date', value: syncCutoffDate ? syncCutoffDate.toISOString().split('T')[0] : '' },
       ];
 
       for (const setting of settingsToSave) {
@@ -3886,6 +3900,9 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
       const parsedRate = parseFloat(gstRate);
       if (!isNaN(parsedRate) && parsedRate > 0 && onGstRateChanged) {
         onGstRateChanged(parsedRate);
+      }
+      if (onSyncCutoffChanged) {
+        onSyncCutoffChanged(syncCutoffDate ? syncCutoffDate.toISOString().split('T')[0] : '');
       }
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
@@ -4061,6 +4078,45 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
               <span>🇺🇸</span> <span className="font-medium text-muted-foreground">United States</span>
               <Badge variant="outline" className="text-[10px]">Coming Soon</Badge>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sync Cutoff Date */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            Sync Cutoff Date
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Settlements with a period ending <strong>before</strong> this date will be automatically marked as "Already in Xero" when fetched via the API. Set this to the date you started using Xettle to prevent old data being pushed to Xero.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className={cn("w-[200px] justify-start text-left font-normal", !syncCutoffDate && "text-muted-foreground")}>
+                  <CalendarIcon className="h-3.5 w-3.5 mr-2" />
+                  {syncCutoffDate ? format(syncCutoffDate, 'dd MMM yyyy') : 'No cutoff set'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={syncCutoffDate}
+                  onSelect={setSyncCutoffDate}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+            {syncCutoffDate && (
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => setSyncCutoffDate(undefined)}>
+                Clear
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
