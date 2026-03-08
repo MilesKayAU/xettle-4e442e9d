@@ -32,8 +32,9 @@ export function shouldShowUpgradeNudge(): boolean {
 }
 
 /** Small card showing current plan + upgrade CTA for Settings tab */
-export function CurrentPlanCard({ isPaid }: { isPaid: boolean }) {
+export function CurrentPlanCard({ isPaid, userTier = 'free' }: { isPaid: boolean; userTier?: 'free' | 'starter' | 'pro' }) {
   const uploadCount = getManualUploadCount();
+  const tierLabel = userTier === 'pro' ? 'Pro' : userTier === 'starter' ? 'Starter' : 'Free';
 
   return (
     <Card>
@@ -44,7 +45,7 @@ export function CurrentPlanCard({ isPaid }: { isPaid: boolean }) {
             Your Plan
           </CardTitle>
           <Badge variant={isPaid ? 'default' : 'secondary'} className={isPaid ? '' : 'bg-muted text-muted-foreground'}>
-            {isPaid ? 'Starter' : 'Free'}
+            {tierLabel}
           </Badge>
         </div>
       </CardHeader>
