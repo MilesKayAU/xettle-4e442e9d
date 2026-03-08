@@ -1318,7 +1318,7 @@ export default function AccountingDashboard() {
                   setActiveTab('auto-imported');
                 }} />
                 <XeroConnectionStatus />
-                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
+                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
               </div>
             </TabsContent>
           </Tabs>
