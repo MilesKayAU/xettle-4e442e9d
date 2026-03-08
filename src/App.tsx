@@ -15,6 +15,7 @@ const XeroCallback = lazy(() => import("@/pages/XeroCallback"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const AmazonCallback = lazy(() => import("@/pages/AmazonCallback"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({

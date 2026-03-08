@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
+const AMAZON_AUTH_URL = 'https://sellercentral.amazon.com.au/apps/authorize/consent'
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -23,20 +25,48 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     })
 
-    const token = authHeader.replace('Bearer ', '')
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token)
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders })
     }
-    const userId = claimsData.claims.sub as string
+    const userId = user.id
 
     const action = req.headers.get('x-action') || ''
+    const AMAZON_CLIENT_ID = Deno.env.get('AMAZON_SP_CLIENT_ID')
+    const AMAZON_CLIENT_SECRET = Deno.env.get('AMAZON_SP_CLIENT_SECRET')
+
+    // ─── AUTHORIZE: Build Amazon OAuth URL ───────────────────────
+    if (action === 'authorize') {
+      if (!AMAZON_CLIENT_ID) {
+        return new Response(JSON.stringify({ error: 'SP-API not configured', pending: true }), {
+          status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const body = await req.json().catch(() => ({}))
+      const redirectUri = (body as any).redirect_uri || 'https://xettle.lovable.app/amazon/callback'
+      
+      // Generate a state token to prevent CSRF
+      const state = crypto.randomUUID()
+      
+      const params = new URLSearchParams({
+        application_id: 'amzn1.sp.solution.d95a6e1f-2b22-4bb1-a6de-73427cb73bd9',
+        redirect_uri: redirectUri,
+        state,
+      })
+
+      const authUrl = `${AMAZON_AUTH_URL}?${params.toString()}`
+
+      return new Response(JSON.stringify({ authUrl, state }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     // ─── STATUS: Check if user has Amazon connected ──────────────
     if (action === 'status') {
       const { data, error } = await supabase
         .from('amazon_tokens')
-        .select('id, selling_partner_id, marketplace_id, region, expires_at')
+        .select('id, selling_partner_id, marketplace_id, region, expires_at, updated_at')
         .eq('user_id', userId)
         .limit(1)
 
@@ -50,12 +80,9 @@ serve(async (req) => {
 
     // ─── CONNECT: Exchange authorization code for tokens ─────────
     if (action === 'connect') {
-      const AMAZON_CLIENT_ID = Deno.env.get('AMAZON_SP_CLIENT_ID')
-      const AMAZON_CLIENT_SECRET = Deno.env.get('AMAZON_SP_CLIENT_SECRET')
-
       if (!AMAZON_CLIENT_ID || !AMAZON_CLIENT_SECRET) {
         return new Response(JSON.stringify({
-          error: 'Amazon SP-API credentials not configured. Awaiting developer registration approval.',
+          error: 'Amazon SP-API credentials not configured.',
           pending: true,
         }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
@@ -64,7 +91,7 @@ serve(async (req) => {
       const { spapi_oauth_code, selling_partner_id, marketplace_id, region } = body
 
       if (!spapi_oauth_code || !selling_partner_id) {
-        return new Response(JSON.stringify({ error: 'Missing required parameters' }), {
+        return new Response(JSON.stringify({ error: 'Missing required parameters: spapi_oauth_code, selling_partner_id' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
@@ -115,9 +142,6 @@ serve(async (req) => {
 
     // ─── REFRESH: Get fresh access token ─────────────────────────
     if (action === 'refresh') {
-      const AMAZON_CLIENT_ID = Deno.env.get('AMAZON_SP_CLIENT_ID')
-      const AMAZON_CLIENT_SECRET = Deno.env.get('AMAZON_SP_CLIENT_SECRET')
-
       if (!AMAZON_CLIENT_ID || !AMAZON_CLIENT_SECRET) {
         return new Response(JSON.stringify({ error: 'SP-API not configured' }), {
           status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -137,7 +161,7 @@ serve(async (req) => {
         })
       }
 
-      // Check if current token is still valid
+      // Check if current token is still valid (with 60s buffer)
       if (tokenRow.access_token && new Date(tokenRow.expires_at) > new Date(Date.now() + 60000)) {
         return new Response(JSON.stringify({
           access_token: tokenRow.access_token,
@@ -200,7 +224,7 @@ serve(async (req) => {
       })
     }
 
-    return new Response(JSON.stringify({ error: 'Unknown action' }), {
+    return new Response(JSON.stringify({ error: 'Unknown action. Use: authorize, connect, status, refresh, disconnect' }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   } catch (err) {
