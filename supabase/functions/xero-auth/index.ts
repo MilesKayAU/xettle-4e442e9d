@@ -17,8 +17,17 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url)
-    // Support both query param and header for action
-    const action = url.searchParams.get('action') || req.headers.get('x-action')
+    // Support query param, header, or body for action
+    let action = url.searchParams.get('action') || req.headers.get('x-action')
+    
+    // Clone request for potential body parsing later; peek at body for action if not found yet
+    let parsedBody: any = null
+    if (!action && req.method === 'POST') {
+      try {
+        parsedBody = await req.clone().json()
+        action = parsedBody?.action
+      } catch {}
+    }
     
     const XERO_CLIENT_ID = Deno.env.get('XERO_CLIENT_ID')
     const XERO_CLIENT_SECRET = Deno.env.get('XERO_CLIENT_SECRET')
