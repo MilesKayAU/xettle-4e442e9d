@@ -112,6 +112,7 @@ export default function AccountingDashboard() {
   const [pushing, setPushing] = useState(false);
   const [pushed, setPushed] = useState(false);
   const [settingsGstRate, setSettingsGstRate] = useState<number>(10);
+  const [settingsGapThreshold, setSettingsGapThreshold] = useState<number>(16);
   const [settingsAccountCodes, setSettingsAccountCodes] = useState<Record<string, string> | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
   
@@ -159,7 +160,7 @@ export default function AccountingDashboard() {
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'gap_threshold_days']);
         if (data) {
           for (const row of data) {
             if (row.key === 'accounting_gst_rate' && row.value) {
@@ -168,6 +169,10 @@ export default function AccountingDashboard() {
             }
             if (row.key === 'accounting_xero_account_codes' && row.value) {
               try { setSettingsAccountCodes(JSON.parse(row.value)); } catch {}
+            }
+            if (row.key === 'gap_threshold_days' && row.value) {
+              const parsed = parseInt(row.value, 10);
+              if (!isNaN(parsed) && parsed > 0) setSettingsGapThreshold(parsed);
             }
           }
         }
@@ -1098,6 +1103,7 @@ export default function AccountingDashboard() {
                   <BulkUploadProcessor
                     files={bulkFiles}
                     gstRate={settingsGstRate}
+                    gapThresholdDays={settingsGapThreshold}
                     selectedCountry={selectedCountry}
                     existingSettlements={settlements}
                     onComplete={() => {
@@ -1183,7 +1189,7 @@ export default function AccountingDashboard() {
             <TabsContent value="settings">
               <div className="space-y-4">
                 <XeroConnectionStatus />
-                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
+                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onGapThresholdChanged={(days) => setSettingsGapThreshold(days)} />
               </div>
             </TabsContent>
           </Tabs>
@@ -1231,6 +1237,7 @@ interface BulkFileResult {
 function BulkUploadProcessor({
   files,
   gstRate,
+  gapThresholdDays = 16,
   selectedCountry,
   existingSettlements,
   onComplete,
@@ -1240,6 +1247,7 @@ function BulkUploadProcessor({
 }: {
   files: File[];
   gstRate: number;
+  gapThresholdDays?: number;
   selectedCountry: string;
   existingSettlements: SettlementRecord[];
   onComplete: () => void;
@@ -1513,9 +1521,8 @@ function BulkUploadProcessor({
       const startDate = new Date(next.start + 'T00:00:00Z');
       const diffMs = startDate.getTime() - endDate.getTime();
       const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-      // Amazon settlements typically overlap by ~1 day or are back-to-back (0-1 day gap)
-      // Flag gaps of 2+ days as potential missing settlements
-      if (diffDays > 2) {
+      // Flag gaps exceeding the configurable threshold (default 16 days)
+      if (diffDays > gapThresholdDays) {
         detected.push({
           afterId: current.id,
           afterEnd: current.end,
@@ -3302,7 +3309,7 @@ const REQUIRED_XERO_ACCOUNTS = Object.entries(DEFAULT_ACCOUNT_CODES).map(([, val
 
 // ─── Settings Screen ────────────────────────────────────────────────
 
-function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: number) => void }) {
+function SettlementSettings({ onGstRateChanged, onGapThresholdChanged }: { onGstRateChanged?: (rate: number) => void; onGapThresholdChanged?: (days: number) => void }) {
   const [accountCodes, setAccountCodes] = useState<Record<string, string>>(() => {
     const codes: Record<string, string> = {};
     Object.entries(DEFAULT_ACCOUNT_CODES).forEach(([key, val]) => {
@@ -3311,6 +3318,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
     return codes;
   });
   const [gstRate, setGstRate] = useState('10');
+  const [gapThreshold, setGapThreshold] = useState('16');
   const [savingSettings, setSavingSettings] = useState(false);
   const [checking, setChecking] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -3323,7 +3331,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'gap_threshold_days']);
 
         if (data) {
           for (const row of data) {
@@ -3332,6 +3340,9 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
             }
             if (row.key === 'accounting_gst_rate' && row.value) {
               setGstRate(row.value);
+            }
+            if (row.key === 'gap_threshold_days' && row.value) {
+              setGapThreshold(row.value);
             }
           }
         }
@@ -3450,6 +3461,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
       const settingsToSave = [
         { key: 'accounting_xero_account_codes', value: JSON.stringify(accountCodes) },
         { key: 'accounting_gst_rate', value: gstRate },
+        { key: 'gap_threshold_days', value: gapThreshold },
       ];
 
       for (const setting of settingsToSave) {
@@ -3471,6 +3483,10 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
       const parsedRate = parseFloat(gstRate);
       if (!isNaN(parsedRate) && parsedRate > 0 && onGstRateChanged) {
         onGstRateChanged(parsedRate);
+      }
+      const parsedGap = parseInt(gapThreshold, 10);
+      if (!isNaN(parsedGap) && parsedGap > 0 && onGapThresholdChanged) {
+        onGapThresholdChanged(parsedGap);
       }
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
@@ -3622,6 +3638,32 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
               step="0.5"
             />
             <span className="text-xs text-muted-foreground">Currently: divide by {100 / parseFloat(gstRate || '10') + 1}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Gap Detection Threshold */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Gap Detection</CardTitle>
+          <CardDescription className="text-xs">
+            During bulk uploads, flag gaps between consecutive settlements exceeding this threshold.
+            Amazon AU cycles are typically ~14 days.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Label className="text-xs w-36">Threshold (days)</Label>
+            <Input
+              type="number"
+              value={gapThreshold}
+              onChange={(e) => setGapThreshold(e.target.value)}
+              className="h-8 text-xs font-mono w-24"
+              min="1"
+              max="90"
+              step="1"
+            />
+            <span className="text-xs text-muted-foreground">Gaps over {gapThreshold} days will be flagged</span>
           </div>
         </CardContent>
       </Card>
