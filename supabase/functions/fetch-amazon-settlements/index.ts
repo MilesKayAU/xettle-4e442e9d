@@ -409,12 +409,15 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         .eq('user_id', userId);
       const existingIds = new Set((existingData || []).map((s: any) => s.settlement_id));
 
-      // 5. Process all reports, oldest first
-      const reversed = [...allReports].reverse();
+      // 5. Process reports newest-first so fresh data gets imported even if we hit rate limits
+      const sorted = [...allReports].sort((a: any, b: any) => {
+        // Sort by createdTime descending (newest first)
+        return new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime();
+      });
       let userImported = 0, userSkipped = 0, userErrors = 0;
 
-      for (let i = 0; i < reversed.length; i++) {
-        const report = reversed[i];
+      for (let i = 0; i < sorted.length; i++) {
+        const report = sorted[i];
         if (!report.reportDocumentId) continue;
 
         // Rate-limit delay (3s between downloads to avoid 429)
