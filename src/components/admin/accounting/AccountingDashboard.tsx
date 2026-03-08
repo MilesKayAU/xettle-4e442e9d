@@ -95,6 +95,7 @@ async function removeExistingSettlementForUser(userId: string, settlementId: str
 }
 
 export default function AccountingDashboard() {
+  const [selectedPlatform, setSelectedPlatform] = useState('amazon');
   const [selectedCountry, setSelectedCountry] = useState('AU');
   const [activeTab, setActiveTab] = useState('upload');
   const [settlementFile, setSettlementFile] = useState<File | null>(null);
