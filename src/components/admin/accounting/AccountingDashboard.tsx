@@ -1399,17 +1399,11 @@ export default function AccountingDashboard() {
             />
           </Tabs>
         </>
-      ) : (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Globe className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-muted-foreground">
-              Support for {COUNTRIES.find(c => c.code === selectedCountry)?.label} is coming soon.
-            </p>
-          </CardContent>
-        </Card>
       )}
         </div>
+    </div>
+  );
+}
     </div>
   );
 }
