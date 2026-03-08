@@ -269,6 +269,39 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_history: {
+        Row: {
+          created_at: string
+          details: Json | null
+          error_message: string | null
+          event_type: string
+          id: string
+          settlements_affected: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          error_message?: string | null
+          event_type: string
+          id?: string
+          settlements_affected?: number | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          settlements_affected?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -343,7 +376,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user" | "paid"
+      app_role: "admin" | "moderator" | "user" | "paid" | "starter" | "pro"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -471,7 +504,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user", "paid"],
+      app_role: ["admin", "moderator", "user", "paid", "starter", "pro"],
     },
   },
 } as const
