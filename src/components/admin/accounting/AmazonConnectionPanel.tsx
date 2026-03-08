@@ -13,9 +13,10 @@ interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
   isPaid?: boolean;
   gstRate?: number;
+  syncCutoffDate?: string;
 }
 
-export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false, gstRate = 10 }: AmazonConnectionPanelProps) {
+export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false, gstRate = 10, syncCutoffDate }: AmazonConnectionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
