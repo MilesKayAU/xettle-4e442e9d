@@ -109,9 +109,12 @@ export default function Landing() {
       {/* Competitor comparison */}
       <section className="py-16 px-4 bg-card border-y border-border">
         <div className="container-custom max-w-3xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-8 text-foreground">
-            Why pay for what should be free?
+          <h2 className="text-2xl font-bold mb-3 text-foreground">
+            Not everyone needs API automation
           </h2>
+          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
+            Most sellers just want their Amazon settlements synced to Xero — accurately, with GST handled right. No marketplace API keys, no complex setup. Just upload, review, and push.
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {competitors.map((c) => (
               <div
