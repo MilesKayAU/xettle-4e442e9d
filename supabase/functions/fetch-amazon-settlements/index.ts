@@ -297,9 +297,9 @@ async function refreshAccessToken(amazonToken: any): Promise<string> {
 async function downloadReport(baseUrl: string, accessToken: string, reportDocumentId: string): Promise<string> {
   const docUrl = `${baseUrl}/reports/2021-06-30/documents/${reportDocumentId}`;
   let docResponse: Response | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     if (attempt > 0) {
-      const delay = Math.min(2000 * Math.pow(2, attempt), 10000);
+      const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
       console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
       await new Promise(r => setTimeout(r, delay));
     }
@@ -409,12 +409,15 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         .eq('user_id', userId);
       const existingIds = new Set((existingData || []).map((s: any) => s.settlement_id));
 
-      // 5. Process all reports, oldest first
-      const reversed = [...allReports].reverse();
+      // 5. Process reports newest-first so fresh data gets imported even if we hit rate limits
+      const sorted = [...allReports].sort((a: any, b: any) => {
+        // Sort by createdTime descending (newest first)
+        return new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime();
+      });
       let userImported = 0, userSkipped = 0, userErrors = 0;
 
-      for (let i = 0; i < reversed.length; i++) {
-        const report = reversed[i];
+      for (let i = 0; i < sorted.length; i++) {
+        const report = sorted[i];
         if (!report.reportDocumentId) continue;
 
         // Rate-limit delay (3s between downloads to avoid 429)
@@ -434,7 +437,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
             continue;
           }
 
-          const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd < syncCutoffDate;
+          const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd <= syncCutoffDate;
           const { header, summary, lines, unmapped, splitMonth } = parsed;
 
           // Insert settlement
