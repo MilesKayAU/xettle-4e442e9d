@@ -1313,7 +1313,7 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-                <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} onSettlementsAutoFetched={() => {
+                <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={() => {
                   loadSettlements();
                   setActiveTab('auto-imported');
                 }} />
