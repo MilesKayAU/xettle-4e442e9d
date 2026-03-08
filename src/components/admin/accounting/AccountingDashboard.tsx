@@ -1287,6 +1287,7 @@ function BulkUploadProcessor({
   const [savingAll, setSavingAll] = useState(false);
   const [saveComplete, setSaveComplete] = useState(false);
   const processingRef = useRef(false);
+  const batchSeenIds = useRef(new Set<string>());
 
   const extractId = (name: string): string => {
     const match = name.match(/(\d{9,15})/);
