@@ -1403,6 +1403,7 @@ export default function AccountingDashboard() {
         </div>
     </div>
   );
+}
 
 // ─── Bulk Upload Processor ────────────────────────────────────────────
 
