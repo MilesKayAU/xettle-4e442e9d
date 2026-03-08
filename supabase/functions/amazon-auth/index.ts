@@ -44,7 +44,7 @@ serve(async (req) => {
       }
 
       const body = await req.json().catch(() => ({}))
-      const redirectUri = (body as any).redirect_uri || 'https://xettle.lovable.app/amazon/callback'
+      const redirectUri = (body as any).redirect_uri || 'https://xettle.app/amazon/callback'
       
       // Generate a state token to prevent CSRF
       const state = crypto.randomUUID()
