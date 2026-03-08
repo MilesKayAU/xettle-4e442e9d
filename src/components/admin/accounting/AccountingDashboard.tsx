@@ -116,6 +116,7 @@ export default function AccountingDashboard() {
   
   const [settingsAccountCodes, setSettingsAccountCodes] = useState<Record<string, string> | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
+  const [isPaidUser, setIsPaidUser] = useState(false);
   
   // Bulk upload state
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
@@ -202,6 +203,20 @@ export default function AccountingDashboard() {
       } catch {}
     };
     checkXero();
+  }, []);
+
+  // Check paid role
+  useEffect(() => {
+    const checkPaid = async () => {
+      try {
+        const { data } = await supabase.rpc('has_role', { _role: 'paid' });
+        if (data) setIsPaidUser(true);
+        // Admins always get paid features
+        const { data: isAdmin } = await supabase.rpc('has_role', { _role: 'admin' });
+        if (isAdmin) setIsPaidUser(true);
+      } catch {}
+    };
+    checkPaid();
   }, []);
 
   const loadSettlements = useCallback(async () => {
@@ -1278,7 +1293,7 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-                <AmazonConnectionPanel />
+                <AmazonConnectionPanel isPaid={isPaidUser} />
                 <XeroConnectionStatus />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
               </div>

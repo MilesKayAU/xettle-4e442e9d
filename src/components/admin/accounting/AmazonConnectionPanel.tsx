@@ -2,15 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug, RefreshCw } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug, RefreshCw, Lock } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
+  isPaid?: boolean;
 }
 
-export default function AmazonConnectionPanel({ onSettlementsAutoFetched }: AmazonConnectionPanelProps) {
+export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false }: AmazonConnectionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
@@ -229,6 +230,22 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched }: Amaz
                 Disconnect
               </Button>
             </div>
+          </div>
+        ) : !isPaid ? (
+          <div className="space-y-3">
+            <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground flex items-start gap-2">
+              <Lock className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-foreground">Paid Feature</p>
+                <p className="text-xs mt-0.5">
+                  Auto-import settlement reports directly from Amazon Seller Central. Upgrade to a paid plan to unlock this feature.
+                </p>
+              </div>
+            </div>
+            <Button size="sm" disabled className="gap-1.5 opacity-60">
+              <ExternalLink className="h-3.5 w-3.5" />
+              Connect Amazon (Paid Plan)
+            </Button>
           </div>
         ) : (
           <div className="space-y-3">
