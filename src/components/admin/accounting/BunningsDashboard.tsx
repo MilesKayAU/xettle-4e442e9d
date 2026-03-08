@@ -110,7 +110,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
         setParsed(result.data);
         toast.success('Settlement parsed successfully!');
         setActiveTab('review');
-      } else {
+      } else if (!result.success) {
         setParseError(result.error);
         toast.error(result.error);
       }
