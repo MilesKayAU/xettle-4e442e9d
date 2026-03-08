@@ -15,6 +15,14 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 
+const PLATFORMS = [
+  { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
+  { code: 'shopify', label: 'Shopify', icon: '🛍️', active: false },
+  { code: 'ebay', label: 'eBay', icon: '🏷️', active: false },
+  { code: 'kogan', label: 'Kogan', icon: '🛒', active: false },
+  { code: 'bunnings', label: 'Bunnings', icon: '🔨', active: false },
+] as const;
+
 const COUNTRIES = [
   { code: 'AU', label: 'Australia', flag: '🇦🇺', active: true },
   { code: 'UK', label: 'United Kingdom', flag: '🇬🇧', active: false },
@@ -87,6 +95,7 @@ async function removeExistingSettlementForUser(userId: string, settlementId: str
 }
 
 export default function AccountingDashboard() {
+  const [selectedPlatform, setSelectedPlatform] = useState('amazon');
   const [selectedCountry, setSelectedCountry] = useState('AU');
   const [activeTab, setActiveTab] = useState('upload');
   const [settlementFile, setSettlementFile] = useState<File | null>(null);
@@ -853,39 +862,67 @@ export default function AccountingDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <DollarSign className="h-6 w-6 text-green-600" />
-            Amazon Accounting
-          </h2>
-          <p className="text-muted-foreground mt-1">
-            Upload Amazon settlement data, reconcile transactions, and sync to Xero.
-          </p>
+      {/* Platform Selector — top level */}
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight mb-4">Sales Channels</h2>
+        <div className="flex gap-2 flex-wrap">
+          {PLATFORMS.map((platform) => (
+            <button
+              key={platform.code}
+              onClick={() => platform.active && setSelectedPlatform(platform.code)}
+              disabled={!platform.active}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border transition-all text-sm font-medium
+                ${selectedPlatform === platform.code
+                  ? 'border-primary bg-primary/10 text-primary shadow-sm'
+                  : platform.active
+                    ? 'border-border bg-background text-foreground hover:bg-muted cursor-pointer'
+                    : 'border-border bg-muted/50 text-muted-foreground cursor-not-allowed opacity-60'
+                }`}
+            >
+              <span className="text-lg">{platform.icon}</span>
+              {platform.label}
+              {!platform.active && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Soon</Badge>}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Country Selector */}
-      <div className="flex gap-2">
-        {COUNTRIES.map((country) => (
-          <button
-            key={country.code}
-            onClick={() => country.active && setSelectedCountry(country.code)}
-            disabled={!country.active}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all text-sm font-medium
-              ${selectedCountry === country.code
-                ? 'border-green-600 bg-green-50 text-green-800 shadow-sm'
-                : country.active
-                  ? 'border-border bg-background text-foreground hover:bg-muted cursor-pointer'
-                  : 'border-border bg-muted/50 text-muted-foreground cursor-not-allowed opacity-60'
-              }`}
-          >
-            <span className="text-lg">{country.flag}</span>
-            {country.label}
-            {!country.active && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Soon</Badge>}
-          </button>
-        ))}
-      </div>
+      {selectedPlatform === 'amazon' ? (
+        <div className="space-y-6">
+          {/* Amazon sub-header with country selector */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                Amazon Settlements
+              </h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Upload settlement data, reconcile, and sync to Xero.
+              </p>
+            </div>
+          </div>
+
+          {/* Country Selector */}
+          <div className="flex gap-2">
+            {COUNTRIES.map((country) => (
+              <button
+                key={country.code}
+                onClick={() => country.active && setSelectedCountry(country.code)}
+                disabled={!country.active}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md border transition-all text-sm
+                  ${selectedCountry === country.code
+                    ? 'border-primary bg-primary/5 text-foreground font-medium'
+                    : country.active
+                      ? 'border-border bg-background text-muted-foreground hover:bg-muted cursor-pointer'
+                      : 'border-border bg-muted/50 text-muted-foreground cursor-not-allowed opacity-60'
+                  }`}
+              >
+                <span>{country.flag}</span>
+                {country.label}
+                {!country.active && <Badge variant="outline" className="text-[10px] px-1 py-0">Soon</Badge>}
+              </button>
+            ))}
+          </div>
 
       {selectedCountry === 'AU' ? (
         <>
@@ -1128,6 +1165,20 @@ export default function AccountingDashboard() {
             <Globe className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
             <p className="text-muted-foreground">
               Support for {COUNTRIES.find(c => c.code === selectedCountry)?.label} is coming soon.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Globe className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
+            <p className="text-lg font-medium text-muted-foreground mb-1">
+              {PLATFORMS.find(p => p.code === selectedPlatform)?.label} Integration
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Coming soon. We're building support for more sales channels.
             </p>
           </CardContent>
         </Card>
