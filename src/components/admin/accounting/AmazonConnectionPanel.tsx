@@ -12,6 +12,7 @@ import { parseSettlementTSV, type ParserOptions } from '@/utils/settlement-parse
 interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
   isPaid?: boolean;
+  gstRate?: number;
 }
 
 export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false }: AmazonConnectionPanelProps) {
