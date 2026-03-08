@@ -26,19 +26,8 @@ import { CurrentPlanCard, UpgradeNudgeDialog, incrementManualUploadCount, should
 import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting/SyncComponents';
 import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
 
-const PLATFORMS = [
-  { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
-  { code: 'shopify', label: 'Shopify', icon: '🛍️', active: false },
-  { code: 'ebay', label: 'eBay', icon: '🏷️', active: false },
-  { code: 'kogan', label: 'Kogan', icon: '🛒', active: false },
-  { code: 'bunnings', label: 'Bunnings', icon: '🔨', active: false },
-] as const;
-
-const COUNTRIES = [
-  { code: 'AU', label: 'Australia', flag: '🇦🇺', active: true },
-  { code: 'UK', label: 'United Kingdom', flag: '🇬🇧', active: false },
-  { code: 'US', label: 'United States', flag: '🇺🇸', active: false },
-] as const;
+// Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
+const SELECTED_COUNTRY = 'AU';
 
 interface SettlementRecord {
   id: string;
