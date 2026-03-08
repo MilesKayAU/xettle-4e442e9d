@@ -17,6 +17,7 @@ import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
 import OnboardingChecklist from '@/components/admin/accounting/OnboardingChecklist';
 import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
+import AutoImportedTab from '@/components/admin/accounting/AutoImportedTab';
 
 const PLATFORMS = [
   { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
