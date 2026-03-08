@@ -71,7 +71,7 @@ const XeroConnectionStatus = () => {
         return;
       }
 
-      const redirectUri = `${window.location.origin}/auth/xero/callback`;
+      const redirectUri = `${window.location.origin}/xero/callback`;
       
       // Use supabase.functions.invoke
       const { data: result, error } = await supabase.functions.invoke('xero-auth', {
