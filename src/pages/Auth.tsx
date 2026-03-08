@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { sanitizeEmail } from "@/utils/input-sanitization";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import Honeypot from "@/components/ui/honeypot";
-import { Lock, UserPlus } from 'lucide-react';
+import { Lock, UserPlus, Mail } from 'lucide-react';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -25,6 +25,12 @@ export default function Auth() {
     confirmPassword: '',
     fullName: ''
   });
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [resendEmail, setResendEmail] = useState('');
+  const [resendSent, setResendSent] = useState(false);
+  const [showResendVerification, setShowResendVerification] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -50,6 +56,11 @@ export default function Auth() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: sanitizedEmail, password: signInData.password });
       if (error) {
+        // If email not confirmed, offer resend
+        if (error.message.toLowerCase().includes('email not confirmed')) {
+          setResendEmail(sanitizedEmail);
+          setShowResendVerification(true);
+        }
         toast({ title: "Sign In Failed", description: error.message, variant: "destructive" });
         return;
       }
@@ -97,9 +108,60 @@ export default function Auth() {
         return;
       }
       toast({ title: "Account Created!", description: "Please check your email to confirm your account." });
+      setResendEmail(sanitizedEmail);
+      setShowResendVerification(true);
       setSignUpData({ email: '', password: '', confirmPassword: '', fullName: '' });
     } catch {
       toast({ title: "Sign Up Failed", description: "An unexpected error occurred", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const sanitizedEmail = sanitizeEmail(forgotEmail);
+    if (!sanitizedEmail) {
+      toast({ title: "Invalid Email", description: "Please enter a valid email address", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(sanitizedEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) {
+        toast({ title: "Reset Failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      setForgotSent(true);
+      toast({ title: "Reset Email Sent", description: "Check your inbox for a password reset link." });
+    } catch {
+      toast({ title: "Reset Failed", description: "An unexpected error occurred", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!resendEmail) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: resendEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+      if (error) {
+        toast({ title: "Resend Failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      setResendSent(true);
+      toast({ title: "Verification Email Sent", description: `A new verification email has been sent to ${resendEmail}.` });
+    } catch {
+      toast({ title: "Resend Failed", description: "An unexpected error occurred", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -115,6 +177,30 @@ export default function Auth() {
           <p className="text-muted-foreground mt-2">Amazon settlements, Xettled.</p>
         </div>
 
+        {/* Resend verification banner */}
+        {showResendVerification && (
+          <Card className="mb-4 border-primary/30 bg-primary/5">
+            <CardContent className="py-4 flex items-start gap-3">
+              <Mail className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">Check your email</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  We sent a verification link to <span className="font-medium">{resendEmail}</span>
+                </p>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="px-0 h-auto text-xs mt-1"
+                  disabled={isLoading || resendSent}
+                  onClick={handleResendVerification}
+                >
+                  {resendSent ? '✓ Verification email resent' : "Didn't receive it? Resend"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Welcome</CardTitle>
@@ -122,77 +208,135 @@ export default function Auth() {
           </CardHeader>
           <CardContent>
             <Honeypot value={honeypot} onChange={setHoneypot} />
-            
-            <Tabs defaultValue={defaultTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="signin" className="flex items-center gap-2">
-                  <Lock className="h-4 w-4" />
-                  Sign In
-                </TabsTrigger>
-                <TabsTrigger value="signup" className="flex items-center gap-2">
-                  <UserPlus className="h-4 w-4" />
-                  Sign Up
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="signin">
-                <form onSubmit={handleSignIn} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-email">Email</Label>
-                    <Input id="signin-email" type="email" value={signInData.email}
-                      onChange={(e) => setSignInData(prev => ({ ...prev, email: e.target.value }))}
-                      placeholder="you@example.com" required disabled={isLoading}
-                      autoComplete="email" maxLength={254} />
+
+            {showForgotPassword ? (
+              <div className="space-y-4">
+                <div className="text-center mb-2">
+                  <p className="text-sm font-medium text-foreground">Reset your password</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Enter your email and we'll send you a reset link
+                  </p>
+                </div>
+                {forgotSent ? (
+                  <div className="text-center py-4 space-y-3">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                      <Mail className="h-6 w-6 text-green-600" />
+                    </div>
+                    <p className="text-sm text-foreground font-medium">Check your email</p>
+                    <p className="text-xs text-muted-foreground">
+                      We sent a password reset link to <span className="font-medium">{forgotEmail}</span>
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => { setShowForgotPassword(false); setForgotSent(false); setForgotEmail(''); }}>
+                      Back to Sign In
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-password">Password</Label>
-                    <Input id="signin-password" type="password" value={signInData.password}
-                      onChange={(e) => setSignInData(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder="Enter your password" required disabled={isLoading}
-                      autoComplete="current-password" maxLength={128} />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isLoading || !signInData.email || !signInData.password}>
-                    {isLoading ? <LoadingSpinner size="sm" text="Signing In..." /> : "Sign In"}
-                  </Button>
-                </form>
-              </TabsContent>
-              
-              <TabsContent value="signup">
-                <form onSubmit={handleSignUp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name">Full Name (Optional)</Label>
-                    <Input id="signup-name" type="text" value={signUpData.fullName}
-                      onChange={(e) => setSignUpData(prev => ({ ...prev, fullName: e.target.value }))}
-                      placeholder="Your full name" disabled={isLoading}
-                      autoComplete="name" maxLength={100} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input id="signup-email" type="email" value={signUpData.email}
-                      onChange={(e) => setSignUpData(prev => ({ ...prev, email: e.target.value }))}
-                      placeholder="you@example.com" required disabled={isLoading}
-                      autoComplete="email" maxLength={254} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input id="signup-password" type="password" value={signUpData.password}
-                      onChange={(e) => setSignUpData(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder="Create a password" required disabled={isLoading}
-                      autoComplete="new-password" maxLength={128} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-confirm">Confirm Password</Label>
-                    <Input id="signup-confirm" type="password" value={signUpData.confirmPassword}
-                      onChange={(e) => setSignUpData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                      placeholder="Confirm your password" required disabled={isLoading}
-                      autoComplete="new-password" maxLength={128} />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isLoading || !signUpData.email || !signUpData.password || !signUpData.confirmPassword}>
-                    {isLoading ? <LoadingSpinner size="sm" text="Creating Account..." /> : "Create Account"}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
+                ) : (
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="forgot-email">Email</Label>
+                      <Input
+                        id="forgot-email"
+                        type="email"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        required
+                        disabled={isLoading}
+                        autoComplete="email"
+                        maxLength={254}
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading || !forgotEmail}>
+                      {isLoading ? <LoadingSpinner size="sm" text="Sending..." /> : "Send Reset Link"}
+                    </Button>
+                    <Button variant="ghost" className="w-full" onClick={() => setShowForgotPassword(false)}>
+                      Back to Sign In
+                    </Button>
+                  </form>
+                )}
+              </div>
+            ) : (
+              <Tabs defaultValue={defaultTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="signin" className="flex items-center gap-2">
+                    <Lock className="h-4 w-4" />
+                    Sign In
+                  </TabsTrigger>
+                  <TabsTrigger value="signup" className="flex items-center gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    Sign Up
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="signin">
+                  <form onSubmit={handleSignIn} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="signin-email">Email</Label>
+                      <Input id="signin-email" type="email" value={signInData.email}
+                        onChange={(e) => setSignInData(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="you@example.com" required disabled={isLoading}
+                        autoComplete="email" maxLength={254} />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="signin-password">Password</Label>
+                        <Button
+                          variant="link"
+                          className="px-0 h-auto text-xs text-muted-foreground"
+                          type="button"
+                          onClick={() => setShowForgotPassword(true)}
+                        >
+                          Forgot password?
+                        </Button>
+                      </div>
+                      <Input id="signin-password" type="password" value={signInData.password}
+                        onChange={(e) => setSignInData(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Enter your password" required disabled={isLoading}
+                        autoComplete="current-password" maxLength={128} />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading || !signInData.email || !signInData.password}>
+                      {isLoading ? <LoadingSpinner size="sm" text="Signing In..." /> : "Sign In"}
+                    </Button>
+                  </form>
+                </TabsContent>
+                
+                <TabsContent value="signup">
+                  <form onSubmit={handleSignUp} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-name">Full Name (Optional)</Label>
+                      <Input id="signup-name" type="text" value={signUpData.fullName}
+                        onChange={(e) => setSignUpData(prev => ({ ...prev, fullName: e.target.value }))}
+                        placeholder="Your full name" disabled={isLoading}
+                        autoComplete="name" maxLength={100} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-email">Email</Label>
+                      <Input id="signup-email" type="email" value={signUpData.email}
+                        onChange={(e) => setSignUpData(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="you@example.com" required disabled={isLoading}
+                        autoComplete="email" maxLength={254} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-password">Password</Label>
+                      <Input id="signup-password" type="password" value={signUpData.password}
+                        onChange={(e) => setSignUpData(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Create a password" required disabled={isLoading}
+                        autoComplete="new-password" maxLength={128} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-confirm">Confirm Password</Label>
+                      <Input id="signup-confirm" type="password" value={signUpData.confirmPassword}
+                        onChange={(e) => setSignUpData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                        placeholder="Confirm your password" required disabled={isLoading}
+                        autoComplete="new-password" maxLength={128} />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading || !signUpData.email || !signUpData.password || !signUpData.confirmPassword}>
+                      {isLoading ? <LoadingSpinner size="sm" text="Creating Account..." /> : "Create Account"}
+                    </Button>
+                  </form>
+                </TabsContent>
+              </Tabs>
+            )}
           </CardContent>
         </Card>
       </div>
