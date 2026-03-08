@@ -22,6 +22,7 @@ import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide
 import OnboardingChecklist from '@/components/admin/accounting/OnboardingChecklist';
 import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
 import AutoImportedTab from '@/components/admin/accounting/AutoImportedTab';
+import { CurrentPlanCard, UpgradeNudgeDialog, incrementManualUploadCount, shouldShowUpgradeNudge, getManualUploadCount } from '@/components/admin/accounting/UpgradePlanComponents';
 
 const PLATFORMS = [
   { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
@@ -123,7 +124,8 @@ export default function AccountingDashboard() {
   const [xeroConnected, setXeroConnected] = useState(false);
   const [isPaidUser, setIsPaidUser] = useState(false);
   const [syncCutoffDate, setSyncCutoffDate] = useState<string>('');
-  
+  const [showUpgradeNudge, setShowUpgradeNudge] = useState(false);
+  const [nudgeUploadCount, setNudgeUploadCount] = useState(0);
   // Global fetch state — visible across all tabs, persisted across refresh
   const [amazonFetching, setAmazonFetching] = useState(() => {
     const stored = localStorage.getItem('xettle_fetch_started');
@@ -522,7 +524,12 @@ export default function AccountingDashboard() {
       }
 
       setSaved(true);
+      const newCount = incrementManualUploadCount();
       toast.success(`Settlement ${header.settlementId} ${isOverwrite ? 'overwritten' : 'saved'} successfully`);
+      if (!isPaidUser && shouldShowUpgradeNudge()) {
+        setNudgeUploadCount(newCount);
+        setShowUpgradeNudge(true);
+      }
       await loadSettlements();
       // Stay on review tab so user can Push to Xero — don't clear parsed state
       // clearSettlementFiles() would set parsed=null, breaking Push to Xero
@@ -1400,9 +1407,17 @@ export default function AccountingDashboard() {
                   setAmazonFetchStatus(status);
                 }} />
                 <XeroConnectionStatus />
+                <CurrentPlanCard isPaid={isPaidUser} />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
               </div>
             </TabsContent>
+
+            {/* Upgrade nudge dialog */}
+            <UpgradeNudgeDialog
+              open={showUpgradeNudge}
+              onOpenChange={setShowUpgradeNudge}
+              uploadCount={nudgeUploadCount}
+            />
           </Tabs>
         </>
       ) : (
