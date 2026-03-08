@@ -174,7 +174,7 @@ export default function Admin() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Admin Panel</h1>
-            <p className="text-muted-foreground mt-1">Manage users and monitor connections</p>
+            <p className="text-muted-foreground mt-1">Manage users and monitor connections <span className="font-mono text-xs opacity-50">v1.6.0</span></p>
           </div>
           <div className="flex gap-2">
             <Button variant="default" size="sm" onClick={() => setInviteOpen(true)}>
