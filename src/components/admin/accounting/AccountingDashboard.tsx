@@ -1294,10 +1294,24 @@ export default function AccountingDashboard() {
               />
             </TabsContent>
 
+            {/* AUTO-IMPORTED TAB */}
+            <TabsContent value="auto-imported">
+              <AutoImportedTab
+                existingSettlementIds={new Set(settlements.filter(s => (s as any).source !== 'api').map(s => s.settlement_id))}
+                onSyncToXero={(settlementId) => {
+                  // TODO: Implement sync-to-Xero from auto-imported
+                  toast.info(`Sync to Xero for ${settlementId} — coming soon`);
+                }}
+              />
+            </TabsContent>
+
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-                <AmazonConnectionPanel isPaid={isPaidUser} />
+                <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} onSettlementsAutoFetched={() => {
+                  loadSettlements();
+                  setActiveTab('auto-imported');
+                }} />
                 <XeroConnectionStatus />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
               </div>
