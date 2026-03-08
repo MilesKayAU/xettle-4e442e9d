@@ -903,43 +903,16 @@ export default function AccountingDashboard() {
     }
   }, []);
 
+  // Expose a method to open settings tab from parent
+  useEffect(() => {
+    const handler = () => setActiveTab('settings');
+    window.addEventListener('xettle:open-settings', handler);
+    return () => window.removeEventListener('xettle:open-settings', handler);
+  }, []);
+
   return (
     <div className="space-y-6">
-      {/* Platform Selector — top level */}
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight mb-4">Sales Channels</h2>
-        <div className="flex gap-2 flex-wrap">
-          {PLATFORMS.map((platform) => (
-            <button
-              key={platform.code}
-              onClick={() => platform.active && setSelectedPlatform(platform.code)}
-              disabled={!platform.active}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border transition-all text-sm font-medium
-                ${selectedPlatform === platform.code
-                  ? 'border-primary bg-primary/10 text-primary shadow-sm'
-                  : platform.active
-                    ? 'border-border bg-background text-foreground hover:bg-muted cursor-pointer'
-                    : 'border-border bg-muted/50 text-muted-foreground cursor-not-allowed opacity-60'
-                }`}
-            >
-              <span className="text-lg">{platform.icon}</span>
-              {platform.label}
-              {!platform.active && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Soon</Badge>}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Onboarding Checklist */}
-      <OnboardingChecklist
-        xeroConnected={xeroConnected}
-        accountsVerified={!!settingsAccountCodes}
-        hasSettlements={settlements.length > 0}
-        onGoToSettings={() => { setSelectedPlatform('amazon'); setActiveTab('settings'); }}
-        onConnectXero={() => { setSelectedPlatform('amazon'); setActiveTab('settings'); }}
-      />
-
-      {selectedPlatform === 'amazon' ? (
+      {/* Amazon Settlements — direct entry */}
         <div className="space-y-6">
           {/* Amazon sub-header with country selector */}
           <div className="flex items-center justify-between">
@@ -1225,19 +1198,6 @@ export default function AccountingDashboard() {
         </Card>
       )}
         </div>
-      ) : (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Globe className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-lg font-medium text-muted-foreground mb-1">
-              {PLATFORMS.find(p => p.code === selectedPlatform)?.label} Integration
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Coming soon. We're building support for more sales channels.
-            </p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
