@@ -188,6 +188,7 @@ export type Database = {
           sales_shipping: number | null
           seller_fees: number | null
           settlement_id: string
+          source: string
           split_month_1_data: Json | null
           split_month_2_data: Json | null
           status: string | null
@@ -221,6 +222,7 @@ export type Database = {
           sales_shipping?: number | null
           seller_fees?: number | null
           settlement_id: string
+          source?: string
           split_month_1_data?: Json | null
           split_month_2_data?: Json | null
           status?: string | null
@@ -254,6 +256,7 @@ export type Database = {
           sales_shipping?: number | null
           seller_fees?: number | null
           settlement_id?: string
+          source?: string
           split_month_1_data?: Json | null
           split_month_2_data?: Json | null
           status?: string | null
