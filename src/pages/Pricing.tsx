@@ -29,8 +29,8 @@ const tiers = [
   {
     name: 'Starter',
     icon: Rocket,
-    yearlyPrice: 99,
-    monthlyPrice: 10,
+    yearlyPrice: 129,
+    monthlyPrice: 12.99,
     description: 'Connect Amazon. Stop downloading files manually.',
     features: [
       'Everything in Free',
@@ -46,8 +46,8 @@ const tiers = [
   {
     name: 'Pro',
     icon: Crown,
-    yearlyPrice: 199,
-    monthlyPrice: 20,
+    yearlyPrice: 229,
+    monthlyPrice: 22.99,
     description: 'Fully hands-off. Open your laptop, books are done.',
     features: [
       'Everything in Starter',
