@@ -375,7 +375,6 @@ export default function AccountingDashboard() {
         period_start: header.periodStart,
         period_end: header.periodEnd,
         deposit_date: header.depositDate,
-        currency: header.currency,
         sales_principal: summary.salesPrincipal,
         sales_shipping: summary.salesShipping,
         promotional_discounts: summary.promotionalDiscounts,
@@ -392,19 +391,9 @@ export default function AccountingDashboard() {
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: 'saved',
         is_split_month: splitMonth.isSplitMonth,
-        split_month_1_start: splitMonth.month1?.start || null,
-        split_month_1_end: splitMonth.month1?.end || null,
-        split_month_1_ratio: splitMonth.month1?.ratio || null,
-        split_month_2_start: splitMonth.month2?.start || null,
-        split_month_2_end: splitMonth.month2?.end || null,
-        split_month_2_ratio: splitMonth.month2?.ratio || null,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
         split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-        international_sales: summary.internationalSales,
-        international_fees: summary.internationalFees,
-        split_rollover_amount: splitMonth.rolloverAmount || 0,
-        parser_version: PARSER_VERSION,
-      } as any);
+      });
       if (settError) throw settError;
 
       // 2. Insert settlement_lines (batch in chunks of 500)
@@ -884,10 +873,10 @@ export default function AccountingDashboard() {
         reconciliationMatch: s.reconciliation_status === 'matched',
         reconciliationDiff: round2((s.bank_deposit || 0) - grossTotal),
         debugBreakdown: [],
-        auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0) - (s.international_sales || 0)),
-        auFees: round2((s.seller_fees || 0) + (s.fba_fees || 0) + (s.storage_fees || 0) - (s.international_fees || 0)),
-        internationalSales: s.international_sales || 0,
-        internationalFees: s.international_fees || 0,
+        auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0)),
+        auFees: round2((s.seller_fees || 0) + (s.fba_fees || 0) + (s.storage_fees || 0)),
+        internationalSales: 0,
+        internationalFees: 0,
       };
 
       let splitMonth: ParsedSettlement['splitMonth'] = {
@@ -901,7 +890,7 @@ export default function AccountingDashboard() {
           isSplitMonth: true,
           month1: s.split_month_1_data ? JSON.parse(s.split_month_1_data) : null,
           month2: s.split_month_2_data ? JSON.parse(s.split_month_2_data) : null,
-          rolloverAmount: s.split_rollover_amount || 0,
+          rolloverAmount: 0,
         };
       }
 
@@ -1291,7 +1280,6 @@ function BulkUploadProcessor({
         period_start: header.periodStart,
         period_end: header.periodEnd,
         deposit_date: header.depositDate,
-        currency: header.currency,
         sales_principal: summary.salesPrincipal,
         sales_shipping: summary.salesShipping,
         promotional_discounts: summary.promotionalDiscounts,
@@ -1308,19 +1296,9 @@ function BulkUploadProcessor({
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: 'saved',
         is_split_month: splitMonth.isSplitMonth,
-        split_month_1_start: splitMonth.month1?.start || null,
-        split_month_1_end: splitMonth.month1?.end || null,
-        split_month_1_ratio: splitMonth.month1?.ratio || null,
-        split_month_2_start: splitMonth.month2?.start || null,
-        split_month_2_end: splitMonth.month2?.end || null,
-        split_month_2_ratio: splitMonth.month2?.ratio || null,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
         split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-        international_sales: summary.internationalSales,
-        international_fees: summary.internationalFees,
-        split_rollover_amount: splitMonth.rolloverAmount || 0,
-        parser_version: PARSER_VERSION,
-      } as any);
+      });
       if (settError) throw settError;
 
       if (lines.length > 0) {
@@ -2539,7 +2517,6 @@ function BatchSettlementReview({
         period_start: header.periodStart,
         period_end: header.periodEnd,
         deposit_date: header.depositDate,
-        currency: header.currency,
         sales_principal: summary.salesPrincipal,
         sales_shipping: summary.salesShipping,
         promotional_discounts: summary.promotionalDiscounts,
@@ -2556,19 +2533,9 @@ function BatchSettlementReview({
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: 'saved',
         is_split_month: splitMonth.isSplitMonth,
-        split_month_1_start: splitMonth.month1?.start || null,
-        split_month_1_end: splitMonth.month1?.end || null,
-        split_month_1_ratio: splitMonth.month1?.ratio || null,
-        split_month_2_start: splitMonth.month2?.start || null,
-        split_month_2_end: splitMonth.month2?.end || null,
-        split_month_2_ratio: splitMonth.month2?.ratio || null,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
         split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-        international_sales: summary.internationalSales,
-        international_fees: summary.internationalFees,
-        split_rollover_amount: splitMonth.rolloverAmount || 0,
-        parser_version: PARSER_VERSION,
-      } as any);
+      });
 
       if (lines.length > 0) {
         const lineRows = lines.map(l => ({
