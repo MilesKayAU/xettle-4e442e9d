@@ -2113,6 +2113,40 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     }
   };
 
+  const handleMarkSyncedOne = async (settlement: SettlementRecord) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await supabase.from('settlements').update({ status: 'synced_external' } as any).eq('id', settlement.id).eq('user_id', user.id);
+      if (error) throw error;
+      toast.success(`Marked ${settlement.settlement_id} as already in Xero`);
+      onDeleted(); // reloads
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    }
+  };
+
+  const [markingSynced, setMarkingSynced] = useState(false);
+  const handleMarkSyncedBulk = async () => {
+    if (selectedIds.size === 0) return;
+    setMarkingSynced(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      for (const uuid of Array.from(selectedIds)) {
+        const { error } = await supabase.from('settlements').update({ status: 'synced_external' } as any).eq('id', uuid).eq('user_id', user.id);
+        if (error) throw error;
+      }
+      toast.success(`Marked ${selectedIds.size} settlement(s) as already in Xero`);
+      setSelectedIds(new Set());
+      onDeleted(); // reloads
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    } finally {
+      setMarkingSynced(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
