@@ -138,6 +138,7 @@ export type Database = {
           marketplace: string | null
           net_ex_gst: number | null
           other_fees: number | null
+          parser_version: string | null
           period_end: string
           period_start: string
           promotional_discounts: number | null
@@ -170,6 +171,7 @@ export type Database = {
           marketplace?: string | null
           net_ex_gst?: number | null
           other_fees?: number | null
+          parser_version?: string | null
           period_end: string
           period_start: string
           promotional_discounts?: number | null
@@ -202,6 +204,7 @@ export type Database = {
           marketplace?: string | null
           net_ex_gst?: number | null
           other_fees?: number | null
+          parser_version?: string | null
           period_end?: string
           period_start?: string
           promotional_discounts?: number | null
