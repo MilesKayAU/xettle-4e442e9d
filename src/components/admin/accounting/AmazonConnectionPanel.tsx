@@ -110,22 +110,27 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Step 1: List available reports
+      // Step 1: List available reports (last 90 days only)
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 90);
+      
       const { data, error } = await supabase.functions.invoke('fetch-amazon-settlements', {
         headers: { 'x-action': 'list' },
-        body: {},
+        body: { startDate: startDate.toISOString() },
       });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      const reports = data?.reports || [];
-      if (reports.length === 0) {
-        toast.info('No new settlement reports found on Amazon');
+      const allReports = data?.reports || [];
+      if (allReports.length === 0) {
+        toast.info('No settlement reports found in the last 90 days');
         return;
       }
 
-      toast.success(`Found ${reports.length} settlement report(s). Downloading...`);
+      // Limit to 10 most recent reports per fetch to avoid rate limits
+      const reports = allReports.slice(0, 10);
+      toast.success(`Found ${allReports.length} report(s) in last 90 days. Processing ${reports.length}...`);
 
       // Step 2: Check which settlements already exist
       const { data: existingData } = await supabase
