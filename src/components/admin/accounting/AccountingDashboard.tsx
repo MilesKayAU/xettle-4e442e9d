@@ -2061,26 +2061,62 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     }
   };
 
-  // Sequence numbering: sort by period_end ascending
-  const sorted = [...settlements].sort((a, b) => a.period_end.localeCompare(b.period_end));
-  const seqMap = new Map<string, number>();
-  sorted.forEach((s, i) => seqMap.set(s.id, i + 1));
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir(field === 'period' ? 'desc' : 'asc');
+    }
+  };
 
-  // Build display rows (desc order) with gap indicators
+  const SortIcon = ({ field }: { field: SortField }) => (
+    <span className={`inline-block ml-1 text-[10px] ${sortField === field ? 'text-primary' : 'text-muted-foreground/40'}`}>
+      {sortField === field ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+    </span>
+  );
+
+  // Sequence numbering: always by period_end ascending
+  const seqSorted = [...settlements].sort((a, b) => a.period_end.localeCompare(b.period_end));
+  const seqMap = new Map<string, number>();
+  seqSorted.forEach((s, i) => seqMap.set(s.id, i + 1));
+
+  // Apply user sort
+  const sortedSettlements = [...settlements].sort((a, b) => {
+    let cmp = 0;
+    switch (sortField) {
+      case 'period': cmp = a.period_start.localeCompare(b.period_start); break;
+      case 'deposit': cmp = (a.bank_deposit || 0) - (b.bank_deposit || 0); break;
+      case 'status': cmp = (a.status || '').localeCompare(b.status || ''); break;
+      case 'seq': cmp = (seqMap.get(a.id) || 0) - (seqMap.get(b.id) || 0); break;
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  // Build display rows with gap indicators
   type DisplayRow =
     | { type: 'settlement'; settlement: SettlementRecord; seq: number }
     | { type: 'gap'; afterDate: string; beforeDate: string };
 
   const displayRows: DisplayRow[] = [];
-  for (let i = 0; i < settlements.length; i++) {
-    const s = settlements[i];
+  for (let i = 0; i < sortedSettlements.length; i++) {
+    const s = sortedSettlements[i];
     const seq = seqMap.get(s.id) || 0;
     displayRows.push({ type: 'settlement', settlement: s, seq });
 
-    if (i < settlements.length - 1) {
-      const next = settlements[i + 1]; // next is older (sorted newest first)
-      if (s.period_start > next.period_end) {
-        displayRows.push({ type: 'gap', afterDate: next.period_end, beforeDate: s.period_start });
+    // Only show gaps when sorted by period
+    if (sortField === 'period' && i < sortedSettlements.length - 1) {
+      const next = sortedSettlements[i + 1];
+      if (sortDir === 'desc') {
+        // newest first: current.period_start should follow next.period_end
+        if (s.period_start > next.period_end) {
+          displayRows.push({ type: 'gap', afterDate: next.period_end, beforeDate: s.period_start });
+        }
+      } else {
+        // oldest first: next.period_start should follow current.period_end
+        if (next.period_start > s.period_end) {
+          displayRows.push({ type: 'gap', afterDate: s.period_end, beforeDate: next.period_start });
+        }
       }
     }
   }
