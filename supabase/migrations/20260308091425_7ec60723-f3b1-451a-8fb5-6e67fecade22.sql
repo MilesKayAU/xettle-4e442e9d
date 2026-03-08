@@ -1,0 +1,1 @@
+ALTER TABLE public.settlements ADD COLUMN IF NOT EXISTS parser_version text DEFAULT NULL;
