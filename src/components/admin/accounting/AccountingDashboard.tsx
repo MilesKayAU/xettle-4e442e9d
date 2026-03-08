@@ -1280,7 +1280,6 @@ function BulkUploadProcessor({
         period_start: header.periodStart,
         period_end: header.periodEnd,
         deposit_date: header.depositDate,
-        currency: header.currency,
         sales_principal: summary.salesPrincipal,
         sales_shipping: summary.salesShipping,
         promotional_discounts: summary.promotionalDiscounts,
@@ -1297,19 +1296,9 @@ function BulkUploadProcessor({
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: 'saved',
         is_split_month: splitMonth.isSplitMonth,
-        split_month_1_start: splitMonth.month1?.start || null,
-        split_month_1_end: splitMonth.month1?.end || null,
-        split_month_1_ratio: splitMonth.month1?.ratio || null,
-        split_month_2_start: splitMonth.month2?.start || null,
-        split_month_2_end: splitMonth.month2?.end || null,
-        split_month_2_ratio: splitMonth.month2?.ratio || null,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
         split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-        international_sales: summary.internationalSales,
-        international_fees: summary.internationalFees,
-        split_rollover_amount: splitMonth.rolloverAmount || 0,
-        parser_version: PARSER_VERSION,
-      } as any);
+      });
       if (settError) throw settError;
 
       if (lines.length > 0) {
@@ -2528,7 +2517,6 @@ function BatchSettlementReview({
         period_start: header.periodStart,
         period_end: header.periodEnd,
         deposit_date: header.depositDate,
-        currency: header.currency,
         sales_principal: summary.salesPrincipal,
         sales_shipping: summary.salesShipping,
         promotional_discounts: summary.promotionalDiscounts,
@@ -2545,19 +2533,9 @@ function BatchSettlementReview({
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: 'saved',
         is_split_month: splitMonth.isSplitMonth,
-        split_month_1_start: splitMonth.month1?.start || null,
-        split_month_1_end: splitMonth.month1?.end || null,
-        split_month_1_ratio: splitMonth.month1?.ratio || null,
-        split_month_2_start: splitMonth.month2?.start || null,
-        split_month_2_end: splitMonth.month2?.end || null,
-        split_month_2_ratio: splitMonth.month2?.ratio || null,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
         split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-        international_sales: summary.internationalSales,
-        international_fees: summary.internationalFees,
-        split_rollover_amount: splitMonth.rolloverAmount || 0,
-        parser_version: PARSER_VERSION,
-      } as any);
+      });
 
       if (lines.length > 0) {
         const lineRows = lines.map(l => ({
