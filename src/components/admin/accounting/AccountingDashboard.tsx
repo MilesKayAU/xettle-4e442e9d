@@ -3952,7 +3952,8 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
       });
 
       const { data, error } = await supabase.functions.invoke('xero-auth', {
-        body: { action: 'create_accounts', userId: user.id, accounts: accountsToCreate }
+        body: { accounts: accountsToCreate },
+        headers: { 'x-action': 'create_accounts' },
       });
 
       if (error) throw error;
