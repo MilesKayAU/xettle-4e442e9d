@@ -1332,11 +1332,13 @@ export default function AccountingDashboard() {
               <div className="space-y-4">
                 <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={() => {
                   loadSettlements();
-                  setActiveTab('auto-imported');
                 }} onRequestSettings={() => {
                   setTimeout(() => {
                     document.getElementById('sync-cutoff-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }, 100);
+                }} onFetchStateChange={(fetching, status) => {
+                  setAmazonFetching(fetching);
+                  setAmazonFetchStatus(status);
                 }} />
                 <XeroConnectionStatus />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
