@@ -1838,9 +1838,14 @@ function SettlementGuidancePanel({
 
 // ─── Settlement History ──────────────────────────────────────────────
 
+type SortField = 'period' | 'deposit' | 'status' | 'seq';
+type SortDir = 'asc' | 'desc';
+
 function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushToXero }: { settlements: SettlementRecord[]; loading: boolean; onDeleted: () => void; onReview?: (settlementId: string, settlementUuid: string) => void; onPushToXero?: (settlementId: string, settlementUuid: string) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sortField, setSortField] = useState<SortField>('period');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
