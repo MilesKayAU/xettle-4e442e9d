@@ -1212,15 +1212,36 @@ export default function AccountingDashboard() {
               )}
               {/* Single mode */}
               {parsed && parsedBatch.length === 0 && (
-                <SettlementReview
-                  parsed={parsed}
-                  onSave={handleSave}
-                  saving={saving}
-                  saved={saved}
-                  onPushToXero={handlePushToXero}
-                  pushing={pushing}
-                  pushed={pushed}
-                />
+                <div className="space-y-2">
+                  {!saved && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setParsed(null);
+                          setSaved(false);
+                          setPushed(false);
+                          clearSettlementFiles();
+                          clearTransactionFile();
+                          setActiveTab('upload');
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        Discard
+                      </Button>
+                    </div>
+                  )}
+                  <SettlementReview
+                    parsed={parsed}
+                    onSave={handleSave}
+                    saving={saving}
+                    saved={saved}
+                    onPushToXero={handlePushToXero}
+                    pushing={pushing}
+                    pushed={pushed}
+                  />
+                </div>
               )}
             </TabsContent>
 
