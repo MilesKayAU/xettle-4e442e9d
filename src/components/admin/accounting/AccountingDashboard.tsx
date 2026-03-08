@@ -2821,16 +2821,37 @@ function BatchSettlementReview({
                   {item.saved ? (
                     <Badge variant="secondary" className="text-[10px]">Saved</Badge>
                   ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      disabled={item.saving || !p.summary.reconciliationMatch}
-                      onClick={(e) => { e.stopPropagation(); saveOne(index); }}
-                    >
-                      {item.saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                      Save
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const updated = batch.filter((_, i) => i !== index);
+                          if (updated.length === 0) {
+                            onBatchUpdate([]);
+                            onAllSaved();
+                          } else {
+                            onBatchUpdate(updated);
+                            if (expandedIndex === index) setExpandedIndex(null);
+                          }
+                        }}
+                        title="Remove from review"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        disabled={item.saving || !p.summary.reconciliationMatch}
+                        onClick={(e) => { e.stopPropagation(); saveOne(index); }}
+                      >
+                        {item.saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                        Save
+                      </Button>
+                    </>
                   )}
                   <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                 </div>
