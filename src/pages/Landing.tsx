@@ -95,15 +95,16 @@ export default function Landing() {
             <span className="text-primary">Xettled.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-            Turn marketplace settlement reports into clean Xero invoices.
+            Turn marketplace settlement reports into clean Xero invoices in seconds.
             <br />
-            Works with Amazon today — Bunnings and more coming soon.
+            Amazon today. Bunnings and more marketplaces coming soon.
           </p>
           <p className="text-sm text-muted-foreground/70 mb-8 font-medium">
             <span className="text-primary font-semibold">X</span>ero + Se<span className="text-primary font-semibold">ttle</span> = <span className="text-primary font-semibold">Xettle</span>
           </p>
 
           {/* Marketplace strip */}
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-3">Works with marketplaces like</p>
           <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
             {marketplaces.map((m) => (
               <span
@@ -189,7 +190,7 @@ export default function Landing() {
               <ul className="space-y-3 text-sm mb-8">
                 {[
                   'Everything in Free, plus:',
-                  'Amazon SP-API auto-fetch',
+                  'Amazon auto-import (SP-API)',
                   'New settlements fetched daily',
                   'Manual review & push to Xero',
                   'No more downloading CSVs',
