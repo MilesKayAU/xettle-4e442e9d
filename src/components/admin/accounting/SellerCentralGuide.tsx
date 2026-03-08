@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, HelpCircle, ExternalLink, Download, ArrowRight, Monitor } from 'lucide-react';
+import { ChevronDown, ChevronUp, HelpCircle, ExternalLink, ArrowRight } from 'lucide-react';
+import sellerCentralStatements from '@/assets/seller-central-statements.png';
 
 export default function SellerCentralGuide() {
   const [expanded, setExpanded] = useState(false);
@@ -25,20 +26,18 @@ export default function SellerCentralGuide() {
         </button>
 
         {expanded && (
-          <div className="mt-4 space-y-6">
+          <div className="mt-4 space-y-5">
 
-            {/* Step 1 — Navigate */}
+            {/* Step 1 */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">1</span>
                 <p className="text-sm font-medium">
-                  Open Amazon Seller Central
+                  In Seller Central, go to <strong>Payments</strong> → <strong>All Statements</strong>
                 </p>
               </div>
               <div className="ml-8">
-                {/* Mock navigation breadcrumb */}
-                <div className="rounded-lg border border-border bg-background p-3 space-y-2">
-                  <p className="text-xs text-muted-foreground">Navigate to:</p>
+                <div className="rounded-lg border border-border bg-background p-3">
                   <div className="flex items-center gap-2 text-sm">
                     <span className="px-2 py-1 bg-muted rounded font-medium">Payments</span>
                     <ArrowRight className="h-3 w-3 text-muted-foreground" />
@@ -50,75 +49,28 @@ export default function SellerCentralGuide() {
               </div>
             </div>
 
-            {/* Step 2 — Find settlement */}
+            {/* Step 2 — Screenshot */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">2</span>
                 <p className="text-sm font-medium">
-                  Find the settlement period and click <strong>"Download Flat File V2"</strong>
+                  Find a closed settlement and click <strong>"Download Flat File V2"</strong>
                 </p>
               </div>
-              <div className="ml-8">
-                {/* Mock statement table */}
-                <div className="rounded-lg border border-border bg-background overflow-hidden">
-                  <div className="px-3 py-2 bg-muted/50 border-b">
-                    <p className="text-xs font-medium text-muted-foreground">All Statements</p>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Statement period</th>
-                          <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Sales</th>
-                          <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Expenses</th>
-                          <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Payout</th>
-                          <th className="text-center px-3 py-1.5 font-medium text-muted-foreground">Download</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b bg-muted/10">
-                          <td className="px-3 py-2 text-muted-foreground italic">Current period</td>
-                          <td className="px-3 py-2 text-right text-muted-foreground">—</td>
-                          <td className="px-3 py-2 text-right text-muted-foreground">—</td>
-                          <td className="px-3 py-2 text-right text-muted-foreground">—</td>
-                          <td className="px-3 py-2 text-center text-[10px] text-muted-foreground italic">After settlement close</td>
-                        </tr>
-                        <tr className="border-b">
-                          <td className="px-3 py-2 font-mono">DD/MM — DD/MM/YYYY</td>
-                          <td className="px-3 py-2 text-right font-mono">$X,XXX</td>
-                          <td className="px-3 py-2 text-right font-mono">-$X,XXX</td>
-                          <td className="px-3 py-2 text-right font-mono font-medium">$X,XXX</td>
-                          <td className="px-3 py-2 text-center">
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground text-[10px] font-medium">
-                              <Download className="h-2.5 w-2.5" /> Download Flat File V2
-                            </span>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-3 py-2 font-mono text-muted-foreground">DD/MM — DD/MM/YYYY</td>
-                          <td className="px-3 py-2 text-right font-mono text-muted-foreground">$X,XXX</td>
-                          <td className="px-3 py-2 text-right font-mono text-muted-foreground">-$X,XXX</td>
-                          <td className="px-3 py-2 text-right font-mono text-muted-foreground">$X,XXX</td>
-                          <td className="px-3 py-2 text-center">
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-muted text-muted-foreground text-[10px]">
-                              <Download className="h-2.5 w-2.5" /> Download Flat File V2
-                            </span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="px-3 py-2 border-t flex items-start gap-2">
-                    <Monitor className="h-3.5 w-3.5 text-primary mt-0.5 flex-shrink-0" />
-                    <p className="text-[10px] text-muted-foreground">
-                      Each row is one settlement period (usually every 2 weeks). Download the <strong>Flat File V2</strong> — this is the TSV file Xettle processes.
-                    </p>
-                  </div>
-                </div>
+              <div className="ml-8 rounded-lg overflow-hidden border border-border">
+                <img
+                  src={sellerCentralStatements}
+                  alt="Amazon Seller Central All Statements page showing the Download Flat File V2 button circled"
+                  className="w-full"
+                  loading="lazy"
+                />
               </div>
+              <p className="text-xs text-muted-foreground ml-8">
+                Each row is one settlement period (usually every 2 weeks). The current open period shows "Available after settlement close".
+              </p>
             </div>
 
-            {/* Step 3 — Upload */}
+            {/* Step 3 */}
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">3</span>
