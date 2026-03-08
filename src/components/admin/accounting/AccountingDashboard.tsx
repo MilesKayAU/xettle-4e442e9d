@@ -154,6 +154,28 @@ export default function AccountingDashboard() {
   const transactionInputRef = useRef<HTMLInputElement>(null);
    const pendingPushRef = useRef(false);
 
+  // Poll localStorage to detect fetch completion/timeout (e.g. after page refresh)
+  useEffect(() => {
+    if (!amazonFetching) return;
+    const interval = setInterval(() => {
+      const stored = localStorage.getItem('xettle_fetch_started');
+      if (!stored) {
+        // Fetch was completed (localStorage cleared by the response handler)
+        setAmazonFetching(false);
+        setAmazonFetchStatus(null);
+        return;
+      }
+      const elapsed = Date.now() - parseInt(stored, 10);
+      if (elapsed > 5 * 60 * 1000) {
+        // Timeout — assume fetch completed or failed silently
+        localStorage.removeItem('xettle_fetch_started');
+        setAmazonFetching(false);
+        setAmazonFetchStatus(null);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [amazonFetching]);
+
   // Warn before navigating away with unsaved data
   useEffect(() => {
     const hasUnsaved = (parsed && !saved) || parsedBatch.some(b => !b.saved);
