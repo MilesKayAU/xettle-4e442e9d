@@ -170,10 +170,6 @@ export default function AccountingDashboard() {
             if (row.key === 'accounting_xero_account_codes' && row.value) {
               try { setSettingsAccountCodes(JSON.parse(row.value)); } catch {}
             }
-            if (row.key === 'gap_threshold_days' && row.value) {
-              const parsed = parseInt(row.value, 10);
-              if (!isNaN(parsed) && parsed > 0) setSettingsGapThreshold(parsed);
-            }
           }
         }
       } catch {}
