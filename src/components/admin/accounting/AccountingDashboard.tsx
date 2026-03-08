@@ -1082,8 +1082,7 @@ export default function AccountingDashboard() {
             </div>
           )}
 
-
-            // Stop active bulk processing when leaving upload tab, but keep files visible
+          <Tabs value={activeTab} onValueChange={(tab) => {
             if (activeTab === 'upload' && tab !== 'upload' && bulkProcessing) {
               setBulkProcessing(false);
             }
