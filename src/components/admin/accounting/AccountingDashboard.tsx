@@ -2633,6 +2633,14 @@ function BatchSettlementReview({
               </p>
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReviewSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
+                className="gap-1.5 text-xs"
+              >
+                {reviewSortDir === 'desc' ? '▼ Newest first' : '▲ Oldest first'}
+              </Button>
               {unsavedCount > 0 && (
                 <Button onClick={handleSaveAll} disabled={savingAll} className="gap-2">
                   {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -2651,7 +2659,15 @@ function BatchSettlementReview({
 
       {/* Settlement list */}
       <div className="space-y-2">
-        {batch.map((item, index) => {
+        {[...batch]
+          .map((item, originalIndex) => ({ item, originalIndex }))
+          .sort((a, b) => {
+            const aStart = a.item.parsed.header.periodStart;
+            const bStart = b.item.parsed.header.periodStart;
+            const cmp = aStart.localeCompare(bStart);
+            return reviewSortDir === 'asc' ? cmp : -cmp;
+          })
+          .map(({ item, originalIndex: index }) => {
           const { parsed: p } = item;
           const isExpanded = expandedIndex === index;
 
