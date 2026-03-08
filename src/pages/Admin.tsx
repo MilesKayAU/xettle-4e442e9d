@@ -190,7 +190,7 @@ export default function Admin() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Total Users</CardDescription>
@@ -201,6 +201,12 @@ export default function Admin() {
             <CardHeader className="pb-2">
               <CardDescription>Xero Connected</CardDescription>
               <CardTitle className="text-3xl">{users.filter(u => u.xero_connected).length}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Amazon Connected</CardDescription>
+              <CardTitle className="text-3xl">{users.filter(u => u.amazon_connected).length}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -234,6 +240,7 @@ export default function Admin() {
                     <TableHead>Joined</TableHead>
                     <TableHead>Last Sign In</TableHead>
                     <TableHead>Xero</TableHead>
+                    <TableHead>Amazon</TableHead>
                     <TableHead className="text-right">Settlements</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -252,6 +259,13 @@ export default function Admin() {
                       </TableCell>
                       <TableCell>
                         {u.xero_connected ? (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {u.amazon_connected ? (
                           <CheckCircle className="h-4 w-4 text-green-500" />
                         ) : (
                           <XCircle className="h-4 w-4 text-muted-foreground" />
