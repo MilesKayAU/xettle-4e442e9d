@@ -45,6 +45,7 @@ function App() {
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/xero/callback" element={<XeroCallback />} />
+                  <Route path="/amazon/callback" element={<AmazonCallback />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />
