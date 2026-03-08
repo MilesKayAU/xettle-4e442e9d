@@ -37,9 +37,9 @@ const features = [
 ];
 
 const competitors = [
-  { name: 'Link My Books', price: 'from $17/mo' },
-  { name: 'A2X', price: 'from $25/mo' },
-  { name: 'Taxomate', price: 'from $9/mo' },
+  { name: 'Link My Books', price: '$$$' },
+  { name: 'A2X', price: '$$$' },
+  { name: 'Taxomate', price: '$$' },
   { name: 'Xettle', price: 'Free', highlight: true },
 ];
 
