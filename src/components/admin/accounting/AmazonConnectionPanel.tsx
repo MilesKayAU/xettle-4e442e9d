@@ -15,7 +15,7 @@ interface AmazonConnectionPanelProps {
   gstRate?: number;
 }
 
-export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false }: AmazonConnectionPanelProps) {
+export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false, gstRate = 10 }: AmazonConnectionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
