@@ -80,6 +80,45 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_connections: {
+        Row: {
+          connection_status: string
+          connection_type: string
+          country_code: string
+          created_at: string
+          id: string
+          marketplace_code: string
+          marketplace_name: string
+          settings: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connection_status?: string
+          connection_type?: string
+          country_code?: string
+          created_at?: string
+          id?: string
+          marketplace_code: string
+          marketplace_name: string
+          settings?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connection_status?: string
+          connection_type?: string
+          country_code?: string
+          created_at?: string
+          id?: string
+          marketplace_code?: string
+          marketplace_name?: string
+          settings?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       settlement_lines: {
         Row: {
           accounting_category: string | null
