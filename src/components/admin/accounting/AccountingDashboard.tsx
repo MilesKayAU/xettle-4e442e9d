@@ -1042,6 +1042,9 @@ export default function AccountingDashboard() {
 
               </div>
 
+              {/* How to find your settlement report guide */}
+              <SellerCentralGuide />
+
               <div className="mt-4 flex gap-3">
                 {/* Single file parse */}
                 {settlementFile && !bulkFiles && (
