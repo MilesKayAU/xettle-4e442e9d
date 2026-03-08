@@ -49,7 +49,6 @@ Deno.serve(async (req) => {
         'profile',
         'email',
         'accounting.transactions',
-        'accounting.attachments',
         'accounting.contacts',
         'offline_access'
       ].join(' ')
