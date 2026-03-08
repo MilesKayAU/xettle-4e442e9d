@@ -11,12 +11,13 @@ import { parseSettlementTSV, type ParserOptions } from '@/utils/settlement-parse
 
 interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
+  onRequestSettings?: () => void;
   isPaid?: boolean;
   gstRate?: number;
   syncCutoffDate?: string;
 }
 
-export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid = false, gstRate = 10, syncCutoffDate }: AmazonConnectionPanelProps) {
+export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequestSettings, isPaid = false, gstRate = 10, syncCutoffDate }: AmazonConnectionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
@@ -112,8 +113,9 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
   const handleFetchNow = async () => {
     if (!syncCutoffDate) {
       toast.error('Sync cutoff date required', {
-        description: 'Go to Settings and set a "Don\'t sync before" date first. This prevents old settlements already in Xero from being synced again.',
+        description: 'Set a "Don\'t sync before" date in Settings first.',
       });
+      if (onRequestSettings) onRequestSettings();
       return;
     }
     setFetching(true);
