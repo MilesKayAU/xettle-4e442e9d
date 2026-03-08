@@ -2499,7 +2499,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                                     {m1 && (
                                       <div className="p-2 rounded bg-purple-50/50 border border-purple-100">
                                         <p className="font-medium">Journal 1 ({formatDisplayDate(m1.end)}) — nets to $0.00</p>
-                                        <p className="font-mono">All transactions at full amounts</p>
+                                        <p className="font-mono">{m1.monthLabel} transactions (by posted date)</p>
                                         <p className="font-mono text-purple-700">Rollover to 612: {formatAUD(-rollover)}</p>
                                         {(s as any).xero_journal_id_1 && <p className="font-mono text-[10px] text-muted-foreground">Journal: {(s as any).xero_journal_id_1}</p>}
                                       </div>
@@ -2508,7 +2508,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                                       <div className="p-2 rounded bg-purple-50/50 border border-purple-100">
                                         <p className="font-medium">Journal 2 ({formatDisplayDate(m2.start)}) — nets to {formatAUD(s.bank_deposit)}</p>
                                         <p className="font-mono text-purple-700">Rollover from 612: {formatAUD(rollover)}</p>
-                                        <p className="font-mono">{m2.monthLabel} transactions ({Math.round(m2.ratio * 100)}% by days)</p>
+                                        <p className="font-mono">{m2.monthLabel} transactions (by posted date)</p>
                                         {(s as any).xero_journal_id_2 && <p className="font-mono text-[10px] text-muted-foreground">Journal: {(s as any).xero_journal_id_2}</p>}
                                       </div>
                                     )}
