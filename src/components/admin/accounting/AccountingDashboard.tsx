@@ -3890,7 +3890,8 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase.functions.invoke('xero-auth', {
-        body: { action: 'get_accounts', userId: user.id }
+        body: {},
+        headers: { 'x-action': 'get_accounts' },
       });
 
       if (error) throw error;
