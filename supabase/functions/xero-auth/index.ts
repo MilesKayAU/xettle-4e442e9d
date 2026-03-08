@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Action: Check connection status
+    // Action: Check connection status (with proactive token refresh)
     if (action === 'status') {
       const authHeader = req.headers.get('Authorization')
       if (!authHeader?.startsWith('Bearer ')) {
@@ -237,9 +237,15 @@ Deno.serve(async (req) => {
 
       const userId = claimsData.claims.sub
 
-      const { data: tokens, error } = await supabase
+      // Use service role to read AND refresh tokens
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+
+      const { data: tokens, error } = await supabaseAdmin
         .from('xero_tokens')
-        .select('tenant_id, tenant_name, expires_at')
+        .select('*')
         .eq('user_id', userId)
 
       if (error) {
@@ -251,7 +257,52 @@ Deno.serve(async (req) => {
       }
 
       const connected = tokens && tokens.length > 0
-      const isExpired = connected && new Date(tokens[0].expires_at) < new Date()
+      let isExpired = false
+
+      // Proactively refresh if token is expired or expiring within 5 minutes
+      if (connected && tokens.length > 0) {
+        const xeroToken = tokens[0]
+        const expiresAt = new Date(xeroToken.expires_at)
+        
+        if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
+          console.log('Token expired or expiring soon during status check, refreshing...')
+          try {
+            const tokenResponse = await fetch(XERO_TOKEN_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': `Basic ${btoa(`${XERO_CLIENT_ID}:${XERO_CLIENT_SECRET}`)}`
+              },
+              body: new URLSearchParams({
+                grant_type: 'refresh_token',
+                refresh_token: xeroToken.refresh_token
+              })
+            })
+
+            if (tokenResponse.ok) {
+              const tokenData = await tokenResponse.json()
+              const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+              await supabaseAdmin.from('xero_tokens').update({
+                access_token: tokenData.access_token,
+                refresh_token: tokenData.refresh_token,
+                expires_at: newExpiresAt,
+                updated_at: new Date().toISOString()
+              }).eq('id', xeroToken.id)
+              
+              // Update local reference for response
+              tokens[0].expires_at = newExpiresAt
+              console.log('Token refreshed successfully during status check')
+            } else {
+              const errorText = await tokenResponse.text()
+              console.error('Token refresh failed during status check:', errorText)
+              isExpired = true
+            }
+          } catch (refreshErr) {
+            console.error('Token refresh error during status check:', refreshErr)
+            isExpired = true
+          }
+        }
+      }
 
       return new Response(
         JSON.stringify({
