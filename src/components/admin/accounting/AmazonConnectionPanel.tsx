@@ -290,9 +290,9 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
             <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground flex items-start gap-2">
               <Lock className="h-4 w-4 mt-0.5 shrink-0" />
               <div>
-                <p className="text-xs font-medium text-foreground">Paid Feature</p>
+                <p className="text-xs font-medium text-foreground">Starter Plan Feature</p>
                 <p className="text-xs mt-0.5">
-                  Auto-import settlement reports directly from Amazon Seller Central. Upgrade to a paid plan to unlock this feature.
+                  Auto-import settlement reports directly from Amazon Seller Central. Upgrade to Starter ($129/yr) or Pro ($229/yr) to unlock.
                 </p>
               </div>
             </div>
