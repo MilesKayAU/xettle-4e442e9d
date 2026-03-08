@@ -156,6 +156,42 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
     }
   };
 
+  const handleSaveManualToken = async () => {
+    if (!manualToken.trim() || !manualSellerId.trim()) {
+      toast.error('Please enter both Seller ID and Refresh Token');
+      return;
+    }
+    setSavingToken(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('amazon_tokens')
+        .upsert({
+          user_id: user.id,
+          selling_partner_id: manualSellerId.trim(),
+          marketplace_id: 'A39IBJ37TRP1C6',
+          region: 'fe',
+          refresh_token: manualToken.trim(),
+          access_token: null,
+          expires_at: null,
+        } as any, { onConflict: 'user_id,selling_partner_id' });
+
+      if (error) throw error;
+
+      toast.success('Amazon token saved successfully');
+      setManualToken('');
+      setManualSellerId('');
+      setShowManualToken(false);
+      await checkStatus();
+    } catch (err: any) {
+      toast.error(`Save failed: ${err.message}`);
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
