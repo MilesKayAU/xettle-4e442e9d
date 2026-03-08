@@ -18,7 +18,7 @@ interface AmazonConnectionPanelProps {
   onFetchStateChange?: (fetching: boolean, progress: string | null) => void;
 }
 
-export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequestSettings, isPaid = false, gstRate = 10, syncCutoffDate }: AmazonConnectionPanelProps) {
+export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequestSettings, isPaid = false, gstRate = 10, syncCutoffDate, onFetchStateChange }: AmazonConnectionPanelProps) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
