@@ -141,16 +141,19 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         return;
       }
 
-      // Limit to 10 most recent reports per fetch to avoid rate limits
-      const reports = allReports.slice(0, 5);
-      toast.success(`Found ${allReports.length} report(s). Processing ${reports.length} (oldest first)...`);
-
       // Step 2: Check which settlements already exist
       const { data: existingData } = await supabase
         .from('settlements')
         .select('settlement_id')
         .eq('user_id', user.id);
       const existingIds = new Set((existingData || []).map(s => s.settlement_id));
+      console.log(`[Amazon Fetch] ${allReports.length} reports from API, ${existingIds.size} already in DB`);
+
+      // Filter out reports we can skip early (by reportId matching settlement_id pattern)
+      // Process oldest first (reverse the API's newest-first order), take up to 5 new ones
+      const reversed = [...allReports].reverse();
+      const reports = reversed.slice(0, 5);
+      toast.success(`Found ${allReports.length} report(s). Processing ${reports.length} (oldest first)...`);
 
       // Step 3: Download and parse each report (with delay for rate limiting)
       let importedCount = 0;
@@ -190,9 +193,10 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
           }
 
           // Check for duplicates
+          console.log(`[Amazon Fetch] Parsed settlement ${parsed.header.settlementId} (${parsed.header.periodStart} → ${parsed.header.periodEnd})`);
           if (existingIds.has(parsed.header.settlementId)) {
             skippedCount++;
-            console.info(`Skipping duplicate settlement ${parsed.header.settlementId}`);
+            console.info(`[Amazon Fetch] Skipping duplicate settlement ${parsed.header.settlementId}`);
             continue;
           }
 
