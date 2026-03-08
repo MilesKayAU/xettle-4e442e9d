@@ -437,7 +437,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
             continue;
           }
 
-          const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd < syncCutoffDate;
+          const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd <= syncCutoffDate;
           const { header, summary, lines, unmapped, splitMonth } = parsed;
 
           // Insert settlement
