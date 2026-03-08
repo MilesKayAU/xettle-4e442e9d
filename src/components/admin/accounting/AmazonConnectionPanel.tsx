@@ -40,6 +40,10 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
         if (data.connection?.updated_at) {
           setLastSync(data.connection.updated_at);
         }
+        // Pre-fill seller ID from existing connection
+        if (data.connection?.selling_partner_id) {
+          setManualSellerId(data.connection.selling_partner_id);
+        }
       }
     } catch {
       // silently fail
