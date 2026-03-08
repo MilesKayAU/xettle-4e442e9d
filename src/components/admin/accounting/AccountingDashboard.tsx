@@ -393,7 +393,8 @@ export default function AccountingDashboard() {
         is_split_month: splitMonth.isSplitMonth,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
         split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-      });
+        parser_version: PARSER_VERSION,
+      } as any);
       if (settError) throw settError;
 
       // 2. Insert settlement_lines (batch in chunks of 500)
