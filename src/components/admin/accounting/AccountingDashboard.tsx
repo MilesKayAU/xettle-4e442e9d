@@ -112,7 +112,7 @@ export default function AccountingDashboard() {
   const [pushing, setPushing] = useState(false);
   const [pushed, setPushed] = useState(false);
   const [settingsGstRate, setSettingsGstRate] = useState<number>(10);
-  const [settingsGapThreshold] = useState<number>(0); // kept for compat but no longer used
+  
   const [settingsAccountCodes, setSettingsAccountCodes] = useState<Record<string, string> | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
   
@@ -3353,7 +3353,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
     return codes;
   });
   const [gstRate, setGstRate] = useState('10');
-  const [gapThreshold, setGapThreshold] = useState('16');
+  
   const [savingSettings, setSavingSettings] = useState(false);
   const [checking, setChecking] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -3375,9 +3375,6 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
             }
             if (row.key === 'accounting_gst_rate' && row.value) {
               setGstRate(row.value);
-            }
-            if (row.key === 'gap_threshold_days' && row.value) {
-              setGapThreshold(row.value);
             }
           }
         }
@@ -3496,7 +3493,6 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
       const settingsToSave = [
         { key: 'accounting_xero_account_codes', value: JSON.stringify(accountCodes) },
         { key: 'accounting_gst_rate', value: gstRate },
-        { key: 'gap_threshold_days', value: gapThreshold },
       ];
 
       for (const setting of settingsToSave) {
@@ -3518,10 +3514,6 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
       const parsedRate = parseFloat(gstRate);
       if (!isNaN(parsedRate) && parsedRate > 0 && onGstRateChanged) {
         onGstRateChanged(parsedRate);
-      }
-      const parsedGap = parseInt(gapThreshold, 10);
-      if (!isNaN(parsedGap) && parsedGap > 0 && onGapThresholdChanged) {
-        onGapThresholdChanged(parsedGap);
       }
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
