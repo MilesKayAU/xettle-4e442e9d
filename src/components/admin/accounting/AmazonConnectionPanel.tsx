@@ -142,8 +142,8 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
       }
 
       // Limit to 10 most recent reports per fetch to avoid rate limits
-      const reports = allReports.slice(0, 10);
-      toast.success(`Found ${allReports.length} report(s) in last 90 days. Processing ${reports.length}...`);
+      const reports = allReports.slice(0, 5);
+      toast.success(`Found ${allReports.length} report(s). Processing ${reports.length} (oldest first)...`);
 
       // Step 2: Check which settlements already exist
       const { data: existingData } = await supabase
@@ -162,8 +162,8 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         const report = reports[i];
         if (!report.reportDocumentId) continue;
 
-        // Wait 3 seconds between downloads to respect rate limits
-        if (i > 0) await new Promise(r => setTimeout(r, 3000));
+        // Wait 8 seconds between downloads to respect Amazon rate limits
+        if (i > 0) await new Promise(r => setTimeout(r, 8000));
 
         try {
           const { data: dlData, error: dlError } = await supabase.functions.invoke('fetch-amazon-settlements', {
