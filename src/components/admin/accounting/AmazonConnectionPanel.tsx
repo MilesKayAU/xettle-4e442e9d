@@ -24,6 +24,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
   const [disconnecting, setDisconnecting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [fetchProgress, setFetchProgress] = useState<{ current: number; total: number; status: string } | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [showManualToken, setShowManualToken] = useState(false);
   const [manualToken, setManualToken] = useState('');
@@ -119,11 +120,11 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
       return;
     }
     setFetching(true);
+    setFetchProgress({ current: 0, total: 0, status: 'Listing reports...' });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Step 1: List available reports (last 90 days only)
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 90);
       
@@ -141,31 +142,31 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         return;
       }
 
-      // Step 2: Check which settlements already exist
+      // Check which settlements already exist
       const { data: existingData } = await supabase
         .from('settlements')
         .select('settlement_id')
         .eq('user_id', user.id);
       const existingIds = new Set((existingData || []).map(s => s.settlement_id));
-      console.log(`[Amazon Fetch] ${allReports.length} reports from API, ${existingIds.size} already in DB`);
 
-      // Filter out reports we can skip early (by reportId matching settlement_id pattern)
-      // Process oldest first (reverse the API's newest-first order), take up to 5 new ones
+      // Process ALL reports, oldest first
       const reversed = [...allReports].reverse();
-      const reports = reversed.slice(0, 5);
-      toast.success(`Found ${allReports.length} report(s). Processing ${reports.length} (oldest first)...`);
+      const totalReports = reversed.length;
+      setFetchProgress({ current: 0, total: totalReports, status: `0 of ${totalReports}` });
 
-      // Step 3: Download and parse each report (with delay for rate limiting)
       let importedCount = 0;
       let skippedCount = 0;
       let cutoffCount = 0;
+      let errorCount = 0;
       const parserOpts: ParserOptions = { gstRate };
 
-      for (let i = 0; i < reports.length; i++) {
-        const report = reports[i];
+      for (let i = 0; i < reversed.length; i++) {
+        const report = reversed[i];
         if (!report.reportDocumentId) continue;
 
-        // Wait 8 seconds between downloads to respect Amazon rate limits
+        setFetchProgress({ current: i + 1, total: totalReports, status: `${i + 1} of ${totalReports} — ${importedCount} new, ${skippedCount} skipped` });
+
+        // Rate-limit delay (8s between downloads)
         if (i > 0) await new Promise(r => setTimeout(r, 8000));
 
         try {
@@ -175,35 +176,27 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
           });
 
           if (dlError || dlData?.error) {
-            console.error('Failed to download report:', report.reportId, dlData?.error || dlError);
+            errorCount++;
             continue;
           }
 
           const content = dlData?.content;
-          if (!content) continue;
+          if (!content) { errorCount++; continue; }
 
-          // Parse the TSV content
           let parsed;
           try {
             parsed = parseSettlementTSV(content, parserOpts);
-          } catch (parseErr: any) {
-            console.error('Failed to parse report:', report.reportId, parseErr.message);
-            toast.error(`Failed to parse report ${report.reportId}: ${parseErr.message}`);
+          } catch {
+            errorCount++;
             continue;
           }
 
-          // Check for duplicates
-          console.log(`[Amazon Fetch] Parsed settlement ${parsed.header.settlementId} (${parsed.header.periodStart} → ${parsed.header.periodEnd})`);
           if (existingIds.has(parsed.header.settlementId)) {
             skippedCount++;
-            console.info(`[Amazon Fetch] Skipping duplicate settlement ${parsed.header.settlementId}`);
             continue;
           }
 
-          // Check if settlement is before cutoff date → auto-mark as already in Xero
           const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd < syncCutoffDate;
-
-          // Save to database with source='api'
           const { header, summary, lines, unmapped } = parsed;
           const splitMonth = parsed.splitMonth;
 
@@ -233,11 +226,10 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
             is_split_month: splitMonth.isSplitMonth,
             split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
             split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-            parser_version: parsed.header.settlementId ? `${parsed.splitMonth ? 'v1.7.0' : 'v1.7.0'}` : 'v1.7.0',
+            parser_version: 'v1.7.0',
           } as any);
-          if (settError) throw settError;
+          if (settError) { errorCount++; continue; }
 
-          // Insert lines in chunks
           if (lines.length > 0) {
             const lineRows = lines.map(l => ({
               user_id: user.id,
@@ -253,15 +245,12 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
               marketplace_name: l.marketplaceName || null,
             }));
             for (let j = 0; j < lineRows.length; j += 500) {
-              const chunk = lineRows.slice(j, j + 500);
-              const { error: lineErr } = await supabase.from('settlement_lines').insert(chunk);
-              if (lineErr) throw lineErr;
+              await supabase.from('settlement_lines').insert(lineRows.slice(j, j + 500));
             }
           }
 
-          // Insert unmapped
           if (unmapped.length > 0) {
-            const unmappedRows = unmapped.map(u => ({
+            await supabase.from('settlement_unmapped').insert(unmapped.map(u => ({
               user_id: user.id,
               settlement_id: header.settlementId,
               transaction_type: u.transactionType,
@@ -269,35 +258,31 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
               amount_description: u.amountDescription,
               amount: u.amount,
               raw_row: u.rawRow,
-            }));
-            const { error: unmappedErr } = await supabase.from('settlement_unmapped').insert(unmappedRows);
-            if (unmappedErr) throw unmappedErr;
+            })));
           }
 
           existingIds.add(parsed.header.settlementId);
           importedCount++;
           if (isBeforeCutoff) cutoffCount++;
         } catch (dlErr: any) {
-          console.error('Download/parse error:', dlErr);
-          toast.error(`Error processing report: ${dlErr.message}`);
+          errorCount++;
         }
       }
 
       const parts = [];
       if (importedCount > 0) parts.push(`${importedCount} imported`);
-      if (cutoffCount > 0) parts.push(`${cutoffCount} auto-marked as already in Xero (before cutoff)`);
+      if (cutoffCount > 0) parts.push(`${cutoffCount} auto-marked as already in Xero`);
       if (skippedCount > 0) parts.push(`${skippedCount} duplicates skipped`);
-      toast.success(`Done! ${parts.join(', ')}. Check the Auto-Imported tab.`);
+      if (errorCount > 0) parts.push(`${errorCount} errors`);
+      toast.success(`Done! ${parts.join(', ')}.`);
       
-      if (importedCount > 0) {
-        onSettlementsAutoFetched?.();
-      }
-
+      if (importedCount > 0) onSettlementsAutoFetched?.();
       setLastSync(new Date().toISOString());
     } catch (err: any) {
       toast.error(`Fetch failed: ${err.message}`);
     } finally {
       setFetching(false);
+      setFetchProgress(null);
     }
   };
 
@@ -394,28 +379,44 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
                 </div>
               )}
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant={!syncCutoffDate ? "destructive" : "outline"}
-                size="sm"
-                onClick={handleFetchNow}
-                disabled={fetching}
-                className="gap-1.5"
-                title={!syncCutoffDate ? 'Set a sync cutoff date in Settings first' : undefined}
-              >
-                {fetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                {fetching ? 'Fetching...' : !syncCutoffDate ? '⚠ Set Cutoff Date' : 'Fetch Now'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDisconnect}
-                disabled={disconnecting}
-                className="gap-1.5 text-destructive hover:text-destructive"
-              >
-                {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
-                Disconnect
-              </Button>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <Button
+                  variant={!syncCutoffDate ? "destructive" : "outline"}
+                  size="sm"
+                  onClick={handleFetchNow}
+                  disabled={fetching}
+                  className="gap-1.5"
+                  title={!syncCutoffDate ? 'Set a sync cutoff date in Settings first' : undefined}
+                >
+                  {fetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {fetching ? 'Fetching...' : !syncCutoffDate ? '⚠ Set Cutoff Date' : 'Fetch All'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDisconnect}
+                  disabled={disconnecting || fetching}
+                  className="gap-1.5 text-destructive hover:text-destructive"
+                >
+                  {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
+                  Disconnect
+                </Button>
+              </div>
+              {fetchProgress && (
+                <div className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1.5 flex items-center gap-2">
+                  <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                  <span>{fetchProgress.status}</span>
+                  {fetchProgress.total > 0 && (
+                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden ml-1">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all duration-500"
+                        style={{ width: `${Math.round((fetchProgress.current / fetchProgress.total) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ) : !isPaid ? (
