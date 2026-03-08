@@ -363,12 +363,13 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         .from('app_settings')
         .select('key, value')
         .eq('user_id', userId)
-        .in('key', ['gstRate', 'syncCutoffDate']);
+        .in('key', ['accounting_gst_rate', 'sync_cutoff_date']);
 
       const settingsMap: Record<string, string> = {};
       (settingsData || []).forEach((s: any) => { settingsMap[s.key] = s.value; });
-      const gstRate = parseFloat(settingsMap['gstRate'] || '10');
-      const syncCutoffDate = settingsMap['syncCutoffDate'] || null;
+      const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
+      const syncCutoffDate = settingsMap['sync_cutoff_date'] || null;
+      console.log(`[Sync] User ${userId}: gstRate=${gstRate}, syncCutoffDate=${syncCutoffDate}`);
 
       // 3. List settlement reports (last 90 days)
       const startDate = new Date();
@@ -416,8 +417,8 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         const report = reversed[i];
         if (!report.reportDocumentId) continue;
 
-        // Rate-limit delay (8s between downloads to avoid 429)
-        if (i > 0) await new Promise(r => setTimeout(r, 8000));
+        // Rate-limit delay (3s between downloads to avoid 429)
+        if (i > 0) await new Promise(r => setTimeout(r, 3000));
 
         try {
           // Download report
