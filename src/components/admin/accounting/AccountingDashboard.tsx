@@ -14,6 +14,7 @@ import { Scissors } from "lucide-react";
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
+import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
 
 const PLATFORMS = [
   { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
@@ -1041,6 +1042,9 @@ export default function AccountingDashboard() {
                 </Card>
 
               </div>
+
+              {/* How to find your settlement report guide */}
+              <SellerCentralGuide />
 
               <div className="mt-4 flex gap-3">
                 {/* Single file parse */}
