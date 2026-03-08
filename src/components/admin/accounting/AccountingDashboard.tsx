@@ -205,6 +205,20 @@ export default function AccountingDashboard() {
     checkXero();
   }, []);
 
+  // Check paid role
+  useEffect(() => {
+    const checkPaid = async () => {
+      try {
+        const { data } = await supabase.rpc('has_role', { _role: 'paid' });
+        if (data) setIsPaidUser(true);
+        // Admins always get paid features
+        const { data: isAdmin } = await supabase.rpc('has_role', { _role: 'admin' });
+        if (isAdmin) setIsPaidUser(true);
+      } catch {}
+    };
+    checkPaid();
+  }, []);
+
   const loadSettlements = useCallback(async () => {
     setLoadingSettlements(true);
     try {
