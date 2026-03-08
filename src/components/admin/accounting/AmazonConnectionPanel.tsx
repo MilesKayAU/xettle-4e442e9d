@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug, RefreshCw, Lock } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug, RefreshCw, Lock, KeyRound } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
@@ -19,6 +21,10 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
   const [connecting, setConnecting] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [showManualToken, setShowManualToken] = useState(false);
+  const [manualToken, setManualToken] = useState('');
+  const [manualSellerId, setManualSellerId] = useState('');
+  const [savingToken, setSavingToken] = useState(false);
 
   const checkStatus = useCallback(async () => {
     setLoading(true);
