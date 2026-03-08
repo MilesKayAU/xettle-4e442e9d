@@ -912,9 +912,7 @@ export default function AccountingDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Amazon Settlements — direct entry, no platform selector */}
-      {(() => {
-        // Always show Amazon content (only active platform)
+      {/* Amazon Settlements — direct entry */}
         <div className="space-y-6">
           {/* Amazon sub-header with country selector */}
           <div className="flex items-center justify-between">
