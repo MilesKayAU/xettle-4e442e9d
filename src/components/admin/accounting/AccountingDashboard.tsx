@@ -126,6 +126,7 @@ export default function AccountingDashboard() {
   const [syncCutoffDate, setSyncCutoffDate] = useState<string>('');
   const [showUpgradeNudge, setShowUpgradeNudge] = useState(false);
   const [nudgeUploadCount, setNudgeUploadCount] = useState(0);
+  const [userTier, setUserTier] = useState<'free' | 'starter' | 'pro'>('free');
   // Global fetch state — visible across all tabs, persisted across refresh
   const [amazonFetching, setAmazonFetching] = useState(() => {
     const stored = localStorage.getItem('xettle_fetch_started');
@@ -256,18 +257,26 @@ export default function AccountingDashboard() {
     checkXero();
   }, []);
 
-  // Check paid role
+  // Check user tier (pro > starter > paid > free)
   useEffect(() => {
-    const checkPaid = async () => {
+    const checkTier = async () => {
       try {
-        const { data } = await supabase.rpc('has_role', { _role: 'paid' });
-        if (data) setIsPaidUser(true);
-        // Admins always get paid features
+        // Check in order: pro, starter, paid (legacy), admin
+        const { data: isPro } = await supabase.rpc('has_role', { _role: 'pro' as any });
+        if (isPro) { setUserTier('pro'); setIsPaidUser(true); return; }
+        
+        const { data: isStarter } = await supabase.rpc('has_role', { _role: 'starter' as any });
+        if (isStarter) { setUserTier('starter'); setIsPaidUser(true); return; }
+        
+        const { data: isPaid } = await supabase.rpc('has_role', { _role: 'paid' });
+        if (isPaid) { setUserTier('starter'); setIsPaidUser(true); return; }
+        
+        // Admins get Pro access
         const { data: isAdmin } = await supabase.rpc('has_role', { _role: 'admin' });
-        if (isAdmin) setIsPaidUser(true);
+        if (isAdmin) { setUserTier('pro'); setIsPaidUser(true); return; }
       } catch {}
     };
-    checkPaid();
+    checkTier();
   }, []);
 
   const loadSettlements = useCallback(async () => {
