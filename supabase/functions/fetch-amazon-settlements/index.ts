@@ -104,17 +104,29 @@ serve(async (req) => {
         })
       }
 
-      // Step 1: Get the report document URL
+      // Step 1: Get the report document URL (with retry for rate limiting)
       const docUrl = `${baseUrl}/reports/2021-06-30/documents/${reportDocumentId}`
-      const docResponse = await fetch(docUrl, {
-        headers: { 'x-amz-access-token': access_token },
-      })
+      let docResponse: Response | null = null
+      let lastErrBody = ''
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          const delay = Math.min(2000 * Math.pow(2, attempt), 10000)
+          console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`)
+          await new Promise(r => setTimeout(r, delay))
+        }
+        docResponse = await fetch(docUrl, {
+          headers: { 'x-amz-access-token': access_token },
+        })
+        if (docResponse.status !== 429) break
+        lastErrBody = await docResponse.text()
+        console.warn('SP-API 429 rate limited:', lastErrBody)
+      }
 
-      if (!docResponse.ok) {
-        const errBody = await docResponse.text()
-        console.error('SP-API document fetch failed:', docResponse.status, errBody)
-        return new Response(JSON.stringify({ error: `Failed to get report document: ${docResponse.status}` }), {
-          status: docResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      if (!docResponse || !docResponse.ok) {
+        const errBody = lastErrBody || (docResponse ? await docResponse.text() : 'No response')
+        console.error('SP-API document fetch failed:', docResponse?.status, errBody)
+        return new Response(JSON.stringify({ error: `Failed to get report document: ${docResponse?.status}` }), {
+          status: docResponse?.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
 

@@ -121,10 +121,13 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
 
       toast.success(`Found ${reports.length} settlement report(s). Downloading...`);
 
-      // Download each report
+      // Download each report (with delay to avoid rate limiting)
       let downloadedCount = 0;
-      for (const report of reports) {
+      for (let i = 0; i < reports.length; i++) {
+        const report = reports[i];
         if (!report.reportDocumentId) continue;
+        // Wait 3 seconds between downloads to respect rate limits
+        if (i > 0) await new Promise(r => setTimeout(r, 3000));
         try {
           const { data: dlData, error: dlError } = await supabase.functions.invoke('fetch-amazon-settlements', {
             headers: { 'x-action': 'download' },
