@@ -110,7 +110,7 @@ export default function Landing() {
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border ${
                   m.status === 'live'
                     ? 'bg-primary/10 text-primary border-primary/20'
-                    : 'bg-muted text-muted-foreground border-border'
+                    : 'bg-background text-muted-foreground border-border/60'
                 }`}
               >
                 {m.name}
