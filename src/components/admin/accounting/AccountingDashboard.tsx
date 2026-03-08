@@ -160,7 +160,7 @@ export default function AccountingDashboard() {
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'gap_threshold_days']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
         if (data) {
           for (const row of data) {
             if (row.key === 'accounting_gst_rate' && row.value) {
@@ -3366,7 +3366,7 @@ function SettlementSettings({ onGstRateChanged }: { onGstRateChanged?: (rate: nu
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'gap_threshold_days']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
 
         if (data) {
           for (const row of data) {
