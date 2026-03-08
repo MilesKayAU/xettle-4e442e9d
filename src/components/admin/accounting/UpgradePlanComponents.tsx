@@ -83,9 +83,26 @@ export function CurrentPlanCard({ isPaid, userTier = 'free' }: { isPaid: boolean
               </Link>
             </Button>
           </>
+        ) : userTier === 'starter' ? (
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>You have access to Amazon SP-API auto-fetch and manual Xero push.</p>
+            <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+              <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                <Crown className="h-3.5 w-3.5 text-primary" />
+                Upgrade to Pro ($229/yr)
+              </p>
+              <p className="text-xs text-muted-foreground">Daily auto-push to Xero, email notifications, fully hands-off.</p>
+            </div>
+            <Button size="sm" variant="outline" className="w-full" asChild>
+              <Link to="/pricing">
+                View Plans
+                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Link>
+            </Button>
+          </div>
         ) : (
           <div className="text-sm text-muted-foreground">
-            <p>You have access to Amazon SP-API auto-fetch and manual Xero push.</p>
+            <p>You're on <strong className="text-foreground">Pro</strong> — full automation with auto-fetch and auto-push to Xero.</p>
             <Button size="sm" variant="outline" className="mt-2" asChild>
               <Link to="/pricing">
                 View all plans
