@@ -116,6 +116,7 @@ export default function AccountingDashboard() {
   
   const [settingsAccountCodes, setSettingsAccountCodes] = useState<Record<string, string> | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
+  const [isPaidUser, setIsPaidUser] = useState(false);
   
   // Bulk upload state
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
