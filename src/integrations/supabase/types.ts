@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      amazon_tokens: {
+        Row: {
+          access_token: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          marketplace_id: string
+          refresh_token: string
+          region: string
+          selling_partner_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          marketplace_id?: string
+          refresh_token: string
+          region?: string
+          selling_partner_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          marketplace_id?: string
+          refresh_token?: string
+          region?: string
+          selling_partner_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           created_at: string

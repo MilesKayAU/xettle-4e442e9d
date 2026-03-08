@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
 import OnboardingChecklist from '@/components/admin/accounting/OnboardingChecklist';
+import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
 
 const PLATFORMS = [
   { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
@@ -1277,6 +1278,7 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
+                <AmazonConnectionPanel />
                 <XeroConnectionStatus />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
               </div>
@@ -2994,6 +2996,69 @@ function SettlementReview({
   const [showLineItems, setShowLineItems] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
+  // Compute rollover amount for display (mirrors handlePushToXero logic)
+  const computedRolloverAmount = useMemo(() => {
+    if (!splitMonth.isSplitMonth || !splitMonth.month1 || !splitMonth.month2) return 0;
+    const m1EndDate = splitMonth.month1.end;
+    const month1Lines = lines.filter(l => {
+      if (!l.postedDate) return true;
+      return l.postedDate <= m1EndDate;
+    });
+
+    // Replicate Xero-inclusive total computation for month 1 lines
+    const INCOME_CATS = new Set(['Sales - Principal', 'Sales - Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
+    const auBuckets: Record<string, number> = {};
+    const intlBuckets: Record<string, number> = {};
+    const expenseBuckets: Record<string, number> = {};
+    const otherBuckets: Record<string, number> = {};
+    const taxSubBuckets: Record<string, number> = {};
+
+    for (const line of month1Lines) {
+      let cat = line.accountingCategory;
+      if (cat === 'Sales') cat = line.amountDescription === 'Shipping' ? 'Sales - Shipping' : 'Sales - Principal';
+      if (cat === 'Tax Collected by Amazon') {
+        taxSubBuckets[line.amountDescription] = (taxSubBuckets[line.amountDescription] || 0) + line.amount;
+        continue;
+      }
+      if (INCOME_CATS.has(cat)) {
+        if (line.isAuMarketplace) auBuckets[cat] = (auBuckets[cat] || 0) + line.amount;
+        else intlBuckets[cat] = (intlBuckets[cat] || 0) + line.amount;
+      } else if (['Seller Fees', 'FBA Fees', 'Storage Fees'].includes(cat)) {
+        expenseBuckets[cat] = (expenseBuckets[cat] || 0) + line.amount;
+      } else {
+        otherBuckets[cat] = (otherBuckets[cat] || 0) + line.amount;
+      }
+    }
+
+    // Compute Xero-inclusive total (OUTPUT/INPUT lines get *1.1, others as-is)
+    let xeroTotal = 0;
+    for (const [cat, amount] of Object.entries(auBuckets)) {
+      const a = round2(amount);
+      if (a === 0) continue;
+      // AU income → GST on Income (OUTPUT) → exGst * 1.1
+      const taxAmt = round2(a / 11);
+      const exGst = round2(a - taxAmt);
+      xeroTotal += round2(exGst * 1.1);
+    }
+    for (const [, amount] of Object.entries(intlBuckets)) {
+      xeroTotal += round2(amount); // EXEMPTOUTPUT — no GST
+    }
+    for (const [, amount] of Object.entries(expenseBuckets)) {
+      const a = round2(amount);
+      if (a === 0) continue;
+      const exGst = round2(a - round2(a / 11));
+      xeroTotal += round2(exGst * 1.1); // INPUT → exGst * 1.1
+    }
+    for (const [, amount] of Object.entries(otherBuckets)) {
+      xeroTotal += round2(amount); // BASEXCLUDED
+    }
+    for (const [, amount] of Object.entries(taxSubBuckets)) {
+      xeroTotal += round2(amount); // BASEXCLUDED
+    }
+
+    return round2(xeroTotal);
+  }, [splitMonth, lines]);
+
   // Build Xero journal preview lines (same logic as handlePushToXero)
   const journalPreviewLines = useMemo(() => {
     const INCOME_CATS = new Set(['Sales - Principal', 'Sales - Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
@@ -3280,7 +3345,7 @@ function SettlementReview({
                   <div className="border-t border-purple-200 my-1" />
                   <div className="flex justify-between text-purple-700 font-medium">
                     <span>Rollover to 612:</span>
-                    <span className="font-mono">{formatAUD(-splitMonth.rolloverAmount)}</span>
+                    <span className="font-mono">{formatAUD(-computedRolloverAmount)}</span>
                   </div>
                   <div className="border-t border-purple-200 my-1" />
                   <div className="flex justify-between font-semibold"><span>Net:</span><span className="font-mono">$0.00</span></div>
@@ -3293,7 +3358,7 @@ function SettlementReview({
                 <div className="space-y-0.5 text-xs">
                   <div className="flex justify-between text-purple-700 font-medium">
                     <span>Rollover from 612:</span>
-                    <span className="font-mono">{formatAUD(splitMonth.rolloverAmount)}</span>
+                    <span className="font-mono">{formatAUD(computedRolloverAmount)}</span>
                   </div>
                   <div className="border-t border-purple-200 my-1" />
                   <p className="text-muted-foreground text-[10px] italic">
