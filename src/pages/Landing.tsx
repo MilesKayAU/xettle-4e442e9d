@@ -40,7 +40,7 @@ const competitors = [
   { name: 'Link My Books', price: '$17–49/mo' },
   { name: 'A2X', price: '$25–79/mo' },
   { name: 'Taxomate', price: '$19–49/mo' },
-  { name: 'SyncBooks', price: 'Free', highlight: true },
+  { name: 'SellerBooks', price: 'Free', highlight: true },
 ];
 
 export default function Landing() {
@@ -189,7 +189,7 @@ export default function Landing() {
       <footer className="border-t border-border py-8 px-4">
         <div className="container-custom flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} SyncBooks. Free forever.
+            © {new Date().getFullYear()} SellerBooks. Free forever.
           </p>
           <div className="flex gap-6">
             <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
