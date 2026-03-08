@@ -677,8 +677,17 @@ export default function AccountingDashboard() {
 
         // Invoice 1: Month-1 actual lines + balancing 612 line
         const lines1 = buildInvoiceLineItems(month1Lines, `${m1.monthLabel}`, header.settlementId);
-        const lines1Sum = lines1.reduce((sum, l) => sum + l.UnitAmount, 0);
-        const rolloverAmount = round2(lines1Sum);
+        // Rollover must offset the GST-inclusive Xero total so Invoice 1 nets to $0.00
+        // Xero adds GST on OUTPUT/INPUT lines but not BASEXCLUDED, so we compute the inclusive total
+        let xeroInclusiveTotal = 0;
+        for (const item of lines1) {
+          if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
+            xeroInclusiveTotal += round2(round2(item.UnitAmount) * 1.1);
+          } else {
+            xeroInclusiveTotal += round2(item.UnitAmount);
+          }
+        }
+        const rolloverAmount = round2(xeroInclusiveTotal);
 
         console.info('[Split Month Invoice Rollover]', {
           settlementId: header.settlementId,
@@ -2425,7 +2434,14 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                               {(() => {
                                 const m1 = s.split_month_1_data ? JSON.parse(s.split_month_1_data as string) : null;
                                 const m2 = s.split_month_2_data ? JSON.parse(s.split_month_2_data as string) : null;
-                                const rollover = (s as any).split_rollover_amount || 0;
+                                // Compute rollover from month1 data (sum of all amounts = what would go to 612)
+                                const rollover = m1 ? round2(
+                                  (m1.salesPrincipal || 0) + (m1.salesShipping || 0) +
+                                  (m1.promotionalDiscounts || 0) + (m1.refunds || 0) +
+                                  (m1.fbaFees || 0) + (m1.sellerFees || 0) +
+                                  (m1.storageFees || 0) + (m1.otherFees || 0) +
+                                  (m1.reimbursements || 0)
+                                ) : 0;
                                 return (
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                                     {m1 && (
