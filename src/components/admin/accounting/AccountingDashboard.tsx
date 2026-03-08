@@ -124,9 +124,24 @@ export default function AccountingDashboard() {
   const [isPaidUser, setIsPaidUser] = useState(false);
   const [syncCutoffDate, setSyncCutoffDate] = useState<string>('');
   
-  // Global fetch state — visible across all tabs
-  const [amazonFetching, setAmazonFetching] = useState(false);
-  const [amazonFetchStatus, setAmazonFetchStatus] = useState<string | null>(null);
+  // Global fetch state — visible across all tabs, persisted across refresh
+  const [amazonFetching, setAmazonFetching] = useState(() => {
+    const stored = localStorage.getItem('xettle_fetch_started');
+    if (stored) {
+      const elapsed = Date.now() - parseInt(stored, 10);
+      // Consider fetch alive for up to 5 minutes
+      if (elapsed < 5 * 60 * 1000) return true;
+      localStorage.removeItem('xettle_fetch_started');
+    }
+    return false;
+  });
+  const [amazonFetchStatus, setAmazonFetchStatus] = useState<string | null>(() => {
+    const stored = localStorage.getItem('xettle_fetch_started');
+    if (stored && Date.now() - parseInt(stored, 10) < 5 * 60 * 1000) {
+      return 'Fetching settlement reports from Amazon...';
+    }
+    return null;
+  });
   // Bulk upload state
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
   const [bulkProcessing, setBulkProcessing] = useState(false);
