@@ -3739,7 +3739,7 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'sync_cutoff_date']);
 
         if (data) {
           for (const row of data) {
@@ -3748,6 +3748,10 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
             }
             if (row.key === 'accounting_gst_rate' && row.value) {
               setGstRate(row.value);
+            }
+            if (row.key === 'sync_cutoff_date' && row.value) {
+              setSyncCutoffDate(new Date(row.value));
+              onSyncCutoffChanged?.(row.value);
             }
           }
         }
@@ -3866,6 +3870,7 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
       const settingsToSave = [
         { key: 'accounting_xero_account_codes', value: JSON.stringify(accountCodes) },
         { key: 'accounting_gst_rate', value: gstRate },
+        { key: 'sync_cutoff_date', value: syncCutoffDate ? syncCutoffDate.toISOString().split('T')[0] : '' },
       ];
 
       for (const setting of settingsToSave) {
@@ -3886,6 +3891,11 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
       toast.success('Settings saved');
       const parsedRate = parseFloat(gstRate);
       if (!isNaN(parsedRate) && parsedRate > 0 && onGstRateChanged) {
+        onGstRateChanged(parsedRate);
+      }
+      if (onSyncCutoffChanged) {
+        onSyncCutoffChanged(syncCutoffDate ? syncCutoffDate.toISOString().split('T')[0] : '');
+      }
         onGstRateChanged(parsedRate);
       }
     } catch (err: any) {
