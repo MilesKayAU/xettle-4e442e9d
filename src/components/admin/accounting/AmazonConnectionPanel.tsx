@@ -15,6 +15,7 @@ interface AmazonConnectionPanelProps {
   isPaid?: boolean;
   gstRate?: number;
   syncCutoffDate?: string;
+  onFetchStateChange?: (fetching: boolean, progress: string | null) => void;
 }
 
 export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequestSettings, isPaid = false, gstRate = 10, syncCutoffDate }: AmazonConnectionPanelProps) {
