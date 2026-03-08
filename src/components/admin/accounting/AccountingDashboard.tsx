@@ -4094,7 +4094,7 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className={cn("w-[200px] justify-start text-left font-normal", !syncCutoffDate && "text-muted-foreground")}>
@@ -4112,12 +4112,43 @@ function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRa
                 />
               </PopoverContent>
             </Popover>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={async () => {
+                try {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (!user) return;
+                  const { data } = await supabase
+                    .from('settlements')
+                    .select('period_start')
+                    .eq('user_id', user.id)
+                    .order('period_start', { ascending: true })
+                    .limit(1);
+                  if (data && data.length > 0) {
+                    setSyncCutoffDate(new Date(data[0].period_start));
+                    toast.success('Cutoff set to your earliest settlement: ' + data[0].period_start);
+                  } else {
+                    toast.info('No existing settlements found — set a date manually');
+                  }
+                } catch {
+                  toast.error('Failed to look up settlements');
+                }
+              }}
+            >
+              <History className="h-3 w-3" />
+              Use earliest existing
+            </Button>
             {syncCutoffDate && (
               <Button variant="ghost" size="sm" className="text-xs" onClick={() => setSyncCutoffDate(undefined)}>
                 Clear
               </Button>
             )}
           </div>
+          {!syncCutoffDate && (
+            <p className="text-xs text-destructive mt-2 font-medium">⚠ Required — Amazon fetch is blocked until this is set</p>
+          )}
         </CardContent>
       </Card>
 
