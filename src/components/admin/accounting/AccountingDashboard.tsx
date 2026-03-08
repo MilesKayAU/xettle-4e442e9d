@@ -24,6 +24,7 @@ import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectio
 import AutoImportedTab from '@/components/admin/accounting/AutoImportedTab';
 import { CurrentPlanCard, UpgradeNudgeDialog, incrementManualUploadCount, shouldShowUpgradeNudge, getManualUploadCount } from '@/components/admin/accounting/UpgradePlanComponents';
 import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting/SyncComponents';
+import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
 
 const PLATFORMS = [
   { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
@@ -1417,8 +1418,8 @@ export default function AccountingDashboard() {
                   setAmazonFetchStatus(status);
                 }} />
                 <XeroConnectionStatus />
+                <AutomationSettingsPanel userTier={userTier} />
                 <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />
-                <CronScheduleCard userTier={userTier} />
                 <SyncHistoryCard />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
               </div>
