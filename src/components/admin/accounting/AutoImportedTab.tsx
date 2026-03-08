@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw, CloudDownload } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw, CloudDownload, ShieldCheck, AlertTriangle } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
@@ -48,6 +48,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [marking, setMarking] = useState<string | null>(null);
 
   const loadApiSettlements = useCallback(async () => {
     setLoading(true);
@@ -77,7 +78,6 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Delete lines first
       await supabase.from('settlement_lines').delete()
         .eq('user_id', user.id).eq('settlement_id', settlement.settlement_id);
       await supabase.from('settlement_unmapped').delete()
@@ -93,7 +93,46 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
   };
 
+  const handleMarkAsInXero = async (settlement: AutoImportedSettlement) => {
+    setMarking(settlement.id);
+    try {
+      const { error } = await supabase
+        .from('settlements')
+        .update({ status: 'synced_external' } as any)
+        .eq('id', settlement.id);
+      if (error) throw error;
+      toast.success(`Settlement ${settlement.settlement_id} marked as already in Xero`);
+      await loadApiSettlements();
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    } finally {
+      setMarking(null);
+    }
+  };
+
+  const handleUnmarkFromXero = async (settlement: AutoImportedSettlement) => {
+    setMarking(settlement.id);
+    try {
+      const { error } = await supabase
+        .from('settlements')
+        .update({ status: 'saved' } as any)
+        .eq('id', settlement.id);
+      if (error) throw error;
+      toast.success(`Settlement ${settlement.settlement_id} unmarked — available for sync`);
+      await loadApiSettlements();
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    } finally {
+      setMarking(null);
+    }
+  };
+
   const handleSyncToXero = async (settlement: AutoImportedSettlement) => {
+    // Guard: never sync if marked as already in Xero
+    if (settlement.status === 'synced_external') {
+      toast.error('This settlement is marked as already in Xero. Unmark it first if you want to sync.');
+      return;
+    }
     setSyncing(settlement.id);
     try {
       onSyncToXero?.(settlement.settlement_id);
@@ -102,11 +141,15 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
   };
 
+  const isAlreadyInXero = (s: AutoImportedSettlement) =>
+    s.status === 'synced_external' || !!(s.xero_journal_id || s.xero_journal_id_1);
+
   const getStatusBadge = (settlement: AutoImportedSettlement) => {
     const isSynced = !!(settlement.xero_journal_id || settlement.xero_journal_id_1);
-    const isDuplicate = existingSettlementIds.has(settlement.settlement_id) && settlement.source === 'api';
-    // Check if there's also a manual version
-    
+
+    if (settlement.status === 'synced_external') {
+      return <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50"><ShieldCheck className="h-3 w-3 mr-1" /> Already in Xero</Badge>;
+    }
     if (isSynced) {
       return <Badge className="bg-green-100 text-green-800 text-[10px]"><CheckCircle2 className="h-3 w-3 mr-1" /> Synced to Xero</Badge>;
     }
@@ -118,6 +161,9 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
     return <Badge variant="secondary" className="text-[10px]">Imported</Badge>;
   };
+
+  // Count settlements needing attention
+  const needsReviewCount = settlements.filter(s => !isAlreadyInXero(s) && s.reconciliation_status === 'matched').length;
 
   if (loading) {
     return (
@@ -155,6 +201,17 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
 
   return (
     <div className="space-y-4">
+      {/* Warning banner if there are untagged settlements */}
+      {needsReviewCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-xs text-amber-800">
+            <p className="font-medium">{needsReviewCount} settlement(s) ready to sync</p>
+            <p className="mt-0.5">If any of these are already in Xero (entered manually or via another tool), mark them as <strong>"Already in Xero"</strong> to prevent duplicate entries.</p>
+          </div>
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -177,12 +234,15 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
             {settlements.map(s => {
               const isDuplicateOfManual = existingSettlementIds.has(s.settlement_id);
               const isSynced = !!(s.xero_journal_id || s.xero_journal_id_1);
-              const isDisabled = isDuplicateOfManual && !isSynced;
+              const isMarkedExternal = s.status === 'synced_external';
+              const isDisabled = (isDuplicateOfManual && !isSynced) || isMarkedExternal;
+              const canSync = !isSynced && !isMarkedExternal && !isDuplicateOfManual && s.reconciliation_status === 'matched';
 
               return (
                 <div
                   key={s.id}
                   className={`border rounded-lg p-3 transition-colors ${
+                    isMarkedExternal ? 'opacity-60 bg-amber-50/30 border-amber-200/50' :
                     isDisabled ? 'opacity-50 bg-muted/30' : 'hover:bg-muted/20'
                   }`}
                 >
@@ -191,7 +251,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
                         {getStatusBadge(s)}
-                        {isDuplicateOfManual && (
+                        {isDuplicateOfManual && !isMarkedExternal && (
                           <Badge variant="outline" className="text-[10px] text-muted-foreground">
                             Already in History
                           </Badge>
@@ -207,6 +267,34 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Mark / Unmark as Already in Xero */}
+                      {!isSynced && (
+                        isMarkedExternal ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1 text-amber-700 hover:text-amber-800"
+                            onClick={() => handleUnmarkFromXero(s)}
+                            disabled={marking === s.id}
+                          >
+                            {marking === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                            Unmark
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1"
+                            onClick={() => handleMarkAsInXero(s)}
+                            disabled={marking === s.id}
+                            title="Mark as already entered in Xero — prevents sync"
+                          >
+                            {marking === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                            Already in Xero
+                          </Button>
+                        )
+                      )}
+
                       {onViewSettlement && (
                         <Button
                           variant="ghost"
@@ -217,7 +305,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                           <Eye className="h-3 w-3" /> View
                         </Button>
                       )}
-                      {!isSynced && !isDisabled && s.reconciliation_status === 'matched' && onSyncToXero && (
+                      {canSync && onSyncToXero && (
                         <Button
                           size="sm"
                           className="h-7 px-2 text-xs gap-1"
