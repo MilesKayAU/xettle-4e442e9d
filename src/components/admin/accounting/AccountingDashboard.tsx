@@ -356,12 +356,23 @@ export default function AccountingDashboard() {
       const parserOpts: ParserOptions = { gstRate: settingsGstRate };
       const result = parseSettlementTSV(text, parserOpts);
 
+      // Dedup check 1: exact settlement ID match
       const existing = settlements.find(s => s.settlement_id === result.header.settlementId);
-      if (existing) {
+      // Dedup check 2: fingerprint match (same dates + same deposit amount)
+      const fingerprintMatch = !existing ? settlements.find(s =>
+        s.period_start === result.header.periodStart &&
+        s.period_end === result.header.periodEnd &&
+        Math.abs((s.bank_deposit || 0) - result.summary.bankDeposit) < 0.01
+      ) : null;
+
+      if (existing || fingerprintMatch) {
+        const match = existing || fingerprintMatch!;
         setUploadWarning({
           type: 'duplicate',
-          message: `This settlement (${result.header.settlementId}) is already saved. Parsing fresh — save will overwrite existing record.`,
-          existing,
+          message: existing
+            ? `This settlement (${result.header.settlementId}) is already saved. Parsing fresh — save will overwrite existing record.`
+            : `A settlement with matching dates (${formatDisplayDate(match.period_start)} – ${formatDisplayDate(match.period_end)}) and deposit (${formatAUD(match.bank_deposit)}) already exists as ${match.settlement_id}. This appears to be a duplicate file.`,
+          existing: match,
         });
       } else if (lastSettlement && result.header.periodStart) {
         const expectedStart = lastSettlement.period_end;
