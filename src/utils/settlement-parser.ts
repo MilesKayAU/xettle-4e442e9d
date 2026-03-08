@@ -581,6 +581,7 @@ function detectSplitMonth(
     'July', 'August', 'September', 'October', 'November', 'December'];
 
   // Aggregate lines by actual posted date into month buckets
+  const formatDateStr = (d: Date) => d.toISOString().split('T')[0];
   const lastDayMonth1Str = formatDateStr(lastDayMonth1); // YYYY-MM-DD
   const aggregateLines = (monthLines: SettlementLine[]) => {
     let sp = 0, ss = 0, pd = 0, sf = 0, ff = 0, stf = 0, ref = 0, reim = 0, oth = 0;
