@@ -207,7 +207,7 @@ export function CronScheduleCard({ userTier }: { userTier: 'free' | 'starter' | 
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Settlements are auto-fetched from Amazon and pushed to Xero on this schedule. You can always trigger a manual sync too.
+              Amazon posts settlements every 2–3 days, so daily checks catch everything. The 12-hour option ensures you're always first to reconcile.
             </p>
           </div>
         ) : (
