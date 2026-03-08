@@ -1,104 +1,54 @@
 
 
-# Plan: Strip Project to Accounting Module Only
+# Plan: Extract Accounting Module into Independent App
 
-## Summary
-Remove all e-commerce, blog, chat, Alibaba, logistics, and inventory features. Keep only the accounting/Xero integration and auth. Make AccountingDashboard the main page after login.
+## What You Have (Module Inventory)
 
-## Files to KEEP (modify some)
-- `src/App.tsx` — Simplify routes to: `/` (accounting dashboard behind auth), `/auth`, `/auth/xero/callback`
-- `src/pages/Auth.tsx` — Keep, redirect to `/` on login (already does this)
-- `src/pages/XeroCallback.tsx` — Keep as-is
-- `src/components/admin/accounting/AccountingDashboard.tsx` — Keep as-is
-- `src/components/admin/XeroConnectionStatus.tsx` — Keep as-is
-- `src/components/admin/AdminHeader.tsx` — Keep (sign out, user info)
-- `src/components/admin/AdminLoginView.tsx` — Keep
-- `src/components/admin/LoginForm.tsx` — Keep
-- `src/hooks/use-admin-auth.tsx` — Keep
-- `src/utils/settlement-parser.ts` — Keep
-- `src/utils/xero-csv-export.ts` — Keep
-- `src/utils/input-sanitization.ts` — Keep (used by Auth)
-- `src/integrations/supabase/client.ts` — Keep
-- `src/integrations/supabase/client-extended.ts` — Keep
-- `src/integrations/supabase/types.ts` — Keep
-- `src/components/ui/*` — Keep all UI primitives
-- `src/components/ErrorBoundary.tsx` — Keep
-- `src/lib/utils.ts` — Keep
-- `supabase/functions/xero-auth/index.ts` — Keep
-- `supabase/functions/sync-amazon-journal/index.ts` — Keep
-- All config files (vite, tailwind, tsconfig, etc.) — Keep
+The accounting module is self-contained with these components:
 
-## Files to DELETE (~60+ files)
-### Pages
-- `src/pages/Index.tsx`, `Products.tsx`, `ProductDetail.tsx`, `Blog.tsx`, `BlogPost.tsx`, `Contact.tsx`, `Distributors.tsx`, `WhereToBuy.tsx`, `PurchaseOrders.tsx`, `POApproval.tsx`, `Header.tsx` (duplicate page)
+| Layer | Files | Lines |
+|-------|-------|-------|
+| **UI** | `src/components/admin/accounting/AccountingDashboard.tsx` | ~3,490 |
+| **Parser** | `src/utils/settlement-parser.ts` | ~716 |
+| **Xero Invoice Sync** | `supabase/functions/sync-amazon-journal/index.ts` | ~450 |
+| **Xero OAuth** | `supabase/functions/xero-auth/index.ts` | existing |
+| **Xero Connection UI** | `src/components/admin/XeroConnectionStatus.tsx` | existing |
+| **Xero Callback Page** | `src/pages/XeroCallback.tsx` | existing |
 
-### Components
-- `src/components/Header.tsx`, `Footer.tsx`, `ChatMessenger.tsx`
-- `src/components/AiBlogEditor.tsx`, `AiContentGenerator.tsx`, `AiImageGenerator.tsx`
-- `src/components/DistributorApplicationsManager.tsx`
-- `src/components/SEO/*` (all SEO components)
-- `src/components/chat/*` (all chat components)
-- `src/components/distributor/*` (all distributor components)
-- `src/components/purchase-orders/*` (all PO components)
-- `src/components/admin/AdminTabs.tsx` — Delete (replaced by direct AccountingDashboard rendering)
-- `src/components/admin/AlibabaManagement.tsx`, `AlibabaAccountSettings.tsx`, `AmazonProductManagement.tsx`
-- `src/components/admin/BlogManagement.tsx`, `BlogPostItem.tsx`, `EditBlogPostDialog.tsx`
-- `src/components/admin/ContactMessagesManager.tsx`, `DistributorManagement.tsx`
-- `src/components/admin/DataManipulationTools.tsx`, `DataTable.tsx`, `DataUploadManager.tsx`
-- `src/components/admin/EnhancedAlibabaInvoiceForm.tsx`, `QuickAlibabaInvoiceCreator.tsx`
-- `src/components/admin/FaqManagement.tsx`, `LogisticsManagement.tsx`
-- `src/components/admin/NotificationSettings.tsx`, `PasswordChangeDialog.tsx`
-- `src/components/admin/PaymentMethodsSettings.tsx`, `ProductImageManager.tsx`, `ProductImageManagerSupabase.tsx`
-- `src/components/admin/ProductManagement.tsx`, `ProductSupplierLinker.tsx`
-- `src/components/admin/PurchaseOrderManagement.tsx`, `ReportsManagement.tsx`
-- `src/components/admin/SheetSelector.tsx`, `SupabaseAuthDialog.tsx`, `SupplierTable.tsx`
-- `src/components/admin/WhereToBuyManagement.tsx`, `ArrivalDateReviewDialog.tsx`
-- `src/components/admin/product/*` (all product sub-components)
-- `src/components/admin/reports/*` (all report components)
-- `src/components/admin/AIDataOrchestrator.tsx`
-- `src/components/admin/types.ts` — Delete (BlogPost type no longer needed)
+**Database tables**: `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
 
-### Hooks
-- `src/hooks/use-blog-posts.ts`, `use-forecast-calculations.ts`, `use-ignored-products.ts`
-- `src/hooks/use-inventory-data.ts`, `use-inventory-database.ts`, `use-inventory-upload.ts`
-- `src/hooks/use-logistics.ts`, `use-notification-settings.ts`, `use-payment-methods.ts`
-- `src/hooks/use-product-images.tsx`, `use-product-images-supabase.ts`, `use-products.ts`
-- `src/hooks/use-purchase-orders.ts`, `use-seo.ts`, `use-supabase-config.ts`
-- `src/hooks/useDistributorForm.ts`, `useDistributorSubmission.ts`
-- `src/hooks/useForecastSettings.ts`, `useSupplierMapping.ts`
-- `src/hooks/use-alibaba-accounts.ts`
+**Secrets needed**: `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `RESEND_API_KEY` (for notifications)
 
-### Utils
-- `src/utils/arrival-date-extractor.ts`, `australian-seo-utils.ts`, `blogApi.ts`
-- `src/utils/image-utils.ts`, `inventory-calculations.ts`, `logistics-parser.ts`
-- `src/utils/seo-utils.ts`, `xero-po-export.ts`
+## Recommended Approach
 
-### Services
-- `src/services/*` (all service files)
+**Create a new Lovable project** and port the accounting module as the primary app. This is the cleanest path because:
 
-### Types
-- `src/types/blog.d.ts`, `globals.d.ts`, `inventory.ts`, `product-images.ts`, `purchase-orders.ts`, `supabase-types.ts`
-- `src/constants/inventory-mapping.ts`
+1. You get a fresh Supabase instance (clean DB, no legacy tables)
+2. Independent deployment and domain
+3. Own auth system focused on bookkeeper access
+4. No risk of breaking the Miles Kay e-commerce site
 
-### Edge Functions to DELETE
-- `supabase/functions/ai-data-orchestrator/`, `extract-invoice-data/`, `get-exchange-rate/`
-- `supabase/functions/notify-po-approval/`, `parse-alibaba-order/`, `parse-alibaba-pdfs/`
-- `supabase/functions/process-data-upload/`, `send-invoice-notification/`, `send-purchase-order/`
-- `supabase/functions/sync-amazon-products/`, `sync-google-sheets/`, `sync-to-xero/`
+## What the New App Would Include
 
-## Key Modifications
+1. **Auth** — Supabase email auth with admin role
+2. **Dashboard** — The AccountingDashboard as the main page (upload, review, history, settings tabs)
+3. **Settlement Parser** — `settlement-parser.ts` copied directly
+4. **Edge Functions** — `sync-amazon-journal` and `xero-auth` deployed to new Supabase
+5. **Xero Integration** — OAuth connection UI + callback page
+6. **Settings** — Account code configuration, GST rate
+7. **Database** — Migrations for `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
 
-### `src/App.tsx`
-- Remove Header, Footer, SitemapGenerator, ChatMessenger
-- Routes: `/` renders a protected accounting page (auth check + AccountingDashboard), `/auth` renders Auth, `/auth/xero/callback` renders XeroCallback, `*` renders NotFound
-- Create a simple `ProtectedRoute` wrapper using `useAdminAuth`
+## What I Cannot Do From Here
 
-### `src/pages/Admin.tsx` → Repurpose as Home Page
-- Remove AdminTabs, BlogPost state
-- Render AdminHeader + AccountingDashboard + XeroConnectionStatus directly
-- This becomes the `/` route
+Lovable cannot programmatically create a separate project or copy files between projects. You would need to:
 
-### `src/pages/Auth.tsx`
-- Remove signup tab (admin-only app), or keep if desired
-- Navigate to `/` on success (already does this)
+1. **Create a new Lovable project** (click + New Project)
+2. **Come back here** and I can help you prepare all the code as a single prompt to paste into the new project, or you can reference this project
+3. Alternatively, **remix this project** (Settings → Remix) and then strip out everything except the accounting module
+
+## Recommended Next Step
+
+**Remix this project**, then in the new remixed project, ask me to strip it down to only the accounting module — removing all e-commerce pages (Products, Blog, Contact, Distributors, Where To Buy, etc.), the Alibaba invoice system, logistics, and Amazon product sync. This preserves all the accounting code, edge functions, and database schema intact while giving you an independent app.
+
+The remix approach is fastest because all code, edge functions, and Supabase config carry over. You'd just need to connect a new Supabase project and run the database migrations.
 
