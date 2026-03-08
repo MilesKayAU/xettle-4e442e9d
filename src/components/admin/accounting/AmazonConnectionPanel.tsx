@@ -264,6 +264,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
 
           existingIds.add(parsed.header.settlementId);
           importedCount++;
+          if (isBeforeCutoff) cutoffCount++;
         } catch (dlErr: any) {
           console.error('Download/parse error:', dlErr);
           toast.error(`Error processing report: ${dlErr.message}`);
