@@ -269,9 +269,36 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                 {settlements.length} settlement(s) fetched from Amazon SP-API. Review and sync to Xero.
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={loadApiSettlements} className="gap-1.5">
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              {settlements.length > 0 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    onClick={toggleSelectAll}
+                  >
+                    {selected.size === settlements.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                    {selected.size === settlements.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                  {selected.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={handleDeleteSelected}
+                      disabled={deletingBulk}
+                    >
+                      {deletingBulk ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Delete {selected.size}
+                    </Button>
+                  )}
+                </>
+              )}
+              <Button variant="outline" size="sm" onClick={loadApiSettlements} className="gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
