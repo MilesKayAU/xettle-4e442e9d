@@ -325,6 +325,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                     >
                       {selected.has(s.id) ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
                     </button>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
                         {getStatusBadge(s)}
