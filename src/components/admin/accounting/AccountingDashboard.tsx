@@ -126,7 +126,19 @@ export default function AccountingDashboard() {
   // File input refs for resetting
   const settlementInputRef = useRef<HTMLInputElement>(null);
   const transactionInputRef = useRef<HTMLInputElement>(null);
-  const pendingPushRef = useRef(false);
+   const pendingPushRef = useRef(false);
+
+  // Warn before navigating away with unsaved data
+  useEffect(() => {
+    const hasUnsaved = (parsed && !saved) || parsedBatch.some(b => !b.saved);
+    if (!hasUnsaved) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [parsed, saved, parsedBatch]);
 
   // Auto-trigger Push to Xero after history review loads parsed state
   useEffect(() => {
