@@ -43,8 +43,7 @@ serve(async (req) => {
         })
       }
 
-      const body = await req.json().catch(() => ({}))
-      const redirectUri = (body as any).redirect_uri || 'https://xettle.app/amazon/callback'
+      const redirectUri = 'https://xettle.app/amazon/callback'
       
       // Generate a state token to prevent CSRF
       const state = crypto.randomUUID()
@@ -53,6 +52,7 @@ serve(async (req) => {
         application_id: 'amzn1.sp.solution.d95a6e1f-2b22-4bb1-a6de-73427cb73bd9',
         redirect_uri: redirectUri,
         state,
+        version: 'beta',
       })
 
       const authUrl = `${AMAZON_AUTH_URL}?${params.toString()}`
