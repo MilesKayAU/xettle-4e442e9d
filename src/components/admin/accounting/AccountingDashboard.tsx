@@ -180,7 +180,7 @@ export default function AccountingDashboard() {
         const { data } = await supabase
           .from('app_settings')
           .select('key, value')
-          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate']);
+          .in('key', ['accounting_xero_account_codes', 'accounting_gst_rate', 'sync_cutoff_date']);
         if (data) {
           for (const row of data) {
             if (row.key === 'accounting_gst_rate' && row.value) {
@@ -189,6 +189,9 @@ export default function AccountingDashboard() {
             }
             if (row.key === 'accounting_xero_account_codes' && row.value) {
               try { setSettingsAccountCodes(JSON.parse(row.value)); } catch {}
+            }
+            if (row.key === 'sync_cutoff_date' && row.value) {
+              setSyncCutoffDate(row.value);
             }
           }
         }
