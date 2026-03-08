@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug, RefreshCw, Lock } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug, RefreshCw, Lock, KeyRound } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
@@ -19,6 +21,10 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
   const [connecting, setConnecting] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [showManualToken, setShowManualToken] = useState(false);
+  const [manualToken, setManualToken] = useState('');
+  const [manualSellerId, setManualSellerId] = useState('');
+  const [savingToken, setSavingToken] = useState(false);
 
   const checkStatus = useCallback(async () => {
     setLoading(true);
@@ -150,6 +156,42 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
     }
   };
 
+  const handleSaveManualToken = async () => {
+    if (!manualToken.trim() || !manualSellerId.trim()) {
+      toast.error('Please enter both Seller ID and Refresh Token');
+      return;
+    }
+    setSavingToken(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('amazon_tokens')
+        .upsert({
+          user_id: user.id,
+          selling_partner_id: manualSellerId.trim(),
+          marketplace_id: 'A39IBJ37TRP1C6',
+          region: 'fe',
+          refresh_token: manualToken.trim(),
+          access_token: null,
+          expires_at: null,
+        } as any, { onConflict: 'user_id,selling_partner_id' });
+
+      if (error) throw error;
+
+      toast.success('Amazon token saved successfully');
+      setManualToken('');
+      setManualSellerId('');
+      setShowManualToken(false);
+      await checkStatus();
+    } catch (err: any) {
+      toast.error(`Save failed: ${err.message}`);
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -255,17 +297,67 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
                 Xettle requests <strong>read-only</strong> access to your Finance & Accounting data.
               </p>
             </div>
-            <Button
-              size="sm"
-              onClick={handleConnect}
-              disabled={connecting}
-              className="gap-1.5"
-            >
-              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-              {connecting ? 'Redirecting...' : 'Connect Amazon'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={handleConnect}
+                disabled={connecting}
+                className="gap-1.5"
+              >
+                {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                {connecting ? 'Redirecting...' : 'Connect Amazon'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowManualToken(!showManualToken)}
+                className="gap-1.5"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Manual Token
+              </Button>
+            </div>
+            {showManualToken && (
+              <div className="border border-border rounded-lg p-4 space-y-3 bg-muted/20">
+                <p className="text-xs text-muted-foreground font-medium">
+                  Paste a refresh token from the SP-API Solution Provider Portal to connect without OAuth.
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <Label htmlFor="seller-id" className="text-xs">Selling Partner ID</Label>
+                    <Input
+                      id="seller-id"
+                      placeholder="e.g. A1B2C3D4E5F6G7"
+                      value={manualSellerId}
+                      onChange={(e) => setManualSellerId(e.target.value)}
+                      className="font-mono text-xs h-8"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="refresh-token" className="text-xs">Refresh Token</Label>
+                    <Input
+                      id="refresh-token"
+                      type="password"
+                      placeholder="Atzr|..."
+                      value={manualToken}
+                      onChange={(e) => setManualToken(e.target.value)}
+                      className="font-mono text-xs h-8"
+                    />
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleSaveManualToken}
+                  disabled={savingToken || !manualToken.trim() || !manualSellerId.trim()}
+                  className="gap-1.5"
+                >
+                  {savingToken ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Save & Connect
+                </Button>
+              </div>
+            )}
             <p className="text-[10px] text-muted-foreground">
-              This will redirect you to Amazon to authorize Xettle to access your settlement data.
+              OAuth redirects to Amazon to authorize. Manual token is for testing with SP-API portal credentials.
             </p>
           </div>
         )}
