@@ -1592,6 +1592,33 @@ function BulkUploadProcessor({
           ))}
         </div>
 
+        {/* Gap detection alert */}
+        {done && gaps.length > 0 && (
+          <Card className="border-amber-400 bg-amber-50/50">
+            <CardContent className="py-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                <AlertTriangle className="h-4 w-4" />
+                {gaps.length} gap{gaps.length !== 1 ? 's' : ''} detected in settlement timeline
+              </div>
+              <div className="text-xs space-y-1.5">
+                {gaps.map((g, i) => (
+                  <div key={i} className="flex items-center gap-2 text-amber-700 bg-amber-100/60 rounded px-2 py-1.5">
+                    <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>
+                      <span className="font-medium">{g.gapDays} days missing</span> between{' '}
+                      <span className="font-mono text-[11px]">{formatDisplayDate(g.afterEnd)}</span> and{' '}
+                      <span className="font-mono text-[11px]">{formatDisplayDate(g.beforeStart)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-amber-600 mt-1">
+                Download the missing settlement report(s) from Seller Central to fill these gaps before pushing to Xero.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {paused && !done && (
           <Card className="border-destructive bg-destructive/5">
             <CardContent className="py-4 space-y-3">
