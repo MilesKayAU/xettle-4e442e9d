@@ -45,8 +45,9 @@ export default function AdminHeader({ onSignOut, userEmail }: AdminHeaderProps) 
             <CardTitle className="text-base text-orange-800">Admin Access</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="py-3 text-sm text-orange-700">
+        <CardContent className="py-3 text-sm text-orange-700 flex justify-between items-center">
           <p>You are now in admin mode. Changes made here will affect the live website.</p>
+          <span className="font-mono text-xs text-orange-500">v1.6.0</span>
         </CardContent>
       </Card>
     </>
