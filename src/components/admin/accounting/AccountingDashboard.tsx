@@ -2138,6 +2138,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
   const statusBadge = (status: string) => {
     switch (status) {
       case 'pushed_to_xero': return <Badge className="bg-emerald-600 text-white border-emerald-600 text-[10px]">Posted ✓</Badge>;
+      case 'synced_external': return <Badge className="bg-gray-200 text-gray-700 border-gray-300 text-[10px]">Synced ↗</Badge>;
       case 'voided': return <Badge variant="destructive" className="text-[10px]">Voided</Badge>;
       case 'saved': return <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px]">Saved</Badge>;
       case 'pending': return <Badge variant="outline" className="text-[10px] text-muted-foreground">Unsaved</Badge>;
