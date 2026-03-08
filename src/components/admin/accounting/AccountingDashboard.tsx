@@ -2491,6 +2491,7 @@ function BatchSettlementReview({
 }) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [savingAll, setSavingAll] = useState(false);
+  const [reviewSortDir, setReviewSortDir] = useState<'asc' | 'desc'>('desc');
 
   const saveOne = async (index: number) => {
     const item = batch[index];
