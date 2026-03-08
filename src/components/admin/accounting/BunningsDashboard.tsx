@@ -9,7 +9,15 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { parseBunningsSummaryPdf, formatAUD, type ParsedBunningsSettlement } from '@/utils/bunnings-summary-parser';
+import { parseBunningsSummaryPdf, type BunningsParseExtra } from '@/utils/bunnings-summary-parser';
+import {
+  type StandardSettlement,
+  saveSettlement,
+  syncSettlementToXero,
+  deleteSettlement,
+  formatSettlementDate,
+  formatAUD,
+} from '@/utils/settlement-engine';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 
 interface BunningsDashboardProps {
@@ -32,12 +40,6 @@ interface SettlementRecord {
   marketplace: string;
 }
 
-function formatDate(d: string) {
-  if (!d) return '—';
-  const dt = new Date(d + 'T00:00:00');
-  return dt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 function statusBadge(status: string) {
   switch (status) {
     case 'synced':
@@ -56,7 +58,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [parsed, setParsed] = useState<ParsedBunningsSettlement | null>(null);
+  const [parsed, setParsed] = useState<StandardSettlement | null>(null);
+  const [extra, setExtra] = useState<BunningsParseExtra | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -65,7 +68,6 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const [historyLoading, setHistoryLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load history
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
@@ -88,7 +90,6 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     loadHistory();
   }, [loadHistory]);
 
-  // Handle PDF upload & parse
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -100,6 +101,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
     setFile(f);
     setParsed(null);
+    setExtra(null);
     setParseError(null);
     setSavedSettlementId(null);
     setParsing(true);
@@ -107,7 +109,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     try {
       const result = await parseBunningsSummaryPdf(f);
       if (result.success) {
-        setParsed(result.data);
+        setParsed(result.settlement);
+        setExtra(result.extra);
         toast.success('Settlement parsed successfully!');
         setActiveTab('review');
       } else {
@@ -123,148 +126,49 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     }
   };
 
-  // Save to database
   const handleSave = async () => {
     if (!parsed) return;
     setSaving(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Check for duplicate
-      const { data: existing } = await supabase
-        .from('settlements')
-        .select('id')
-        .eq('settlement_id', parsed.invoiceNumber)
-        .eq('user_id', user.id)
-        .eq('marketplace', 'bunnings')
-        .maybeSingle();
-
-      if (existing) {
-        toast.error('This settlement has already been saved.');
-        setSaving(false);
-        return;
-      }
-
-      const { error } = await supabase.from('settlements').insert({
-        user_id: user.id,
-        settlement_id: parsed.invoiceNumber,
-        marketplace: 'bunnings',
-        period_start: parsed.periodStart,
-        period_end: parsed.periodEnd,
-        sales_principal: parsed.ordersExGst,
-        seller_fees: parsed.commissionExGst,
-        gst_on_income: parsed.ordersGst,
-        gst_on_expenses: Math.abs(parsed.commissionGst),
-        bank_deposit: parsed.netPayout,
-        source: 'manual',
-        status: 'saved',
-        reconciliation_status: parsed.reconciles ? 'reconciled' : 'warning',
-      } as any);
-
-      if (error) throw error;
-
-      setSavedSettlementId(parsed.invoiceNumber);
+    const result = await saveSettlement(parsed);
+    if (result.success) {
+      setSavedSettlementId(parsed.settlement_id);
       toast.success('Settlement saved!');
       loadHistory();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save');
-    } finally {
-      setSaving(false);
+    } else {
+      toast.error(result.error || 'Failed to save');
     }
+    setSaving(false);
   };
 
-  // Push to Xero
   const handlePushToXero = async (settlementId?: string) => {
-    const targetId = settlementId || savedSettlementId || parsed?.invoiceNumber;
+    const targetId = settlementId || savedSettlementId || parsed?.settlement_id;
     if (!targetId) return;
 
     setPushing(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Get settlement data
-      const { data: settlement, error: fetchErr } = await supabase
-        .from('settlements')
-        .select('*')
-        .eq('settlement_id', targetId)
-        .eq('user_id', user.id)
-        .eq('marketplace', 'bunnings')
-        .single();
-
-      if (fetchErr || !settlement) throw new Error('Settlement not found');
-
-      const s = settlement as any;
-      const periodLabel = `${formatDate(s.period_start)} – ${formatDate(s.period_end)}`;
-      const reference = `Bunnings Settlement ${periodLabel} (${s.settlement_id})`;
-
-      const lineItems = [
-        {
-          Description: 'Marketplace Sales',
-          AccountCode: '200',
-          TaxType: 'OUTPUT',
-          UnitAmount: Math.round(s.sales_principal * 100) / 100,
-          Quantity: 1,
-        },
-        {
-          Description: 'Marketplace Commission',
-          AccountCode: '407',
-          TaxType: 'INPUT',
-          UnitAmount: Math.round(s.seller_fees * 100) / 100,
-          Quantity: 1,
-        },
-      ];
-
-      const { data: result, error: fnErr } = await supabase.functions.invoke('sync-amazon-journal', {
-        body: {
-          userId: user.id,
-          action: 'create',
-          reference,
-          date: s.period_end,
-          dueDate: s.period_end,
-          lineItems,
-          contactName: 'Bunnings Marketplace',
-        },
-      });
-
-      if (fnErr) throw fnErr;
-      if (!result?.success) throw new Error(result?.error || 'Xero push failed');
-
-      // Update settlement with Xero invoice ID
-      await supabase
-        .from('settlements')
-        .update({
-          status: 'synced',
-          xero_journal_id: result.invoiceId,
-        } as any)
-        .eq('settlement_id', targetId)
-        .eq('user_id', user.id);
-
+    const result = await syncSettlementToXero(targetId, 'bunnings');
+    if (result.success) {
       toast.success('Invoice created in Xero!');
       loadHistory();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to push to Xero');
-    } finally {
-      setPushing(false);
+    } else {
+      toast.error(result.error || 'Failed to push to Xero');
     }
+    setPushing(false);
   };
 
-  // Delete settlement
   const handleDelete = async (id: string) => {
-    try {
-      const { error } = await supabase.from('settlements').delete().eq('id', id);
-      if (error) throw error;
+    const result = await deleteSettlement(id);
+    if (result.success) {
       toast.success('Settlement deleted');
       loadHistory();
-    } catch {
-      toast.error('Failed to delete');
+    } else {
+      toast.error(result.error || 'Failed to delete');
     }
   };
 
   const clearUpload = () => {
     setFile(null);
     setParsed(null);
+    setExtra(null);
     setParseError(null);
     setSavedSettlementId(null);
     if (inputRef.current) inputRef.current.value = '';
@@ -364,7 +268,6 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
         <TabsContent value="review" className="space-y-4 mt-4">
           {parsed ? (
             <>
-              {/* Summary Card */}
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
@@ -382,35 +285,35 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                     </div>
                   </div>
                   <CardDescription>
-                    {parsed.shopName} • {formatDate(parsed.periodStart)} – {formatDate(parsed.periodEnd)}
+                    {extra?.shopName || 'Bunnings'} • {formatSettlementDate(parsed.period_start)} – {formatSettlementDate(parsed.period_end)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                       <span className="text-muted-foreground">Gross Sales (excl. GST)</span>
-                      <span className="font-medium text-right">{formatAUD(parsed.ordersExGst)}</span>
+                      <span className="font-medium text-right">{formatAUD(parsed.sales_ex_gst)}</span>
                       
                       <span className="text-muted-foreground">GST Collected</span>
-                      <span className="font-medium text-right">{formatAUD(parsed.ordersGst)}</span>
+                      <span className="font-medium text-right">{formatAUD(parsed.gst_on_sales)}</span>
                       
                       <span className="text-muted-foreground">Commission (excl. GST)</span>
-                      <span className="font-medium text-right text-destructive">{formatAUD(parsed.commissionExGst)}</span>
+                      <span className="font-medium text-right text-destructive">{formatAUD(parsed.fees_ex_gst)}</span>
                       
                       <span className="text-muted-foreground">GST on Commission</span>
-                      <span className="font-medium text-right text-destructive">{formatAUD(parsed.commissionGst)}</span>
+                      <span className="font-medium text-right text-destructive">-{formatAUD(parsed.gst_on_fees)}</span>
                     </div>
                     
                     <div className="border-t border-border pt-3">
                       <div className="grid grid-cols-2 gap-x-8 text-sm">
                         <span className="font-semibold">Net Settlement</span>
-                        <span className="font-bold text-right text-lg">{formatAUD(parsed.netPayout)}</span>
+                        <span className="font-bold text-right text-lg">{formatAUD(parsed.net_payout)}</span>
                       </div>
                     </div>
 
-                    {parsed.invoiceNumber && (
+                    {parsed.settlement_id && (
                       <p className="text-xs text-muted-foreground mt-2">
-                        Settlement ID: {parsed.invoiceNumber}
+                        Settlement ID: {parsed.settlement_id}
                       </p>
                     )}
                   </div>
@@ -438,27 +341,27 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                         <tr className="border-t border-border">
                           <td className="px-3 py-2">Marketplace Sales</td>
                           <td className="px-3 py-2 text-muted-foreground">200 – Sales</td>
-                          <td className="px-3 py-2 text-right font-medium">{formatAUD(parsed.ordersExGst)}</td>
+                          <td className="px-3 py-2 text-right font-medium">{formatAUD(parsed.sales_ex_gst)}</td>
                           <td className="px-3 py-2 text-muted-foreground">GST on Income</td>
                         </tr>
                         <tr className="border-t border-border">
                           <td className="px-3 py-2">Marketplace Commission</td>
                           <td className="px-3 py-2 text-muted-foreground">407 – Seller Fees</td>
-                          <td className="px-3 py-2 text-right font-medium text-destructive">{formatAUD(parsed.commissionExGst)}</td>
+                          <td className="px-3 py-2 text-right font-medium text-destructive">{formatAUD(parsed.fees_ex_gst)}</td>
                           <td className="px-3 py-2 text-muted-foreground">GST on Expenses</td>
                         </tr>
                       </tbody>
                       <tfoot className="bg-muted/30 border-t border-border">
                         <tr>
                           <td colSpan={2} className="px-3 py-2 font-semibold">Invoice Total</td>
-                          <td className="px-3 py-2 text-right font-bold">{formatAUD(parsed.netPayout)}</td>
+                          <td className="px-3 py-2 text-right font-bold">{formatAUD(parsed.net_payout)}</td>
                           <td></td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Contact: Bunnings Marketplace • Ref: Bunnings Settlement {formatDate(parsed.periodStart)} – {formatDate(parsed.periodEnd)}
+                    Contact: Bunnings Marketplace • Ref: Bunnings Settlement {formatSettlementDate(parsed.period_start)} – {formatSettlementDate(parsed.period_end)}
                   </p>
                 </CardContent>
               </Card>
@@ -513,7 +416,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium">
-                            {formatDate(s.period_start)} – {formatDate(s.period_end)}
+                            {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
                           </p>
                           {statusBadge(s.status)}
                         </div>
