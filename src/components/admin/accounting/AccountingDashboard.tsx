@@ -1114,7 +1114,10 @@ export default function AccountingDashboard() {
 
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
-              <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
+              <div className="space-y-4">
+                <XeroConnectionStatus />
+                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} />
+              </div>
             </TabsContent>
           </Tabs>
         </>
