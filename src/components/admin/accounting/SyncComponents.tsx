@@ -193,7 +193,12 @@ export function CronScheduleCard({ userTier }: { userTier: 'free' | 'starter' | 
                 </SelectTrigger>
                 <SelectContent>
                   {CRON_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    <SelectItem key={opt.value} value={opt.value}>
+                      <div className="flex flex-col">
+                        <span>{opt.label}</span>
+                        <span className="text-xs text-muted-foreground">{opt.description}</span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
