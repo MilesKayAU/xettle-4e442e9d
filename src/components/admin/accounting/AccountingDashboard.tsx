@@ -1838,9 +1838,14 @@ function SettlementGuidancePanel({
 
 // ─── Settlement History ──────────────────────────────────────────────
 
+type SortField = 'period' | 'deposit' | 'status' | 'seq';
+type SortDir = 'asc' | 'desc';
+
 function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushToXero }: { settlements: SettlementRecord[]; loading: boolean; onDeleted: () => void; onReview?: (settlementId: string, settlementUuid: string) => void; onPushToXero?: (settlementId: string, settlementUuid: string) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sortField, setSortField] = useState<SortField>('period');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
@@ -2056,26 +2061,62 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     }
   };
 
-  // Sequence numbering: sort by period_end ascending
-  const sorted = [...settlements].sort((a, b) => a.period_end.localeCompare(b.period_end));
-  const seqMap = new Map<string, number>();
-  sorted.forEach((s, i) => seqMap.set(s.id, i + 1));
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir(field === 'period' ? 'desc' : 'asc');
+    }
+  };
 
-  // Build display rows (desc order) with gap indicators
+  const SortIcon = ({ field }: { field: SortField }) => (
+    <span className={`inline-block ml-1 text-[10px] ${sortField === field ? 'text-primary' : 'text-muted-foreground/40'}`}>
+      {sortField === field ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+    </span>
+  );
+
+  // Sequence numbering: always by period_end ascending
+  const seqSorted = [...settlements].sort((a, b) => a.period_end.localeCompare(b.period_end));
+  const seqMap = new Map<string, number>();
+  seqSorted.forEach((s, i) => seqMap.set(s.id, i + 1));
+
+  // Apply user sort
+  const sortedSettlements = [...settlements].sort((a, b) => {
+    let cmp = 0;
+    switch (sortField) {
+      case 'period': cmp = a.period_start.localeCompare(b.period_start); break;
+      case 'deposit': cmp = (a.bank_deposit || 0) - (b.bank_deposit || 0); break;
+      case 'status': cmp = (a.status || '').localeCompare(b.status || ''); break;
+      case 'seq': cmp = (seqMap.get(a.id) || 0) - (seqMap.get(b.id) || 0); break;
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  // Build display rows with gap indicators
   type DisplayRow =
     | { type: 'settlement'; settlement: SettlementRecord; seq: number }
     | { type: 'gap'; afterDate: string; beforeDate: string };
 
   const displayRows: DisplayRow[] = [];
-  for (let i = 0; i < settlements.length; i++) {
-    const s = settlements[i];
+  for (let i = 0; i < sortedSettlements.length; i++) {
+    const s = sortedSettlements[i];
     const seq = seqMap.get(s.id) || 0;
     displayRows.push({ type: 'settlement', settlement: s, seq });
 
-    if (i < settlements.length - 1) {
-      const next = settlements[i + 1]; // next is older (sorted newest first)
-      if (s.period_start > next.period_end) {
-        displayRows.push({ type: 'gap', afterDate: next.period_end, beforeDate: s.period_start });
+    // Only show gaps when sorted by period
+    if (sortField === 'period' && i < sortedSettlements.length - 1) {
+      const next = sortedSettlements[i + 1];
+      if (sortDir === 'desc') {
+        // newest first: current.period_start should follow next.period_end
+        if (s.period_start > next.period_end) {
+          displayRows.push({ type: 'gap', afterDate: next.period_end, beforeDate: s.period_start });
+        }
+      } else {
+        // oldest first: next.period_start should follow current.period_end
+        if (next.period_start > s.period_end) {
+          displayRows.push({ type: 'gap', afterDate: s.period_end, beforeDate: next.period_start });
+        }
       }
     }
   }
@@ -2145,14 +2186,22 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                     className="rounded border-muted-foreground/40 h-3.5 w-3.5 cursor-pointer"
                   />
                 </th>
-                <th className="py-2 px-2 font-medium w-12 text-center">Seq</th>
-                <th className="py-2 px-4 font-medium">Period</th>
+                <th className="py-2 px-2 font-medium w-12 text-center cursor-pointer hover:text-foreground" onClick={() => toggleSort('seq')}>
+                  Seq<SortIcon field="seq" />
+                </th>
+                <th className="py-2 px-4 font-medium cursor-pointer hover:text-foreground" onClick={() => toggleSort('period')}>
+                  Period<SortIcon field="period" />
+                </th>
                 <th className="py-2 px-4 font-medium text-right">Sales</th>
                 <th className="py-2 px-4 font-medium text-right">Fees</th>
                 <th className="py-2 px-4 font-medium text-right">Refunds</th>
                 <th className="py-2 px-4 font-medium text-right">Net</th>
-                <th className="py-2 px-4 font-medium text-right">Deposit</th>
-                <th className="py-2 px-4 font-medium">Status</th>
+                <th className="py-2 px-4 font-medium text-right cursor-pointer hover:text-foreground" onClick={() => toggleSort('deposit')}>
+                  Deposit<SortIcon field="deposit" />
+                </th>
+                <th className="py-2 px-4 font-medium cursor-pointer hover:text-foreground" onClick={() => toggleSort('status')}>
+                  Status<SortIcon field="status" />
+                </th>
                 <th className="py-2 px-2 font-medium w-10">Actions</th>
               </tr>
             </thead>
@@ -2442,6 +2491,7 @@ function BatchSettlementReview({
 }) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [savingAll, setSavingAll] = useState(false);
+  const [reviewSortDir, setReviewSortDir] = useState<'asc' | 'desc'>('desc');
 
   const saveOne = async (index: number) => {
     const item = batch[index];
@@ -2583,6 +2633,14 @@ function BatchSettlementReview({
               </p>
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReviewSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
+                className="gap-1.5 text-xs"
+              >
+                {reviewSortDir === 'desc' ? '▼ Newest first' : '▲ Oldest first'}
+              </Button>
               {unsavedCount > 0 && (
                 <Button onClick={handleSaveAll} disabled={savingAll} className="gap-2">
                   {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -2601,7 +2659,15 @@ function BatchSettlementReview({
 
       {/* Settlement list */}
       <div className="space-y-2">
-        {batch.map((item, index) => {
+        {[...batch]
+          .map((item, originalIndex) => ({ item, originalIndex }))
+          .sort((a, b) => {
+            const aStart = a.item.parsed.header.periodStart;
+            const bStart = b.item.parsed.header.periodStart;
+            const cmp = aStart.localeCompare(bStart);
+            return reviewSortDir === 'asc' ? cmp : -cmp;
+          })
+          .map(({ item, originalIndex: index }) => {
           const { parsed: p } = item;
           const isExpanded = expandedIndex === index;
 
