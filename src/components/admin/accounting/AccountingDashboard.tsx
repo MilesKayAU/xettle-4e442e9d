@@ -1198,8 +1198,6 @@ export default function AccountingDashboard() {
         </Card>
       )}
         </div>
-      {/* end Amazon content */}
-      {return null;})()}
     </div>
   );
 }
