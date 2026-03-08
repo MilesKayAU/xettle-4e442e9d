@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Lock } from 'lucide-react';
 
-const SITE_PIN = '8421';
+const SITE_PIN = '1941';
 const STORAGE_KEY = 'xettle_pin_verified';
 
 export default function PinGate({ children }: { children: React.ReactNode }) {
