@@ -231,6 +231,22 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
               </Button>
             </div>
           </div>
+        ) : !isPaid ? (
+          <div className="space-y-3">
+            <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground flex items-start gap-2">
+              <Lock className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-foreground">Paid Feature</p>
+                <p className="text-xs mt-0.5">
+                  Auto-import settlement reports directly from Amazon Seller Central. Upgrade to a paid plan to unlock this feature.
+                </p>
+              </div>
+            </div>
+            <Button size="sm" disabled className="gap-1.5 opacity-60">
+              <ExternalLink className="h-3.5 w-3.5" />
+              Connect Amazon (Paid Plan)
+            </Button>
+          </div>
         ) : (
           <div className="space-y-3">
             <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground">
