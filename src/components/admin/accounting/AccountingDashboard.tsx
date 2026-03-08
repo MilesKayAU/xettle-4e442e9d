@@ -1410,7 +1410,21 @@ function BulkUploadProcessor({
 
       const parserOpts: ParserOptions = { gstRate };
       const parsed = parseSettlementTSV(text, parserOpts);
-      const existsAlready = existingSettlements.some(s => s.settlement_id === parsed.header.settlementId);
+      const parsedId = parsed.header.settlementId;
+      const existsAlready = existingSettlements.some(s => s.settlement_id === parsedId);
+
+      // In-batch duplicate detection: skip if we already parsed this ID in this batch
+      if (batchSeenIds.current.has(parsedId)) {
+        setResults(prev => prev.map((r, i) => i === index ? {
+          ...r, status: 'batch_duplicate' as BulkFileStatus,
+          message: `Duplicate file in batch — already parsed as ${parsedId}`,
+          settlementId: parsedId,
+        } : r));
+        setCurrentIndex(index + 1);
+        setTimeout(() => processNext(index + 1), 100);
+        return;
+      }
+      batchSeenIds.current.add(parsedId);
 
       if (!parsed.summary.reconciliationMatch) {
         setResults(prev => prev.map((r, i) => i === index ? {
