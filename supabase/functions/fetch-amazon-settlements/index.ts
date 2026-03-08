@@ -86,6 +86,12 @@ serve(async (req) => {
       }
 
       const reportsData = await reportsResponse.json()
+      const reportCount = reportsData.reports?.length || 0
+      console.log(`SP-API reports list: found ${reportCount} reports`, {
+        hasNextToken: !!reportsData.nextToken,
+        startDate: params.get('createdSince'),
+        endDate: params.get('createdUntil'),
+      })
 
       return new Response(JSON.stringify({
         reports: reportsData.reports || [],
