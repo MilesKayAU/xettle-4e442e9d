@@ -1081,7 +1081,7 @@ export default function AccountingDashboard() {
             </div>
           </div>
 
-      {true ? (
+      {(() => (
         <>
           <SettlementGuidancePanel
             lastSettlement={lastSettlement}
@@ -1399,14 +1399,10 @@ export default function AccountingDashboard() {
             />
           </Tabs>
         </>
-      )}
+      ))()}
         </div>
     </div>
   );
-}
-    </div>
-  );
-}
 
 // ─── Bulk Upload Processor ────────────────────────────────────────────
 
