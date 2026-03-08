@@ -24,6 +24,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
   const [disconnecting, setDisconnecting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [fetchProgress, setFetchProgress] = useState<{ current: number; total: number; status: string } | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [showManualToken, setShowManualToken] = useState(false);
   const [manualToken, setManualToken] = useState('');
