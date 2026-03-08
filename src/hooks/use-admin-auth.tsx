@@ -1,0 +1,123 @@
+
+import { useState, useEffect } from "react";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+
+export function useAdminAuth() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [session, setSession] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
+
+  // Check authentication state on mount
+  useEffect(() => {
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setIsAuthenticated(!!session);
+        if (session) {
+          localStorage.setItem('adminLoggedIn', 'true');
+        } else {
+          localStorage.removeItem('adminLoggedIn');
+        }
+      }
+    );
+
+    // Check for existing session
+    checkSession();
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function checkSession() {
+    try {
+      console.log('Checking authentication session...');
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('Current Supabase session:', session);
+      
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsAuthenticated(!!session);
+      
+      if (session) {
+        localStorage.setItem('adminLoggedIn', 'true');
+      } else {
+        localStorage.removeItem('adminLoggedIn');
+      }
+    } catch (error) {
+      console.error("Error checking auth session:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      setIsLoading(true);
+      console.log('Attempting Supabase sign-in with:', email);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('Supabase sign-in failed:', error);
+        toast({
+          title: 'Authentication Failed',
+          description: error.message || 'Invalid credentials',
+          variant: 'destructive',
+        });
+        return { success: false, error };
+      }
+
+      console.log('Supabase sign-in successful:', data);
+      
+      toast({
+        title: 'Signed In',
+        description: 'Successfully authenticated.',
+        variant: 'default',
+      });
+      
+      return { success: true, data };
+    } catch (error) {
+      console.error('Exception during Supabase sign-in:', error);
+      toast({
+        title: 'Authentication Error',
+        description: 'An unexpected error occurred',
+        variant: 'destructive',
+      });
+      return { success: false, error };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  function handleSignOut() {
+    return async () => {
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        console.error("Error signing out:", error);
+      }
+      
+      toast({
+        title: "Signed Out",
+        description: "You have been signed out successfully",
+      });
+    };
+  }
+
+  return {
+    isAuthenticated,
+    setIsAuthenticated,
+    isLoading,
+    session,
+    user,
+    handleSignOut,
+    signIn
+  };
+}

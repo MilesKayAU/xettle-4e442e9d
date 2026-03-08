@@ -1,0 +1,1 @@
+ALTER TABLE public.settlements ADD COLUMN parser_version text NOT NULL DEFAULT 'v1.0.0';

@@ -1,0 +1,1 @@
+DELETE FROM settlement_lines; DELETE FROM settlement_unmapped; DELETE FROM settlements;

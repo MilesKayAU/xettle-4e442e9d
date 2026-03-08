@@ -1,0 +1,38 @@
+-- Insert Nancy Zhan supplier record with name field populated
+INSERT INTO public.suppliers (
+  name,
+  contact_person,
+  company_name,
+  company,
+  email,
+  phone,
+  mobile,
+  fax,
+  website,
+  street,
+  city,
+  province_region_state,
+  postal_code,
+  country,
+  supplier_date,
+  tax_id_number,
+  address
+) VALUES (
+  'Shanghai Rayshine Envi-tech Developing Co., Ltd',
+  'Nancy Zhan',
+  'Shanghai Rayshine Envi-tech Developing Co., Ltd',
+  'Shanghai Rayshine Envi-tech Developing Co., Ltd',
+  'zhan.chen@aliyun.com',
+  '021-69790805-611',
+  '(+86)18796225471',
+  '021-69792693',
+  'http://shlvsan.en.alibaba.com/',
+  'Huacai Road',
+  'Shanghai',
+  'Shanghai',
+  '201708',
+  'China',
+  '2024-07-04',
+  '91310118739763209Y',
+  'Huacai Road, Shanghai, Shanghai 201708, China'
+);

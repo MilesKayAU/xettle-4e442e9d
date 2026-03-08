@@ -1,0 +1,51 @@
+export const COLUMN_MAPPING = {
+  'ASIN': 'asin',
+  'SKU': 'sku',
+  'Title': 'title',
+  'ROI, %': 'roi_percent',
+  'FBA/FBM Stock': 'fba_fbm_stock',
+  'Stock value': 'stock_value',
+  'Estimated Sales Velocity': 'estimated_sales_velocity',
+  'Days of stock left': 'days_of_stock_left',
+  'Recommended quantity for reordering': 'recommended_quantity_for_reordering',
+  'Running out of stock': 'running_out_of_stock',
+  'Reserved': 'reserved',
+  'Sent to FBA': 'sent_to_fba',
+  'Ordered': 'ordered',
+  'Time to reorder': 'time_to_reorder',
+  'Margin': 'margin',
+  'Profit forecast (30 days)': 'profit_forecast_30_days',
+  'Comment': 'comment',
+  'Marketplace': 'marketplace',
+  'Target stock range after new order days': 'target_stock_range_after_new_order_days',
+  'FBA buffer days': 'fba_buffer_days',
+  'Manuf. time days': 'manuf_time_days',
+  'Use a Prep Center': 'use_a_prep_center',
+  'Shipping to Prep Center days': 'shipping_to_prep_center_days',
+  'Shipping to FBA days': 'shipping_to_fba_days',
+  'Box param length': 'box_param_length',
+  'Box param width': 'box_param_width',
+  'Box param height': 'box_param_height',
+  'Box param Units In Box': 'box_param_units_in_box',
+  'Color': 'color',
+  'Size': 'size',
+  'Multipack size': 'multipack_size',
+  'Item number': 'item_number',
+  'FNSKU': 'fnsku',
+  'Recommended ship-in quantity (by Amazon)': 'recommended_ship_in_quantity_by_amazon',
+  'Recommended ship-in date (by Amazon)': 'recommended_ship_in_date_by_amazon',
+  'Historical days of supply': 'historical_days_of_supply',
+  'Supplier SKU': 'supplier_sku',
+  'FBA prep. stock Gold Coast': 'fba_prep_stock_gold_coast',
+  'FBA prep. stock Prep center 2 stock': 'fba_prep_stock_prep_center_2_stock',
+  'FBA prep. stock Prep center 3 stock': 'fba_prep_stock_prep_center_3_stock',
+  'FBA prep. stock Prep center 4 stock': 'fba_prep_stock_prep_center_4_stock',
+  'Missed profit (est)': 'missed_profit_est'
+} as const;
+
+export const DEFAULT_FORECAST_SETTINGS = {
+  DAYS_PER_MONTH: 30.4,
+  DEFAULT_LEAD_TIME: 30, // days
+  DEFAULT_BUFFER_DAYS: 14, // days
+  SAFETY_STOCK_MULTIPLIER: 1.2, // 20% safety stock
+} as const;

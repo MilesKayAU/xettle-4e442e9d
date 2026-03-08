@@ -1,0 +1,1 @@
+UPDATE logistics_shipments SET actual_arrival = '2025-02-20' WHERE id = '8c9b2482-10e5-48ee-a1c2-9f3ecad18a7a' AND actual_arrival = '0020-02-20'

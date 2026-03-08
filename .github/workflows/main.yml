@@ -1,0 +1,67 @@
+name: Deploy via SSH
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # Shallow clone for faster checkout
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock # Enhance SSH agent security
+
+      - name: Deploy and restart server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 60m
+          script: |
+            set -euo pipefail
+            shopt -s inherit_errexit
+
+            APP_DIR="/root/miles-kay-reveal"
+            PORT=80
+            LOG_FILE="/tmp/serve.log"
+
+            echo "⚠️ Stopping existing 'serve' processes"
+            pkill -x serve || echo "ℹ️ No running serve processes found"
+
+            echo "🔄 Updating code in $APP_DIR"
+            cd "$APP_DIR" || { echo "❌ Failed to access $APP_DIR"; exit 1; }
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "📋 Installing dependencies"
+            npm ci --prefer-offline --no-audit --progress=false
+
+            echo "🏗️ Building application"
+            npm run build
+
+            echo "🔧 Setting permissions for dist directory"
+            chmod -R 755 dist
+
+            echo "🚀 Starting new server in background"
+            nohup serve dist -s -p "$PORT" </dev/null >"$LOG_FILE" 2>&1 &
+            sleep 2 # Brief pause to ensure server starts
+
+            echo "✅ Deployment complete"

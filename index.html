@@ -1,0 +1,60 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- ✅ Embedded Supabase Config -->
+    <script>
+      (function() {
+        try {
+          console.log("[Supabase] Loading inline config");
+
+          // 👇 YOUR LIVE SUPABASE CONFIG
+          window.ENV_SUPABASE_URL = "https://wtxqdzcihxjaiosmffvm.supabase.co";
+          window.ENV_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0eHFkemNpaHhqYWlvc21mZnZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyMTMxNjcsImV4cCI6MjA1ODc4OTE2N30.1PCe3yo5Xscz-lKBU6lI9iv7Pu8KcLQwPc8mMCfqK_Y";
+
+          console.log("[Supabase] Inline config loaded:", 
+            window.ENV_SUPABASE_URL, 
+            window.ENV_SUPABASE_KEY ? "Key loaded" : "Key missing"
+          );
+
+          window.validateSupabaseConfig = function() {
+            return {
+              url: window.ENV_SUPABASE_URL,
+              keyExists: !!window.ENV_SUPABASE_KEY,
+              hostname: window.location.hostname,
+              timestamp: new Date().toISOString(),
+            };
+          };
+        } catch (e) {
+          console.error("[Supabase] Config failed", e);
+        }
+      })();
+    </script>
+
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Miles Kay - Innovative Cleaning Solutions</title>
+    <meta name="description" content="Discover Miles Kay's revolutionary cleaning products including 0% PVA dishwashing sheets, laundry sheets, and professional coffee machine cleaning solutions." />
+    <meta name="author" content="Miles Kay" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <meta property="og:title" content="Miles Kay - Innovative Cleaning Solutions" />
+    <meta property="og:description" content="Discover Miles Kay's revolutionary cleaning products including 0% PVA dishwashing sheets, laundry sheets, and professional coffee machine cleaning solutions." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@lovable_dev" />
+    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
+    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

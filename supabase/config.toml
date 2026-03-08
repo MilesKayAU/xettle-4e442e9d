@@ -1,0 +1,31 @@
+project_id = "wtxqdzcihxjaiosmffvm"
+
+[functions.extract-invoice-data]
+verify_jwt = false
+
+[functions.parse-alibaba-order]
+verify_jwt = false
+
+[functions.parse-alibaba-pdfs]
+verify_jwt = false
+
+[functions.send-invoice-notification]
+verify_jwt = false
+
+[functions.send-purchase-order]
+verify_jwt = false
+
+[functions.notify-po-approval]
+verify_jwt = false
+
+[functions.get-exchange-rate]
+verify_jwt = false
+
+[functions.xero-auth]
+verify_jwt = false
+
+[functions.sync-to-xero]
+verify_jwt = false
+
+[functions.sync-amazon-journal]
+verify_jwt = false

@@ -1,0 +1,1 @@
+ALTER TABLE public.settlement_lines ADD COLUMN IF NOT EXISTS marketplace_name text DEFAULT NULL;

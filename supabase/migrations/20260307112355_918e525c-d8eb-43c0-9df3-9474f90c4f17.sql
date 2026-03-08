@@ -1,0 +1,1 @@
+ALTER TABLE settlements ADD COLUMN split_rollover_amount numeric DEFAULT 0;
