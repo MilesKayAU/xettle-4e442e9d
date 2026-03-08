@@ -147,6 +147,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, isPaid
       // Step 3: Download and parse each report (with delay for rate limiting)
       let importedCount = 0;
       let skippedCount = 0;
+      let cutoffCount = 0;
       const parserOpts: ParserOptions = { gstRate };
 
       for (let i = 0; i < reports.length; i++) {
