@@ -105,13 +105,12 @@ export function SyncHistoryCard() {
 }
 
 const CRON_OPTIONS = [
-  { value: '6', label: 'Every 6 hours' },
-  { value: '12', label: 'Every 12 hours' },
-  { value: '24', label: 'Every 24 hours' },
+  { value: '12', label: 'Every 12 hours', description: 'Premium — catch settlements faster' },
+  { value: '24', label: 'Every 24 hours (daily)', description: 'Recommended — perfect for 99% of sellers' },
 ];
 
 export function CronScheduleCard({ userTier }: { userTier: 'free' | 'starter' | 'pro' }) {
-  const [schedule, setSchedule] = useState<string>('6');
+  const [schedule, setSchedule] = useState<string>('24');
   const [saving, setSaving] = useState(false);
   const isPro = userTier === 'pro';
 
@@ -194,7 +193,12 @@ export function CronScheduleCard({ userTier }: { userTier: 'free' | 'starter' | 
                 </SelectTrigger>
                 <SelectContent>
                   {CRON_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    <SelectItem key={opt.value} value={opt.value}>
+                      <div className="flex flex-col">
+                        <span>{opt.label}</span>
+                        <span className="text-xs text-muted-foreground">{opt.description}</span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -203,7 +207,7 @@ export function CronScheduleCard({ userTier }: { userTier: 'free' | 'starter' | 
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Settlements are auto-fetched from Amazon and pushed to Xero on this schedule. You can always trigger a manual sync too.
+              Amazon posts settlements every 2–3 days, so daily checks catch everything. The 12-hour option ensures you're always first to reconcile.
             </p>
           </div>
         ) : (
