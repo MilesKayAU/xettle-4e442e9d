@@ -1124,7 +1124,6 @@ export default function AccountingDashboard() {
                   <BulkUploadProcessor
                     files={bulkFiles}
                     gstRate={settingsGstRate}
-                    gapThresholdDays={settingsGapThreshold}
                     selectedCountry={selectedCountry}
                     existingSettlements={settlements}
                     onComplete={() => {
@@ -1258,7 +1257,6 @@ interface BulkFileResult {
 function BulkUploadProcessor({
   files,
   gstRate,
-  gapThresholdDays = 16,
   selectedCountry,
   existingSettlements,
   onComplete,
@@ -1268,7 +1266,6 @@ function BulkUploadProcessor({
 }: {
   files: File[];
   gstRate: number;
-  gapThresholdDays?: number;
   selectedCountry: string;
   existingSettlements: SettlementRecord[];
   onComplete: () => void;
