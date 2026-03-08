@@ -106,10 +106,9 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
     try {
       const result = await parseBunningsSummaryPdf(f);
-      if (result.success) {
-        setParsed(result.data);
-        toast.success('Settlement parsed successfully!');
-        setActiveTab('review');
+      if (!result.success) {
+        setParseError(result.error);
+        toast.error(result.error);
       } else {
         setParseError(result.error);
         toast.error(result.error);
