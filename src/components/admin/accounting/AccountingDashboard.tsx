@@ -176,6 +176,20 @@ export default function AccountingDashboard() {
     loadAccountingSettings();
   }, []);
 
+  // Check Xero connection status
+  useEffect(() => {
+    const checkXero = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('xero-auth', {
+          method: 'GET',
+          headers: { 'x-action': 'status' }
+        });
+        if (!error && data?.connected) setXeroConnected(true);
+      } catch {}
+    };
+    checkXero();
+  }, []);
+
   const loadSettlements = useCallback(async () => {
     setLoadingSettlements(true);
     try {
