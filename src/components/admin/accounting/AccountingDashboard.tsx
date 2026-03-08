@@ -3096,7 +3096,7 @@ function SettlementReview({
                   </div>
                   <div className="border-t border-purple-200 my-1" />
                   <p className="text-muted-foreground text-[10px] italic">
-                    + {splitMonth.month2.monthLabel} transactions ({month2Lines.length} lines by posted date)
+                    + {splitMonth.month2.monthLabel} transactions (by posted date)
                   </p>
                   <div className="flex justify-between"><span>Sales:</span><span className="font-mono text-green-700">{formatAUD(splitMonth.month2.totalSales)}</span></div>
                   <div className="flex justify-between"><span>Fees:</span><span className="font-mono text-red-600">{formatAUD(splitMonth.month2.sellerFees + splitMonth.month2.fbaFees + splitMonth.month2.storageFees)}</span></div>
