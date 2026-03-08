@@ -1169,6 +1169,20 @@ export default function AccountingDashboard() {
           </CardContent>
         </Card>
       )}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Globe className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
+            <p className="text-lg font-medium text-muted-foreground mb-1">
+              {PLATFORMS.find(p => p.code === selectedPlatform)?.label} Integration
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Coming soon. We're building support for more sales channels.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
