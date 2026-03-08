@@ -15,6 +15,14 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 
+const PLATFORMS = [
+  { code: 'amazon', label: 'Amazon', icon: '📦', active: true },
+  { code: 'shopify', label: 'Shopify', icon: '🛍️', active: false },
+  { code: 'ebay', label: 'eBay', icon: '🏷️', active: false },
+  { code: 'kogan', label: 'Kogan', icon: '🛒', active: false },
+  { code: 'bunnings', label: 'Bunnings', icon: '🔨', active: false },
+] as const;
+
 const COUNTRIES = [
   { code: 'AU', label: 'Australia', flag: '🇦🇺', active: true },
   { code: 'UK', label: 'United Kingdom', flag: '🇬🇧', active: false },
