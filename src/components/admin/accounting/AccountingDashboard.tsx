@@ -3461,6 +3461,7 @@ function SettlementSettings({ onGstRateChanged, onGapThresholdChanged }: { onGst
       const settingsToSave = [
         { key: 'accounting_xero_account_codes', value: JSON.stringify(accountCodes) },
         { key: 'accounting_gst_rate', value: gstRate },
+        { key: 'gap_threshold_days', value: gapThreshold },
       ];
 
       for (const setting of settingsToSave) {
