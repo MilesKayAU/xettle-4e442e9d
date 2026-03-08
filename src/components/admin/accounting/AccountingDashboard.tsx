@@ -2713,7 +2713,7 @@ function BatchSettlementReview({
                 {savedCount} saved • {unsavedCount} pending • Click to expand details
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
@@ -2723,10 +2723,31 @@ function BatchSettlementReview({
                 {reviewSortDir === 'desc' ? '▼ Newest first' : '▲ Oldest first'}
               </Button>
               {unsavedCount > 0 && (
-                <Button onClick={handleSaveAll} disabled={savingAll} className="gap-2">
-                  {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {savingAll ? 'Saving...' : `Save All ${unsavedCount}`}
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const unsavedItems = batch.filter(b => !b.saved);
+                      if (unsavedItems.length === batch.length) {
+                        // All unsaved — discard everything
+                        onBatchUpdate([]);
+                        onAllSaved();
+                      } else {
+                        // Keep only saved items
+                        onBatchUpdate(batch.filter(b => b.saved));
+                      }
+                    }}
+                    className="gap-1.5 text-xs text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Discard Unsaved ({unsavedCount})
+                  </Button>
+                  <Button onClick={handleSaveAll} disabled={savingAll} className="gap-2">
+                    {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {savingAll ? 'Saving...' : `Save All ${unsavedCount}`}
+                  </Button>
+                </>
               )}
               {allSaved && (
                 <Badge className="bg-green-100 text-green-800 text-sm px-3 py-1.5 gap-1">
