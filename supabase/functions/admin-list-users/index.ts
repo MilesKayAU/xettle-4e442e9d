@@ -57,16 +57,15 @@ Deno.serve(async (req) => {
       throw listError
     }
 
-    // Get Xero connections and settlement counts
-    const { data: xeroTokens } = await supabaseAdmin
-      .from('xero_tokens')
-      .select('user_id')
+    // Get Xero connections, Amazon connections, and settlement counts
+    const [{ data: xeroTokens }, { data: amazonTokens }, { data: settlementCounts }] = await Promise.all([
+      supabaseAdmin.from('xero_tokens').select('user_id'),
+      supabaseAdmin.from('amazon_tokens').select('user_id'),
+      supabaseAdmin.from('settlements').select('user_id'),
+    ])
 
     const xeroUserIds = new Set((xeroTokens || []).map(t => t.user_id))
-
-    const { data: settlementCounts } = await supabaseAdmin
-      .from('settlements')
-      .select('user_id')
+    const amazonUserIds = new Set((amazonTokens || []).map(t => t.user_id))
 
     const countMap: Record<string, number> = {}
     for (const s of settlementCounts || []) {
@@ -79,6 +78,7 @@ Deno.serve(async (req) => {
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at || null,
       xero_connected: xeroUserIds.has(u.id),
+      amazon_connected: amazonUserIds.has(u.id),
       settlement_count: countMap[u.id] || 0,
     }))
 
