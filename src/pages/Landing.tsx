@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Shield, Zap, DollarSign, FileSpreadsheet, RefreshCw, Users, CheckCircle, Upload, Bot, Crown } from 'lucide-react';
+import { ArrowRight, Shield, Zap, DollarSign, FileSpreadsheet, RefreshCw, Users, CheckCircle, Upload, Bot, Crown, Rocket } from 'lucide-react';
 
 const features = [
   {
@@ -19,7 +19,7 @@ const features = [
   {
     icon: Bot,
     title: 'Auto-Import from Amazon',
-    description: 'Connect your Seller Central account and let Xettle automatically fetch new settlement reports every 6 hours.',
+    description: 'Connect your Seller Central account and let Xettle automatically fetch new settlement reports every 12–24 hours.',
     free: false,
   },
   {
@@ -114,7 +114,7 @@ export default function Landing() {
           <p className="text-muted-foreground text-center mb-10 max-w-xl mx-auto">
             Manual uploads are free forever. Upgrade when you want Amazon to sync automatically.
           </p>
-          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {/* Free */}
             <div className="rounded-2xl border-2 border-border bg-background p-8">
               <div className="flex items-center gap-2 mb-1">
@@ -143,7 +143,7 @@ export default function Landing() {
               </Button>
             </div>
 
-            {/* Paid */}
+            {/* Starter */}
             <div className="rounded-2xl border-2 border-primary bg-primary/5 p-8 relative">
               <div className="absolute -top-3 right-6">
                 <span className="bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
@@ -151,22 +151,18 @@ export default function Landing() {
                 </span>
               </div>
               <div className="flex items-center gap-2 mb-1">
-                <Crown className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-bold text-foreground">Pro</h3>
+                <Rocket className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-bold text-foreground">Starter</h3>
               </div>
-              <p className="text-4xl font-black text-foreground mb-1">
-                <span className="text-muted-foreground text-lg font-normal line-through mr-2">$29</span>
-                Coming Soon
-              </p>
-              <p className="text-sm text-muted-foreground mb-6">per month</p>
+              <p className="text-4xl font-black text-foreground mb-1">$129</p>
+              <p className="text-sm text-muted-foreground mb-6">per year</p>
               <ul className="space-y-3 text-sm mb-8">
                 {[
                   'Everything in Free, plus:',
-                  'Auto-import from Amazon SP-API',
-                  'New settlements fetched every 6 hours',
+                  'Amazon SP-API auto-fetch',
+                  'New settlements fetched daily',
+                  'Manual review & push to Xero',
                   'No more downloading CSVs',
-                  'Priority support',
-                  'Early access to new platforms',
                 ].map((item, i) => (
                   <li key={item} className="flex items-start gap-2">
                     <CheckCircle className={`h-4 w-4 shrink-0 mt-0.5 ${i === 0 ? 'text-muted-foreground' : 'text-primary'}`} />
@@ -175,6 +171,38 @@ export default function Landing() {
                 ))}
               </ul>
               <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
+            </div>
+
+            {/* Pro */}
+            <div className="rounded-2xl border-2 border-border bg-background p-8 relative">
+              <div className="absolute -top-3 right-6">
+                <span className="bg-muted text-muted-foreground text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                  <Crown className="h-3 w-3" /> PRO
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mb-1">
+                <Crown className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-bold text-foreground">Pro</h3>
+              </div>
+              <p className="text-4xl font-black text-foreground mb-1">$229</p>
+              <p className="text-sm text-muted-foreground mb-6">per year</p>
+              <ul className="space-y-3 text-sm mb-8">
+                {[
+                  'Everything in Starter, plus:',
+                  'Auto-push to Xero on schedule',
+                  'Every 12 or 24 hour sync cycle',
+                  'Toggle automations on/off anytime',
+                  'Priority support & early access',
+                ].map((item, i) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <CheckCircle className={`h-4 w-4 shrink-0 mt-0.5 ${i === 0 ? 'text-muted-foreground' : 'text-primary'}`} />
+                    <span className={`${i === 0 ? 'text-muted-foreground font-medium' : 'text-foreground'}`}>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button className="w-full" variant="outline" disabled>
                 Coming Soon
               </Button>
             </div>
