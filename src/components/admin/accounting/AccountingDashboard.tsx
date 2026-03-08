@@ -1070,7 +1070,19 @@ export default function AccountingDashboard() {
             </Card>
           )}
 
-          <Tabs value={activeTab} onValueChange={(tab) => {
+          {/* Persistent fetch status banner */}
+          {amazonFetching && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3 mb-4">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-blue-900">Fetching from Amazon SP-API...</p>
+                <p className="text-xs text-blue-700">{amazonFetchStatus || 'Downloading settlement reports in the background. You can navigate freely.'}</p>
+              </div>
+              <Badge variant="outline" className="text-blue-700 border-blue-300 shrink-0">In Progress</Badge>
+            </div>
+          )}
+
+
             // Stop active bulk processing when leaving upload tab, but keep files visible
             if (activeTab === 'upload' && tab !== 'upload' && bulkProcessing) {
               setBulkProcessing(false);
