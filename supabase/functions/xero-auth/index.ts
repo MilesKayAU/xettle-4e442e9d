@@ -409,8 +409,127 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Action: Create missing accounts in Xero
+    if (action === 'create_accounts') {
+      let body: any = {};
+      try { body = await req.json(); } catch {}
+      const userId = body?.userId;
+      const accounts = body?.accounts; // Array of { Code, Name, Type, TaxType }
+
+      if (!userId || !accounts || !Array.isArray(accounts) || accounts.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'userId and accounts array are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+
+      const { data: tokens, error: tokenError } = await supabaseAdmin
+        .from('xero_tokens')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (tokenError || !tokens || tokens.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'No Xero connection found' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      let xeroToken = tokens[0]
+
+      // Refresh if expired
+      const expiresAt = new Date(xeroToken.expires_at)
+      if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
+        const tokenResponse = await fetch(XERO_TOKEN_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${btoa(`${XERO_CLIENT_ID}:${XERO_CLIENT_SECRET}`)}`
+          },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: xeroToken.refresh_token
+          })
+        })
+
+        if (tokenResponse.ok) {
+          const tokenData = await tokenResponse.json()
+          const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+          await supabaseAdmin.from('xero_tokens').update({
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+            expires_at: newExpiresAt,
+            updated_at: new Date().toISOString()
+          }).eq('id', xeroToken.id)
+          xeroToken = { ...xeroToken, access_token: tokenData.access_token }
+        }
+      }
+
+      // Xero account type mapping
+      const XERO_TYPE_MAP: Record<string, string> = {
+        'Revenue': 'REVENUE',
+        'Other Income': 'OTHERINCOME',
+        'Expense': 'EXPENSE',
+        'Current Asset': 'CURRENT',
+        'Current Liability': 'CURRLIAB',
+      }
+
+      const results: Array<{ code: string; name: string; success: boolean; error?: string }> = []
+
+      for (const account of accounts) {
+        try {
+          const xeroType = XERO_TYPE_MAP[account.Type] || account.Type
+          const payload = {
+            Code: account.Code,
+            Name: account.Name,
+            Type: xeroType,
+            TaxType: account.TaxType || 'NONE',
+            EnablePaymentsToAccount: false,
+          }
+
+          console.log('Creating Xero account:', JSON.stringify(payload))
+
+          const response = await fetch('https://api.xero.com/api.xro/2.0/Accounts', {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${xeroToken.access_token}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Xero-tenant-id': xeroToken.tenant_id
+            },
+            body: JSON.stringify(payload)
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error(`Failed to create account ${account.Code}:`, response.status, errorText)
+            results.push({ code: account.Code, name: account.Name, success: false, error: errorText })
+          } else {
+            console.log(`Account ${account.Code} created successfully`)
+            results.push({ code: account.Code, name: account.Name, success: true })
+          }
+        } catch (err: any) {
+          results.push({ code: account.Code, name: account.Name, success: false, error: err.message })
+        }
+      }
+
+      const allSuccess = results.every(r => r.success)
+
+      return new Response(
+        JSON.stringify({ success: allSuccess, results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use: authorize, callback, status, disconnect, or get_accounts' }),
+      JSON.stringify({ error: 'Invalid action. Use: authorize, callback, status, disconnect, get_accounts, or create_accounts' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
