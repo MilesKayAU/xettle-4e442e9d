@@ -2186,14 +2186,22 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                     className="rounded border-muted-foreground/40 h-3.5 w-3.5 cursor-pointer"
                   />
                 </th>
-                <th className="py-2 px-2 font-medium w-12 text-center">Seq</th>
-                <th className="py-2 px-4 font-medium">Period</th>
+                <th className="py-2 px-2 font-medium w-12 text-center cursor-pointer hover:text-foreground" onClick={() => toggleSort('seq')}>
+                  Seq<SortIcon field="seq" />
+                </th>
+                <th className="py-2 px-4 font-medium cursor-pointer hover:text-foreground" onClick={() => toggleSort('period')}>
+                  Period<SortIcon field="period" />
+                </th>
                 <th className="py-2 px-4 font-medium text-right">Sales</th>
                 <th className="py-2 px-4 font-medium text-right">Fees</th>
                 <th className="py-2 px-4 font-medium text-right">Refunds</th>
                 <th className="py-2 px-4 font-medium text-right">Net</th>
-                <th className="py-2 px-4 font-medium text-right">Deposit</th>
-                <th className="py-2 px-4 font-medium">Status</th>
+                <th className="py-2 px-4 font-medium text-right cursor-pointer hover:text-foreground" onClick={() => toggleSort('deposit')}>
+                  Deposit<SortIcon field="deposit" />
+                </th>
+                <th className="py-2 px-4 font-medium cursor-pointer hover:text-foreground" onClick={() => toggleSort('status')}>
+                  Status<SortIcon field="status" />
+                </th>
                 <th className="py-2 px-2 font-medium w-10">Actions</th>
               </tr>
             </thead>
