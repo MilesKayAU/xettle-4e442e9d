@@ -151,7 +151,21 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
-    const detectedFiles: DetectedFile[] = newFiles.map(f => ({
+    // Dedup 1: skip files already in the current list (by name + size)
+    const currentFiles = filesRef.current;
+    const uniqueFiles = newFiles.filter(f => {
+      const isDupe = currentFiles.some(
+        existing => existing.file.name === f.name && existing.file.size === f.size
+      );
+      if (isDupe) {
+        toast.warning(`"${f.name}" is already in the upload list — skipped.`, { duration: 4000 });
+      }
+      return !isDupe;
+    });
+
+    if (uniqueFiles.length === 0) return;
+
+    const detectedFiles: DetectedFile[] = uniqueFiles.map(f => ({
       file: f,
       status: 'detecting' as FileStatus,
       detection: null,
@@ -159,33 +173,67 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     setFiles(prev => [...prev, ...detectedFiles]);
 
     const results = await Promise.allSettled(
-      newFiles.map(async (file, idx) => {
+      uniqueFiles.map(async (file, idx) => {
         const result = await detectFile(file);
-        // Pre-parse if detected as settlement
         let settlements: StandardSettlement[] = [];
         if (result && result.isSettlementFile) {
           settlements = await preParseFile(file, result);
         }
-        return { idx, result, settlements };
+
+        // Dedup 2: check if any parsed settlement already exists in DB
+        let dbDupeIds: string[] = [];
+        if (settlements.length > 0) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const ids = settlements.map(s => s.settlement_id);
+              const { data: existing } = await supabase
+                .from('settlements')
+                .select('settlement_id')
+                .eq('user_id', user.id)
+                .in('settlement_id', ids);
+              dbDupeIds = (existing || []).map((e: any) => e.settlement_id);
+            }
+          } catch {}
+        }
+
+        return { idx, result, settlements, dbDupeIds };
       })
     );
 
     setFiles(prev => {
       const updated = [...prev];
-      const offset = prev.length - newFiles.length;
+      const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements } = r.value;
+          const { idx, result, settlements, dbDupeIds } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
+            // If ALL settlements are already in DB, mark as saved/dupe
+            const allDupes = settlements.length > 0 && dbDupeIds.length === settlements.length;
+            const someDupes = dbDupeIds.length > 0 && !allDupes;
+
+            let status: FileStatus = result
+              ? (result.isSettlementFile ? 'detected' : 'wrong_file')
+              : 'unknown';
+
+            let error: string | undefined;
+            if (allDupes) {
+              status = 'error';
+              error = `Already saved — ${dbDupeIds.length} settlement${dbDupeIds.length > 1 ? 's' : ''} from this file already exist in your account.`;
+            }
+
             updated[fileIdx] = {
               ...updated[fileIdx],
               detection: result,
               settlements: settlements.length > 0 ? settlements : undefined,
-              status: result
-                ? (result.isSettlementFile ? 'detected' : 'wrong_file')
-                : 'unknown',
+              status,
+              error,
             };
+
+            if (someDupes) {
+              toast.info(`${dbDupeIds.length} of ${settlements.length} settlements from "${uniqueFiles[idx].name}" already exist — duplicates will be skipped on save.`, { duration: 6000 });
+            }
           }
         }
       }
