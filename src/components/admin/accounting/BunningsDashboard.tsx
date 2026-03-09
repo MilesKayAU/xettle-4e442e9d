@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
-  History, Loader2, Send, Eye, Trash2, Info
+  History, Loader2, Send, Eye, Trash2, Info, HelpCircle, ChevronDown
 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import bunningsBillingImg from '@/assets/bunnings-billing-cycles.png';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { parseBunningsSummaryPdf, type BunningsParseExtra } from '@/utils/bunnings-summary-parser';
@@ -220,12 +222,49 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             <CardContent className="py-4">
               <div className="flex items-start gap-3">
                 <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">Upload your Bunnings "Summary of Transactions" PDF</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     This is the fortnightly settlement PDF from your Bunnings Mirakl seller portal. 
                     We'll extract the totals and create a matching Xero invoice automatically.
                   </p>
+
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm" className="mt-2 h-7 px-2 text-xs text-primary gap-1">
+                        <HelpCircle className="h-3 w-3" />
+                        How to find the right file
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-3 space-y-3">
+                      <div className="rounded-md border border-border bg-background p-3 text-xs space-y-2">
+                        <p className="font-medium text-foreground">Step-by-step:</p>
+                        <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground">
+                          <li>Log in to your <strong>Bunnings Mirakl seller portal</strong></li>
+                          <li>Navigate to <strong>Billing and documents → Billing cycles</strong></li>
+                          <li>Find the settlement period you want to import (see screenshot below)</li>
+                          <li>Click the <strong>three dots (⋮)</strong> on the right side of the row</li>
+                          <li>Select <strong>"Download Summary of Transactions"</strong> — this downloads a PDF</li>
+                          <li>Upload that PDF here</li>
+                        </ol>
+                        <div className="mt-3 rounded border border-border overflow-hidden">
+                          <img
+                            src={bunningsBillingImg}
+                            alt="Bunnings Mirakl portal — Billing cycles page showing where to download the Summary of Transactions PDF"
+                            className="w-full"
+                          />
+                          <p className="text-[10px] text-muted-foreground px-2 py-1.5 bg-muted/50">
+                            Bunnings Mirakl portal → Billing and documents → click ⋮ → "Download Summary of Transactions"
+                          </p>
+                        </div>
+                        <p className="text-muted-foreground mt-2">
+                          <strong>⚠️ Not the right file:</strong> The "Accounting documents" tab or individual invoice PDFs won't work. 
+                          You need the <strong>Summary of Transactions</strong> PDF specifically.
+                        </p>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 </div>
               </div>
             </CardContent>
