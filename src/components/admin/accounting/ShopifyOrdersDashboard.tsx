@@ -699,8 +699,14 @@ export default function ShopifyOrdersDashboard() {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {formatSettlementDate(parseResult.periodStart)} to {formatSettlementDate(parseResult.periodEnd)} ·{' '}
-                        {parseResult.totalOrderCount} total orders · {parseResult.paidCount} paid ·{' '}
-                        {parseResult.unpaidCount > 0 && <span className="text-amber-600">{parseResult.unpaidCount} skipped (unpaid)</span>}
+                        {parseResult.totalOrderCount} total rows · {parseResult.paidCount} included
+                        {parseResult.statusBreakdown.partially_refunded > 0 && (
+                          <> ({parseResult.statusBreakdown.paid} paid + {parseResult.statusBreakdown.partially_refunded} partially refunded)</>
+                        )}
+                        {parseResult.unpaidCount > 0 && <> · <span className="text-amber-600">{parseResult.unpaidCount} excluded</span></>}
+                        {parseResult.statusBreakdown.refunded > 0 && (
+                          <> ({parseResult.statusBreakdown.refunded} refunded, {parseResult.statusBreakdown.other_excluded} other)</>
+                        )}
                       </p>
                     </div>
                     <Button variant="outline" size="sm" onClick={clearUpload}>
@@ -760,7 +766,10 @@ export default function ShopifyOrdersDashboard() {
                                 {g.currency !== 'AUD' && <Badge variant="outline" className="ml-2 text-[10px]">{g.currency}</Badge>}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} · {formatSettlementDate(g.periodStart)} – {formatSettlementDate(g.periodEnd)}
+                                {g.statusBreakdown && g.statusBreakdown.partially_refunded > 0
+                                  ? `${g.statusBreakdown.paid} paid + ${g.statusBreakdown.partially_refunded} partially refunded = ${g.orderCount} orders`
+                                  : `${g.orderCount} order${g.orderCount !== 1 ? 's' : ''}`
+                                } · {formatSettlementDate(g.periodStart)} – {formatSettlementDate(g.periodEnd)}
                               </p>
                             </div>
                           </div>

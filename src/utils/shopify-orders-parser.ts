@@ -65,6 +65,20 @@ export interface MarketplaceGroup {
   sampleNoteAttributes?: string[];
   /** Sample tags for unknown groups */
   sampleTags?: string[];
+  /** Financial status breakdown within this group */
+  statusBreakdown?: MarketplaceGroupStatusBreakdown;
+}
+
+export interface StatusBreakdown {
+  paid: number;
+  partially_refunded: number;
+  refunded: number;
+  other_excluded: number;
+}
+
+export interface MarketplaceGroupStatusBreakdown {
+  paid: number;
+  partially_refunded: number;
 }
 
 export interface ShopifyOrdersParseResult {
@@ -81,6 +95,8 @@ export interface ShopifyOrdersParseResult {
   periodEnd: string;
   /** True if period_end is within last 3 days — may be a partial import */
   partialPeriodWarning: boolean;
+  /** Breakdown of all financial statuses found */
+  statusBreakdown: StatusBreakdown;
 }
 
 export interface ShopifyOrdersParseError {
@@ -320,6 +336,7 @@ export function parseShopifyOrdersCSV(
     const allOrders: ShopifyOrderRow[] = [];
     let unpaidCount = 0;
     let duplicateLineItemCount = 0;
+    const statusBreakdown: StatusBreakdown = { paid: 0, partially_refunded: 0, refunded: 0, other_excluded: 0 };
 
     for (let i = 1; i < lines.length; i++) {
       const fields = parseCSVRow(lines[i]);
@@ -330,10 +347,25 @@ export function parseShopifyOrdersCSV(
 
       if (!paymentMethod && !financialStatus) continue;
 
-      // Only include paid orders
-      if (financialStatus !== 'paid') {
+      // Include paid and partially_refunded orders (at original Total).
+      // Partial refunds are handled as separate accounting entries (like LMB).
+      // Exclude fully refunded and other statuses.
+      const includedStatuses = ['paid', 'partially_refunded'];
+      if (!includedStatuses.includes(financialStatus)) {
         unpaidCount++;
+        if (financialStatus === 'refunded') {
+          statusBreakdown.refunded++;
+        } else {
+          statusBreakdown.other_excluded++;
+        }
         continue;
+      }
+
+      // Track status breakdown
+      if (financialStatus === 'paid') {
+        statusBreakdown.paid++;
+      } else if (financialStatus === 'partially_refunded') {
+        statusBreakdown.partially_refunded++;
       }
 
       // Order-level dedup: Shopify exports one row per line item.
@@ -378,7 +410,7 @@ export function parseShopifyOrdersCSV(
     }
 
     if (allOrders.length === 0) {
-      return { success: false, error: 'No paid orders found in the CSV.' };
+      return { success: false, error: 'No paid or partially refunded orders found in the CSV.' };
     }
 
     // ── Group by marketplace_key + currency using JSON.stringify for safety ──
@@ -411,6 +443,12 @@ export function parseShopifyOrdersCSV(
       const uniqueNotes = [...new Set(orders.map(o => o.noteAttributes).filter(Boolean))].slice(0, 3);
       const uniqueTags = [...new Set(orders.map(o => o.tags).filter(Boolean))].slice(0, 3);
 
+      // Per-group financial status breakdown
+      const groupStatusBreakdown: MarketplaceGroupStatusBreakdown = {
+        paid: orders.filter(o => o.financialStatus === 'paid').length,
+        partially_refunded: orders.filter(o => o.financialStatus === 'partially_refunded').length,
+      };
+
       const group: MarketplaceGroup = {
         marketplaceKey: actualMktKey,
         registryEntry: entry,
@@ -429,6 +467,7 @@ export function parseShopifyOrdersCSV(
         status: entry.skip ? 'skipped' : (actualMktKey === 'unknown' ? 'unknown' : 'ready'),
         sampleNoteAttributes: uniqueNotes,
         sampleTags: uniqueTags,
+        statusBreakdown: groupStatusBreakdown,
       };
 
       if (entry.skip) {
@@ -473,6 +512,7 @@ export function parseShopifyOrdersCSV(
       periodStart: allDates[0] || '',
       periodEnd: allDates[allDates.length - 1] || '',
       partialPeriodWarning,
+      statusBreakdown,
     };
   } catch (err: any) {
     return { success: false, error: `CSV parsing failed: ${err.message || 'Unknown error'}` };
