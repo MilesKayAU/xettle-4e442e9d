@@ -78,10 +78,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const loadSettlements = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
+      const code = marketplace.marketplace_code;
+      const shopifyOrdersCode = `shopify_orders_${code}`;
       const { data, error } = await supabase
         .from('settlements')
         .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, refunds, reimbursements, other_fees, xero_journal_id, sales_shipping')
-        .eq('marketplace', marketplace.marketplace_code)
+        .or(`marketplace.eq.${code},marketplace.eq.${shopifyOrdersCode}`)
         .order('period_end', { ascending: false });
       if (error) throw error;
       setSettlements((data || []) as SettlementRow[]);
