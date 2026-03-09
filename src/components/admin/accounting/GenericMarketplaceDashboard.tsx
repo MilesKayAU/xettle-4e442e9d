@@ -69,6 +69,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
   const [settlements, setSettlements] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -84,6 +85,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         .order('period_end', { ascending: false });
       if (error) throw error;
       setSettlements((data || []) as SettlementRow[]);
+      setHasLoadedOnce(true);
     } catch {
       // silent
     } finally {
@@ -305,7 +307,21 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               <Loader2 className="h-4 w-4 animate-spin" /> Loading settlements…
             </CardContent>
           </Card>
+        ) : settlements.length === 0 && !hasLoadedOnce ? (
+          /* Tab just created — uploads are still being processed */
+          <Card className="border-border">
+            <CardContent className="py-8 text-center">
+              <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground">
+                Processing uploads…
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Settlements are being parsed and saved — they'll appear here automatically.
+              </p>
+            </CardContent>
+          </Card>
         ) : settlements.length === 0 ? (
+          /* Loaded but genuinely empty */
           <Card className="border-border">
             <CardContent className="py-8 text-center">
               <p className="text-sm text-muted-foreground">
