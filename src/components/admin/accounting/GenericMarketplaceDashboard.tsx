@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
   CheckSquare, Square, Eye, ShieldCheck, ShieldAlert,
-  Download, RefreshCw
+  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
