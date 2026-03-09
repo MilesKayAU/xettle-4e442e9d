@@ -272,12 +272,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
       if (marketplace === 'bunnings' && df.file.name.toLowerCase().endsWith('.pdf')) {
         const result = await parseBunningsSummaryPdf(df.file);
-        if (!result.success) throw new Error(result.error);
+        if (!result.success) throw new Error('error' in result ? result.error : 'Bunnings parse failed');
         settlements = [result.settlement];
       } else if (marketplace === 'shopify_payments') {
         const text = await df.file.text();
         const result = parseShopifyPayoutCSV(text);
-        if (!result.success) throw new Error(result.error);
+        if (!result.success) throw new Error('error' in result ? result.error : 'Shopify parse failed');
         settlements = result.settlements;
       } else {
         // Generic parser
