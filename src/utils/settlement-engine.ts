@@ -300,6 +300,7 @@ export async function syncSettlementToXero(
         userId: user.id,
         action: 'create',
         reference,
+        description,
         date: s.period_end,
         dueDate: s.period_end,
         lineItems,
