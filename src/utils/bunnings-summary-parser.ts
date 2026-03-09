@@ -105,16 +105,18 @@ function interpretAmounts(amounts: number[]): { exGst: number; gst: number; incl
 // ─── Known Mirakl billing row patterns ──────────────────────────────
 // Each pattern: [regex, label, sign] — sign: 1 = positive, -1 = negative (fees/refunds)
 const ROW_PATTERNS: Array<{ regex: RegExp; label: string; category: 'sales' | 'commission' | 'refund' | 'refund_commission' | 'shipping' | 'subscription' | 'manual_credit' | 'manual_debit' | 'other' }> = [
-  { regex: /Payable\s+orders?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Payable orders', category: 'sales' },
-  { regex: /Commission\s+on\s+orders?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Commission on orders', category: 'commission' },
-  { regex: /Refund(?:s?)\s+on\s+orders?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Refund on orders', category: 'refund' },
-  { regex: /Refund(?:s?)\s+on\s+commission\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Refund on commission', category: 'refund_commission' },
-  { regex: /(?:Payable\s+)?shipping\s+charges?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Shipping charges', category: 'shipping' },
+  { regex: /Payable\s+orders?\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Payable orders', category: 'sales' },
+  { regex: /Commission\s+on\s+orders?\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Commission on orders', category: 'commission' },
+  // Matches both "Refunded orders" and "Refund on orders"
+  { regex: /Refund(?:ed|s?(?:\s+on)?)\s+orders?\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Refunded orders', category: 'refund' },
+  // Matches both "Commission on refunded orders" and "Refund on commission"
+  { regex: /(?:Commission\s+on\s+refunded\s+orders?|Refunds?\s+on\s+commission)\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Commission on refunded orders', category: 'refund_commission' },
+  { regex: /(?:Payable\s+)?shipping\s+charges?\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Shipping charges', category: 'shipping' },
   { regex: /Subscription\s+amount\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Subscription amount', category: 'subscription' },
-  { regex: /Manual\s+credit\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Manual credit', category: 'manual_credit' },
-  { regex: /Manual\s+debit\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Manual debit', category: 'manual_debit' },
-  { regex: /(?:Other|Miscellaneous)\s+(?:charges?|fees?|credits?)\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Other charges', category: 'other' },
-  { regex: /(?:Late\s+)?delivery\s+(?:charges?|penalties?)\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Delivery charges', category: 'other' },
+  { regex: /Manual\s+credit\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Manual credit', category: 'manual_credit' },
+  { regex: /Manual\s+debit\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Manual debit', category: 'manual_debit' },
+  { regex: /(?:Other|Miscellaneous)\s+(?:charges?|fees?|credits?)\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Other charges', category: 'other' },
+  { regex: /(?:Late\s+)?delivery\s+(?:charges?|penalties?)\s*(?:\([^)]*\)\s*)*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Delivery charges', category: 'other' },
 ];
 
 /**
