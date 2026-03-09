@@ -50,7 +50,8 @@ interface UploadWarning {
 }
 
 interface BatchItem {
-  file: File;
+  file: File | null;
+  fileName: string;
   parsed: StandardSettlement | null;
   extra: BunningsParseExtra | null;
   error: string | null;
