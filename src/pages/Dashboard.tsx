@@ -4,6 +4,7 @@ import { useAdminAuth } from '@/hooks/use-admin-auth';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
+import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyReconciliationStatus';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -263,6 +264,15 @@ export default function Dashboard() {
         {activeView === 'settlements' ? (
           <ErrorBoundary>
             <div className="space-y-6">
+              {/* Monthly Reconciliation Status */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <MonthlyReconciliationStatus
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                  onSelectMarketplace={setSelectedMarketplace}
+                />
+              )}
+
               {/* Marketplace Switcher */}
               <div>
                 {!marketplacesLoading && (

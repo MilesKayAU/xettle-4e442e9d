@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher';
 import {
   syncSettlementToXero,
+  syncXeroStatus,
   deleteSettlement,
   formatSettlementDate,
   formatAUD,
@@ -50,6 +51,8 @@ interface SettlementRow {
   reimbursements: number | null;
   other_fees: number | null;
   xero_journal_id: string | null;
+  xero_invoice_number: string | null;
+  xero_status: string | null;
   sales_shipping: number | null;
   bank_verified: boolean | null;
   bank_verified_amount: number | null;
@@ -57,19 +60,21 @@ interface SettlementRow {
   bank_verified_by: string | null;
 }
 
-function statusBadge(status: string | null) {
+function statusBadge(s: SettlementRow) {
+  const status = s.status;
   switch (status) {
     case 'synced':
-      return <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Synced to Xero ✓</Badge>;
     case 'pushed_to_xero':
-      return <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Posted to Xero ✓</Badge>;
+      return s.xero_invoice_number
+        ? <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">In Xero ({s.xero_invoice_number}) ✓</Badge>
+        : <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Pushed to Xero ✓</Badge>;
     case 'synced_external':
       return <Badge variant="outline" className="border-muted-foreground/40 text-[10px]">Already in Xero</Badge>;
+    case 'push_failed':
+      return <Badge variant="destructive" className="text-[10px]">Push failed</Badge>;
     case 'saved':
     case 'parsed':
-      return <Badge variant="secondary" className="text-[10px]">Saved</Badge>;
-    case 'error':
-      return <Badge variant="destructive" className="text-[10px]">Error</Badge>;
+      return <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">Ready to push</Badge>;
     default:
       return <Badge variant="outline" className="text-[10px]">{status || 'Saved'}</Badge>;
   }
@@ -122,7 +127,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       const woolworthsCode = `woolworths_marketplus_${code}`;
       const { data, error } = await supabase
         .from('settlements')
-        .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, refunds, reimbursements, other_fees, xero_journal_id, sales_shipping, bank_verified, bank_verified_amount, bank_verified_at, bank_verified_by')
+        .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, refunds, reimbursements, other_fees, xero_journal_id, xero_invoice_number, xero_status, sales_shipping, bank_verified, bank_verified_amount, bank_verified_at, bank_verified_by')
         .or(`marketplace.eq.${code},marketplace.eq.${shopifyOrdersCode},marketplace.eq.${woolworthsCode}`)
         .order('period_end', { ascending: false });
       if (error) throw error;
@@ -239,7 +244,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         setBankVerifyConfirmed(false);
         loadSettlements();
       } else {
-        toast.error(result.error || 'Failed to push to Xero');
+        // Structured duplicate warning
+        if (result.error && result.error.includes('already exists in Xero')) {
+          toast.error('Duplicate invoice detected — void the existing invoice in Xero first, then retry.', { duration: 8000 });
+        } else {
+          toast.error(result.error || 'Failed to push to Xero');
+        }
       }
     } catch (err: any) {
       toast.error(`Xero sync failed: ${err.message}`);
@@ -434,6 +444,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               const gstIncome = s.gst_on_income || 0;
               const isSelected = selected.has(s.id);
               const isSyncable = s.status === 'saved' || s.status === 'parsed';
+              const isPushFailed = s.status === 'push_failed';
+              const isSynced = s.status === 'synced' || s.status === 'pushed_to_xero';
 
               // Gap detection — allow tolerance for daily-payout marketplaces like Shopify
               const prev = settlements[idx + 1];
@@ -472,13 +484,16 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               <span className="text-sm font-semibold text-foreground">
                                 {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
                               </span>
-                              {statusBadge(s.status)}
+                              {statusBadge(s)}
                               {s.marketplace.startsWith('shopify_orders_') && (
                                 <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
                               )}
                             </div>
                             <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
                               ID: {s.settlement_id}
+                              {s.xero_invoice_number && s.xero_status && (
+                                <span className="ml-2 text-primary">{s.xero_invoice_number} · {s.xero_status}</span>
+                              )}
                             </p>
                             <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
                               <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
@@ -501,6 +516,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
+                          {/* Push to Xero — Ready state */}
                           {isSyncable && (
                             <>
                               <TooltipProvider>
@@ -510,6 +526,13 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                       size="sm"
                                       variant={verifyingId === s.id || s.bank_verified ? 'default' : 'outline'}
                                       onClick={() => {
+                                        // Duplicate prevention: warn if already has xero_journal_id
+                                        if (s.xero_journal_id) {
+                                          const confirmed = window.confirm(
+                                            `This settlement already has a Xero invoice (${s.xero_invoice_number || s.xero_journal_id}). Push again?`
+                                          );
+                                          if (!confirmed) return;
+                                        }
                                         if (verifyingId === s.id) {
                                           setVerifyingId(null);
                                           setBankAmountInput('');
@@ -541,6 +564,33 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                 Already in Xero
                               </Button>
                             </>
+                          )}
+                          {/* Retry — Push failed state */}
+                          {isPushFailed && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                              disabled={pushing === s.id}
+                              onClick={async () => {
+                                // Reset status and retry
+                                await supabase
+                                  .from('settlements')
+                                  .update({ status: 'saved', xero_journal_id: null } as any)
+                                  .eq('id', s.id);
+                                loadSettlements();
+                                toast.info('Status reset — you can now retry pushing to Xero');
+                              }}
+                            >
+                              {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5 mr-1" />}
+                              ⚠️ Retry Push
+                            </Button>
+                          )}
+                          {/* Synced state — show green badge */}
+                          {isSynced && (
+                            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                              ✅ {s.xero_invoice_number || 'Pushed'}
+                            </Badge>
                           )}
                           <Button
                             variant="ghost"

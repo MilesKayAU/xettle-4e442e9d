@@ -157,9 +157,13 @@ export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLin
  * Build Xero invoice reference string
  */
 export function buildInvoiceReference(settlement: StandardSettlement): string {
+  return `Xettle-${settlement.settlement_id}`;
+}
+
+export function buildInvoiceDescription(settlement: StandardSettlement): string {
   const label = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
   const periodLabel = `${formatSettlementDate(settlement.period_start)} – ${formatSettlementDate(settlement.period_end)}`;
-  return `${label} Settlement ${periodLabel} (${settlement.settlement_id})`;
+  return `${label} Settlement ${periodLabel}`;
 }
 
 // ─── Save to Database ───────────────────────────────────────────────────────
@@ -267,10 +271,11 @@ export async function syncSettlementToXero(
     const s = settlement as any;
     const contactName = options?.contactName || MARKETPLACE_CONTACTS[marketplace] || `${marketplace} Marketplace`;
     
-    // Build reference
+    // Build reference — new format: Xettle-{settlement_id}
+    const reference = options?.reference || `Xettle-${s.settlement_id}`;
     const periodLabel = `${formatSettlementDate(s.period_start)} – ${formatSettlementDate(s.period_end)}`;
     const label = MARKETPLACE_LABELS[marketplace] || marketplace;
-    const reference = options?.reference || `${label} Settlement ${periodLabel} (${s.settlement_id})`;
+    const description = `${label} Settlement ${periodLabel}`;
 
     // Build line items (use provided or default 2-line)
     const lineItems = options?.lineItems || [
@@ -295,6 +300,7 @@ export async function syncSettlementToXero(
         userId: user.id,
         action: 'create',
         reference,
+        description,
         date: s.period_end,
         dueDate: s.period_end,
         lineItems,
@@ -305,18 +311,31 @@ export async function syncSettlementToXero(
     if (fnErr) return { success: false, error: fnErr.message };
     if (!result?.success) return { success: false, error: result?.error || 'Xero push failed' };
 
-    // Update settlement status
+    // Update settlement status with invoice number
     await supabase
       .from('settlements')
       .update({
         status: 'synced',
         xero_journal_id: result.invoiceId,
+        xero_invoice_number: result.invoiceNumber || null,
+        xero_status: 'AUTHORISED',
       } as any)
       .eq('settlement_id', settlementId)
       .eq('user_id', user.id);
 
     return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
   } catch (err: any) {
+    // Mark push_failed in DB
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from('settlements')
+          .update({ status: 'push_failed' } as any)
+          .eq('settlement_id', settlementId)
+          .eq('user_id', user.id);
+      }
+    } catch { /* ignore */ }
     return { success: false, error: err.message || 'Unknown error' };
   }
 }
@@ -365,6 +384,25 @@ export async function deleteSettlement(id: string): Promise<{ success: boolean; 
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
+  }
+}
+
+// ─── Xero Sync Back ─────────────────────────────────────────────────────────
+
+export async function syncXeroStatus(): Promise<{ success: boolean; updated?: number; error?: string }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    const { data, error } = await supabase.functions.invoke('sync-xero-status', {
+      body: { userId: user.id },
+    });
+
+    if (error) return { success: false, error: error.message };
+    if (!data?.success) return { success: false, error: data?.error || 'Sync failed' };
+    return { success: true, updated: data.updated || 0 };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
   }
 }
 
