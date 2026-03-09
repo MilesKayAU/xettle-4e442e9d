@@ -185,7 +185,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     loadSettlements();
   }, [selected, loadSettlements]);
 
-  const handlePushToXero = useCallback(async (settlement: SettlementRow) => {
+  const handlePushToXero = useCallback(async (settlement: SettlementRow, bankAmount?: number) => {
     setPushing(settlement.id);
     try {
       // Build a StandardSettlement from the DB record for reconciliation check
@@ -222,7 +222,20 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       const lineItems = buildSimpleInvoiceLines(stdSettlement);
       const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace, { lineItems });
       if (result.success) {
+        // Save bank verification data
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && bankAmount !== undefined) {
+          await supabase.from('settlements').update({
+            bank_verified: true,
+            bank_verified_amount: bankAmount,
+            bank_verified_at: new Date().toISOString(),
+            bank_verified_by: user.id,
+          } as any).eq('id', settlement.id);
+        }
         toast.success('Invoice created in Xero!');
+        setVerifyingId(null);
+        setBankAmountInput('');
+        setBankVerifyConfirmed(false);
         loadSettlements();
       } else {
         toast.error(result.error || 'Failed to push to Xero');
