@@ -3107,6 +3107,68 @@ function BatchSettlementReview({
   );
 }
 
+// ─── Reconciliation Card ─────────────────────────────────────────────
+
+function ReconciliationCard({ result }: { result: ReconciliationResult }) {
+  const statusIcon = (status: ReconCheck['status']) => {
+    if (status === 'pass') return <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />;
+    if (status === 'warn') return <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />;
+    return <XCircle className="h-4 w-4 text-destructive shrink-0" />;
+  };
+
+  const borderColor = result.overallStatus === 'pass'
+    ? 'border-green-400 bg-green-50/30'
+    : result.overallStatus === 'warn'
+    ? 'border-amber-400 bg-amber-50/30'
+    : 'border-destructive bg-destructive/5';
+
+  const headerIcon = result.overallStatus === 'pass'
+    ? <CheckCircle2 className="h-5 w-5 text-green-600" />
+    : result.overallStatus === 'warn'
+    ? <AlertTriangle className="h-5 w-5 text-amber-600" />
+    : <XCircle className="h-5 w-5 text-destructive" />;
+
+  const headerText = result.overallStatus === 'pass'
+    ? 'All Reconciliation Checks Passed'
+    : result.overallStatus === 'warn'
+    ? 'Reconciliation Warnings — Review Before Sync'
+    : 'Reconciliation Failed — Sync Blocked';
+
+  return (
+    <Card className={`border-2 ${borderColor}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          {headerIcon}
+          {headerText}
+        </CardTitle>
+        <CardDescription className="text-xs">
+          {result.canSync
+            ? 'Settlement passed validation and can be synced to Xero.'
+            : 'Critical issues detected. Resolve before syncing to Xero.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {result.checks.map((check) => (
+            <div key={check.id} className="flex items-start gap-3 py-2 px-3 rounded-md bg-background/60 border border-border/50">
+              {statusIcon(check.status)}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{check.label}</span>
+                  {check.severity === 'critical' && check.status === 'fail' && (
+                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Blocks Sync</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{check.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Review Component (Link My Books style) ─────────────────────────
 
 function SettlementReview({
