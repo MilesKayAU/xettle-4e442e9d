@@ -280,7 +280,7 @@ const ShopifyConnectionStatus = () => {
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-2 pt-2">
                 <Input
-                  placeholder="Admin API access token (shpat_...)"
+                  placeholder="shpat_..."
                   value={manualToken}
                   onChange={(e) => setManualToken(e.target.value)}
                   type="password"
