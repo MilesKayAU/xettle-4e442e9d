@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shopify_tokens_user_shop ON public.shopify_tokens (user_id, shop_domain);

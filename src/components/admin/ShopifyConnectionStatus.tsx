@@ -164,7 +164,7 @@ const ShopifyConnectionStatus = () => {
         shop_domain: domain,
         access_token: token,
         scope: 'custom_app',
-      }, { onConflict: 'user_id' } as any);
+      }, { onConflict: 'user_id,shop_domain' } as any);
 
       if (error) throw error;
 
@@ -274,13 +274,13 @@ const ShopifyConnectionStatus = () => {
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="w-full text-muted-foreground text-xs gap-1">
                   <Key className="h-3 w-3" />
-                  Using a Shopify Custom App? Enter your access token directly
+                  Using a Shopify Custom App instead?
                   <ChevronDown className={`h-3 w-3 transition-transform ${manualOpen ? 'rotate-180' : ''}`} />
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-2 pt-2">
                 <Input
-                  placeholder="Admin API access token (shpat_...)"
+                  placeholder="shpat_..."
                   value={manualToken}
                   onChange={(e) => setManualToken(e.target.value)}
                   type="password"
@@ -303,7 +303,7 @@ const ShopifyConnectionStatus = () => {
                       Saving...
                     </>
                   ) : (
-                    'Save token'
+                    'Save connection'
                   )}
                 </Button>
               </CollapsibleContent>
