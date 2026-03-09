@@ -682,6 +682,26 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                       </div>
                     </div>
 
+                    {/* Reconciliation check */}
+                    <div className={`rounded-md border p-3 text-xs space-y-1.5 ${parsed.reconciles ? 'border-primary/20 bg-primary/5' : 'border-destructive/30 bg-destructive/5'}`}>
+                      <p className="font-medium text-foreground">Reconciliation Check</p>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                        <span className="text-muted-foreground">Gross sales (inc GST)</span>
+                        <span className="text-right tabular-nums">{formatAUD(parsed.sales_ex_gst + parsed.gst_on_sales)}</span>
+                        <span className="text-muted-foreground">Marketplace fees (inc GST)</span>
+                        <span className="text-right tabular-nums text-destructive">-{formatAUD(Math.abs(parsed.fees_ex_gst) + parsed.gst_on_fees)}</span>
+                      </div>
+                      <div className="border-t border-border pt-1.5 grid grid-cols-2 gap-x-6">
+                        <span className="text-muted-foreground">Expected payout</span>
+                        <span className="text-right tabular-nums font-medium">{formatAUD((parsed.sales_ex_gst + parsed.gst_on_sales) - (Math.abs(parsed.fees_ex_gst) + parsed.gst_on_fees))}</span>
+                        <span className="text-muted-foreground">Settlement file</span>
+                        <span className="text-right tabular-nums font-medium">{formatAUD(parsed.net_payout)}</span>
+                      </div>
+                      <p className={`font-medium ${parsed.reconciles ? 'text-primary' : 'text-destructive'}`}>
+                        {parsed.reconciles ? '✓ Balanced — amounts match' : '⚠ Mismatch — review amounts'}
+                      </p>
+                    </div>
+
                     {parsed.settlement_id && (
                       <p className="text-xs text-muted-foreground mt-2">
                         Settlement ID: {parsed.settlement_id}
