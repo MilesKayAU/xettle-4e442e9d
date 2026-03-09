@@ -83,6 +83,7 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
   const [result, setResult] = useState<ShopifyOrdersParseResult | null>(null);
   const [unknownAssignments, setUnknownAssignments] = useState<Record<number, string>>({});
   const [pushed, setPushed] = useState(false);
+  const [showSkuManager, setShowSkuManager] = useState(false);
 
   // ─── Upload handling ──────────────────────────────────────────────
 
