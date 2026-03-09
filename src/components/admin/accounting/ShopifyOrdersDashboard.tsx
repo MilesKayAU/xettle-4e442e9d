@@ -305,6 +305,8 @@ export default function ShopifyOrdersDashboard() {
     let saved = 0;
     const newSavedIds = new Set(savedIds);
 
+    const { data: { user } } = await supabase.auth.getUser();
+
     for (const s of settlements) {
       const result = await saveSettlement(s);
       if (result.success || result.duplicate) {
@@ -313,12 +315,41 @@ export default function ShopifyOrdersDashboard() {
         if (result.duplicate) {
           toast.info(`${s.metadata?.displayName || s.marketplace} already exists — skipped.`);
         }
+
+        // Save individual orders as settlement_lines for bookkeeper drill-down
+        if (result.success && user && parseResult) {
+          const mktKey = s.metadata?.marketplaceKey;
+          const group = [...parseResult.groups, ...parseResult.unknownGroups].find(
+            g => g.marketplaceKey === mktKey && g.currency === (s.metadata?.currency || 'AUD')
+          );
+          if (group && group.orders.length > 0) {
+            const lineRows = group.orders.map(order => ({
+              user_id: user.id,
+              settlement_id: s.settlement_id,
+              order_id: order.name,
+              sku: order.lineitemSku || null,
+              amount: order.total,
+              amount_type: 'order_total',
+              amount_description: `${order.lineitemSku || 'N/A'} × ${order.lineitemQuantity}`,
+              transaction_type: 'Order',
+              posted_date: order.paidAt ? order.paidAt.split('T')[0] : null,
+              marketplace_name: s.metadata?.displayName || mktKey,
+              accounting_category: 'sales',
+            }));
+
+            // Insert in batches of 500
+            for (let i = 0; i < lineRows.length; i += 500) {
+              const batch = lineRows.slice(i, i + 500);
+              await supabase.from('settlement_lines').insert(batch as any);
+            }
+          }
+        }
       }
     }
 
     setSavedIds(newSavedIds);
     setSaving(false);
-    toast.success(`Saved ${saved} of ${settlements.length} clearing invoices`);
+    toast.success(`Saved ${saved} of ${settlements.length} clearing invoices — view in each marketplace tab`);
     loadHistory();
   };
 
