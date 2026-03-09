@@ -235,6 +235,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 }
               }
               onMarketplacesChanged?.();
+            } else if (mktCode === 'shopify_orders' && settlements.length > 0) {
+              // Shopify Orders creates tabs for each detected sub-marketplace (kogan, mydeal, etc.)
+              const subCodes = new Set(settlements.map(s => {
+                const subKey = s.metadata?.marketplaceKey;
+                return subKey || mktCode;
+              }).filter(c => c !== 'unknown' && c !== 'shopify_orders'));
+              for (const code of subCodes) {
+                if (!createdTabs.has(code)) {
+                  createdTabs.add(code);
+                  await ensureMarketplaceConnection(code);
+                }
+              }
+              onMarketplacesChanged?.();
             } else if (!createdTabs.has(mktCode)) {
               createdTabs.add(mktCode);
               await ensureMarketplaceConnection(mktCode);
