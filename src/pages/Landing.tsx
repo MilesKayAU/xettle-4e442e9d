@@ -18,6 +18,28 @@ const marketplaces = [
 ];
 
 export default function Landing() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Handle Shopify redirecting to App URL (/) instead of callback URL
+  useEffect(() => {
+    const shop = searchParams.get('shop');
+    const hmac = searchParams.get('hmac');
+    const host = searchParams.get('host');
+    const code = searchParams.get('code');
+
+    if (shop && hmac && host && !code) {
+      // Shopify app redirect without auth code — route user appropriately
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          navigate('/dashboard', { replace: true });
+        } else {
+          navigate('/auth', { replace: true });
+        }
+      });
+    }
+  }, [searchParams, navigate]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
