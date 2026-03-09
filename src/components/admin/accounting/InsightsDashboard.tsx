@@ -604,6 +604,25 @@ export default function InsightsDashboard() {
                     </div>
                   )}
 
+                  {/* After shipping estimate row */}
+                  {s.shippingCostPerOrder > 0 && s.returnAfterAdsAndShipping !== null ? (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Truck className="h-3 w-3" /> After ads & shipping (est.)
+                      </span>
+                      <span className={`font-semibold tabular-nums ${getRatioColor(s.returnAfterAdsAndShipping)}`}>
+                        ${s.returnAfterAdsAndShipping.toFixed(2)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] text-muted-foreground">Add est. shipping to see full cost</p>
+                      <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-primary" onClick={() => openShippingDialog(s.marketplace)}>
+                        <Plus className="h-3 w-3 mr-1" /> Add Shipping
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Impact insight text */}
                   {impactText && (
                     <p className="text-[11px] text-muted-foreground italic">{impactText}</p>
