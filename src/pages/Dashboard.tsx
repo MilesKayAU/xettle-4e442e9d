@@ -22,7 +22,7 @@ export default function Dashboard() {
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeView, setActiveView] = useState<DashboardView>(() => {
-    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'settlements';
+    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'smart_upload';
   });
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
