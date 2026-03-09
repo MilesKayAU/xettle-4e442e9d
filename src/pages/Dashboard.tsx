@@ -224,7 +224,7 @@ export default function Dashboard() {
             <div>
               <h2 className="text-2xl font-bold text-foreground">Smart Upload</h2>
               <p className="text-muted-foreground mt-1">
-                Drop any settlement files — Amazon TSV, Shopify CSV, Bunnings PDF, or anything else. Xettle will detect the marketplace and parse automatically.
+                Drop any settlement files — Amazon TSV, Shopify CSV, Bunnings PDF, or anything else. Xettle auto-detects the marketplace, parses your data, and if you're uploading from a new marketplace we'll set it up for you automatically. No configuration needed.
               </p>
             </div>
             <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>

@@ -414,7 +414,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 Smart Upload — Drop any settlement files
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                CSV, TSV, XLSX, PDF — Xettle auto-detects the marketplace and creates settlements
+                CSV, TSV, XLSX, PDF — Xettle auto-detects the marketplace and creates settlements. New marketplace? We'll set it up for you.
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
