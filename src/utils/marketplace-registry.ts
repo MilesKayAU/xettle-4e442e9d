@@ -12,6 +12,7 @@ export interface MarketplaceRegistryEntry {
   default_sales_account: string;
   default_shipping_account: string;
   default_clearing_account: string;
+  default_fees_account: string;
   gst_on_sales: boolean;
   /** Patterns to match in Note Attributes (case insensitive contains) */
   note_attributes_patterns?: string[];
@@ -23,6 +24,8 @@ export interface MarketplaceRegistryEntry {
   skip?: boolean;
   /** Reason for skipping */
   reason?: string;
+  /** Alias for reason — used by spec */
+  skip_reason?: string;
   /** Source of this entry */
   source?: 'built_in' | 'ai_detected' | 'user_created';
   /** AI confidence if ai_detected */
@@ -37,6 +40,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '200',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     note_attributes_patterns: ['MyDealOrderID'],
     tags_patterns: ['mydeal', 'my deal'],
@@ -50,12 +54,15 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '200',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     note_attributes_patterns: [
       'Order placed from: Bunnings',
       'Tenant_id: Bunnings',
+      'Channel_id: 0196',
     ],
     tags_patterns: ['bunnings', 'mirakl'],
+    payment_method_patterns: ['mirakl'],
     source: 'built_in',
   },
   kogan: {
@@ -65,6 +72,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '200',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     note_attributes_patterns: [
       'Order placed from: Kogan',
@@ -73,6 +81,12 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     tags_patterns: [
       'kogan',
       'cedcommerce mcf connector, kogan',
+    ],
+    payment_method_patterns: [
+      'commercium by constacloud',
+      'commercium',
+      'constacloud',
+      'kogan',
     ],
     source: 'built_in',
   },
@@ -83,6 +97,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '200',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     note_attributes_patterns: [
       'Order placed from: Big W',
@@ -98,6 +113,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '200',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     note_attributes_patterns: [
       'Everyday Market',
@@ -117,6 +133,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '200',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     note_attributes_patterns: [
       'Order placed from: Catch',
@@ -132,12 +149,14 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '200',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     note_attributes_patterns: [
       'Order placed from: eBay',
       'eBayOrderID',
     ],
     tags_patterns: ['ebay', 'EBAY'],
+    payment_method_patterns: ['ebay'],
     source: 'built_in',
   },
   paypal: {
@@ -147,6 +166,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '201',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     payment_method_patterns: [
       'paypal express checkout',
@@ -161,6 +181,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '201',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     payment_method_patterns: [
       'afterpay',
@@ -175,6 +196,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '201',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     payment_method_patterns: ['stripe'],
     source: 'built_in',
@@ -186,6 +208,7 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '201',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     payment_method_patterns: ['manual'],
     source: 'built_in',
@@ -197,9 +220,11 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
     default_sales_account: '201',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     skip: true,
-    reason: 'Handled by Shopify Payments payout CSV',
+    reason: 'Handled by Shopify Payments payout CSV — skipped',
+    skip_reason: 'Handled by Shopify Payments payout CSV — skipped',
     payment_method_patterns: [
       'shopify_payments',
       'shopify payments',
@@ -278,6 +303,7 @@ export function getRegistryEntry(key: string): MarketplaceRegistryEntry {
     default_sales_account: '201',
     default_shipping_account: '206',
     default_clearing_account: '613',
+    default_fees_account: '405',
     gst_on_sales: true,
     source: 'built_in',
   };
