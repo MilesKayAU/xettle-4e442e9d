@@ -139,6 +139,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
     setParsedPayouts([]);
     setSavedIds(new Set());
     setParseError(null);
+    setUploadWarning(null);
     setParsing(true);
 
     try {
@@ -148,6 +149,40 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
         const payouts = result.settlements;
         setParsedPayouts(payouts);
         persistState(payouts, []);
+
+        // ── Duplicate detection ──
+        const duplicateIds: string[] = [];
+        for (const p of payouts) {
+          const exactMatch = settlements.find(s => s.settlement_id === p.settlement_id);
+          const fingerprint = !exactMatch ? settlements.find(s =>
+            s.period_start === p.period_start &&
+            s.period_end === p.period_end &&
+            Math.abs((s.bank_deposit || 0) - p.net_payout) < 0.01
+          ) : null;
+          if (exactMatch || fingerprint) duplicateIds.push(p.settlement_id);
+        }
+
+        if (duplicateIds.length > 0) {
+          setUploadWarning({
+            type: 'duplicate',
+            message: duplicateIds.length === 1
+              ? `Payout ${duplicateIds[0]} already exists. Saving will skip duplicates.`
+              : `${duplicateIds.length} of ${payouts.length} payouts already exist and will be skipped on save.`,
+            duplicateIds,
+          });
+        }
+
+        // ── Gap detection ──
+        if (!duplicateIds.length && settlements.length > 0) {
+          const latestHistoryEnd = settlements[0]?.period_end;
+          const earliestParsed = [...payouts].sort((a, b) => a.period_start.localeCompare(b.period_start))[0];
+          if (latestHistoryEnd && earliestParsed && earliestParsed.period_start > latestHistoryEnd) {
+            setUploadWarning({
+              type: 'gap',
+              message: `Gap detected: last saved payout ends ${formatSettlementDate(latestHistoryEnd)}, but this upload starts ${formatSettlementDate(earliestParsed.period_start)}. You may be missing payouts.`,
+            });
+          }
+        }
 
         const reconciledCount = payouts.filter(p => p.reconciles).length;
         const total = payouts.length;
