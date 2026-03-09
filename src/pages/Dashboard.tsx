@@ -4,6 +4,7 @@ import AccountingDashboard from '@/components/admin/accounting/AccountingDashboa
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import BunningsDashboard from '@/components/admin/accounting/BunningsDashboard';
 import MarketplaceSwitcher, { MARKETPLACE_CATALOG, type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
+import MarketplaceReturnRatio from '@/components/admin/accounting/MarketplaceReturnRatio';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles } from 'lucide-react';
@@ -140,9 +141,12 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="container-custom py-8">
+      <div className="container-custom py-8 space-y-6">
+        {/* Marketplace Return Ratio — cross-marketplace insight */}
+        <MarketplaceReturnRatio />
+
         {/* Marketplace Switcher */}
-        <div className="mb-6">
+        <div>
           {!marketplacesLoading && (
             <MarketplaceSwitcher
               selectedMarketplace={selectedMarketplace}
