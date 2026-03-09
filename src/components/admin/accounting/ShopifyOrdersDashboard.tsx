@@ -605,6 +605,43 @@ export default function ShopifyOrdersDashboard() {
         </p>
       </div>
 
+      {/* Shopify connection banner */}
+      {!shopifyStatusLoading && !shopifyConnected && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="py-4">
+            <p className="text-sm font-medium mb-2">💡 Connect your Shopify store to fetch orders automatically — no CSV upload needed.</p>
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                onClick={() => {
+                  const settingsTab = document.querySelector('[data-value="settings"]') as HTMLElement;
+                  if (settingsTab) settingsTab.click();
+                  else toast.info('Go to Settings → Shopify Integration to connect your store');
+                }}
+              >
+                Connect Shopify →
+              </Button>
+              <span className="text-xs text-muted-foreground">Or continue uploading CSV manually</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {!shopifyStatusLoading && shopifyConnected && shopifyShopDomain && (
+        <Card className="border-green-400/30 bg-green-50/20 dark:bg-green-950/10">
+          <CardContent className="py-3 flex items-center justify-between">
+            <p className="text-sm font-medium flex items-center gap-2">
+              🛍 <span className="text-muted-foreground">{shopifyShopDomain}</span> Connected ✅
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => toast.info('Auto-fetch coming soon — use CSV upload in the meantime')}
+            >
+              Fetch latest orders
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="upload" className="gap-1.5">
