@@ -1,38 +1,87 @@
 /**
- * Shopify Orders CSV Parser
+ * Shopify Orders CSV Parser — Registry-based marketplace splitter
  * 
- * Parses Shopify's Orders export CSV and groups by payment gateway
- * to create $0.00 clearing invoices for each non-Shopify-Payments gateway.
+ * Parses Shopify's Orders export CSV, detects marketplace per row using
+ * the central marketplace registry (Note Attributes → Tags → Payment Method),
+ * groups by marketplace + currency, and creates $0.00 clearing invoices.
  * 
- * Fingerprint: columns contain 'Payment Method' AND 'Financial Status' AND 'Paid at'
- * marketplace_code: 'shopify_orders'
+ * Fingerprint: columns contain Name, Financial Status, Paid at, Subtotal,
+ * Shipping, Taxes, Total, Payment Method, Note Attributes, Tags
+ * 
+ * marketplace_code per group: 'shopify_orders_{registry_key}'
  * source: 'csv_upload'
- * 
- * FLOW:
- * 1. Filter rows where Financial Status = 'paid'
- * 2. Group by Payment Method
- * 3. Skip 'shopify_payments' (handled by Shopify Payments payout CSV)
- * 4. Per gateway: create one $0.00 clearing invoice with 3 lines:
- *    - Shopify Sales (Subtotal / 1.1, GST on Income)
- *    - Shopify Shipping Revenue (Shipping / 1.1, GST on Income)
- *    - Gateway Clearing (-Total, BAS Excluded)
  */
 
 import type { StandardSettlement } from './settlement-engine';
+import {
+  MARKETPLACE_REGISTRY,
+  detectMarketplaceFromRow,
+  getRegistryEntry,
+  type MarketplaceRegistryEntry,
+} from './marketplace-registry';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface ShopifyOrderRow {
-  name: string;           // Order name (#1001)
+  name: string;
   financialStatus: string;
   paymentMethod: string;
   paidAt: string;
-  subtotal: number;       // Incl GST
-  shipping: number;       // Incl GST
-  total: number;          // Full order total
+  subtotal: number;
+  shipping: number;
+  taxes: number;
+  total: number;
+  discountAmount: number;
   currency: string;
+  noteAttributes: string;
+  tags: string;
+  detectedMarketplace: string; // registry key
 }
 
+export interface MarketplaceGroup {
+  marketplaceKey: string;        // registry key (e.g. 'mydeal', 'paypal')
+  registryEntry: MarketplaceRegistryEntry;
+  orders: ShopifyOrderRow[];
+  orderCount: number;
+  totalSubtotal: number;
+  totalShipping: number;
+  totalTaxes: number;
+  totalAmount: number;
+  totalDiscounts: number;
+  periodStart: string;
+  periodEnd: string;
+  currency: string;
+  skipped: boolean;
+  skipReason?: string;
+  /** Status for review UI */
+  status: 'ready' | 'skipped' | 'needs_review' | 'unknown';
+  /** Sample note attributes for unknown groups */
+  sampleNoteAttributes?: string[];
+  /** Sample tags for unknown groups */
+  sampleTags?: string[];
+}
+
+export interface ShopifyOrdersParseResult {
+  success: true;
+  groups: MarketplaceGroup[];
+  skippedGroups: MarketplaceGroup[];
+  unknownGroups: MarketplaceGroup[];
+  unpaidCount: number;
+  totalOrderCount: number;
+  paidCount: number;
+  settlements: StandardSettlement[];
+  periodStart: string;
+  periodEnd: string;
+}
+
+export interface ShopifyOrdersParseError {
+  success: false;
+  error: string;
+}
+
+export type ShopifyOrdersResult = ShopifyOrdersParseResult | ShopifyOrdersParseError;
+
+// Keep old types for backward compat
 export interface GatewayGroup {
   gateway: string;
   gatewayLabel: string;
@@ -43,24 +92,8 @@ export interface GatewayGroup {
   orderCount: number;
   periodStart: string;
   periodEnd: string;
-  skipped: boolean;       // true for shopify_payments
+  skipped: boolean;
 }
-
-export interface ShopifyOrdersParseResult {
-  success: true;
-  gateways: GatewayGroup[];
-  skippedGateways: GatewayGroup[];
-  unpaidCount: number;
-  totalOrderCount: number;
-  settlements: StandardSettlement[];
-}
-
-export interface ShopifyOrdersParseError {
-  success: false;
-  error: string;
-}
-
-export type ShopifyOrdersResult = ShopifyOrdersParseResult | ShopifyOrdersParseError;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -70,7 +103,7 @@ function round2(n: number): number {
 
 function parseAmount(raw: string): number {
   if (!raw) return 0;
-  const cleaned = raw.replace(/[^0-9.\-,]/g, '').replace(/,/g, '');
+  const cleaned = raw.replace(/[^0-9.\\-,]/g, '').replace(/,/g, '');
   const val = parseFloat(cleaned);
   return isNaN(val) ? 0 : val;
 }
@@ -78,27 +111,16 @@ function parseAmount(raw: string): number {
 function normaliseDate(raw: string): string {
   if (!raw) return '';
   const trimmed = raw.trim();
-
-  // ISO: 2026-01-15T10:30:00+1100 or 2026-01-15
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-    return trimmed.substring(0, 10);
-  }
-
-  // DD/MM/YYYY or MM/DD/YYYY
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.substring(0, 10);
   const slashParts = trimmed.split(/[\/ ]/)[0]?.split('/');
   if (slashParts && slashParts.length === 3) {
     const [a, b, c] = slashParts;
-    // Assume DD/MM/YYYY for AU
-    if (parseInt(c) > 100) {
-      return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-    }
+    if (parseInt(c) > 100) return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
   }
-
   try {
     const d = new Date(trimmed);
     if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
   } catch { /* fall through */ }
-
   return trimmed;
 }
 
@@ -106,12 +128,11 @@ function parseCSVRow(line: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
-
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
-        current += '"';
+    if (ch === '\"') {
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '\"') {
+        current += '\"';
         i++;
       } else {
         inQuotes = !inQuotes;
@@ -125,33 +146,6 @@ function parseCSVRow(line: string): string[] {
   }
   result.push(current);
   return result;
-}
-
-const SHOPIFY_PAYMENTS_ALIASES = new Set([
-  'shopify_payments',
-  'shopify payments',
-  'shopify',
-]);
-
-function normaliseGateway(raw: string): string {
-  return raw.trim().toLowerCase().replace(/\s+/g, '_');
-}
-
-function gatewayLabel(raw: string): string {
-  const normalised = normaliseGateway(raw);
-  const labels: Record<string, string> = {
-    paypal: 'PayPal',
-    afterpay: 'Afterpay',
-    afterpay_v2: 'Afterpay',
-    stripe: 'Stripe',
-    shopify_payments: 'Shopify Payments',
-    zip: 'Zip Pay',
-    klarna: 'Klarna',
-    manual: 'Manual Payment',
-    bank_deposit: 'Bank Deposit',
-    cash: 'Cash',
-  };
-  return labels[normalised] || raw.trim().split(/[\s_]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 function monthYear(dateStr: string): string {
@@ -172,8 +166,12 @@ interface ColumnMap {
   paidAt: number;
   subtotal: number;
   shipping: number;
+  taxes: number;
   total: number;
+  discountAmount: number;
   currency: number;
+  noteAttributes: number;
+  tags: number;
 }
 
 const COLUMN_PATTERNS: Record<keyof ColumnMap, RegExp[]> = {
@@ -183,29 +181,29 @@ const COLUMN_PATTERNS: Record<keyof ColumnMap, RegExp[]> = {
   paidAt:          [/^paid\s*at$/i, /^paid\s*date$/i],
   subtotal:        [/^subtotal$/i, /^sub\s*total$/i],
   shipping:        [/^shipping$/i, /^shipping\s*amount$/i],
+  taxes:           [/^taxes$/i, /^tax$/i, /^tax\s*amount$/i],
   total:           [/^total$/i],
+  discountAmount:  [/^discount\s*amount$/i, /^discounts?$/i, /^discount\s*code$/i],
   currency:        [/^currency$/i],
+  noteAttributes:  [/^note\s*attributes$/i, /^notes?\s*attributes?$/i, /^note$/i],
+  tags:            [/^tags$/i],
 };
 
 function matchColumns(headers: string[]): ColumnMap | null {
-  const lower = headers.map(h => h.toLowerCase().trim());
   const map: Partial<ColumnMap> = {};
-
   for (const [key, patterns] of Object.entries(COLUMN_PATTERNS)) {
     for (const pattern of patterns) {
-      const idx = lower.findIndex(h => pattern.test(h));
+      const idx = headers.findIndex(h => pattern.test(h.trim()));
       if (idx !== -1 && !(key in map)) {
         map[key as keyof ColumnMap] = idx;
         break;
       }
     }
   }
-
   // Require minimum: financialStatus, paymentMethod, total
   if (map.financialStatus === undefined || map.paymentMethod === undefined || map.total === undefined) {
     return null;
   }
-
   return {
     name:            map.name ?? -1,
     financialStatus: map.financialStatus!,
@@ -213,14 +211,23 @@ function matchColumns(headers: string[]): ColumnMap | null {
     paidAt:          map.paidAt ?? -1,
     subtotal:        map.subtotal ?? -1,
     shipping:        map.shipping ?? -1,
+    taxes:           map.taxes ?? -1,
     total:           map.total!,
+    discountAmount:  map.discountAmount ?? -1,
     currency:        map.currency ?? -1,
+    noteAttributes:  map.noteAttributes ?? -1,
+    tags:            map.tags ?? -1,
   };
 }
 
 // ─── Main Parser ────────────────────────────────────────────────────────────
 
-export function parseShopifyOrdersCSV(csvContent: string): ShopifyOrdersResult {
+export function parseShopifyOrdersCSV(
+  csvContent: string,
+  options?: { taxRate?: number }
+): ShopifyOrdersResult {
+  const taxRate = options?.taxRate ?? 0.10;
+
   try {
     const lines = csvContent.split('\n').filter(l => l.trim().length > 0);
     if (lines.length < 2) {
@@ -247,13 +254,19 @@ export function parseShopifyOrdersCSV(csvContent: string): ShopifyOrdersResult {
       const financialStatus = colMap.financialStatus >= 0 ? fields[colMap.financialStatus]?.trim().toLowerCase() : '';
       const paymentMethod = colMap.paymentMethod >= 0 ? fields[colMap.paymentMethod]?.trim() : '';
 
-      if (!paymentMethod) continue;
+      if (!paymentMethod && !financialStatus) continue;
 
       // Only include paid orders
       if (financialStatus !== 'paid') {
         unpaidCount++;
         continue;
       }
+
+      const noteAttributes = colMap.noteAttributes >= 0 ? fields[colMap.noteAttributes]?.trim() || '' : '';
+      const tags = colMap.tags >= 0 ? fields[colMap.tags]?.trim() || '' : '';
+
+      // Detect marketplace using registry
+      const detectedMarketplace = detectMarketplaceFromRow(noteAttributes, tags, paymentMethod);
 
       allOrders.push({
         name: colMap.name >= 0 ? fields[colMap.name]?.trim() || '' : '',
@@ -262,8 +275,13 @@ export function parseShopifyOrdersCSV(csvContent: string): ShopifyOrdersResult {
         paidAt: colMap.paidAt >= 0 ? normaliseDate(fields[colMap.paidAt]?.trim() || '') : '',
         subtotal: colMap.subtotal >= 0 ? parseAmount(fields[colMap.subtotal] || '') : 0,
         shipping: colMap.shipping >= 0 ? parseAmount(fields[colMap.shipping] || '') : 0,
+        taxes: colMap.taxes >= 0 ? parseAmount(fields[colMap.taxes] || '') : 0,
         total: parseAmount(fields[colMap.total] || ''),
+        discountAmount: colMap.discountAmount >= 0 ? parseAmount(fields[colMap.discountAmount] || '') : 0,
         currency: colMap.currency >= 0 ? fields[colMap.currency]?.trim().toUpperCase() || 'AUD' : 'AUD',
+        noteAttributes,
+        tags,
+        detectedMarketplace,
       });
     }
 
@@ -271,103 +289,151 @@ export function parseShopifyOrdersCSV(csvContent: string): ShopifyOrdersResult {
       return { success: false, error: 'No paid orders found in the CSV.' };
     }
 
-    // ── Group by payment method ──
+    // ── Group by marketplace_key + currency ──
+    const groupKey = (order: ShopifyOrderRow) => `${order.detectedMarketplace}_${order.currency}`;
     const groupMap = new Map<string, ShopifyOrderRow[]>();
     for (const order of allOrders) {
-      const key = normaliseGateway(order.paymentMethod);
+      const key = groupKey(order);
       if (!groupMap.has(key)) groupMap.set(key, []);
       groupMap.get(key)!.push(order);
     }
 
-    const gateways: GatewayGroup[] = [];
-    const skippedGateways: GatewayGroup[] = [];
+    const readyGroups: MarketplaceGroup[] = [];
+    const skippedGroups: MarketplaceGroup[] = [];
+    const unknownGroups: MarketplaceGroup[] = [];
 
     for (const [key, orders] of groupMap) {
-      const isShopifyPayments = SHOPIFY_PAYMENTS_ALIASES.has(key);
+      const [mktKey] = key.split('_');
+      // Extract the actual marketplace key (may have underscores)
+      const lastUnderscoreIdx = key.lastIndexOf('_');
+      const actualMktKey = key.substring(0, lastUnderscoreIdx);
+      const currency = key.substring(lastUnderscoreIdx + 1);
+
+      const entry = getRegistryEntry(actualMktKey);
       const dates = orders.map(o => o.paidAt).filter(Boolean).sort();
-      
-      const group: GatewayGroup = {
-        gateway: key,
-        gatewayLabel: gatewayLabel(orders[0].paymentMethod),
+
+      // Sample data for unknown groups
+      const uniqueNotes = [...new Set(orders.map(o => o.noteAttributes).filter(Boolean))].slice(0, 3);
+      const uniqueTags = [...new Set(orders.map(o => o.tags).filter(Boolean))].slice(0, 3);
+
+      const group: MarketplaceGroup = {
+        marketplaceKey: actualMktKey,
+        registryEntry: entry,
         orders,
+        orderCount: orders.length,
         totalSubtotal: round2(orders.reduce((s, o) => s + o.subtotal, 0)),
         totalShipping: round2(orders.reduce((s, o) => s + o.shipping, 0)),
+        totalTaxes: round2(orders.reduce((s, o) => s + o.taxes, 0)),
         totalAmount: round2(orders.reduce((s, o) => s + o.total, 0)),
-        orderCount: orders.length,
+        totalDiscounts: round2(orders.reduce((s, o) => s + o.discountAmount, 0)),
         periodStart: dates[0] || '',
         periodEnd: dates[dates.length - 1] || '',
-        skipped: isShopifyPayments,
+        currency,
+        skipped: !!entry.skip,
+        skipReason: entry.reason,
+        status: entry.skip ? 'skipped' : (actualMktKey === 'unknown' ? 'unknown' : 'ready'),
+        sampleNoteAttributes: uniqueNotes,
+        sampleTags: uniqueTags,
       };
 
-      if (isShopifyPayments) {
-        skippedGateways.push(group);
+      if (entry.skip) {
+        skippedGroups.push(group);
+      } else if (actualMktKey === 'unknown') {
+        unknownGroups.push(group);
       } else {
-        gateways.push(group);
+        readyGroups.push(group);
       }
     }
 
-    // Sort gateways by order count descending
-    gateways.sort((a, b) => b.orderCount - a.orderCount);
+    // Sort by order count descending
+    readyGroups.sort((a, b) => b.orderCount - a.orderCount);
+    unknownGroups.sort((a, b) => b.orderCount - a.orderCount);
 
-    // ── Build StandardSettlements for each non-skipped gateway ──
-    const settlements: StandardSettlement[] = gateways.map(g => {
-      const GST_DIVISOR = 1.1;
-      const salesInclGst = g.totalSubtotal;
-      const shippingInclGst = g.totalShipping;
-      const clearingAmount = -g.totalAmount; // negative to zero out
+    // ── Build StandardSettlements for ready groups ──
+    const settlements = buildSettlementsFromGroups(readyGroups, taxRate);
 
-      const salesExGst = round2(salesInclGst / GST_DIVISOR);
-      const shippingExGst = round2(shippingInclGst / GST_DIVISOR);
-      const gstOnSales = round2(salesInclGst - salesExGst);
-      const gstOnShipping = round2(shippingInclGst - shippingExGst);
-
-      const settlementId = `shopify_${g.gateway}_${g.periodStart}_${g.periodEnd}`;
-      const label = g.gatewayLabel;
-      const period = monthYear(g.periodStart);
-
-      return {
-        marketplace: 'shopify_orders',
-        settlement_id: settlementId,
-        period_start: g.periodStart,
-        period_end: g.periodEnd,
-        sales_ex_gst: salesExGst,
-        gst_on_sales: round2(gstOnSales + gstOnShipping),
-        fees_ex_gst: 0, // No fees — clearing invoice
-        gst_on_fees: 0,
-        net_payout: 0,   // $0.00 invoice
-        source: 'csv_upload',
-        reconciles: true, // Always reconciles because it's $0.00
-        metadata: {
-          gateway: g.gateway,
-          gatewayLabel: label,
-          orderCount: g.orderCount,
-          salesInclGst,
-          shippingInclGst,
-          shippingExGst,
-          gstOnShipping,
-          clearingAmount,
-          reference: `Shopify ${label} ${period}`,
-          contactName: label,
-          invoiceType: 'clearing',
-          // Account codes (defaults, user-configurable)
-          salesAccountCode: '201',
-          shippingAccountCode: '206',
-          clearingAccountCode: '613',
-        },
-      };
-    });
+    // Overall period
+    const allDates = allOrders.map(o => o.paidAt).filter(Boolean).sort();
 
     return {
       success: true,
-      gateways,
-      skippedGateways,
+      groups: readyGroups,
+      skippedGroups,
+      unknownGroups,
       unpaidCount,
       totalOrderCount: allOrders.length + unpaidCount,
+      paidCount: allOrders.length,
       settlements,
+      periodStart: allDates[0] || '',
+      periodEnd: allDates[allDates.length - 1] || '',
     };
   } catch (err: any) {
     return { success: false, error: `CSV parsing failed: ${err.message || 'Unknown error'}` };
   }
+}
+
+// ─── Settlement Builder ─────────────────────────────────────────────────────
+
+export function buildSettlementsFromGroups(
+  groups: MarketplaceGroup[],
+  taxRate: number = 0.10
+): StandardSettlement[] {
+  return groups.map(g => {
+    const entry = g.registryEntry;
+    const divisor = 1 + taxRate;
+
+    const salesInclGst = g.totalSubtotal;
+    const shippingInclGst = g.totalShipping;
+    const salesExGst = round2(salesInclGst / divisor);
+    const shippingExGst = round2(shippingInclGst / divisor);
+    const gstOnSales = round2(salesInclGst - salesExGst);
+    const gstOnShipping = round2(shippingInclGst - shippingExGst);
+    const clearingAmount = -g.totalAmount;
+
+    const marketplaceCode = `shopify_orders_${g.marketplaceKey}`;
+    const settlementId = `shopify_orders_${g.marketplaceKey}_${g.currency}_${g.periodStart}_${g.periodEnd}`;
+    const period = monthYear(g.periodStart);
+
+    // Verify $0.00 balance
+    const invoiceTotal = round2(salesInclGst + shippingInclGst + clearingAmount);
+    const balances = Math.abs(invoiceTotal) < 0.02;
+
+    return {
+      marketplace: marketplaceCode,
+      settlement_id: settlementId,
+      period_start: g.periodStart,
+      period_end: g.periodEnd,
+      sales_ex_gst: salesExGst,
+      gst_on_sales: round2(gstOnSales + gstOnShipping),
+      fees_ex_gst: 0,
+      gst_on_fees: 0,
+      net_payout: 0,
+      source: 'csv_upload' as const,
+      reconciles: balances,
+      metadata: {
+        marketplaceKey: g.marketplaceKey,
+        displayName: entry.display_name,
+        contactName: entry.contact_name,
+        orderCount: g.orderCount,
+        currency: g.currency,
+        salesInclGst,
+        shippingInclGst,
+        salesExGst,
+        shippingExGst,
+        gstOnSales,
+        gstOnShipping,
+        clearingAmount,
+        invoiceTotal,
+        reference: `${entry.display_name} Orders ${period}`,
+        invoiceType: 'clearing',
+        salesAccountCode: entry.default_sales_account,
+        shippingAccountCode: entry.default_shipping_account,
+        clearingAccountCode: entry.default_clearing_account,
+        paymentType: entry.payment_type,
+        taxRate,
+      },
+    };
+  });
 }
 
 // ─── Xero Invoice Line Builder ──────────────────────────────────────────────
@@ -377,6 +443,7 @@ export interface XeroLineItem {
   AccountCode: string;
   TaxType: string;
   UnitAmount: number;
+  TaxAmount?: number;
   Quantity: number;
 }
 
@@ -388,38 +455,42 @@ export function buildShopifyOrdersInvoiceLines(
   const salesCode = accountCodes?.sales || meta.salesAccountCode || '201';
   const shippingCode = accountCodes?.shipping || meta.shippingAccountCode || '206';
   const clearingCode = accountCodes?.clearing || meta.clearingAccountCode || '613';
+  const displayName = meta.displayName || meta.contactName || 'Marketplace';
 
   const lines: XeroLineItem[] = [];
 
-  // Line 1: Shopify Sales - Principal (ex GST)
-  if (settlement.sales_ex_gst !== 0) {
+  // Line 1: Sales (ex GST + explicit tax amount)
+  if (meta.salesExGst && meta.salesExGst !== 0) {
     lines.push({
-      Description: `Shopify Sales - ${meta.gatewayLabel || 'Gateway'}`,
+      Description: `${displayName} Sales — ${meta.orderCount} orders ${settlement.period_start} to ${settlement.period_end}`,
       AccountCode: salesCode,
-      TaxType: 'OUTPUT', // GST on Income
-      UnitAmount: round2(settlement.sales_ex_gst),
+      TaxType: 'OUTPUT',
+      UnitAmount: round2(meta.salesExGst),
+      TaxAmount: round2(meta.gstOnSales || 0),
       Quantity: 1,
     });
   }
 
-  // Line 2: Shopify Shipping Revenue (ex GST)
+  // Line 2: Shipping Revenue (ex GST + explicit tax amount)
   if (meta.shippingExGst && meta.shippingExGst !== 0) {
     lines.push({
-      Description: `Shopify Shipping Revenue - ${meta.gatewayLabel || 'Gateway'}`,
+      Description: `${displayName} Shipping Revenue`,
       AccountCode: shippingCode,
-      TaxType: 'OUTPUT', // GST on Income
+      TaxType: 'OUTPUT',
       UnitAmount: round2(meta.shippingExGst),
+      TaxAmount: round2(meta.gstOnShipping || 0),
       Quantity: 1,
     });
   }
 
-  // Line 3: Gateway Clearing (negative, BAS Excluded)
+  // Line 3: Clearing (negative total, BAS Excluded)
   if (meta.clearingAmount && meta.clearingAmount !== 0) {
     lines.push({
-      Description: `${meta.gatewayLabel || 'Gateway'} Clearing`,
+      Description: `Awaiting ${displayName} settlement payment — match to account ${clearingCode} when bank transfer received`,
       AccountCode: clearingCode,
-      TaxType: 'BASEXCLUDED', // BAS Excluded
+      TaxType: 'BASEXCLUDED',
       UnitAmount: round2(meta.clearingAmount),
+      TaxAmount: 0,
       Quantity: 1,
     });
   }
@@ -429,7 +500,6 @@ export function buildShopifyOrdersInvoiceLines(
 
 // ─── Fingerprint Check ──────────────────────────────────────────────────────
 
-/** Quick check: does this CSV look like a Shopify Orders export? */
 export function isShopifyOrdersCSV(headers: string[]): boolean {
   const lower = headers.map(h => h.toLowerCase().trim());
   const hasPaymentMethod = lower.some(h => /^payment\s*method$/i.test(h));
