@@ -1,54 +1,96 @@
 
 
-# Plan: Extract Accounting Module into Independent App
+## Plan: Add Advertising Spend Layer to Insights Dashboard
 
-## What You Have (Module Inventory)
+### 1. Database Migration
 
-The accounting module is self-contained with these components:
+Create `marketplace_ad_spend` table with unique constraint and `updated_at`:
 
-| Layer | Files | Lines |
-|-------|-------|-------|
-| **UI** | `src/components/admin/accounting/AccountingDashboard.tsx` | ~3,490 |
-| **Parser** | `src/utils/settlement-parser.ts` | ~716 |
-| **Xero Invoice Sync** | `supabase/functions/sync-amazon-journal/index.ts` | ~450 |
-| **Xero OAuth** | `supabase/functions/xero-auth/index.ts` | existing |
-| **Xero Connection UI** | `src/components/admin/XeroConnectionStatus.tsx` | existing |
-| **Xero Callback Page** | `src/pages/XeroCallback.tsx` | existing |
+```sql
+CREATE TABLE public.marketplace_ad_spend (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  marketplace_code text NOT NULL,
+  period_start date NOT NULL,
+  period_end date NOT NULL,
+  spend_amount numeric NOT NULL DEFAULT 0,
+  currency text NOT NULL DEFAULT 'AUD',
+  source text NOT NULL DEFAULT 'manual',
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id, marketplace_code, period_start)
+);
 
-**Database tables**: `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
+ALTER TABLE public.marketplace_ad_spend ENABLE ROW LEVEL SECURITY;
 
-**Secrets needed**: `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `RESEND_API_KEY` (for notifications)
+-- RLS: users own their records
+CREATE POLICY "Users can select own ad spend" ON public.marketplace_ad_spend FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own ad spend" ON public.marketplace_ad_spend FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own ad spend" ON public.marketplace_ad_spend FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own ad spend" ON public.marketplace_ad_spend FOR DELETE USING (auth.uid() = user_id);
 
-## Recommended Approach
+-- updated_at trigger
+CREATE TRIGGER update_marketplace_ad_spend_updated_at
+  BEFORE UPDATE ON public.marketplace_ad_spend
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+```
 
-**Create a new Lovable project** and port the accounting module as the primary app. This is the cleanest path because:
+### 2. InsightsDashboard.tsx Changes
 
-1. You get a fresh Supabase instance (clean DB, no legacy tables)
-2. Independent deployment and domain
-3. Own auth system focused on bookkeeper access
-4. No risk of breaking the Miles Kay e-commerce site
+**Data loading** -- fetch `marketplace_ad_spend` alongside settlements, aggregate ad spend by marketplace using monthly grouping.
 
-## What the New App Would Include
+**"Return per $1 Sold" section** -- for each marketplace:
+- Show current marketplace return bar (unchanged)
+- Below it, show "After advertising" line:
+  - If ad data exists: muted/lighter bar + value like `$0.67`
+  - If no ad data: subtle placeholder -- *"After advertising: — Add ad spend to calculate true return"* with `[Add Ad Spend]` button
+- Add stacked `$1 Sale Breakdown` visualization showing Net Kept | Ads | Fees segments
 
-1. **Auth** — Supabase email auth with admin role
-2. **Dashboard** — The AccountingDashboard as the main page (upload, review, history, settings tabs)
-3. **Settlement Parser** — `settlement-parser.ts` copied directly
-4. **Edge Functions** — `sync-amazon-journal` and `xero-auth` deployed to new Supabase
-5. **Xero Integration** — OAuth connection UI + callback page
-6. **Settings** — Account code configuration, GST rate
-7. **Database** — Migrations for `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
+**Insight messages:**
+- "Advertising reduced your Amazon return by 18%"
+- "Bunnings currently returns $0.21 more per $1 sold than Amazon"
 
-## What I Cannot Do From Here
+**Ad Spend Input Dialog:**
+- Triggered from "Add Ad Spend" button (per marketplace)
+- Fields: Month picker, Spend amount, Currency (default AUD), Notes (optional)
+- Saves to `marketplace_ad_spend` with `source = 'manual'`
+- Upserts on the unique constraint to allow editing
 
-Lovable cannot programmatically create a separate project or copy files between projects. You would need to:
+**Fee Intelligence table:**
+- Add "Ad Spend" and "After Ads" columns (show `—` when no data)
 
-1. **Create a new Lovable project** (click + New Project)
-2. **Come back here** and I can help you prepare all the code as a single prompt to paste into the new project, or you can reference this project
-3. Alternatively, **remix this project** (Settings → Remix) and then strip out everything except the accounting module
+**Marketplace Overview cards:**
+- Add ad spend row if data exists, otherwise show "No ad data" prompt
 
-## Recommended Next Step
+**Tooltips on formulas:**
+- Marketplace return: "Net settlement / Gross sales"
+- Return after ads: "(Net settlement - Ad spend) / Gross sales"
 
-**Remix this project**, then in the new remixed project, ask me to strip it down to only the accounting module — removing all e-commerce pages (Products, Blog, Contact, Distributors, Where To Buy, etc.), the Alibaba invoice system, logistics, and Amazon product sync. This preserves all the accounting code, edge functions, and database schema intact while giving you an independent app.
+**Calculation safeguards:**
+- `if (grossSales <= 0) return null` -- prevent divide-by-zero
+- Clamp `returnAfterAds` to minimum `-1` to ignore impossible values
+- Monthly aggregation: group settlements by `month(period_end)` before matching to ad spend periods
 
-The remix approach is fastest because all code, edge functions, and Supabase config carry over. You'd just need to connect a new Supabase project and run the database migrations.
+### 3. Period Matching Logic
+
+```text
+settlements grouped by: YYYY-MM of period_end
+ad_spend grouped by:    YYYY-MM of period_start
+join on:                marketplace + month
+```
+
+This avoids mismatched ratios from settlements spanning months.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| New migration | Create `marketplace_ad_spend` table + RLS + trigger |
+| `InsightsDashboard.tsx` | Ad spend fetch, dual-layer metrics, stacked bars, input dialog, insight messages, tooltips, safeguards |
+
+### What's NOT Changing
+
+- Settlement engine, parser, Xero sync -- all unchanged
+- Ad spend is analytics only -- never pushed to Xero
 
