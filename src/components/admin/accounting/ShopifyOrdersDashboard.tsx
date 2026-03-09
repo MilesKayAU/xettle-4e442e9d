@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ShopifyOnboarding from './ShopifyOnboarding';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -83,6 +84,7 @@ function statusBadge(status: string) {
 }
 
 export default function ShopifyOrdersDashboard() {
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -122,6 +124,21 @@ export default function ShopifyOrdersDashboard() {
   }, []);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  // Show onboarding when no history and no file uploaded yet
+  useEffect(() => {
+    if (!historyLoading && history.length === 0 && !file && !parseResult) {
+      setShowOnboarding(true);
+    }
+  }, [historyLoading, history.length, file, parseResult]);
+
+  const handleOnboardingComplete = (result: ShopifyOrdersParseResult) => {
+    setShowOnboarding(false);
+    setParseResult(result);
+    setSettlements(result.settlements);
+    setActiveTab('review');
+    toast.success(`${result.paidCount} paid orders parsed — ${result.groups.length} source${result.groups.length !== 1 ? 's' : ''} detected`);
+  };
 
   // ─── Upload & Parse ─────────────────────────────────────────────────
 
@@ -446,6 +463,16 @@ export default function ShopifyOrdersDashboard() {
   };
 
   const allSaved = settlements.length > 0 && settlements.every(s => savedIds.has(s.settlement_id));
+
+  // Show onboarding flow for first-time users
+  if (showOnboarding && !historyLoading) {
+    return (
+      <ShopifyOnboarding
+        onComplete={handleOnboardingComplete}
+        onMarketplacesChanged={loadHistory}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
