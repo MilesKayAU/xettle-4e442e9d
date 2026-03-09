@@ -22,8 +22,13 @@ Deno.serve(async (req) => {
       } catch {}
     }
 
-    const SHOPIFY_CLIENT_ID = Deno.env.get('SHOPIFY_CLIENT_ID')
-    const SHOPIFY_CLIENT_SECRET = Deno.env.get('SHOPIFY_CLIENT_SECRET')
+    const isDev = Deno.env.get('SHOPIFY_DEV_MODE') === 'true'
+    const SHOPIFY_CLIENT_ID = isDev
+      ? Deno.env.get('SHOPIFY_DEV_CLIENT_ID')
+      : Deno.env.get('SHOPIFY_CLIENT_ID')
+    const SHOPIFY_CLIENT_SECRET = isDev
+      ? Deno.env.get('SHOPIFY_DEV_CLIENT_SECRET')
+      : Deno.env.get('SHOPIFY_CLIENT_SECRET')
 
     if (!SHOPIFY_CLIENT_ID || !SHOPIFY_CLIENT_SECRET) {
       console.error('Missing Shopify credentials')
