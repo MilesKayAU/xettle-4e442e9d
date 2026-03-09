@@ -4,6 +4,7 @@ import { useAdminAuth } from '@/hooks/use-admin-auth';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
+import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyReconciliationStatus';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
