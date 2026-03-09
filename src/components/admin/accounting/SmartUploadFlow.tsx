@@ -613,7 +613,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               ) : (
                 <CheckCircle2 className="h-5 w-5" />
               )}
-              Create All {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} & Prepare for Xero
+              Save All {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} for Review
             </Button>
           )}
 
@@ -645,7 +645,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      ✓ Ready to create settlements & prepare for Xero
+                      ✓ Ready to save for review
                     </p>
                   </div>
                   <Button
@@ -658,7 +658,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     ) : (
                       <CheckCircle2 className="h-4 w-4" />
                     )}
-                    Create {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} & Prepare for Xero
+                    Save {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} for Review
                   </Button>
                 </div>
               </CardContent>
