@@ -1,5 +1,3 @@
-
-
 # Plan: Extract Accounting Module into Independent App
 
 ## What You Have (Module Inventory)
@@ -52,3 +50,77 @@ Lovable cannot programmatically create a separate project or copy files between 
 
 The remix approach is fastest because all code, edge functions, and Supabase config carry over. You'd just need to connect a new Supabase project and run the database migrations.
 
+---
+
+# Marketplace Dashboard Standard
+
+Every new marketplace dashboard MUST include the following features before shipping. This serves as the architectural checklist for building marketplace parsers and their UI.
+
+## Required Features
+
+### 1. CSV Upload & Parse
+- File marketplace detection (reject wrong-marketplace files with warning)
+- Auto-detect CSV format variations if applicable
+- Parse into `StandardSettlement` via marketplace-specific parser
+
+### 2. Duplicate Detection (on parse)
+- **Exact match**: Check `settlement_id + marketplace` against existing `settlements` table
+- **Fingerprint match**: Same `period_start + period_end + bank_deposit (±$0.01)`
+- Show warning banner in review tab for duplicates
+- Mark duplicate payouts visually (dimmed, "Duplicate" badge)
+- `saveSettlement()` in settlement-engine.ts handles server-side dedup as final guard
+
+### 3. Gap Detection (on parse)
+- Compare earliest parsed payout's `period_start` against latest saved settlement's `period_end`
+- If gap exists, show orange warning banner: "Gap detected — you may be missing payouts"
+
+### 4. Reconciliation Checks (review tab)
+- Run `runUniversalReconciliation()` on each parsed settlement
+- Display checks inline with expandable "Checks" button per payout card
+- Show pass/warn/fail icons with detail text per check
+- Block Xero sync if `canSync === false` (critical failures)
+- Checks include: Balance, GST Consistency, Refund Completeness, Sanity, Historical Deviation, Invoice Accuracy
+
+### 5. Review Tab — Individual Payout Management
+- Dismiss/remove button (X) on each payout card (removes from parsed array, not DB)
+- Persisted state in localStorage across page refreshes
+- Clear All button
+- Save All → Push All to Xero flow
+
+### 6. History Tab — Bulk Operations
+- Select one / Select all checkboxes
+- Bulk delete with confirmation dialog
+- **Xero sync-aware bulk delete**: Count synced items in selection, show breakdown ("3 selected, 1 synced to Xero"), warn that Xero invoices won't be removed
+- Individual delete for ALL statuses including `synced` (with confirmation dialog for synced items)
+- "Xero ✓" badge on synced items when selected
+- Push to Xero button for saved/parsed items
+- Single-item delete for synced items with warning dialog
+
+### 7. Xero Sync
+- Use `syncSettlementToXero()` from settlement-engine.ts
+- Build marketplace-specific invoice lines via `buildXInvoiceLines()` function
+- Run `runUniversalReconciliation()` before sync — skip if `canSync === false`
+- Contact name from `MARKETPLACE_CONTACTS` map in settlement-engine.ts
+
+### 8. Fee Observation Engine
+- `saveSettlement()` auto-fires `extractFeeObservations()` for intelligence tracking
+- No per-dashboard code needed — handled by settlement-engine.ts
+
+## File Structure for New Marketplaces
+
+```
+src/utils/{marketplace}-parser.ts          → CSV parser → StandardSettlement[]
+src/components/admin/accounting/{Name}Dashboard.tsx  → Dashboard UI
+src/utils/settlement-engine.ts             → Shared save/sync/delete (DO NOT DUPLICATE)
+src/utils/universal-reconciliation.ts      → Shared recon checks (DO NOT DUPLICATE)
+src/utils/file-marketplace-detector.ts     → Add detection pattern for new marketplace
+```
+
+## Currently Implemented Marketplaces
+
+| Marketplace | Parser | Dashboard | Dedup | Gap | Recon | Bulk Delete | Xero Sync |
+|---|---|---|---|---|---|---|---|
+| Amazon AU | ✅ settlement-parser.ts | ✅ AccountingDashboard.tsx | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Shopify Payments | ✅ shopify-payments-parser.ts | ✅ ShopifyPaymentsDashboard.tsx | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Bunnings | ✅ bunnings-summary-parser.ts | ✅ BunningsDashboard.tsx | ✅ | — | ✅ | ✅ | ✅ |
+| Catch / MyDeal / Kogan / Woolworths | — | ✅ GenericMarketplaceDashboard.tsx (placeholder) | — | — | — | — | — |

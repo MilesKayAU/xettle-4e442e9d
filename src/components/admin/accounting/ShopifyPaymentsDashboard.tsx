@@ -487,13 +487,28 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                 </CardContent>
               </Card>
 
-              {/* Individual payout cards */}
+              {/* Duplicate / Gap warning */}
+              {uploadWarning && (
+                <Card className={`border-2 ${uploadWarning.type === 'duplicate' ? 'border-yellow-400 bg-yellow-50/30' : 'border-orange-400 bg-orange-50/30'}`}>
+                  <CardContent className="py-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className={`h-4 w-4 flex-shrink-0 mt-0.5 ${uploadWarning.type === 'duplicate' ? 'text-yellow-600' : 'text-orange-600'}`} />
+                      <p className="text-sm">{uploadWarning.message}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Individual payout cards with reconciliation checks */}
               <div className="space-y-2">
                 {parsedPayouts.map((payout) => {
                   const meta = payout.metadata || {};
                   const isSaved = savedIds.has(payout.settlement_id);
+                  const isDuplicate = uploadWarning?.duplicateIds?.includes(payout.settlement_id);
+                  const reconResult = runUniversalReconciliation(payout);
+                  const isExpanded = expandedRecon.has(payout.settlement_id);
                   return (
-                    <Card key={payout.settlement_id} className={`transition-colors ${payout.reconciles ? '' : 'border-destructive/30'}`}>
+                    <Card key={payout.settlement_id} className={`transition-colors ${isDuplicate ? 'border-yellow-400/50 opacity-60' : payout.reconciles ? '' : 'border-destructive/30'}`}>
                       <CardContent className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <div className="flex-shrink-0">
@@ -507,10 +522,14 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-medium font-mono">{payout.settlement_id}</span>
                               {isSaved && <Badge variant="secondary" className="text-[10px]">Saved</Badge>}
+                              {isDuplicate && <Badge variant="outline" className="text-[10px] border-yellow-500 text-yellow-700">Duplicate</Badge>}
                               {!payout.reconciles && (
                                 <Badge variant="destructive" className="text-[10px]">
                                   Diff: {formatAUD(meta.reconciliationDiff || 0)}
                                 </Badge>
+                              )}
+                              {reconResult.overallStatus === 'warn' && payout.reconciles && (
+                                <Badge variant="outline" className="text-[10px] border-yellow-500 text-yellow-700">Warnings</Badge>
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">
@@ -526,6 +545,16 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                               Sales {formatAUD(meta.grossSalesInclGst || 0)} • Fees {formatAUD(meta.chargesInclGst || 0)}
                             </p>
                           </div>
+                          <button
+                            className="text-xs text-muted-foreground hover:text-foreground underline flex-shrink-0"
+                            onClick={() => setExpandedRecon(prev => {
+                              const n = new Set(prev);
+                              n.has(payout.settlement_id) ? n.delete(payout.settlement_id) : n.add(payout.settlement_id);
+                              return n;
+                            })}
+                          >
+                            {isExpanded ? 'Hide' : 'Checks'}
+                          </button>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -545,6 +574,26 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                             <X className="h-3.5 w-3.5" />
                           </Button>
                         </div>
+                        {/* Expandable reconciliation checks */}
+                        {isExpanded && (
+                          <div className="mt-3 pt-3 border-t border-border space-y-1.5">
+                            {reconResult.checks.map(check => (
+                              <div key={check.id} className="flex items-start gap-2 text-xs">
+                                {check.status === 'pass' ? (
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600 flex-shrink-0 mt-0.5" />
+                                ) : check.status === 'warn' ? (
+                                  <AlertTriangle className="h-3.5 w-3.5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                                ) : (
+                                  <XCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0 mt-0.5" />
+                                )}
+                                <div>
+                                  <span className="font-medium">{check.label}:</span>{' '}
+                                  <span className="text-muted-foreground">{check.detail}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
