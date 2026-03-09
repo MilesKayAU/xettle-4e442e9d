@@ -381,25 +381,31 @@ serve(async (req) => {
     }
 
     // Build the Invoice payload (ACCREC = Sales Invoice)
-    const invoicePayload = {
-      Invoices: [{
-        Type: "ACCREC",
-        Contact: { Name: contactName || "Amazon.com.au" },
-        Date: date,
-        DueDate: dueDate || date,
-        CurrencyCode: "AUD",
-        Status: "AUTHORISED",
-        LineAmountTypes: "Exclusive",
-        Reference: reference,
-        LineItems: lineItems.map(item => ({
-          Description: item.Description,
-          AccountCode: item.AccountCode,
-          TaxType: item.TaxType,
-          UnitAmount: Math.round(item.UnitAmount * 100) / 100,
-          Quantity: item.Quantity || 1,
-        }))
-      }]
+    const invoiceData: Record<string, any> = {
+      Type: "ACCREC",
+      Contact: { Name: contactName || "Amazon.com.au" },
+      Date: date,
+      DueDate: dueDate || date,
+      CurrencyCode: "AUD",
+      Status: "AUTHORISED",
+      LineAmountTypes: "Exclusive",
+      Reference: reference,
+      LineItems: lineItems.map(item => ({
+        Description: item.Description,
+        AccountCode: item.AccountCode,
+        TaxType: item.TaxType,
+        UnitAmount: Math.round(item.UnitAmount * 100) / 100,
+        Quantity: item.Quantity || 1,
+      }))
     };
+
+    // Add human-readable description if provided (Xettle-{id} reference format)
+    if (description) {
+      // Xero doesn't have a top-level Description, but we prepend it to the first line item
+      invoiceData.LineItems[0].Description = `${description}\n${invoiceData.LineItems[0].Description}`;
+    }
+
+    const invoicePayload = { Invoices: [invoiceData] };
 
     console.log('Creating invoice in Xero:', JSON.stringify(invoicePayload, null, 2));
 
