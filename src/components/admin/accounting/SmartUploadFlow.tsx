@@ -674,7 +674,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             return null;
           })()}
 
-          {/* All saved — prompt to view in Settlements tab */}
+          {files.map((df, idx) => (
+            <FileResultCard
+              key={`${df.file.name}-${idx}`}
+              df={df}
+              idx={idx}
+              onRemove={removeFile}
+              onOverride={overrideMarketplace}
+              onAnalyzeAI={analyzeWithAI}
+              onProcess={processFile}
+              onSetStatus={setFileStatus}
+            />
+          ))}
+
           {savedCount > 0 && confirmedCount === 0 && onViewSettlements && (
             <Card className="border-green-400/50 bg-green-50/30 dark:bg-green-950/10">
               <CardContent className="py-4">
