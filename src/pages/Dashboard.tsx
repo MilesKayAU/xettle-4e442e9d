@@ -280,7 +280,7 @@ export default function Dashboard() {
                 <AccountingDashboard />
               ) : isShopifyOrders && selectedUserMarketplace ? (
                 <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                  <ShopifyOrdersDashboard marketplace={selectedUserMarketplace} />
+                  <ShopifyOrdersDashboard />
                 </Suspense>
               ) : selectedUserMarketplace ? (
                 <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => switchView('smart_upload')} />

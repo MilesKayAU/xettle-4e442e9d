@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
   History, Loader2, Send, Eye, Trash2, Info,
@@ -782,6 +783,18 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
           )}
         </TabsContent>
       </Tabs>
+      {/* ─── Section 2: Shopify Orders — Marketplace Splitter ─── */}
+      <Separator className="my-8" />
+      <ShopifyOrdersSection />
     </div>
+  );
+}
+
+function ShopifyOrdersSection() {
+  const ShopifyOrdersDashboard = React.lazy(() => import('./ShopifyOrdersDashboard'));
+  return (
+    <React.Suspense fallback={<div className="flex items-center gap-2 text-sm text-muted-foreground py-4"><Loader2 className="h-4 w-4 animate-spin" /> Loading orders section...</div>}>
+      <ShopifyOrdersDashboard />
+    </React.Suspense>
   );
 }

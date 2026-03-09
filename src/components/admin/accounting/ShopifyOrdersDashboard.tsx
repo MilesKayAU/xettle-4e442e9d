@@ -1,8 +1,8 @@
 /**
- * ShopifyOrdersDashboard — Gateway clearing invoices from Shopify Orders CSV
- * 
- * Shows per-gateway breakdown with order counts and amounts.
- * Users can review, confirm, save, and push to Xero.
+ * ShopifyOrdersDashboard — Marketplace & gateway splitting from Shopify Orders CSV
+ *
+ * Shows per-marketplace/gateway breakdown with order counts, amounts, and
+ * $0.00 clearing invoice previews. Supports unknown group review and AI suggestions.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -12,8 +12,16 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
   History, Loader2, Send, Eye, Trash2, Info, ShoppingCart,
+  SkipForward, HelpCircle, Sparkles, ArrowRight,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -24,8 +32,14 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   parseShopifyOrdersCSV,
   buildShopifyOrdersInvoiceLines,
-  type GatewayGroup,
+  buildSettlementsFromGroups,
+  type MarketplaceGroup,
+  type ShopifyOrdersParseResult,
 } from '@/utils/shopify-orders-parser';
+import {
+  MARKETPLACE_REGISTRY,
+  getRegistryEntry,
+} from '@/utils/marketplace-registry';
 import {
   type StandardSettlement,
   saveSettlement,
@@ -34,11 +48,6 @@ import {
   formatSettlementDate,
   formatAUD,
 } from '@/utils/settlement-engine';
-import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
-
-interface ShopifyOrdersDashboardProps {
-  marketplace: { marketplace_code: string; marketplace_name: string };
-}
 
 interface SettlementRecord {
   id: string;
@@ -68,16 +77,14 @@ function statusBadge(status: string) {
   }
 }
 
-export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDashboardProps) {
+export default function ShopifyOrdersDashboard() {
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  // Parsed gateway groups
-  const [gateways, setGateways] = useState<GatewayGroup[]>([]);
-  const [skippedGateways, setSkippedGateways] = useState<GatewayGroup[]>([]);
-  const [unpaidCount, setUnpaidCount] = useState(0);
+  // Parsed data
+  const [parseResult, setParseResult] = useState<ShopifyOrdersParseResult | null>(null);
   const [settlements, setSettlements] = useState<StandardSettlement[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
@@ -86,8 +93,8 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
   const [historyLoading, setHistoryLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
-
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showBookkeeperInfo, setShowBookkeeperInfo] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -97,7 +104,7 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
       const { data, error } = await supabase
         .from('settlements')
         .select('*')
-        .eq('marketplace', 'shopify_orders')
+        .like('marketplace', 'shopify_orders_%')
         .order('period_end', { ascending: false })
         .limit(200);
       if (error) throw error;
@@ -116,27 +123,27 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
     if (!f) return;
 
     setFile(f);
-    setGateways([]);
-    setSkippedGateways([]);
+    setParseResult(null);
     setSettlements([]);
     setSavedIds(new Set());
     setParseError(null);
-    setUnpaidCount(0);
     setParsing(true);
 
     try {
       const text = await f.text();
       const result = parseShopifyOrdersCSV(text);
       if (result.success) {
-        setGateways(result.gateways);
-        setSkippedGateways(result.skippedGateways);
-        setUnpaidCount(result.unpaidCount);
+        setParseResult(result);
         setSettlements(result.settlements);
 
-        const gwCount = result.gateways.length;
-        const skippedCount = result.skippedGateways.reduce((s, g) => s + g.orderCount, 0);
+        const readyCount = result.groups.length;
+        const skippedCount = result.skippedGroups.reduce((s, g) => s + g.orderCount, 0);
+        const unknownCount = result.unknownGroups.reduce((s, g) => s + g.orderCount, 0);
+
         toast.success(
-          `${result.totalOrderCount} orders parsed — ${gwCount} gateway${gwCount !== 1 ? 's' : ''} detected${skippedCount > 0 ? `, ${skippedCount} Shopify Payments orders skipped` : ''}`
+          `${result.paidCount} paid orders parsed — ${readyCount} source${readyCount !== 1 ? 's' : ''} detected` +
+          (skippedCount > 0 ? `, ${skippedCount} Shopify Payments skipped` : '') +
+          (unknownCount > 0 ? `, ${unknownCount} unknown` : '')
         );
         setActiveTab('review');
       } else {
@@ -152,11 +159,44 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
     }
   };
 
+  // ─── Assign unknown group to a marketplace ──────────────────────────
+
+  const assignUnknownGroup = (groupIdx: number, marketplaceKey: string) => {
+    if (!parseResult) return;
+    const group = parseResult.unknownGroups[groupIdx];
+    if (!group) return;
+
+    if (marketplaceKey === 'skip') {
+      // Move to skipped
+      const newUnknown = parseResult.unknownGroups.filter((_, i) => i !== groupIdx);
+      const newSkipped = [...parseResult.skippedGroups, { ...group, skipped: true, status: 'skipped' as const, skipReason: 'Manually skipped' }];
+      setParseResult({ ...parseResult, unknownGroups: newUnknown, skippedGroups: newSkipped });
+      return;
+    }
+
+    const entry = getRegistryEntry(marketplaceKey);
+    const updatedGroup: MarketplaceGroup = {
+      ...group,
+      marketplaceKey,
+      registryEntry: entry,
+      status: 'ready',
+    };
+
+    const newUnknown = parseResult.unknownGroups.filter((_, i) => i !== groupIdx);
+    const newReady = [...parseResult.groups, updatedGroup];
+
+    // Rebuild settlements
+    const newSettlements = buildSettlementsFromGroups(newReady);
+
+    setParseResult({ ...parseResult, groups: newReady, unknownGroups: newUnknown, settlements: newSettlements });
+    setSettlements(newSettlements);
+  };
+
   // ─── Save All ───────────────────────────────────────────────────────
 
   const handleSaveAll = async () => {
     if (settlements.length === 0) {
-      toast.warning('No gateway settlements to save.');
+      toast.warning('No settlements to save.');
       return;
     }
     setSaving(true);
@@ -168,12 +208,15 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
       if (result.success || result.duplicate) {
         saved++;
         newSavedIds.add(s.settlement_id);
+        if (result.duplicate) {
+          toast.info(`${s.metadata?.displayName || s.marketplace} already exists — skipped.`);
+        }
       }
     }
 
     setSavedIds(newSavedIds);
     setSaving(false);
-    toast.success(`Saved ${saved} of ${settlements.length} gateway clearing invoices`);
+    toast.success(`Saved ${saved} of ${settlements.length} clearing invoices`);
     loadHistory();
   };
 
@@ -182,39 +225,52 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
   const handlePushAllToXero = async () => {
     const toPush = settlements.filter(s => savedIds.has(s.settlement_id));
     if (toPush.length === 0) {
-      toast.warning('Save gateway invoices first before pushing to Xero.');
+      toast.warning('Save clearing invoices first before pushing to Xero.');
       return;
     }
     setPushing(true);
     let pushed = 0;
+    let totalRevenue = 0;
+    let totalGst = 0;
 
     for (const s of toPush) {
       const lineItems = buildShopifyOrdersInvoiceLines(s);
       const meta = s.metadata || {};
-      const result = await syncSettlementToXero(s.settlement_id, 'shopify_orders', {
+
+      // Verify $0.00 balance before pushing
+      const lineTotal = lineItems.reduce((sum, l) => sum + round2(l.UnitAmount * l.Quantity) + (l.TaxAmount || 0), 0);
+      if (Math.abs(lineTotal) > 0.02) {
+        toast.error(`Invoice balancing error for ${meta.displayName} — please contact support`);
+        continue;
+      }
+
+      const result = await syncSettlementToXero(s.settlement_id, s.marketplace, {
         lineItems,
-        contactName: meta.contactName || meta.gatewayLabel || 'Shopify Gateway',
+        contactName: meta.contactName || meta.displayName || 'Marketplace',
         reference: meta.reference,
       });
-      if (result.success) pushed++;
+      if (result.success) {
+        pushed++;
+        totalRevenue += (meta.salesInclGst || 0) + (meta.shippingInclGst || 0);
+        totalGst += (meta.gstOnSales || 0) + (meta.gstOnShipping || 0);
+      }
     }
 
     setPushing(false);
     toast.success(`Pushed ${pushed} of ${toPush.length} clearing invoices to Xero`);
+    setShowBookkeeperInfo(true);
     loadHistory();
   };
 
   // ─── Push single from history ──────────────────────────────────────
 
-  const handlePushToXero = async (settlementId: string) => {
+  const handlePushToXero = async (settlementId: string, marketplace: string) => {
     setPushing(true);
-    // Find the settlement in history to get metadata
-    const histRec = history.find(h => h.settlement_id === settlementId);
-    const result = await syncSettlementToXero(settlementId, 'shopify_orders', {
-      contactName: 'Shopify Gateway',
+    const result = await syncSettlementToXero(settlementId, marketplace, {
+      contactName: marketplace.replace('shopify_orders_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
     });
     if (result.success) {
-      toast.success(`Clearing invoice created in Xero!`);
+      toast.success('Clearing invoice created in Xero!');
       loadHistory();
     } else {
       toast.error(result.error || 'Failed to push to Xero');
@@ -237,12 +293,11 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
 
   const clearUpload = () => {
     setFile(null);
-    setGateways([]);
-    setSkippedGateways([]);
+    setParseResult(null);
     setSettlements([]);
     setSavedIds(new Set());
     setParseError(null);
-    setUnpaidCount(0);
+    setShowBookkeeperInfo(false);
     if (inputRef.current) inputRef.current.value = '';
     setActiveTab('upload');
   };
@@ -254,11 +309,10 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
       <div>
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <span className="text-xl">🛒</span>
-          Shopify Orders — Gateway Clearing
+          All Marketplace & Gateway Orders
         </h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Upload your Shopify Orders CSV. Xettle groups orders by payment gateway and creates
-          $0.00 clearing invoices for PayPal, Afterpay, Stripe, etc.
+          Recognise revenue from MyDeal, Bunnings, Kogan, PayPal, Afterpay and all other channels in one upload.
         </p>
       </div>
 
@@ -267,10 +321,12 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
           <TabsTrigger value="upload" className="gap-1.5">
             <Upload className="h-3.5 w-3.5" /> Upload
           </TabsTrigger>
-          <TabsTrigger value="review" className="gap-1.5" disabled={gateways.length === 0}>
+          <TabsTrigger value="review" className="gap-1.5" disabled={!parseResult}>
             <Eye className="h-3.5 w-3.5" /> Review
-            {gateways.length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5">{gateways.length}</Badge>
+            {parseResult && (
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5">
+                {parseResult.groups.length + parseResult.unknownGroups.length}
+              </Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5">
@@ -283,15 +339,16 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
 
         {/* ─── Upload Tab ─────────────────────────────────────────── */}
         <TabsContent value="upload" className="space-y-4">
-          <Card className={`border-2 transition-colors ${file ? 'border-green-400 bg-green-50/30' : 'border-dashed border-muted-foreground/25 hover:border-primary/40'}`}>
+          <Card className={`border-2 transition-colors ${file ? 'border-green-400 bg-green-50/30 dark:bg-green-950/10' : 'border-dashed border-muted-foreground/25 hover:border-primary/40'}`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
-                Shopify Orders CSV
+                Shopify Orders Export CSV
                 {file && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />}
               </CardTitle>
               <CardDescription className="text-xs">
-                Export from Shopify Admin → Orders → Export. Xettle filters paid orders and groups by payment gateway.
+                Export from Shopify Admin → Orders → Export. Xettle reads Note Attributes, Tags, and Payment Method
+                to split orders by marketplace and gateway automatically.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -309,7 +366,7 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
               />
               {parsing && (
                 <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Parsing orders...
+                  <Loader2 className="h-4 w-4 animate-spin" /> Parsing orders and detecting marketplaces...
                 </div>
               )}
               {parseError && (
@@ -330,15 +387,16 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
                   <p className="font-medium text-foreground">How this works</p>
                   <ol className="list-decimal list-inside space-y-0.5">
                     <li>Export orders from Shopify Admin → Orders → Export</li>
-                    <li>Xettle reads the <strong>Payment Method</strong> column</li>
-                    <li>Orders paid via <strong>Shopify Payments</strong> are skipped (use the Shopify Payments tab)</li>
-                    <li>Other gateways (PayPal, Afterpay, Stripe…) get a $0.00 clearing invoice each</li>
+                    <li>Xettle reads <strong>Note Attributes</strong>, <strong>Tags</strong>, and <strong>Payment Method</strong></li>
+                    <li>Orders are grouped by marketplace (MyDeal, Bunnings, Kogan…) and gateway (PayPal, Afterpay…)</li>
+                    <li>Shopify Payments orders are <strong>skipped</strong> — use the Shopify Payments section above</li>
+                    <li>Each source gets a <strong>$0.00 clearing invoice</strong> in Xero</li>
                   </ol>
-                  <p className="mt-2 text-foreground font-medium">Invoice structure (per gateway):</p>
+                  <p className="mt-2 text-foreground font-medium">Invoice structure (per source):</p>
                   <ul className="list-disc list-inside space-y-0.5">
-                    <li>Line 1: Shopify Sales (201) — Subtotal ÷ 1.1, GST on Income</li>
-                    <li>Line 2: Shopify Shipping Revenue (206) — Shipping ÷ 1.1, GST on Income</li>
-                    <li>Line 3: Gateway Clearing (613) — negative Total, BAS Excluded</li>
+                    <li>Line 1: Sales (ex GST) — GST on Income</li>
+                    <li>Line 2: Shipping Revenue (ex GST) — GST on Income</li>
+                    <li>Line 3: Clearing — negative total, BAS Excluded</li>
                     <li><strong>Invoice total = $0.00</strong></li>
                   </ul>
                 </div>
@@ -349,204 +407,333 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
 
         {/* ─── Review Tab ─────────────────────────────────────────── */}
         <TabsContent value="review" className="space-y-4">
-          {unpaidCount > 0 && (
-            <Card className="border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10">
-              <CardContent className="py-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <p className="text-sm text-amber-700 dark:text-amber-400">
-                    {unpaidCount} order{unpaidCount !== 1 ? 's are' : ' is'} unpaid — skipped. Only paid orders create accounting entries.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="text-sm font-semibold text-foreground mb-2">
-            Detected payment methods:
-          </div>
-
-          <div className="space-y-3">
-            {/* Active gateways */}
-            {gateways.map((g, idx) => {
-              const s = settlements[idx];
-              const isSaved = s ? savedIds.has(s.settlement_id) : false;
-              return (
-                <Card key={g.gateway} className={`border ${isSaved ? 'border-green-400/50 bg-green-50/20 dark:bg-green-950/10' : 'border-primary/20'}`}>
-                  <CardContent className="py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-primary" />
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">
-                            {g.gatewayLabel}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} · {formatSettlementDate(g.periodStart)} – {formatSettlementDate(g.periodEnd)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-foreground">{formatAUD(g.totalAmount)}</p>
-                        {isSaved && (
-                          <Badge variant="secondary" className="text-[10px] mt-1">✓ Saved</Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Invoice breakdown */}
-                    <div className="mt-3 bg-muted/40 rounded-lg p-3 space-y-1.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Sales (ex GST) → 201</span>
-                        <span className="font-medium">{formatAUD(s?.sales_ex_gst || 0)}</span>
-                      </div>
-                      {s?.metadata?.shippingExGst > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Shipping Revenue (ex GST) → 206</span>
-                          <span className="font-medium">{formatAUD(s.metadata.shippingExGst)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">GST on Income</span>
-                        <span className="font-medium">{formatAUD(s?.gst_on_sales || 0)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">{g.gatewayLabel} Clearing → 613</span>
-                        <span className="font-medium">{formatAUD(s?.metadata?.clearingAmount || 0)}</span>
-                      </div>
-                      <Separator className="my-1" />
-                      <div className="flex justify-between font-semibold text-foreground">
-                        <span>Invoice Total</span>
-                        <span className="text-primary">$0.00</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-
-            {/* Skipped gateways */}
-            {skippedGateways.map(g => (
-              <Card key={g.gateway} className="border-muted bg-muted/20">
+          {parseResult && (
+            <>
+              {/* Summary header */}
+              <Card className="border-primary/20 bg-primary/5">
                 <CardContent className="py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <AlertTriangle className="h-5 w-5 text-amber-500" />
-                      <div>
-                        <p className="text-sm font-semibold text-muted-foreground">
-                          {g.gatewayLabel}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} — <span className="font-medium">skipped</span>
-                        </p>
-                      </div>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        Shopify Orders Export
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatSettlementDate(parseResult.periodStart)} to {formatSettlementDate(parseResult.periodEnd)} ·{' '}
+                        {parseResult.totalOrderCount} total orders · {parseResult.paidCount} paid ·{' '}
+                        {parseResult.unpaidCount > 0 && <span className="text-amber-600">{parseResult.unpaidCount} skipped (unpaid)</span>}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground italic">
-                      Use Shopify Payments payout CSV instead
-                    </p>
+                    <Button variant="outline" size="sm" onClick={clearUpload}>
+                      <Trash2 className="h-3.5 w-3.5 mr-1" /> Clear
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
 
-          {/* Action buttons */}
-          {gateways.length > 0 && (
-            <div className="flex gap-3 pt-2">
-              {!allSaved ? (
-                <Button onClick={handleSaveAll} disabled={saving} className="gap-2 flex-1">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Save {gateways.length} Gateway Invoice{gateways.length !== 1 ? 's' : ''}
-                </Button>
-              ) : (
-                <Button onClick={handlePushAllToXero} disabled={pushing} className="gap-2 flex-1">
-                  {pushing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Push All to Xero
-                </Button>
+              {parseResult.unpaidCount > 0 && (
+                <Card className="border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10">
+                  <CardContent className="py-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <p className="text-sm text-amber-700 dark:text-amber-400">
+                        {parseResult.unpaidCount} order{parseResult.unpaidCount !== 1 ? 's are' : ' is'} unpaid — skipped. Only paid orders create accounting entries.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
-              <Button variant="outline" onClick={clearUpload} className="gap-2">
-                <Trash2 className="h-4 w-4" />
-                Clear
-              </Button>
-            </div>
+
+              <div className="text-sm font-semibold text-foreground">Detected sources:</div>
+
+              <div className="space-y-3">
+                {/* ── Ready groups ── */}
+                {parseResult.groups.map((g, idx) => {
+                  const s = settlements.find(s => s.metadata?.marketplaceKey === g.marketplaceKey && s.metadata?.currency === g.currency);
+                  const isSaved = s ? savedIds.has(s.settlement_id) : false;
+                  return (
+                    <Card key={`${g.marketplaceKey}_${g.currency}`} className={`border ${isSaved ? 'border-green-400/50 bg-green-50/20 dark:bg-green-950/10' : 'border-primary/20'}`}>
+                      <CardContent className="py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <CheckCircle2 className="h-5 w-5 text-primary" />
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {g.registryEntry.display_name}
+                                {g.currency !== 'AUD' && <Badge variant="outline" className="ml-2 text-[10px]">{g.currency}</Badge>}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} · {formatSettlementDate(g.periodStart)} – {formatSettlementDate(g.periodEnd)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-foreground">{formatAUD(g.totalAmount)} {g.currency}</p>
+                            {isSaved && <Badge variant="secondary" className="text-[10px] mt-1">✓ Saved</Badge>}
+                          </div>
+                        </div>
+
+                        {/* Invoice line preview */}
+                        {s && (
+                          <div className="mt-3 bg-muted/40 rounded-lg p-3 space-y-1.5 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Sales (ex GST) → {s.metadata?.salesAccountCode}</span>
+                              <span className="font-medium">{formatAUD(s.metadata?.salesExGst || 0)}</span>
+                            </div>
+                            {(s.metadata?.shippingExGst || 0) > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Shipping Revenue (ex GST) → {s.metadata?.shippingAccountCode}</span>
+                                <span className="font-medium">{formatAUD(s.metadata?.shippingExGst || 0)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">GST on Income</span>
+                              <span className="font-medium">{formatAUD(s.gst_on_sales)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">{g.registryEntry.display_name} Clearing → {s.metadata?.clearingAccountCode}</span>
+                              <span className="font-medium">{formatAUD(s.metadata?.clearingAmount || 0)}</span>
+                            </div>
+                            <Separator className="my-1" />
+                            <div className="flex justify-between font-semibold text-foreground">
+                              <span>Invoice Total</span>
+                              <span className="text-primary">$0.00</span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+
+                {/* ── Skipped groups ── */}
+                {parseResult.skippedGroups.map((g) => (
+                  <Card key={`skip_${g.marketplaceKey}_${g.currency}`} className="border border-muted bg-muted/20">
+                    <CardContent className="py-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <SkipForward className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-semibold text-muted-foreground">
+                              {g.registryEntry.display_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} — <span className="italic">{g.skipReason || 'skipped'}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-muted-foreground">{formatAUD(g.totalAmount)} {g.currency}</p>
+                          <Badge variant="outline" className="text-[10px] mt-1 text-muted-foreground">skipped</Badge>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {/* ── Unknown groups ── */}
+                {parseResult.unknownGroups.map((g, idx) => (
+                  <Card key={`unknown_${idx}`} className="border border-amber-400/50 bg-amber-50/20 dark:bg-amber-950/10">
+                    <CardContent className="py-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <HelpCircle className="h-5 w-5 text-amber-600" />
+                          <div>
+                            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                              Unknown Source
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} · needs review
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-sm font-bold text-amber-700 dark:text-amber-400">{formatAUD(g.totalAmount)} {g.currency}</p>
+                      </div>
+
+                      {/* Sample data */}
+                      <div className="bg-muted/40 rounded-lg p-3 space-y-2 text-xs">
+                        {g.sampleNoteAttributes && g.sampleNoteAttributes.length > 0 && (
+                          <div>
+                            <span className="font-medium text-foreground">Note Attributes: </span>
+                            {g.sampleNoteAttributes.map((n, i) => (
+                              <span key={i} className="text-muted-foreground">
+                                {i > 0 && ' | '}{n.substring(0, 80)}{n.length > 80 ? '…' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {g.sampleTags && g.sampleTags.length > 0 && (
+                          <div>
+                            <span className="font-medium text-foreground">Tags: </span>
+                            {g.sampleTags.map((t, i) => (
+                              <span key={i} className="text-muted-foreground">
+                                {i > 0 && ' | '}{t.substring(0, 60)}{t.length > 60 ? '…' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-medium text-foreground">Payment Method: </span>
+                          <span className="text-muted-foreground">{g.orders[0]?.paymentMethod || '—'}</span>
+                        </div>
+                      </div>
+
+                      {/* Manual assignment */}
+                      <div className="flex items-center gap-2">
+                        <Select onValueChange={(val) => assignUnknownGroup(idx, val)}>
+                          <SelectTrigger className="w-48 h-8 text-xs">
+                            <SelectValue placeholder="Assign to marketplace…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(MARKETPLACE_REGISTRY)
+                              .filter(([, e]) => !e.skip)
+                              .map(([key, entry]) => (
+                                <SelectItem key={key} value={key} className="text-xs">
+                                  {entry.display_name}
+                                </SelectItem>
+                              ))}
+                            <SelectItem value="skip" className="text-xs text-muted-foreground">
+                              Skip this group
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-3 pt-2">
+                {!allSaved ? (
+                  <Button onClick={handleSaveAll} disabled={saving || settlements.length === 0}>
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+                    Save All ({settlements.length} invoice{settlements.length !== 1 ? 's' : ''})
+                  </Button>
+                ) : (
+                  <Button onClick={handlePushAllToXero} disabled={pushing}>
+                    {pushing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+                    Confirm and push all to Xero →
+                  </Button>
+                )}
+                {parseResult.unknownGroups.length > 0 && (
+                  <p className="text-xs text-amber-600">
+                    ⚠ {parseResult.unknownGroups.length} unknown group{parseResult.unknownGroups.length !== 1 ? 's' : ''} — assign or skip before pushing
+                  </p>
+                )}
+              </div>
+
+              {/* Bookkeeper instructions */}
+              {showBookkeeperInfo && (
+                <Card className="border-primary/30 bg-primary/5">
+                  <CardContent className="py-4 space-y-3">
+                    <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary" /> Revenue recognised ✅
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      These $0.00 invoices have posted your revenue and GST correctly. Account 613 holds the balance until each marketplace pays you.
+                    </p>
+                    <div className="text-xs text-muted-foreground space-y-2">
+                      <p className="font-medium text-foreground">To complete reconciliation in Xero:</p>
+                      <div>
+                        <p className="font-medium">Marketplace bank transfers (Bunnings, MyDeal, Kogan, Big W):</p>
+                        <p>→ Upload their settlement CSV/PDF to Xettle, OR when bank transfer arrives match it to Account 613 in Xero bank feed</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">PayPal / Afterpay / Stripe payouts:</p>
+                        <p>→ When payout hits your bank, match it to Account 613 in Xero bank feed</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">Shopify Payments:</p>
+                        <p>→ Upload Shopify Payments payout CSV to the section above — Xettle creates the bank-matching invoice</p>
+                      </div>
+                      <p className="mt-2 text-foreground font-medium">Account 613 should net to zero each period once all payments are received.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </TabsContent>
 
-        {/* ─── History Tab ────────────────────────────────────────── */}
+        {/* ─── History Tab ─────────────────────────────────────────── */}
         <TabsContent value="history" className="space-y-4">
-          <XeroConnectionStatus />
-
           {historyLoading ? (
-            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" /> Loading history...
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading history...
             </div>
           ) : history.length === 0 ? (
             <Card className="border-dashed">
-              <CardContent className="py-8 text-center text-muted-foreground">
-                <ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No gateway clearing invoices yet. Upload a Shopify Orders CSV to get started.</p>
+              <CardContent className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">No Shopify Orders clearing invoices yet.</p>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-2">
-              {history.map(s => (
-                <Card key={s.id} className="border-border">
-                  <CardContent className="py-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">
-                            {s.settlement_id.replace(/^shopify_/, '').replace(/_/g, ' ')}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
+              {history.map((s) => {
+                const mktKey = s.marketplace.replace('shopify_orders_', '');
+                const entry = getRegistryEntry(mktKey);
+                return (
+                  <Card key={s.id}>
+                    <CardContent className="py-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {entry.display_name}
+                            </p>
+                            {statusBadge(s.status)}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
                             {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
                           </p>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {statusBadge(s.status)}
-                        {s.status !== 'synced' && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-muted-foreground">$0.00</span>
+                          {s.status !== 'synced' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              disabled={pushing}
+                              onClick={() => handlePushToXero(s.settlement_id, s.marketplace)}
+                            >
+                              <Send className="h-3 w-3" /> Push
+                            </Button>
+                          )}
                           <Button
+                            variant="ghost"
                             size="sm"
-                            variant="outline"
-                            className="gap-1.5 text-xs"
-                            disabled={pushing}
-                            onClick={() => handlePushToXero(s.settlement_id)}
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={() => setDeleteConfirmId(s.id)}
                           >
-                            <Send className="h-3 w-3" />
-                            Push to Xero
+                            <Trash2 className="h-3 w-3" />
                           </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive h-7 w-7 p-0"
-                          onClick={() => setDeleteConfirmId(s.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
       </Tabs>
 
       {/* Delete confirmation */}
-      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this settlement?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this clearing invoice?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the settlement record. If already synced to Xero, the invoice will remain unchanged.
+              This will remove the settlement record. Any invoice already in Xero will not be affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -554,4 +741,8 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
       </AlertDialog>
     </div>
   );
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }

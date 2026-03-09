@@ -167,18 +167,18 @@ const FINGERPRINTS: Fingerprint[] = [
     priority: 80,
   },
 
-  // Shopify Orders CSV — gateway clearing invoices (CORRECT file for this parser)
+  // Shopify Orders CSV — gateway/marketplace clearing invoices
   {
     marketplace: 'shopify_orders',
     marketplaceLabel: 'Shopify Orders',
     isSettlementFile: true,
     requiredColumns: ['payment method', 'financial status', 'paid at'],
-    anyOfColumns: ['subtotal', 'total', 'shipping'],
+    anyOfColumns: ['note attributes', 'tags', 'subtotal', 'total'],
     columnMapping: {
       gross_sales: 'Subtotal',
       net_payout: 'Total',
     },
-    priority: 90,
+    priority: 95,
   },
 
   // Shopify Orders (WRONG for payout — but now routed to shopify_orders parser)
