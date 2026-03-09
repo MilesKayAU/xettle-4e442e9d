@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag, ChevronDown, Key } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ShopifyStatus {
@@ -18,7 +19,10 @@ const ShopifyConnectionStatus = () => {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [shopDomain, setShopDomain] = useState('');
-
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualToken, setManualToken] = useState('');
+  const [manualDomain, setManualDomain] = useState('');
+  const [savingToken, setSavingToken] = useState(false);
   const fetchStatus = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -138,6 +142,52 @@ const ShopifyConnectionStatus = () => {
     }
   };
 
+  const handleManualSave = async () => {
+    const domain = manualDomain.trim();
+    const token = manualToken.trim();
+    if (!domain || !token) {
+      toast.error('Please enter both shop domain and access token');
+      return;
+    }
+
+    setSavingToken(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('You must be logged in');
+        setSavingToken(false);
+        return;
+      }
+
+      const { error } = await supabase.from('shopify_tokens').upsert({
+        user_id: session.user.id,
+        shop_domain: domain,
+        access_token: token,
+        scope: 'custom_app',
+      }, { onConflict: 'user_id' } as any);
+
+      if (error) throw error;
+
+      // Also save shop domain to app_settings
+      await supabase.from('app_settings').upsert({
+        user_id: session.user.id,
+        key: 'shopify_shop_domain',
+        value: domain,
+      }, { onConflict: 'user_id,key' } as any);
+
+      toast.success('Shopify token saved successfully');
+      setManualToken('');
+      setManualDomain('');
+      setManualOpen(false);
+      await fetchStatus();
+    } catch (error: any) {
+      console.error('Error saving Shopify token:', error);
+      toast.error(error.message || 'Failed to save token');
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -219,6 +269,45 @@ const ShopifyConnectionStatus = () => {
                 </>
               )}
             </Button>
+
+            <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full text-muted-foreground text-xs gap-1">
+                  <Key className="h-3 w-3" />
+                  Using a Shopify Custom App? Enter your access token directly
+                  <ChevronDown className={`h-3 w-3 transition-transform ${manualOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2">
+                <Input
+                  placeholder="Admin API access token (shpat_...)"
+                  value={manualToken}
+                  onChange={(e) => setManualToken(e.target.value)}
+                  type="password"
+                />
+                <Input
+                  placeholder="yourstore.myshopify.com"
+                  value={manualDomain}
+                  onChange={(e) => setManualDomain(e.target.value)}
+                />
+                <Button
+                  onClick={handleManualSave}
+                  disabled={savingToken || !manualToken.trim() || !manualDomain.trim()}
+                  variant="secondary"
+                  className="w-full"
+                  size="sm"
+                >
+                  {savingToken ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save token'
+                  )}
+                </Button>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         ) : (
           <div className="flex gap-2">
