@@ -31,6 +31,7 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
       // Shopify Payments CSV signals (transaction-level or payout-level)
       if (lower.includes('payout id') || lower.includes('payout date') ||
           (lower.includes('card brand') && lower.includes('payout')) ||
+          (lower.includes('charges') && lower.includes('total') && lower.includes('bank reference')) ||
           (lower.includes('shopify') && (lower.includes('gross') || lower.includes('charges')))) {
         return 'shopify_payments';
       }
