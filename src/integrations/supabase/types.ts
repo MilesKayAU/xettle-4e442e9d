@@ -632,6 +632,36 @@ export type Database = {
         }
         Relationships: []
       }
+      shopify_tokens: {
+        Row: {
+          access_token: string
+          id: string
+          installed_at: string | null
+          scope: string | null
+          shop_domain: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          id?: string
+          installed_at?: string | null
+          scope?: string | null
+          shop_domain: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          id?: string
+          installed_at?: string | null
+          scope?: string | null
+          shop_domain?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       sync_history: {
         Row: {
           created_at: string
