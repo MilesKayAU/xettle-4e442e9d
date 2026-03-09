@@ -244,7 +244,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         setBankVerifyConfirmed(false);
         loadSettlements();
       } else {
-        toast.error(result.error || 'Failed to push to Xero');
+        // Structured duplicate warning
+        if (result.error && result.error.includes('already exists in Xero')) {
+          toast.error('Duplicate invoice detected — void the existing invoice in Xero first, then retry.', { duration: 8000 });
+        } else {
+          toast.error(result.error || 'Failed to push to Xero');
+        }
       }
     } catch (err: any) {
       toast.error(`Xero sync failed: ${err.message}`);
