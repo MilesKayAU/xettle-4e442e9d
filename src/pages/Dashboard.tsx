@@ -92,7 +92,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (user) loadMarketplaces();
-  }, [user]);
+  }, [user, loadMarketplaces]);
 
   // ─── Claim demo session (post-signup from landing page) ───────────────────
   useEffect(() => {
