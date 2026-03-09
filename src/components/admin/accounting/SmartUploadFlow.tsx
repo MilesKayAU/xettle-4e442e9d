@@ -221,10 +221,25 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           // Create the marketplace tab immediately on detection (before save)
           // so the user sees it appear right away even if saving takes a while
           const mktCode = result.marketplace;
-          if (mktCode && mktCode !== 'amazon_au' && !createdTabs.has(mktCode)) {
-            createdTabs.add(mktCode);
-            await ensureMarketplaceConnection(mktCode);
-            onMarketplacesChanged?.();
+          if (mktCode && mktCode !== 'amazon_au') {
+            // Woolworths MarketPlus creates tabs for each sub-marketplace
+            if (mktCode === 'woolworths_marketplus' && settlements.length > 0) {
+              const subCodes = new Set(settlements.map(s => {
+                const subCode = s.metadata?.marketplaceCode;
+                return subCode || mktCode;
+              }));
+              for (const code of subCodes) {
+                if (!createdTabs.has(code)) {
+                  createdTabs.add(code);
+                  await ensureMarketplaceConnection(code);
+                }
+              }
+              onMarketplacesChanged?.();
+            } else if (!createdTabs.has(mktCode)) {
+              createdTabs.add(mktCode);
+              await ensureMarketplaceConnection(mktCode);
+              onMarketplacesChanged?.();
+            }
           }
         }
 
