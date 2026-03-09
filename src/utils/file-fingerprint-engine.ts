@@ -101,6 +101,24 @@ const FINGERPRINTS: Fingerprint[] = [
     priority: 95,
   },
 
+  // Woolworths MarketPlus (Big W + Everyday Market + MyDeal combined)
+  {
+    marketplace: 'woolworths_marketplus',
+    marketplaceLabel: 'Woolworths MarketPlus',
+    isSettlementFile: true,
+    requiredColumns: ['order source', 'bank payment ref'],
+    anyOfColumns: ['total sale price', 'commission fee', 'net amount'],
+    columnMapping: {
+      order_id: 'Order ID',
+      gross_sales: 'Total Sale Price',
+      fees: 'Commission Fee',
+      net_payout: 'Net Amount',
+      gst: 'GST on Net Amount',
+      settlement_id: 'Bank Payment Ref',
+    },
+    priority: 105,  // Higher than individual BigW/MyDeal fingerprints
+  },
+
   // Kogan
   {
     marketplace: 'kogan',
@@ -530,5 +548,6 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   catch: 'Catch',
   mydeal: 'MyDeal',
   woolworths: 'Woolworths',
+  woolworths_marketplus: 'Woolworths MarketPlus',
   unknown: 'Unknown Marketplace',
 };

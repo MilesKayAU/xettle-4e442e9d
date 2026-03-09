@@ -37,6 +37,7 @@ import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
+import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, type StandardSettlement } from '@/utils/settlement-engine';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 
@@ -133,6 +134,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         return result.settlements;
       }
 
+      if (marketplace === 'woolworths_marketplus') {
+        const text = await file.text();
+        const result = parseWoolworthsMarketPlusCSV(text);
+        if (!result.success) return [];
+        return result.settlements;
+      }
+
       // Generic parser
       const mapping = detection.columnMapping || {};
       const name = file.name.toLowerCase();
@@ -213,10 +221,25 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           // Create the marketplace tab immediately on detection (before save)
           // so the user sees it appear right away even if saving takes a while
           const mktCode = result.marketplace;
-          if (mktCode && mktCode !== 'amazon_au' && !createdTabs.has(mktCode)) {
-            createdTabs.add(mktCode);
-            await ensureMarketplaceConnection(mktCode);
-            onMarketplacesChanged?.();
+          if (mktCode && mktCode !== 'amazon_au') {
+            // Woolworths MarketPlus creates tabs for each sub-marketplace
+            if (mktCode === 'woolworths_marketplus' && settlements.length > 0) {
+              const subCodes = new Set(settlements.map(s => {
+                const subCode = s.metadata?.marketplaceCode;
+                return subCode || mktCode;
+              }));
+              for (const code of subCodes) {
+                if (!createdTabs.has(code)) {
+                  createdTabs.add(code);
+                  await ensureMarketplaceConnection(code);
+                }
+              }
+              onMarketplacesChanged?.();
+            } else if (!createdTabs.has(mktCode)) {
+              createdTabs.add(mktCode);
+              await ensureMarketplaceConnection(mktCode);
+              onMarketplacesChanged?.();
+            }
           }
         }
 
@@ -479,6 +502,11 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const result = parseShopifyOrdersCSV(text);
           if (!result.success) throw new Error('error' in result ? result.error : 'Shopify Orders parse failed');
           settlements = result.settlements;
+        } else if (marketplace === 'woolworths_marketplus') {
+          const text = await df.file.text();
+          const result = parseWoolworthsMarketPlusCSV(text);
+          if (!result.success) throw new Error('error' in result ? result.error : 'Woolworths MarketPlus parse failed');
+          settlements = result.settlements;
         } else {
           const mapping = df.detection.columnMapping || {};
           const name = df.file.name.toLowerCase();
@@ -508,14 +536,61 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         throw new Error('No settlements could be parsed from this file.');
       }
 
-      await ensureMarketplaceConnection(marketplace);
+      // For woolworths_marketplus, ensure sub-marketplace connections exist
+      if (marketplace === 'woolworths_marketplus') {
+        const subCodes = new Set(settlements.map(s => s.metadata?.marketplaceCode).filter(Boolean));
+        for (const code of subCodes) {
+          await ensureMarketplaceConnection(code as string);
+        }
+      } else {
+        await ensureMarketplaceConnection(marketplace);
+      }
 
       let savedCount = 0;
       let dupCount = 0;
+
+      // For Woolworths MarketPlus, parse the raw rows for drill-down
+      let woolworthsRows: any[] = [];
+      if (marketplace === 'woolworths_marketplus' && df.settlements) {
+        try {
+          const text = await df.file.text();
+          const { parseWoolworthsMarketPlusCSV: parse } = await import('@/utils/woolworths-marketplus-parser');
+          const parsed = parse(text);
+          if (parsed.success) woolworthsRows = parsed.allRows;
+        } catch { /* silent */ }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+
       for (const s of settlements) {
         const result = await saveSettlement(s);
-        if (result.success) savedCount++;
-        else if (result.duplicate) dupCount++;
+        if (result.success) {
+          savedCount++;
+
+          // Save settlement_lines for drill-down
+          if (user && marketplace === 'woolworths_marketplus' && woolworthsRows.length > 0) {
+            const orderSource = s.metadata?.orderSource;
+            const groupRows = woolworthsRows.filter((r: any) => r.orderSource === orderSource);
+            if (groupRows.length > 0) {
+              const lineRows = groupRows.map((row: any) => ({
+                user_id: user.id,
+                settlement_id: s.settlement_id,
+                order_id: row.orderId || null,
+                sku: row.sku || null,
+                amount: row.netAmount || 0,
+                amount_type: row.totalSalePrice < 0 ? 'refund' : 'order',
+                amount_description: row.product ? row.product.substring(0, 100) : null,
+                transaction_type: row.totalSalePrice < 0 ? 'Refund' : (row.commissionFee !== 0 && row.totalSalePrice === 0 ? 'Fee' : 'Order'),
+                posted_date: row.orderedDate || null,
+                marketplace_name: s.metadata?.displayName || orderSource,
+                accounting_category: row.totalSalePrice < 0 ? 'refunds' : (row.totalSalePrice === 0 ? 'fees' : 'sales'),
+              }));
+              for (let i = 0; i < lineRows.length; i += 500) {
+                await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
+              }
+            }
+          }
+        } else if (result.duplicate) dupCount++;
         else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
       }
 

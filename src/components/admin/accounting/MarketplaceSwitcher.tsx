@@ -63,6 +63,16 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     description: 'Bunnings Marketplace — manual CSV upload. Mirakl API coming Phase 2.',
   },
   {
+    code: 'bigw',
+    name: 'Big W',
+    icon: '🏬',
+    country: 'AU',
+    countryFlag: '🇦🇺',
+    connectionMethods: ['manual_csv'],
+    phase: 'csv_ready',
+    description: 'Big W Marketplace — auto-detected from Woolworths MarketPlus CSV.',
+  },
+  {
     code: 'kogan',
     name: 'Kogan',
     icon: '🛒',

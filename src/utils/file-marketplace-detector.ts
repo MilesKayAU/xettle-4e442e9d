@@ -3,7 +3,7 @@
  * Returns null if detection is inconclusive.
  */
 
-export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'shopify_payments' | 'shopify_orders' | null;
+export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'shopify_payments' | 'shopify_orders' | 'woolworths_marketplus' | null;
 
 /** Sniff a file and return the detected marketplace */
 export async function detectFileMarketplace(file: File): Promise<DetectedMarketplace> {
@@ -27,6 +27,11 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
       const slice = file.slice(0, 2048);
       const text = await slice.text();
       const lower = text.toLowerCase();
+
+      // Woolworths MarketPlus — has 'order source' AND 'bank payment ref'
+      if (lower.includes('order source') && lower.includes('bank payment ref')) {
+        return 'woolworths_marketplus';
+      }
 
       // Shopify Orders CSV (gateway clearing) — must check before Shopify Payments
       if (lower.includes('payment method') && lower.includes('financial status') && lower.includes('paid at')) {
@@ -80,4 +85,5 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   bunnings: 'Bunnings',
   shopify_payments: 'Shopify Payments',
   shopify_orders: 'Shopify Orders',
+  woolworths_marketplus: 'Woolworths MarketPlus',
 };

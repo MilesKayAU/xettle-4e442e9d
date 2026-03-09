@@ -32,24 +32,28 @@ export interface StandardSettlement {
 export const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
   bunnings: 'Bunnings Marketplace',
+  bigw: 'Big W Marketplace',
   shopify_payments: 'Shopify Payments',
   shopify_orders: 'Shopify', // Dynamic per-gateway contact name in metadata
   catch: 'Catch Marketplace',
   mydeal: 'MyDeal Marketplace',
   kogan: 'Kogan Marketplace',
   woolworths: 'Woolworths Marketplace',
+  woolworths_marketplus: 'Woolworths MarketPlus',
 };
 
 export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
   AU: 'Amazon AU',
   bunnings: 'Bunnings',
+  bigw: 'Big W',
   shopify_payments: 'Shopify Payments',
   shopify_orders: 'Shopify Orders',
   catch: 'Catch',
   mydeal: 'MyDeal',
   kogan: 'Kogan',
   woolworths: 'Woolworths',
+  woolworths_marketplus: 'Woolworths MarketPlus',
 };
 
 // ─── Xero Invoice Line Builder ──────────────────────────────────────────────
