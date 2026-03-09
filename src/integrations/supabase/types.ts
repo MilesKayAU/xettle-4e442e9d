@@ -544,9 +544,11 @@ export type Database = {
           storage_fees: number | null
           updated_at: string
           user_id: string
+          xero_invoice_number: string | null
           xero_journal_id: string | null
           xero_journal_id_1: string | null
           xero_journal_id_2: string | null
+          xero_status: string | null
         }
         Insert: {
           bank_deposit?: number | null
@@ -582,9 +584,11 @@ export type Database = {
           storage_fees?: number | null
           updated_at?: string
           user_id: string
+          xero_invoice_number?: string | null
           xero_journal_id?: string | null
           xero_journal_id_1?: string | null
           xero_journal_id_2?: string | null
+          xero_status?: string | null
         }
         Update: {
           bank_deposit?: number | null
@@ -620,9 +624,11 @@ export type Database = {
           storage_fees?: number | null
           updated_at?: string
           user_id?: string
+          xero_invoice_number?: string | null
           xero_journal_id?: string | null
           xero_journal_id_1?: string | null
           xero_journal_id_2?: string | null
+          xero_status?: string | null
         }
         Relationships: []
       }
