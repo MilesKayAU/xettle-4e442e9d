@@ -359,7 +359,7 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { reference, date, dueDate, lineItems, country, contactName } = body;
+    const { reference, description, date, dueDate, lineItems, country, contactName } = body;
 
     console.log('Create invoice request:', { userId, reference, date, country, contactName, lineItemCount: lineItems?.length });
     if (!reference) throw new Error('Missing reference');
