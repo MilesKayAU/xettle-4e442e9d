@@ -62,7 +62,7 @@ export interface ShopifyParseExtra {
 }
 
 export type ShopifyParseResult =
-  | { success: true; settlements: StandardSettlement[]; extra: ShopifyParseExtra }
+  | { success: true; settlements: StandardSettlement[]; extra: ShopifyParseExtra; rawRows?: ShopifyTransactionRow[]; rowsByPayout?: Map<string, ShopifyTransactionRow[]> }
   | { success: false; error: string };
 
 // Keep single-settlement type for backward compat
