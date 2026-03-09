@@ -140,8 +140,9 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
         );
         setActiveTab('review');
       } else {
-        setParseError(result.error);
-        toast.error(result.error);
+        const errMsg = result.error;
+        setParseError(errMsg);
+        toast.error(errMsg);
       }
     } catch (err: any) {
       setParseError(err.message || 'Unknown error');
@@ -473,7 +474,7 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
 
         {/* ─── History Tab ────────────────────────────────────────── */}
         <TabsContent value="history" className="space-y-4">
-          <XeroConnectionStatus variant="compact" />
+          <XeroConnectionStatus />
 
           {historyLoading ? (
             <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
