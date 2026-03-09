@@ -61,8 +61,19 @@ const MARKETPLACE_ICONS: Record<string, string> = {
 export default function PublicDemoUpload() {
   const [state, setState] = useState<DemoState>({ step: 'idle' });
   const [isDragging, setIsDragging] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  // Check if user is already logged in
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const processFile = useCallback(async (file: File) => {
     // Validate file size
