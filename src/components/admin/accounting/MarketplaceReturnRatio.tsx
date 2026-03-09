@@ -31,7 +31,7 @@ export default function MarketplaceReturnRatio() {
     try {
       const { data, error } = await supabase
         .from('settlements')
-        .select('marketplace, sales_principal, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees')
+        .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees')
         .order('period_end', { ascending: false });
 
       if (error) throw error;
@@ -51,16 +51,18 @@ export default function MarketplaceReturnRatio() {
       const results: MarketplaceStats[] = [];
 
       for (const [mp, rows] of Object.entries(grouped)) {
-        const totalSales = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
-        // Total fees = seller_fees + fba_fees + storage_fees + other_fees (all typically negative or zero)
+        // Use sales INCLUDING GST for consistent cross-marketplace comparison
+        const salesExGst = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
+        const gstOnSales = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
+        const totalSales = salesExGst + gstOnSales;
         const totalFees = rows.reduce((sum, r) =>
           sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
         const totalRefunds = rows.reduce((sum, r) => sum + Math.abs(r.refunds || 0), 0);
         const netPayout = rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
 
         const grossSales = totalSales;
-        const returnRatio = grossSales > 0 ? netPayout / grossSales : 0;
-        const feeLoad = grossSales > 0 ? totalFees / grossSales : 0;
+        const returnRatio = grossSales > 0 ? Math.min(netPayout / grossSales, 1) : 0;
+        const feeLoad = grossSales > 0 ? Math.min(totalFees / grossSales, 1) : 0;
 
         results.push({
           marketplace: mp,
