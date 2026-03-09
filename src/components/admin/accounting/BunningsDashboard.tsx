@@ -20,7 +20,9 @@ import {
   deleteSettlement,
   formatSettlementDate,
   formatAUD,
+  buildSimpleInvoiceLines,
 } from '@/utils/settlement-engine';
+import { runUniversalReconciliation, type UniversalReconciliationResult } from '@/utils/universal-reconciliation';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import MarketplaceInfoPanel from '@/components/MarketplaceInfoPanel';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
@@ -441,13 +443,28 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setSaving(false);
   };
 
-  const handlePushToXero = async (settlementId?: string) => {
+  const handlePushToXero = async (settlementId?: string, settlementData?: StandardSettlement) => {
     const targetId = settlementId || savedSettlementId || parsed?.settlement_id;
     if (!targetId) return;
+
+    // Run reconciliation check before sync
+    const dataToCheck = settlementData || parsed;
+    if (dataToCheck) {
+      const reconResult = runUniversalReconciliation(dataToCheck);
+      if (!reconResult.canSync) {
+        toast.error('Critical reconciliation issues detected — resolve before syncing to Xero.');
+        return;
+      }
+      if (reconResult.overallStatus === 'warn') {
+        toast.warning('Reconciliation warnings exist — proceeding with sync.');
+      }
+    }
+
     setPushing(true);
-    const result = await syncSettlementToXero(targetId, 'bunnings');
+    // Build proper invoice lines including refunds
+    const lineItems = dataToCheck ? buildSimpleInvoiceLines(dataToCheck) : undefined;
+    const result = await syncSettlementToXero(targetId, 'bunnings', lineItems ? { lineItems } : undefined);
     if (result.success) {
-      // Clear persisted state — successfully sent to Xero, no longer pending
       clearParsedStorage();
       toast.success('Invoice created in Xero!');
       loadHistory();
@@ -942,6 +959,53 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 </CardContent>
               </Card>
 
+              {/* Universal Reconciliation Checks */}
+              {(() => {
+                const reconResult = runUniversalReconciliation(parsed);
+                return (
+                  <Card className={`border ${reconResult.overallStatus === 'pass' ? 'border-primary/20' : reconResult.overallStatus === 'warn' ? 'border-amber-500/30' : 'border-destructive/30'}`}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        {reconResult.overallStatus === 'pass' ? (
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                        ) : reconResult.overallStatus === 'warn' ? (
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-destructive" />
+                        )}
+                        Pre-Sync Reconciliation
+                      </CardTitle>
+                      <CardDescription>
+                        {reconResult.canSync
+                          ? 'All critical checks passed — safe to sync to Xero'
+                          : 'Critical issues detected — resolve before syncing'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {reconResult.checks.map(check => (
+                          <div key={check.id} className={`flex items-start gap-2 text-xs rounded-md p-2 ${
+                            check.status === 'pass' ? 'bg-primary/5' : check.status === 'warn' ? 'bg-amber-500/5' : 'bg-destructive/5'
+                          }`}>
+                            {check.status === 'pass' ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-primary mt-0.5 flex-shrink-0" />
+                            ) : check.status === 'warn' ? (
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                            ) : (
+                              <XCircle className="h-3.5 w-3.5 text-destructive mt-0.5 flex-shrink-0" />
+                            )}
+                            <div>
+                              <p className="font-medium text-foreground">{check.label}</p>
+                              <p className="text-muted-foreground">{check.detail}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
               {/* Xero Preview */}
               <Card>
                 <CardHeader className="pb-3">
@@ -949,42 +1013,54 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                   <CardDescription>This is what will be created in Xero</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-md border border-border overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="text-left px-3 py-2 font-medium">Description</th>
-                          <th className="text-left px-3 py-2 font-medium">Account</th>
-                          <th className="text-right px-3 py-2 font-medium">Amount</th>
-                          <th className="text-left px-3 py-2 font-medium">Tax</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-t border-border">
-                          <td className="px-3 py-2">Marketplace Sales</td>
-                          <td className="px-3 py-2 text-muted-foreground">200 – Sales</td>
-                          <td className="px-3 py-2 text-right font-medium">{formatAUD(parsed.sales_ex_gst)}</td>
-                          <td className="px-3 py-2 text-muted-foreground">GST on Income</td>
-                        </tr>
-                        <tr className="border-t border-border">
-                          <td className="px-3 py-2">Marketplace Commission</td>
-                          <td className="px-3 py-2 text-muted-foreground">407 – Seller Fees</td>
-                          <td className="px-3 py-2 text-right font-medium text-destructive">{formatAUD(parsed.fees_ex_gst)}</td>
-                          <td className="px-3 py-2 text-muted-foreground">GST on Expenses</td>
-                        </tr>
-                      </tbody>
-                      <tfoot className="bg-muted/30 border-t border-border">
-                        <tr>
-                          <td colSpan={2} className="px-3 py-2 font-semibold">Invoice Total</td>
-                          <td className="px-3 py-2 text-right font-bold">{formatAUD(parsed.net_payout)}</td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Contact: Bunnings Marketplace • Ref: Bunnings Settlement {formatSettlementDate(parsed.period_start)} – {formatSettlementDate(parsed.period_end)}
-                  </p>
+                  {(() => {
+                    const invoiceLines = buildSimpleInvoiceLines(parsed);
+                    const invoiceTotal = invoiceLines.reduce((sum, l) => sum + l.UnitAmount * l.Quantity, 0);
+                    const gstTotal = invoiceLines.reduce((sum, l) => {
+                      const gst = l.TaxType === 'OUTPUT' || l.TaxType === 'INPUT' ? l.UnitAmount / 10 : 0;
+                      return sum + gst;
+                    }, 0);
+                    return (
+                      <>
+                        <div className="rounded-md border border-border overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="text-left px-3 py-2 font-medium">Description</th>
+                                <th className="text-left px-3 py-2 font-medium">Account</th>
+                                <th className="text-right px-3 py-2 font-medium">Amount</th>
+                                <th className="text-left px-3 py-2 font-medium">Tax</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {invoiceLines.map((line, i) => (
+                                <tr key={i} className="border-t border-border">
+                                  <td className="px-3 py-2">{line.Description}</td>
+                                  <td className="px-3 py-2 text-muted-foreground">{line.AccountCode}</td>
+                                  <td className={`px-3 py-2 text-right font-medium ${line.UnitAmount < 0 ? 'text-destructive' : ''}`}>
+                                    {formatAUD(line.UnitAmount)}
+                                  </td>
+                                  <td className="px-3 py-2 text-muted-foreground">
+                                    {line.TaxType === 'OUTPUT' ? 'GST on Income' : 'GST on Expenses'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="bg-muted/30 border-t border-border">
+                              <tr>
+                                <td colSpan={2} className="px-3 py-2 font-semibold">Invoice Total (inc GST)</td>
+                                <td className="px-3 py-2 text-right font-bold">{formatAUD(Math.round((invoiceTotal + gstTotal) * 100) / 100)}</td>
+                                <td></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Contact: Bunnings Marketplace • Ref: Bunnings Settlement {formatSettlementDate(parsed.period_start)} – {formatSettlementDate(parsed.period_end)}
+                        </p>
+                      </>
+                    );
+                  })()}
                 </CardContent>
               </Card>
 
