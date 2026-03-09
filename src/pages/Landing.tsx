@@ -332,7 +332,107 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* Profit Leak Breakdown */}
+      <section className="py-20 px-4">
+        <div className="container-custom max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              See your real marketplace profit
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Get a clear breakdown of fees, refunds, and shipping for every marketplace.
+            </p>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <img
+                src={profitLeakImg}
+                alt="Profit Leak Breakdown showing fee-by-fee analysis across Bunnings and Amazon AU"
+                className="rounded-2xl border border-border shadow-xl w-full"
+                loading="lazy"
+              />
+            </div>
+            <div className="space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Fee-by-fee breakdown</h3>
+                  <p className="text-muted-foreground text-sm">See exactly where your revenue goes — commission, fulfilment, shipping, refunds, and other fees for each marketplace.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Store className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Compare marketplaces</h3>
+                  <p className="text-muted-foreground text-sm">Instantly compare what you keep from Bunnings vs Amazon vs any marketplace — side by side.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <CheckCircle className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Spot your biggest cost</h3>
+                  <p className="text-muted-foreground text-sm">Every marketplace highlights your biggest profit leak so you know exactly where to focus.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Auto Fee Scanning */}
+      <section className="py-20 px-4 bg-card border-y border-border">
+        <div className="container-custom max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="order-2 lg:order-1 space-y-6">
+              <div className="inline-flex items-center gap-2 bg-destructive/10 text-destructive px-3 py-1 rounded-full text-xs font-semibold">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Built-in Alerts
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground">
+                Auto-scan for fee changes &amp; discrepancies
+              </h2>
+              <p className="text-lg text-muted-foreground">
+                Marketplaces change commission rates, add new fees, or adjust shipping charges — often without notice. Xettle watches every settlement for you.
+              </p>
+              <ul className="space-y-3">
+                {[
+                  'Commission rate changes detected automatically',
+                  'Shipping & fulfilment fee deviation alerts',
+                  'Refund rate spikes flagged before Xero sync',
+                  'Historical trend comparison across settlements',
+                  'Dismiss or investigate — you stay in control',
+                ].map(item => (
+                  <li key={item} className="flex items-start gap-2.5">
+                    <ScanSearch className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    <span className="text-foreground text-sm">{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button size="lg" asChild>
+                <Link to="/auth?tab=signup">
+                  Get Started Free <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+            <div className="order-1 lg:order-2">
+              <img
+                src={feeAlertsImg}
+                alt="Fee Change Alerts showing commission rate changes, shipping deviations, and status indicators"
+                className="rounded-2xl border border-border shadow-xl w-full"
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+
       <section className="py-20 px-4">
         <div className="container-custom max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
