@@ -4,6 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Rocket, Store, BarChart3, AlertTriangle, ScanSearch } from 'lucide-react';
 import profitLeakImg from '@/assets/profit-leak-preview.png';
 import feeAlertsImg from '@/assets/fee-alerts-preview.png';
+import PublicDemoUpload from '@/components/PublicDemoUpload';
+import feeAlertsImg from '@/assets/fee-alerts-preview.png';
 
 const features = [
   {
