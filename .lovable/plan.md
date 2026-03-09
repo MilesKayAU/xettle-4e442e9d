@@ -1,138 +1,79 @@
-# Xettle Build Plan
 
-## Smart File Ingestion — IMPLEMENTED ✅
 
-3-level intelligent file ingestion: fingerprint detection → heuristic mapping → AI fallback.
-Users upload any file, Xettle auto-detects marketplace, warns on wrong files, creates settlements.
+## Plan: Settlement Lines for All Parsers + Drill-Down Overhaul
 
-**Files created:** `file-fingerprint-engine.ts`, `generic-csv-parser.ts`, `SmartUploadFlow.tsx`, `ai-file-interpreter/index.ts`
-**DB:** `marketplace_file_fingerprints` table with RLS
+### Problem
+The eye button shows "No transaction detail available" for most settlements because only Amazon, Shopify Orders, and Woolworths MarketPlus save `settlement_lines`. Shopify Payments, generic CSV, and Bunnings settlements save no lines.
 
----
+### Current State
+| Source | Lines Saved? |
+|--------|-------------|
+| Amazon SP-API (edge function) | ✅ Yes |
+| Amazon manual (AccountingDashboard) | ✅ Yes |
+| Shopify Orders CSV | ✅ Yes |
+| Woolworths MarketPlus CSV | ✅ Yes |
+| Shopify Payments (transaction-level) | ❌ No |
+| Shopify Payments (payout-level) | ❌ No |
+| Generic CSV (any marketplace) | ❌ No |
+| Bunnings PDF | ❌ No |
 
-# Plan: Extract Accounting Module into Independent App
+### Changes
 
-## What You Have (Module Inventory)
+**1. Shopify Payments parser — expose raw rows** (`src/utils/shopify-payments-parser.ts`)
 
-The accounting module is self-contained with these components:
+Add `rawRows` to `ShopifyParseResult` for transaction-level format. Each `ShopifyTransactionRow` already has order, type, amount, fee, net, gst, date — pass them through in the result so SmartUploadFlow can save them as settlement_lines.
 
-| Layer | Files | Lines |
-|-------|-------|-------|
-| **UI** | `src/components/admin/accounting/AccountingDashboard.tsx` | ~3,490 |
-| **Parser** | `src/utils/settlement-parser.ts` | ~716 |
-| **Xero Invoice Sync** | `supabase/functions/sync-amazon-journal/index.ts` | ~450 |
-| **Xero OAuth** | `supabase/functions/xero-auth/index.ts` | existing |
-| **Xero Connection UI** | `src/components/admin/XeroConnectionStatus.tsx` | existing |
-| **Xero Callback Page** | `src/pages/XeroCallback.tsx` | existing |
+For payout-level format, no individual rows exist — mark metadata with `csvFormat: 'payout_level'` (already done) so the UI can show an appropriate message.
 
-**Database tables**: `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
+**2. SmartUploadFlow — save settlement_lines for ALL parsers** (`src/components/admin/accounting/SmartUploadFlow.tsx`)
 
-**Secrets needed**: `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `RESEND_API_KEY` (for notifications)
+After each `saveSettlement()` call succeeds, save settlement_lines for:
 
-## Recommended Approach
+- **Shopify Payments (transaction-level)**: Map each `ShopifyTransactionRow` → `settlement_line` with order_id, type, amount, fee, net, gst, date
+- **Shopify Payments (payout-level)**: Save 3 summary lines (charges total, refunds total, fees total) so drill-down shows *something*
+- **Generic CSV**: Save each parsed row as a settlement_line using the column mapping (order_id, amount, date, description from mapped columns)
+- **Bunnings PDF**: The parser returns a single summary — save summary lines (sales, fees, GST)
 
-**Create a new Lovable project** and port the accounting module as the primary app. This is the cleanest path because:
+Implementation: After the existing woolworths block (line ~572-593), add equivalent blocks for each parser type. Use a helper function `saveSettlementLines(userId, settlementId, lines[])` to avoid repetition.
 
-1. You get a fresh Supabase instance (clean DB, no legacy tables)
-2. Independent deployment and domain
-3. Own auth system focused on bookkeeper access
-4. No risk of breaking the Miles Kay e-commerce site
+**3. GenericMarketplaceDashboard — improved drill-down UI** (`src/components/admin/accounting/GenericMarketplaceDashboard.tsx`)
 
-## What the New App Would Include
-
-1. **Auth** — Supabase email auth with admin role
-2. **Dashboard** — The AccountingDashboard as the main page (upload, review, history, settings tabs)
-3. **Settlement Parser** — `settlement-parser.ts` copied directly
-4. **Edge Functions** — `sync-amazon-journal` and `xero-auth` deployed to new Supabase
-5. **Xero Integration** — OAuth connection UI + callback page
-6. **Settings** — Account code configuration, GST rate
-7. **Database** — Migrations for `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
-
-## What I Cannot Do From Here
-
-Lovable cannot programmatically create a separate project or copy files between projects. You would need to:
-
-1. **Create a new Lovable project** (click + New Project)
-2. **Come back here** and I can help you prepare all the code as a single prompt to paste into the new project, or you can reference this project
-3. Alternatively, **remix this project** (Settings → Remix) and then strip out everything except the accounting module
-
-## Recommended Next Step
-
-**Remix this project**, then in the new remixed project, ask me to strip it down to only the accounting module — removing all e-commerce pages (Products, Blog, Contact, Distributors, Where To Buy, etc.), the Alibaba invoice system, logistics, and Amazon product sync. This preserves all the accounting code, edge functions, and database schema intact while giving you an independent app.
-
-The remix approach is fastest because all code, edge functions, and Supabase config carry over. You'd just need to connect a new Supabase project and run the database migrations.
-
----
-
-# Marketplace Dashboard Standard
-
-Every new marketplace dashboard MUST include the following features before shipping. This serves as the architectural checklist for building marketplace parsers and their UI.
-
-## Required Features
-
-### 1. CSV Upload & Parse
-- File marketplace detection (reject wrong-marketplace files with warning)
-- Auto-detect CSV format variations if applicable
-- Parse into `StandardSettlement` via marketplace-specific parser
-
-### 2. Duplicate Detection (on parse)
-- **Exact match**: Check `settlement_id + marketplace` against existing `settlements` table
-- **Fingerprint match**: Same `period_start + period_end + bank_deposit (±$0.01)`
-- Show warning banner in review tab for duplicates
-- Mark duplicate payouts visually (dimmed, "Duplicate" badge)
-- `saveSettlement()` in settlement-engine.ts handles server-side dedup as final guard
-
-### 3. Gap Detection (on parse)
-- Compare earliest parsed payout's `period_start` against latest saved settlement's `period_end`
-- If gap exists, show orange warning banner: "Gap detected — you may be missing payouts"
-
-### 4. Reconciliation Checks (review tab)
-- Run `runUniversalReconciliation()` on each parsed settlement
-- Display checks inline with expandable "Checks" button per payout card
-- Show pass/warn/fail icons with detail text per check
-- Block Xero sync if `canSync === false` (critical failures)
-- Checks include: Balance, GST Consistency, Refund Completeness, Sanity, Historical Deviation, Invoice Accuracy
-
-### 5. Review Tab — Individual Payout Management
-- Dismiss/remove button (X) on each payout card (removes from parsed array, not DB)
-- Persisted state in localStorage across page refreshes
-- Clear All button
-- Save All → Push All to Xero flow
-
-### 6. History Tab — Bulk Operations
-- Select one / Select all checkboxes
-- Bulk delete with confirmation dialog
-- **Xero sync-aware bulk delete**: Count synced items in selection, show breakdown ("3 selected, 1 synced to Xero"), warn that Xero invoices won't be removed
-- Individual delete for ALL statuses including `synced` (with confirmation dialog for synced items)
-- "Xero ✓" badge on synced items when selected
-- Push to Xero button for saved/parsed items
-- Single-item delete for synced items with warning dialog
-
-### 7. Xero Sync
-- Use `syncSettlementToXero()` from settlement-engine.ts
-- Build marketplace-specific invoice lines via `buildXInvoiceLines()` function
-- Run `runUniversalReconciliation()` before sync — skip if `canSync === false`
-- Contact name from `MARKETPLACE_CONTACTS` map in settlement-engine.ts
-
-### 8. Fee Observation Engine
-- `saveSettlement()` auto-fires `extractFeeObservations()` for intelligence tracking
-- No per-dashboard code needed — handled by settlement-engine.ts
-
-## File Structure for New Marketplaces
+Replace the "No transaction detail available" dead-end message (line 609-611) with a helpful fallback:
 
 ```
-src/utils/{marketplace}-parser.ts          → CSV parser → StandardSettlement[]
-src/components/admin/accounting/{Name}Dashboard.tsx  → Dashboard UI
-src/utils/settlement-engine.ts             → Shared save/sync/delete (DO NOT DUPLICATE)
-src/utils/universal-reconciliation.ts      → Shared recon checks (DO NOT DUPLICATE)
-src/utils/file-marketplace-detector.ts     → Add detection pattern for new marketplace
+📋 Transaction detail not available for this settlement — 
+it was uploaded before detailed tracking was enabled.
+
+Settlement summary:
+Sales: $X | Fees: $X | Net: $X
+
+To see full detail:
+[Re-upload this settlement file]
 ```
 
-## Currently Implemented Marketplaces
+For payout-level Shopify, show: "This is a payout summary. For individual transactions: Shopify Admin → Finances → Transactions → Export"
 
-| Marketplace | Parser | Dashboard | Dedup | Gap | Recon | Bulk Delete | Xero Sync |
-|---|---|---|---|---|---|---|---|
-| Amazon AU | ✅ settlement-parser.ts | ✅ AccountingDashboard.tsx | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Shopify Payments | ✅ shopify-payments-parser.ts | ✅ ShopifyPaymentsDashboard.tsx | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bunnings | ✅ bunnings-summary-parser.ts | ✅ BunningsDashboard.tsx | ✅ | — | ✅ | ✅ | ✅ |
-| Catch / MyDeal / Kogan / Woolworths | — | ✅ GenericMarketplaceDashboard.tsx (placeholder) | — | — | — | — | — |
+Add color coding to transaction rows:
+- refund/Refund → red tint
+- fee/Fee → amber tint
+- adjustment → blue tint
+- order/charge → white (default)
+
+Add a totals row at the bottom of the transaction table.
+
+Add CSV export button in the expanded drill-down view.
+
+**4. Shopify Payments dashboard — save lines on upload** (`src/components/admin/accounting/ShopifyPaymentsDashboard.tsx`)
+
+Check if this component exists and handles its own uploads. If it delegates to SmartUploadFlow, the fix in #2 covers it. If it has its own save path, add line saving there too.
+
+### Files Changed
+
+1. `src/utils/shopify-payments-parser.ts` — Add `rawRows` to parse result
+2. `src/components/admin/accounting/SmartUploadFlow.tsx` — Save settlement_lines for Shopify Payments, generic CSV, Bunnings
+3. `src/components/admin/accounting/GenericMarketplaceDashboard.tsx` — Improved empty-state message, color-coded rows, totals row, CSV export
+
+### Scope Note
+
+This plan focuses on the critical path: ensuring lines are saved going forward and improving the drill-down UI. Historical settlements without lines will get the graceful fallback message with a re-upload prompt.
+
