@@ -33,7 +33,6 @@ import {
   detectFromFingerprints,
   saveFingerprint,
   incrementFingerprintMatch,
-  loadFingerprints,
 } from '@/utils/fingerprint-library';
 import {
   parseShopifyOrdersCSV,

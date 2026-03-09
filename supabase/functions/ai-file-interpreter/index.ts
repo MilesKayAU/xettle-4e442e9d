@@ -121,12 +121,16 @@ Row count: ${row_count || 0}`;
                   enum: ["note_attributes", "tags", "payment_method", "combined", "unknown"],
                   description: "Which field was most useful for detection",
                 },
+                pattern: {
+                  type: "string",
+                  description: "The specific text pattern that was matched (e.g. 'MyDealOrderID', 'commercium by constacloud', 'kogan'). This is saved as a fingerprint for future instant detection.",
+                },
                 reasoning: {
                   type: "string",
                   description: "Brief explanation of why this marketplace was detected",
                 },
               },
-              required: ["marketplace_name", "marketplace_code", "confidence", "detection_field", "reasoning"],
+              required: ["marketplace_name", "marketplace_code", "confidence", "detection_field", "pattern", "reasoning"],
               additionalProperties: false,
             },
           },
