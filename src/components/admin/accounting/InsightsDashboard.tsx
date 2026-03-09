@@ -253,14 +253,22 @@ export default function InsightsDashboard() {
   }
 
   // Generate the main insight sentence
+  const topRevenue = [...stats].sort((a, b) => b.totalSales - a.totalSales)[0];
+  const bestProfit = [...stats].sort((a, b) => b.returnRatio - a.returnRatio)[0];
+
   function getHeroInsight(): string {
     if (stats.length === 1) {
       return `${stats[0].label} returns $${stats[0].returnRatio.toFixed(2)} for every $1 sold after marketplace fees.`;
     }
-    const best = stats[0];
-    const worst = stats[stats.length - 1];
-    const diffPct = ((best.returnRatio - worst.returnRatio) / worst.returnRatio * 100).toFixed(0);
-    return `${best.label} returns $${best.returnRatio.toFixed(2)} per $1 sold — ${diffPct}% higher than ${worst.label}.`;
+    // If same marketplace leads both, simple message
+    if (topRevenue.marketplace === bestProfit.marketplace) {
+      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and profit efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1).`;
+    }
+    const profitMultiple = bestProfit.returnRatio / topRevenue.returnRatio;
+    if (profitMultiple >= 1.5) {
+      return `${topRevenue.label} generates the most revenue, but ${bestProfit.label} returns ${profitMultiple.toFixed(1)}× more profit per sale.`;
+    }
+    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} keeps $${bestProfit.returnRatio.toFixed(2)} per $1 sold.`;
   }
 
   // Stacked bar segments for $1 breakdown
