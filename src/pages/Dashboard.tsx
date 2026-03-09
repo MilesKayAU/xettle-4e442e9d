@@ -3,19 +3,24 @@ import { useAdminAuth } from '@/hooks/use-admin-auth';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import BunningsDashboard from '@/components/admin/accounting/BunningsDashboard';
-import MarketplaceSwitcher, { MARKETPLACE_CATALOG, type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
-import MarketplaceReturnRatio from '@/components/admin/accounting/MarketplaceReturnRatio';
+import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
+import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+
+type DashboardView = 'settlements' | 'insights';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [activeView, setActiveView] = useState<DashboardView>(() => {
+    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'settlements';
+  });
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
@@ -43,17 +48,15 @@ export default function Dashboard() {
         .from('marketplace_connections')
         .select('*')
         .order('created_at', { ascending: true });
-      
+
       if (error) throw error;
-      
+
       if (data && data.length > 0) {
         setUserMarketplaces(data as UserMarketplace[]);
-        // If currently selected marketplace isn't in their list, switch to first
         if (!data.find((m: any) => m.marketplace_code === selectedMarketplace)) {
           setSelectedMarketplace(data[0].marketplace_code);
         }
       } else {
-        // Auto-create Amazon AU for existing users
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
           const { error: insertErr } = await supabase
@@ -66,9 +69,8 @@ export default function Dashboard() {
               connection_type: 'sp_api',
               connection_status: 'active',
             } as any);
-          
+
           if (!insertErr) {
-            // Re-load
             const { data: reloaded } = await supabase
               .from('marketplace_connections')
               .select('*')
@@ -88,6 +90,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (user) loadMarketplaces();
   }, [user]);
+
+  function switchView(view: DashboardView) {
+    setActiveView(view);
+    localStorage.setItem('xettle_dashboard_view', view);
+  }
 
   if (isLoading) {
     return (
@@ -141,30 +148,63 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="container-custom py-8 space-y-6">
-        {/* Marketplace Return Ratio — cross-marketplace insight */}
-        <MarketplaceReturnRatio />
-
-        {/* Marketplace Switcher */}
-        <div>
-          {!marketplacesLoading && (
-            <MarketplaceSwitcher
-              selectedMarketplace={selectedMarketplace}
-              onMarketplaceChange={setSelectedMarketplace}
-              userMarketplaces={userMarketplaces}
-              onMarketplacesChanged={loadMarketplaces}
-            />
-          )}
+      {/* Section switcher — Settlements | Insights */}
+      <div className="border-b border-border bg-card/50">
+        <div className="container-custom">
+          <nav className="flex gap-1 -mb-px">
+            <button
+              onClick={() => switchView('settlements')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeView === 'settlements'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Settlements
+            </button>
+            <button
+              onClick={() => switchView('insights')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeView === 'insights'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Insights
+            </button>
+          </nav>
         </div>
+      </div>
 
-        {/* Marketplace Dashboard Content */}
-        {isAmazonAU ? (
-          <AccountingDashboard />
-        ) : isBunnings && selectedUserMarketplace ? (
-          <BunningsDashboard marketplace={selectedUserMarketplace} />
-        ) : selectedUserMarketplace ? (
-          <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} />
-        ) : null}
+      <div className="container-custom py-8">
+        {activeView === 'settlements' ? (
+          <div className="space-y-6">
+            {/* Marketplace Switcher */}
+            <div>
+              {!marketplacesLoading && (
+                <MarketplaceSwitcher
+                  selectedMarketplace={selectedMarketplace}
+                  onMarketplaceChange={setSelectedMarketplace}
+                  userMarketplaces={userMarketplaces}
+                  onMarketplacesChanged={loadMarketplaces}
+                />
+              )}
+            </div>
+
+            {/* Marketplace Dashboard Content */}
+            {isAmazonAU ? (
+              <AccountingDashboard />
+            ) : isBunnings && selectedUserMarketplace ? (
+              <BunningsDashboard marketplace={selectedUserMarketplace} />
+            ) : selectedUserMarketplace ? (
+              <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} />
+            ) : null}
+          </div>
+        ) : (
+          <InsightsDashboard />
+        )}
       </div>
     </div>
   );
