@@ -380,9 +380,17 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               const isSelected = selected.has(s.id);
               const isSyncable = s.status === 'saved' || s.status === 'parsed';
 
-              // Gap detection
+              // Gap detection — allow tolerance for daily-payout marketplaces like Shopify
               const prev = settlements[idx + 1];
-              const hasGap = prev && s.period_start > prev.period_end;
+              let hasGap = false;
+              if (prev && s.period_start > prev.period_end) {
+                const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
+                const gapDays = gapMs / (1000 * 60 * 60 * 24);
+                // Shopify payouts are daily — gaps up to 4 days (weekends/holidays) are normal
+                const isShopify = (s.marketplace || '').toLowerCase().includes('shopify');
+                const tolerance = isShopify ? 4 : 1;
+                hasGap = gapDays > tolerance;
+              }
 
               return (
                 <React.Fragment key={s.id}>
