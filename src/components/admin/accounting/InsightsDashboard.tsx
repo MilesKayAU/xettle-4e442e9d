@@ -300,7 +300,7 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Total Marketplace Fees</p>
+              <p className="text-xs text-muted-foreground font-medium">Marketplace Fees Paid</p>
               <p className="text-xl font-bold text-destructive mt-1">{formatCurrency(totalAllFees)}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{formatPct(totalAllSales > 0 ? totalAllFees / totalAllSales : 0)} of sales</p>
             </CardContent>
@@ -316,12 +316,12 @@ export default function InsightsDashboard() {
             <CardContent className="pt-5 pb-4">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Marketplace Payout</p>
+                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Return per $1 Sold</p>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs max-w-xs">Cash returned from marketplace after fees. Excludes COGS, shipping & advertising.</TooltipContent>
+                <TooltipContent className="text-xs max-w-xs">How much you keep per $1 of sales after marketplace fees. Excludes COGS, shipping & advertising.</TooltipContent>
               </Tooltip>
               <p className={`text-xl font-bold mt-1 ${getRatioColor(overallRatio)}`}>${overallRatio.toFixed(2)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Per $1 sold (after fees)</p>
+              <p className="text-xs text-muted-foreground mt-0.5">(after marketplace fees)</p>
             </CardContent>
           </Card>
           <Card>
