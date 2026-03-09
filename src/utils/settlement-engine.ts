@@ -67,7 +67,7 @@ export interface XeroLineItem {
  * due to the complexity of FBA fees, storage, refunds, etc.
  */
 export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLineItem[] {
-  return [
+  const lines: XeroLineItem[] = [
     {
       Description: 'Marketplace Sales',
       AccountCode: '200',
@@ -83,6 +83,54 @@ export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLin
       Quantity: 1,
     },
   ];
+
+  const meta = settlement.metadata || {};
+
+  // Add refunds line if present (negative amount — reduces invoice)
+  if (meta.refundsExGst && meta.refundsExGst !== 0) {
+    lines.push({
+      Description: 'Customer Refunds',
+      AccountCode: '200',
+      TaxType: 'OUTPUT',
+      UnitAmount: Math.round((meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) * 100) / 100,
+      Quantity: 1,
+    });
+  }
+
+  // Add refund on commission (positive — marketplace returns commission on refunded orders)
+  if (meta.refundCommissionExGst && meta.refundCommissionExGst !== 0) {
+    lines.push({
+      Description: 'Commission Refund (on refunded orders)',
+      AccountCode: '407',
+      TaxType: 'INPUT',
+      UnitAmount: Math.round(Math.abs(meta.refundCommissionExGst) * 100) / 100,
+      Quantity: 1,
+    });
+  }
+
+  // Add shipping revenue if present
+  if (meta.shippingExGst && meta.shippingExGst !== 0) {
+    lines.push({
+      Description: 'Shipping Revenue',
+      AccountCode: '200',
+      TaxType: 'OUTPUT',
+      UnitAmount: Math.round(meta.shippingExGst * 100) / 100,
+      Quantity: 1,
+    });
+  }
+
+  // Add subscription fee if present
+  if (meta.subscriptionAmount && meta.subscriptionAmount !== 0) {
+    lines.push({
+      Description: 'Marketplace Subscription',
+      AccountCode: '407',
+      TaxType: 'INPUT',
+      UnitAmount: Math.round(meta.subscriptionAmount * 100) / 100,
+      Quantity: 1,
+    });
+  }
+
+  return lines;
 }
 
 /**
