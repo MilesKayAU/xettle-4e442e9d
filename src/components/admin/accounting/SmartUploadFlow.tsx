@@ -56,6 +56,7 @@ interface DetectedFile {
 interface SmartUploadFlowProps {
   onSettlementsSaved?: () => void;
   onMarketplacesChanged?: () => void;
+  onViewSettlements?: () => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
