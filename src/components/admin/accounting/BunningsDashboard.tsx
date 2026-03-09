@@ -192,7 +192,10 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             Upload your Summary of Transactions PDF → Review → Push to Xero.
           </p>
         </div>
-        <XeroConnectionStatus />
+        <div className="flex items-center gap-3">
+          <MarketplaceInfoPanel marketplaceCode="bunnings" />
+          <XeroConnectionStatus />
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

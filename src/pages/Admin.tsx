@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +27,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
 
 interface UserRow {
   id: string;
@@ -189,119 +191,138 @@ export default function Admin() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Total Users</CardDescription>
-              <CardTitle className="text-3xl">{users.length}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Xero Connected</CardDescription>
-              <CardTitle className="text-3xl">{users.filter(u => u.xero_connected).length}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Amazon Connected</CardDescription>
-              <CardTitle className="text-3xl">{users.filter(u => u.amazon_connected).length}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Total Settlements</CardDescription>
-              <CardTitle className="text-3xl">{users.reduce((s, u) => s + u.settlement_count, 0)}</CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
+        <Tabs defaultValue="users" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="users" className="flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" />
+              Users
+            </TabsTrigger>
+            <TabsTrigger value="marketplaces" className="flex items-center gap-1.5">
+              <Store className="h-3.5 w-3.5" />
+              Marketplace Config
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Users table */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              <CardTitle>All Users</CardTitle>
+          <TabsContent value="users" className="space-y-6">
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Total Users</CardDescription>
+                  <CardTitle className="text-3xl">{users.length}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Xero Connected</CardDescription>
+                  <CardTitle className="text-3xl">{users.filter(u => u.xero_connected).length}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Amazon Connected</CardDescription>
+                  <CardTitle className="text-3xl">{users.filter(u => u.amazon_connected).length}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Total Settlements</CardDescription>
+                  <CardTitle className="text-3xl">{users.reduce((s, u) => s + u.settlement_count, 0)}</CardTitle>
+                </CardHeader>
+              </Card>
             </div>
-          </CardHeader>
-          <CardContent>
-            {loadingUsers ? (
-              <div className="flex justify-center py-8">
-                <LoadingSpinner size="md" text="Loading users..." />
-              </div>
-            ) : users.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">No users found</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead>Last Sign In</TableHead>
-                    <TableHead>Xero</TableHead>
-                    <TableHead>Amazon</TableHead>
-                    <TableHead className="text-right">Settlements</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell className="font-medium">{u.email}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(u.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {u.last_sign_in_at
-                          ? new Date(u.last_sign_in_at).toLocaleDateString()
-                          : '—'}
-                      </TableCell>
-                      <TableCell>
-                        {u.xero_connected ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {u.amazon_connected ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">{u.settlement_count}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Send password reset"
-                            disabled={actionLoading === u.id}
-                            onClick={() => handleSendReset(u)}
-                          >
-                            <KeyRound className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Delete user"
-                            disabled={actionLoading === u.id || u.id === user?.id}
-                            onClick={() => setDeleteTarget(u)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+
+            {/* Users table */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  <CardTitle>All Users</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingUsers ? (
+                  <div className="flex justify-center py-8">
+                    <LoadingSpinner size="md" text="Loading users..." />
+                  </div>
+                ) : users.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No users found</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Joined</TableHead>
+                        <TableHead>Last Sign In</TableHead>
+                        <TableHead>Xero</TableHead>
+                        <TableHead>Amazon</TableHead>
+                        <TableHead className="text-right">Settlements</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((u) => (
+                        <TableRow key={u.id}>
+                          <TableCell className="font-medium">{u.email}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {new Date(u.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {u.last_sign_in_at
+                              ? new Date(u.last_sign_in_at).toLocaleDateString()
+                              : '—'}
+                          </TableCell>
+                          <TableCell>
+                            {u.xero_connected ? (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {u.amazon_connected ? (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">{u.settlement_count}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Send password reset"
+                                disabled={actionLoading === u.id}
+                                onClick={() => handleSendReset(u)}
+                              >
+                                <KeyRound className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Delete user"
+                                disabled={actionLoading === u.id || u.id === user?.id}
+                                onClick={() => setDeleteTarget(u)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="marketplaces">
+            <MarketplaceConfigTab />
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Delete confirmation */}
