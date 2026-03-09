@@ -25,6 +25,7 @@ import AutoImportedTab from '@/components/admin/accounting/AutoImportedTab';
 import { CurrentPlanCard, UpgradeNudgeDialog, incrementManualUploadCount, shouldShowUpgradeNudge, getManualUploadCount } from '@/components/admin/accounting/UpgradePlanComponents';
 import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting/SyncComponents';
 import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
+import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@/utils/reconciliation-engine';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_COUNTRY = 'AU';
@@ -1353,6 +1354,7 @@ export default function AccountingDashboard() {
                     onPushToXero={handlePushToXero}
                     pushing={pushing}
                     pushed={pushed}
+                    historicalSettlements={settlements}
                   />
                 </div>
               )}
@@ -3106,6 +3108,68 @@ function BatchSettlementReview({
   );
 }
 
+// ─── Reconciliation Card ─────────────────────────────────────────────
+
+function ReconciliationCard({ result }: { result: ReconciliationResult }) {
+  const statusIcon = (status: ReconCheck['status']) => {
+    if (status === 'pass') return <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />;
+    if (status === 'warn') return <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />;
+    return <XCircle className="h-4 w-4 text-destructive shrink-0" />;
+  };
+
+  const borderColor = result.overallStatus === 'pass'
+    ? 'border-green-400 bg-green-50/30'
+    : result.overallStatus === 'warn'
+    ? 'border-amber-400 bg-amber-50/30'
+    : 'border-destructive bg-destructive/5';
+
+  const headerIcon = result.overallStatus === 'pass'
+    ? <CheckCircle2 className="h-5 w-5 text-green-600" />
+    : result.overallStatus === 'warn'
+    ? <AlertTriangle className="h-5 w-5 text-amber-600" />
+    : <XCircle className="h-5 w-5 text-destructive" />;
+
+  const headerText = result.overallStatus === 'pass'
+    ? 'All Reconciliation Checks Passed'
+    : result.overallStatus === 'warn'
+    ? 'Reconciliation Warnings — Review Before Sync'
+    : 'Reconciliation Failed — Sync Blocked';
+
+  return (
+    <Card className={`border-2 ${borderColor}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          {headerIcon}
+          {headerText}
+        </CardTitle>
+        <CardDescription className="text-xs">
+          {result.canSync
+            ? 'Settlement passed validation and can be synced to Xero.'
+            : 'Critical issues detected. Resolve before syncing to Xero.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {result.checks.map((check) => (
+            <div key={check.id} className="flex items-start gap-3 py-2 px-3 rounded-md bg-background/60 border border-border/50">
+              {statusIcon(check.status)}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{check.label}</span>
+                  {check.severity === 'critical' && check.status === 'fail' && (
+                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Blocks Sync</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{check.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Review Component (Link My Books style) ─────────────────────────
 
 function SettlementReview({
@@ -3116,6 +3180,7 @@ function SettlementReview({
   onPushToXero,
   pushing,
   pushed,
+  historicalSettlements,
 }: {
   parsed: ParsedSettlement;
   onSave: () => void;
@@ -3124,10 +3189,31 @@ function SettlementReview({
   onPushToXero: () => void;
   pushing: boolean;
   pushed: boolean;
+  historicalSettlements?: Array<{ sales_principal: number; sales_shipping: number; seller_fees: number; fba_fees: number; storage_fees: number }>;
 }) {
   const { header, summary, unmapped, lines, splitMonth } = parsed;
   const [showLineItems, setShowLineItems] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
+  // Run reconciliation checks
+  const reconResult = useMemo(() => {
+    let historicalStats: { avgFeeRate: number; avgReturnRatio: number; count: number } | undefined;
+    if (historicalSettlements && historicalSettlements.length >= 2) {
+      const rates = historicalSettlements.map(s => {
+        const sales = Math.abs((s.sales_principal || 0) + (s.sales_shipping || 0));
+        const fees = Math.abs((s.seller_fees || 0) + (s.fba_fees || 0) + (s.storage_fees || 0));
+        return sales > 0 ? fees / sales : 0;
+      }).filter(r => r > 0);
+      if (rates.length >= 2) {
+        historicalStats = {
+          avgFeeRate: rates.reduce((a, b) => a + b, 0) / rates.length,
+          avgReturnRatio: 0,
+          count: rates.length,
+        };
+      }
+    }
+    return runReconciliation(parsed, historicalStats);
+  }, [parsed, historicalSettlements]);
 
   // Compute rollover amount for display (mirrors handlePushToXero logic)
   const computedRolloverAmount = useMemo(() => {
@@ -3451,6 +3537,9 @@ function SettlementReview({
         </CardContent>
       </Card>
 
+      {/* Reconciliation Checks */}
+      <ReconciliationCard result={reconResult} />
+
       {/* Split Month Warning */}
       {splitMonth.isSplitMonth && splitMonth.month1 && splitMonth.month2 && (
         <Card className="border-2 border-purple-400 bg-purple-50/30">
@@ -3746,7 +3835,7 @@ function SettlementReview({
             <Button
               size="lg"
               onClick={onSave}
-              disabled={saving || saved || !parsed?.summary?.reconciliationMatch}
+              disabled={saving || saved || !parsed?.summary?.reconciliationMatch || !reconResult.canSync}
               className="gap-2"
             >
               {saving ? (
@@ -3761,7 +3850,7 @@ function SettlementReview({
               variant="outline"
               size="lg"
               onClick={onPushToXero}
-              disabled={!saved || pushing || pushed}
+              disabled={!saved || pushing || pushed || !reconResult.canSync}
               className="gap-2"
             >
               {pushing ? (
@@ -3772,9 +3861,9 @@ function SettlementReview({
                 <><ExternalLink className="h-4 w-4" /> Push to Xero</>
               )}
             </Button>
-            {!parsed?.summary?.reconciliationMatch && (
+            {(!parsed?.summary?.reconciliationMatch || !reconResult.canSync) && (
               <p className="text-xs text-destructive">
-                Save disabled — settlement does not reconcile.
+                {!reconResult.canSync ? 'Sync blocked — resolve reconciliation failures above.' : 'Save disabled — settlement does not reconcile.'}
               </p>
             )}
             {saved && !pushed && (
