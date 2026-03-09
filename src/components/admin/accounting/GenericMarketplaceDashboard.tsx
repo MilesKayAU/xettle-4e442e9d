@@ -702,11 +702,31 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               ⚠️ Retry Push
                             </Button>
                           )}
-                          {/* Synced state — show green badge */}
+                          {/* Synced state — show green badge + rollback */}
                           {isSynced && (
-                            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-                              ✅ {s.xero_invoice_number || 'Pushed'}
-                            </Badge>
+                            <>
+                              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                                ✅ {s.xero_invoice_number || 'Pushed'}
+                              </Badge>
+                              {s.xero_journal_id && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                        disabled={rollingBack === s.id}
+                                        onClick={() => handleRollback(s)}
+                                      >
+                                        {rollingBack === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p className="text-xs">Void invoice in Xero & reset</p></TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </>
                           )}
                           <Button
                             variant="ghost"
