@@ -50,6 +50,10 @@ interface SettlementRow {
   other_fees: number | null;
   xero_journal_id: string | null;
   sales_shipping: number | null;
+  bank_verified: boolean | null;
+  bank_verified_amount: number | null;
+  bank_verified_at: string | null;
+  bank_verified_by: string | null;
 }
 
 function statusBadge(status: string | null) {
