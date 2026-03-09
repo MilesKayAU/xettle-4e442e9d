@@ -274,7 +274,7 @@ const ShopifyConnectionStatus = () => {
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="w-full text-muted-foreground text-xs gap-1">
                   <Key className="h-3 w-3" />
-                  Using a Shopify Custom App? Enter your access token directly
+                  Using a Shopify Custom App instead?
                   <ChevronDown className={`h-3 w-3 transition-transform ${manualOpen ? 'rotate-180' : ''}`} />
                 </Button>
               </CollapsibleTrigger>
