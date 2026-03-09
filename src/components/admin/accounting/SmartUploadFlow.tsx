@@ -692,6 +692,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
         } else if (result.duplicate) dupCount++;
         else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
+      }
 
       const label = MARKETPLACE_LABELS[marketplace] || marketplace;
       if (savedCount > 0) {
