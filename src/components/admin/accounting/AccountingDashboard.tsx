@@ -28,7 +28,7 @@ import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSet
 import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@/utils/reconciliation-engine';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
-const SELECTED_COUNTRY = 'AU';
+const SELECTED_MARKETPLACE = 'amazon_au';
 
 interface SettlementRecord {
   id: string;
@@ -97,7 +97,7 @@ async function removeExistingSettlementForUser(userId: string, settlementId: str
 
 export default function AccountingDashboard() {
   const [selectedPlatform, setSelectedPlatform] = useState('amazon');
-  const selectedCountry = SELECTED_COUNTRY;
+  const selectedMarketplace = SELECTED_MARKETPLACE;
   const [activeTab, setActiveTab] = useState('upload');
   const [settlementFile, setSettlementFile] = useState<File | null>(null);
   const [transactionFile, setTransactionFile] = useState<File | null>(null);
@@ -277,7 +277,7 @@ export default function AccountingDashboard() {
       const { data, error } = await supabase
         .from('settlements')
         .select('*')
-        .eq('marketplace', selectedCountry)
+        .eq('marketplace', selectedMarketplace)
         .order('period_end', { ascending: false });
       if (error) throw error;
       setSettlements((data || []) as SettlementRecord[]);
@@ -286,7 +286,7 @@ export default function AccountingDashboard() {
     } finally {
       setLoadingSettlements(false);
     }
-  }, [selectedCountry]);
+  }, [selectedMarketplace]);
 
   useEffect(() => { loadSettlements(); }, [loadSettlements]);
 
@@ -474,7 +474,7 @@ export default function AccountingDashboard() {
       const { error: settError } = await supabase.from('settlements').insert({
         user_id: user.id,
         settlement_id: header.settlementId,
-        marketplace: selectedCountry,
+        marketplace: selectedMarketplace,
         period_start: header.periodStart,
         period_end: header.periodEnd,
         deposit_date: header.depositDate,
@@ -504,7 +504,7 @@ export default function AccountingDashboard() {
       import('@/utils/fee-observation-engine').then(({ extractAmazonFeeObservations }) => {
         extractAmazonFeeObservations({
           settlement_id: header.settlementId,
-          marketplace: selectedCountry,
+          marketplace: selectedMarketplace,
           period_start: header.periodStart,
           period_end: header.periodEnd,
           sales_principal: summary.salesPrincipal,
