@@ -8,13 +8,12 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import {
-  Upload, FileText, CheckCircle2, XCircle, AlertTriangle, Loader2,
-  Sparkles, ArrowRight, ChevronDown, Info, Trash2,
+  Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
+  Sparkles, ArrowRight, Info, Trash2,
 } from 'lucide-react';
 import {
   Select,

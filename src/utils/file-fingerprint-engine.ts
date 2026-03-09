@@ -228,7 +228,6 @@ function normaliseHeader(h: string): string {
  */
 export function detectByFingerprint(headers: string[]): FileDetectionResult | null {
   const normHeaders = headers.map(normaliseHeader);
-  const headerSet = new Set(normHeaders);
 
   let bestMatch: { fingerprint: Fingerprint; score: number } | null = null;
 
