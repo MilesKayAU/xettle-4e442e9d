@@ -103,7 +103,7 @@ function round2(n: number): number {
 
 function parseAmount(raw: string): number {
   if (!raw) return 0;
-  const cleaned = raw.replace(/[^0-9.\\-,]/g, '').replace(/,/g, '');
+  const cleaned = raw.replace(/[^0-9.\-,]/g, '').replace(/,/g, '');
   const val = parseFloat(cleaned);
   return isNaN(val) ? 0 : val;
 }
