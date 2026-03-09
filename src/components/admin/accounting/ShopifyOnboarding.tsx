@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useRef, useCallback } from 'react';
+import SkuCostManager from './SkuCostManager';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,8 +27,9 @@ import {
 } from '@/components/ui/select';
 import {
   Upload, CheckCircle2, ChevronDown, FileText, ShoppingCart,
-  ArrowRight, Loader2, SkipForward, Calendar, Info,
+  ArrowRight, Loader2, SkipForward, Calendar, Info, Package,
 } from 'lucide-react';
+import { extractUniqueSKUs } from '@/utils/profit-engine';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
