@@ -439,6 +439,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               const gstIncome = s.gst_on_income || 0;
               const isSelected = selected.has(s.id);
               const isSyncable = s.status === 'saved' || s.status === 'parsed';
+              const isPushFailed = s.status === 'push_failed';
+              const isSynced = s.status === 'synced' || s.status === 'pushed_to_xero';
 
               // Gap detection — allow tolerance for daily-payout marketplaces like Shopify
               const prev = settlements[idx + 1];
