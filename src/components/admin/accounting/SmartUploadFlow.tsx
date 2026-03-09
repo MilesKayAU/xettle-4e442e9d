@@ -56,6 +56,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [files, setFiles] = useState<DetectedFile[]>([]);
   const [processingAll, setProcessingAll] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const filesRef = useRef<DetectedFile[]>([]);
+  // Keep ref in sync with state
+  filesRef.current = files;
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
@@ -151,7 +154,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     });
 
     try {
-      const file = files[idx].file;
+      const file = filesRef.current[idx]?.file;
+      if (!file) return;
       const extracted = await extractFileHeaders(file);
       if (!extracted) {
         setFiles(prev => {
@@ -239,7 +243,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         return updated;
       });
     }
-  }, [files]);
+  }, []);
 
   // ── Parse & save a single file ──
   const processFile = useCallback(async (idx: number) => {
