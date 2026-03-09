@@ -149,14 +149,21 @@ export async function saveFingerprint(params: {
  * Fire-and-forget — doesn't block detection flow.
  */
 export function incrementFingerprintMatch(field: string, pattern: string) {
-  supabase
-    .from('marketplace_fingerprints')
-    .update({ match_count: supabase.rpc ? undefined : undefined }) // can't do increment via update
-    .then(() => {});
-  
-  // Use raw SQL via RPC would be ideal, but we'll do select+update
   (async () => {
     const { data } = await supabase
+      .from('marketplace_fingerprints')
+      .select('id, match_count')
+      .eq('field', field)
+      .eq('pattern', pattern)
+      .maybeSingle();
+    if (data) {
+      await supabase
+        .from('marketplace_fingerprints')
+        .update({ match_count: (data.match_count || 0) + 1 })
+        .eq('id', data.id);
+    }
+  })();
+}
       .from('marketplace_fingerprints')
       .select('id, match_count')
       .eq('field', field)
