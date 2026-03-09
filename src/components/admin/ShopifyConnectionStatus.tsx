@@ -19,7 +19,10 @@ const ShopifyConnectionStatus = () => {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [shopDomain, setShopDomain] = useState('');
-
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualToken, setManualToken] = useState('');
+  const [manualDomain, setManualDomain] = useState('');
+  const [savingToken, setSavingToken] = useState(false);
   const fetchStatus = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
