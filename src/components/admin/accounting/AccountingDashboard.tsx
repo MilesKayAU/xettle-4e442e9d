@@ -3835,7 +3835,7 @@ function SettlementReview({
             <Button
               size="lg"
               onClick={onSave}
-              disabled={saving || saved || !parsed?.summary?.reconciliationMatch}
+              disabled={saving || saved || !parsed?.summary?.reconciliationMatch || !reconResult.canSync}
               className="gap-2"
             >
               {saving ? (
@@ -3850,7 +3850,7 @@ function SettlementReview({
               variant="outline"
               size="lg"
               onClick={onPushToXero}
-              disabled={!saved || pushing || pushed}
+              disabled={!saved || pushing || pushed || !reconResult.canSync}
               className="gap-2"
             >
               {pushing ? (
@@ -3861,9 +3861,9 @@ function SettlementReview({
                 <><ExternalLink className="h-4 w-4" /> Push to Xero</>
               )}
             </Button>
-            {!parsed?.summary?.reconciliationMatch && (
+            {(!parsed?.summary?.reconciliationMatch || !reconResult.canSync) && (
               <p className="text-xs text-destructive">
-                Save disabled — settlement does not reconcile.
+                {!reconResult.canSync ? 'Sync blocked — resolve reconciliation failures above.' : 'Save disabled — settlement does not reconcile.'}
               </p>
             )}
             {saved && !pushed && (
