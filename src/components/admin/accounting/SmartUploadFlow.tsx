@@ -556,6 +556,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         for (const code of subCodes) {
           await ensureMarketplaceConnection(code as string);
         }
+      } else if (marketplace === 'shopify_orders') {
+        // Shopify Orders splits into sub-marketplaces (kogan, mydeal, bunnings, etc.)
+        const subCodes = new Set(settlements.map(s => s.metadata?.marketplaceKey).filter(c => c && c !== 'unknown'));
+        for (const code of subCodes) {
+          await ensureMarketplaceConnection(code as string);
+        }
       } else {
         await ensureMarketplaceConnection(marketplace);
       }
