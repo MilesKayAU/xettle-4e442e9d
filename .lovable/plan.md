@@ -1,3 +1,15 @@
+# Xettle Build Plan
+
+## Smart File Ingestion — IMPLEMENTED ✅
+
+3-level intelligent file ingestion: fingerprint detection → heuristic mapping → AI fallback.
+Users upload any file, Xettle auto-detects marketplace, warns on wrong files, creates settlements.
+
+**Files created:** `file-fingerprint-engine.ts`, `generic-csv-parser.ts`, `SmartUploadFlow.tsx`, `ai-file-interpreter/index.ts`
+**DB:** `marketplace_file_fingerprints` table with RLS
+
+---
+
 # Plan: Extract Accounting Module into Independent App
 
 ## What You Have (Module Inventory)
