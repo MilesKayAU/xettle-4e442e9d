@@ -271,8 +271,8 @@ export default function AccountingDashboard() {
     checkTier();
   }, []);
 
-  const loadSettlements = useCallback(async () => {
-    setLoadingSettlements(true);
+  const loadSettlements = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoadingSettlements(true);
     try {
       const { data, error } = await supabase
         .from('settlements')
