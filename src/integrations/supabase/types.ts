@@ -119,6 +119,138 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_fee_alerts: {
+        Row: {
+          created_at: string
+          deviation_pct: number
+          expected_rate: number
+          fee_type: Database["public"]["Enums"]["fee_observation_type"]
+          id: string
+          marketplace_code: string
+          observed_rate: number
+          settlement_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deviation_pct: number
+          expected_rate: number
+          fee_type: Database["public"]["Enums"]["fee_observation_type"]
+          id?: string
+          marketplace_code: string
+          observed_rate: number
+          settlement_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deviation_pct?: number
+          expected_rate?: number
+          fee_type?: Database["public"]["Enums"]["fee_observation_type"]
+          id?: string
+          marketplace_code?: string
+          observed_rate?: number
+          settlement_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      marketplace_fee_observations: {
+        Row: {
+          base_amount: number
+          created_at: string
+          currency: string
+          fee_category: string
+          fee_type: Database["public"]["Enums"]["fee_observation_type"]
+          id: string
+          marketplace_code: string
+          observation_method: Database["public"]["Enums"]["observation_method"]
+          observed_amount: number
+          observed_rate: number | null
+          period_end: string
+          period_start: string
+          settlement_id: string
+          user_id: string
+        }
+        Insert: {
+          base_amount: number
+          created_at?: string
+          currency?: string
+          fee_category?: string
+          fee_type: Database["public"]["Enums"]["fee_observation_type"]
+          id?: string
+          marketplace_code: string
+          observation_method?: Database["public"]["Enums"]["observation_method"]
+          observed_amount: number
+          observed_rate?: number | null
+          period_end: string
+          period_start: string
+          settlement_id: string
+          user_id: string
+        }
+        Update: {
+          base_amount?: number
+          created_at?: string
+          currency?: string
+          fee_category?: string
+          fee_type?: Database["public"]["Enums"]["fee_observation_type"]
+          id?: string
+          marketplace_code?: string
+          observation_method?: Database["public"]["Enums"]["observation_method"]
+          observed_amount?: number
+          observed_rate?: number | null
+          period_end?: string
+          period_start?: string
+          settlement_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      marketplaces: {
+        Row: {
+          created_at: string
+          currency: string
+          gst_model: string
+          id: string
+          is_active: boolean
+          marketplace_code: string
+          name: string
+          payment_delay_days: number
+          settlement_frequency: string
+          settlement_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          gst_model?: string
+          id?: string
+          is_active?: boolean
+          marketplace_code: string
+          name: string
+          payment_delay_days?: number
+          settlement_frequency?: string
+          settlement_type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          gst_model?: string
+          id?: string
+          is_active?: boolean
+          marketplace_code?: string
+          name?: string
+          payment_delay_days?: number
+          settlement_frequency?: string
+          settlement_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       settlement_lines: {
         Row: {
           accounting_category: string | null
@@ -416,6 +548,15 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user" | "paid" | "starter" | "pro"
+      fee_observation_type:
+        | "commission"
+        | "referral"
+        | "fba_fulfilment"
+        | "storage"
+        | "refund_rate"
+        | "shipping_fee"
+        | "transaction_fee"
+      observation_method: "parser" | "derived" | "manual"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -544,6 +685,16 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user", "paid", "starter", "pro"],
+      fee_observation_type: [
+        "commission",
+        "referral",
+        "fba_fulfilment",
+        "storage",
+        "refund_rate",
+        "shipping_fee",
+        "transaction_fee",
+      ],
+      observation_method: ["parser", "derived", "manual"],
     },
   },
 } as const
