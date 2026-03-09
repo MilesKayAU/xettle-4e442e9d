@@ -309,6 +309,7 @@ const ShopifyConnectionStatus = () => {
                   placeholder="yourstore.myshopify.com"
                   value={manualDomain}
                   onChange={(e) => setManualDomain(e.target.value)}
+                  autoComplete="off"
                 />
                 <Button
                   onClick={handleManualSave}
