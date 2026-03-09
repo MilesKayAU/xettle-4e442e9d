@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.sync-xero-status]
 verify_jwt = false
+
+[functions.shopify-auth]
+verify_jwt = false
