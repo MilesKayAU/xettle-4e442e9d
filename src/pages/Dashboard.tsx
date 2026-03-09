@@ -228,7 +228,11 @@ export default function Dashboard() {
                 </p>
               </div>
               <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                <SmartUploadFlow onSettlementsSaved={loadMarketplaces} onMarketplacesChanged={loadMarketplaces} />
+                <SmartUploadFlow
+                  onSettlementsSaved={loadMarketplaces}
+                  onMarketplacesChanged={loadMarketplaces}
+                  onViewSettlements={() => switchView('settlements')}
+                />
               </Suspense>
             </div>
           </ErrorBoundary>
