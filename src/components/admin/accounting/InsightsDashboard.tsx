@@ -111,11 +111,24 @@ export default function InsightsDashboard() {
         // Cap ratio at 1.0 — a return > $1 per $1 sold is impossible
         const returnRatio = totalSales > 0 ? Math.min(netPayout / totalSales, 1) : 0;
         const feeLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
-        const avgCommission = totalSales > 0 ? Math.min(Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0)) / totalSales, 1) : 0;
+        const commissionTotal = Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
+        const avgCommission = totalSales > 0 ? Math.min(commissionTotal / totalSales, 1) : 0;
         const latestPeriodEnd = rows.length > 0 ? rows[0].period_end : null;
+        const fbaTotal = Math.abs(rows.reduce((sum, r) => sum + (r.fba_fees || 0), 0));
+        const storageTotal = Math.abs(rows.reduce((sum, r) => sum + (r.storage_fees || 0), 0));
+        const otherFeesTotal = Math.abs(rows.reduce((sum, r) => sum + (r.other_fees || 0), 0));
 
         const adSpend = adSpendByMp[mp] || 0;
         const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
+
+        // Build fee breakdown for waterfall
+        const feeBreakdown: FeeBreakdown[] = [];
+        if (commissionTotal > 0) feeBreakdown.push({ label: 'Commission', amount: commissionTotal, pctOfSales: totalSales > 0 ? commissionTotal / totalSales : 0, color: 'bg-primary' });
+        if (fbaTotal > 0) feeBreakdown.push({ label: 'FBA Fulfilment', amount: fbaTotal, pctOfSales: totalSales > 0 ? fbaTotal / totalSales : 0, color: 'bg-destructive' });
+        if (storageTotal > 0) feeBreakdown.push({ label: 'Storage', amount: storageTotal, pctOfSales: totalSales > 0 ? storageTotal / totalSales : 0, color: 'bg-muted-foreground' });
+        if (totalRefunds > 0) feeBreakdown.push({ label: 'Refunds', amount: totalRefunds, pctOfSales: totalSales > 0 ? totalRefunds / totalSales : 0, color: 'bg-muted-foreground/60' });
+        if (otherFeesTotal > 0) feeBreakdown.push({ label: 'Other fees', amount: otherFeesTotal, pctOfSales: totalSales > 0 ? otherFeesTotal / totalSales : 0, color: 'bg-muted-foreground/40' });
+        feeBreakdown.sort((a, b) => b.amount - a.amount);
 
         results.push({
           marketplace: mp,
@@ -131,6 +144,11 @@ export default function InsightsDashboard() {
           avgCommission,
           adSpend,
           returnAfterAds,
+          commissionTotal,
+          fbaTotal,
+          storageTotal,
+          otherFeesTotal,
+          feeBreakdown,
         });
       }
 
