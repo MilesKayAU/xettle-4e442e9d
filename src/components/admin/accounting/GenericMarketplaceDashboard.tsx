@@ -19,12 +19,23 @@ import {
   syncSettlementToXero,
   syncXeroStatus,
   deleteSettlement,
+  rollbackSettlementFromXero,
   formatSettlementDate,
   formatAUD,
   buildSimpleInvoiceLines,
   type StandardSettlement,
 } from '@/utils/settlement-engine';
-import { runUniversalReconciliation } from '@/utils/universal-reconciliation';
+import { runUniversalReconciliation, type UniversalReconciliationResult } from '@/utils/universal-reconciliation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 
@@ -95,6 +106,11 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [bankAmountInput, setBankAmountInput] = useState('');
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
+  const [reconResults, setReconResults] = useState<Record<string, UniversalReconciliationResult>>({});
+  const [expandedRecon, setExpandedRecon] = useState<string | null>(null);
+  const [rollingBack, setRollingBack] = useState<string | null>(null);
+  const [refreshingXero, setRefreshingXero] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
   const loadLineItems = useCallback(async (settlementId: string) => {
     if (lineItems[settlementId]) {
@@ -179,6 +195,13 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   const handleBulkDelete = useCallback(async () => {
     if (selected.size === 0) return;
+    // Check for synced items — show Xero-aware dialog
+    const syncedCount = settlements.filter(s => selected.has(s.id) && (s.status === 'synced' || s.status === 'pushed_to_xero' || s.xero_journal_id)).length;
+    if (syncedCount > 0 && !bulkDeleteDialogOpen) {
+      setBulkDeleteDialogOpen(true);
+      return;
+    }
+    setBulkDeleteDialogOpen(false);
     setBulkDeleting(true);
     let deleted = 0;
     for (const id of selected) {
@@ -189,7 +212,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     setBulkDeleting(false);
     toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
     loadSettlements();
-  }, [selected, loadSettlements]);
+  }, [selected, loadSettlements, settlements, bulkDeleteDialogOpen]);
 
   const handlePushToXero = useCallback(async (settlement: SettlementRow, bankAmount?: number) => {
     setPushing(settlement.id);
@@ -291,7 +314,88 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     }
   }, [settlements, loadSettlements]);
 
+  // ─── Rollback from Xero ─────────────────────────────────────────────────────
+
+  const handleRollback = useCallback(async (settlement: SettlementRow) => {
+    if (!settlement.xero_journal_id) return;
+    const confirmed = window.confirm(
+      `This will void invoice ${settlement.xero_invoice_number || settlement.xero_journal_id} in Xero and reset the settlement to "Ready to push". Continue?`
+    );
+    if (!confirmed) return;
+    setRollingBack(settlement.id);
+    try {
+      const invoiceIds = [settlement.xero_journal_id];
+      const result = await rollbackSettlementFromXero(settlement.settlement_id, settlement.marketplace, invoiceIds);
+      if (result.success) {
+        await supabase.from('settlements').update({ status: 'saved', xero_journal_id: null, xero_invoice_number: null, xero_status: null } as any).eq('id', settlement.id);
+        toast.success('Invoice voided in Xero — settlement reset to Ready');
+        loadSettlements();
+      } else {
+        toast.error(result.error || 'Rollback failed');
+      }
+    } catch (err: any) {
+      toast.error(`Rollback failed: ${err.message}`);
+    } finally {
+      setRollingBack(null);
+    }
+  }, [loadSettlements]);
+
+  // ─── Refresh from Xero ──────────────────────────────────────────────────────
+
+  const handleRefreshXero = useCallback(async () => {
+    setRefreshingXero(true);
+    try {
+      const result = await syncXeroStatus();
+      if (result.success) {
+        toast.success(`Xero status refreshed — ${result.updated || 0} record${(result.updated || 0) !== 1 ? 's' : ''} updated`);
+        loadSettlements();
+      } else {
+        toast.error(result.error || 'Failed to refresh from Xero');
+      }
+    } catch (err: any) {
+      toast.error(`Refresh failed: ${err.message}`);
+    } finally {
+      setRefreshingXero(false);
+    }
+  }, [loadSettlements]);
+
+  // ─── Inline Reconciliation ──────────────────────────────────────────────────
+
+  const toggleReconCheck = useCallback((settlement: SettlementRow) => {
+    const sid = settlement.settlement_id;
+    if (expandedRecon === sid) {
+      setExpandedRecon(null);
+      return;
+    }
+    // Run recon on demand
+    if (!reconResults[sid]) {
+      const stdSettlement: StandardSettlement = {
+        marketplace: settlement.marketplace,
+        settlement_id: settlement.settlement_id,
+        period_start: settlement.period_start,
+        period_end: settlement.period_end,
+        sales_ex_gst: settlement.sales_principal || 0,
+        gst_on_sales: settlement.gst_on_income || 0,
+        fees_ex_gst: settlement.seller_fees || 0,
+        gst_on_fees: settlement.gst_on_expenses || 0,
+        net_payout: settlement.bank_deposit || 0,
+        source: 'csv_upload',
+        reconciles: true,
+        metadata: {
+          refundsExGst: settlement.refunds || 0,
+          shippingExGst: settlement.sales_shipping || 0,
+          subscriptionAmount: settlement.other_fees || 0,
+          refundCommissionExGst: settlement.reimbursements || 0,
+        },
+      };
+      const result = runUniversalReconciliation(stdSettlement);
+      setReconResults(prev => ({ ...prev, [sid]: result }));
+    }
+    setExpandedRecon(sid);
+  }, [expandedRecon, reconResults]);
+
   // ─── Selection ──────────────────────────────────────────────────────────────
+
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -327,7 +431,19 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             View saved settlements, reconcile, and sync to Xero.
           </p>
         </div>
-        <XeroConnectionStatus />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={refreshingXero}
+            onClick={handleRefreshXero}
+          >
+            {refreshingXero ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Refresh from Xero
+          </Button>
+          <XeroConnectionStatus />
+        </div>
       </div>
 
       {/* Upload prompt — directs to Smart Upload */}
@@ -513,6 +629,34 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                 Bank not verified
                               </p>
                             ) : null}
+                            {/* Inline reconciliation toggle */}
+                            <button
+                              onClick={() => toggleReconCheck(s)}
+                              className="text-[10px] text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 cursor-pointer"
+                            >
+                              {expandedRecon === s.settlement_id ? <ChevronDown className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                              {reconResults[s.settlement_id]
+                                ? `Recon: ${reconResults[s.settlement_id].overallStatus === 'pass' ? '✅ Pass' : reconResults[s.settlement_id].overallStatus === 'warn' ? '⚠️ Warnings' : '❌ Fail'}`
+                                : 'Run recon checks'
+                              }
+                            </button>
+                            {/* Inline reconciliation results */}
+                            {expandedRecon === s.settlement_id && reconResults[s.settlement_id] && (
+                              <div className="mt-1.5 space-y-1 bg-muted/30 rounded-md px-3 py-2">
+                                {reconResults[s.settlement_id].checks.map((check) => (
+                                  <div key={check.id} className="flex items-center gap-2 text-[10px]">
+                                    <span>
+                                      {check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️' : '❌'}
+                                    </span>
+                                    <span className="font-medium text-foreground">{check.label}</span>
+                                    <span className="text-muted-foreground">— {check.detail}</span>
+                                  </div>
+                                ))}
+                                {!reconResults[s.settlement_id].canSync && (
+                                  <p className="text-[10px] font-medium text-destructive mt-1">⛔ Xero push blocked — resolve critical issues first</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -586,11 +730,31 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               ⚠️ Retry Push
                             </Button>
                           )}
-                          {/* Synced state — show green badge */}
+                          {/* Synced state — show green badge + rollback */}
                           {isSynced && (
-                            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-                              ✅ {s.xero_invoice_number || 'Pushed'}
-                            </Badge>
+                            <>
+                              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                                ✅ {s.xero_invoice_number || 'Pushed'}
+                              </Badge>
+                              {s.xero_journal_id && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                        disabled={rollingBack === s.id}
+                                        onClick={() => handleRollback(s)}
+                                      >
+                                        {rollingBack === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p className="text-xs">Void invoice in Xero & reset</p></TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </>
                           )}
                           <Button
                             variant="ghost"
@@ -832,6 +996,47 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           </div>
         )}
       </div>
+
+      {/* Xero-aware bulk delete confirmation dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selected.size} settlement{selected.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const syncedCount = settlements.filter(s => selected.has(s.id) && (s.status === 'synced' || s.status === 'pushed_to_xero' || s.xero_journal_id)).length;
+                return syncedCount > 0
+                  ? `⚠️ ${syncedCount} of ${selected.size} selected settlement${selected.size !== 1 ? 's are' : ' is'} already in Xero. Deleting them here will NOT void them in Xero — you'll need to void those invoices manually.`
+                  : `This will permanently delete ${selected.size} settlement${selected.size !== 1 ? 's' : ''} and their transaction lines.`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setBulkDeleteDialogOpen(false);
+                // Force-run the delete (dialog already confirmed)
+                (async () => {
+                  setBulkDeleting(true);
+                  let deleted = 0;
+                  for (const id of selected) {
+                    const result = await deleteSettlement(id);
+                    if (result.success) deleted++;
+                  }
+                  setSelected(new Set());
+                  setBulkDeleting(false);
+                  toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
+                  loadSettlements();
+                })();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete {selected.size} Settlement{selected.size !== 1 ? 's' : ''}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
