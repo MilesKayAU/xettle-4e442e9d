@@ -75,20 +75,18 @@ export function useAdminAuth() {
     }
   };
 
-  function handleSignOut() {
-    return async () => {
-      try {
-        await supabase.auth.signOut();
-      } catch (error) {
-        console.error("Error signing out:", error);
-      }
-      
-      toast({
-        title: "Signed Out",
-        description: "You have been signed out successfully",
-      });
-    };
-  }
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+    
+    toast({
+      title: "Signed Out",
+      description: "You have been signed out successfully",
+    });
+  };
 
   return {
     isAuthenticated,
