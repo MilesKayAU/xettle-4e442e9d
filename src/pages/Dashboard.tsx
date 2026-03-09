@@ -2,7 +2,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
-import BunningsDashboard from '@/components/admin/accounting/BunningsDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -110,7 +109,6 @@ export default function Dashboard() {
   if (!isAuthenticated) return null;
 
   const isAmazonAU = selectedMarketplace === 'amazon_au';
-  const isBunnings = selectedMarketplace === 'bunnings';
   const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
 
   return (
@@ -211,8 +209,6 @@ export default function Dashboard() {
               {/* Marketplace Dashboard Content */}
               {isAmazonAU ? (
                 <AccountingDashboard />
-              ) : isBunnings && selectedUserMarketplace ? (
-                <BunningsDashboard marketplace={selectedUserMarketplace} />
               ) : selectedUserMarketplace ? (
                 <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} />
               ) : null}
