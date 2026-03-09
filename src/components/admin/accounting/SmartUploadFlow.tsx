@@ -1043,27 +1043,17 @@ const FILE_GUIDES = [
 ];
 
 function FileGuide({ forceCollapsed }: { forceCollapsed?: boolean }) {
-  const [userToggled, setUserToggled] = useState(false);
-  const [userOpen, setUserOpen] = useState(false);
-  
-  const open = userToggled ? userOpen : !forceCollapsed ? false : false;
-  const handleOpenChange = (val: boolean) => {
-    setUserToggled(true);
-    setUserOpen(val);
-  };
-
-  // Reset user toggle when forceCollapsed changes (files added/removed)
+  const [open, setOpen] = useState(false);
   const prevForce = useRef(forceCollapsed);
-  if (prevForce.current !== forceCollapsed) {
-    prevForce.current = forceCollapsed;
-    if (forceCollapsed && userOpen) {
-      setUserToggled(false);
-      setUserOpen(false);
-    }
+  
+  // Auto-collapse when files are first uploaded
+  if (prevForce.current !== forceCollapsed && forceCollapsed) {
+    setOpen(false);
   }
+  prevForce.current = forceCollapsed;
 
   return (
-    <Collapsible open={open} onOpenChange={handleOpenChange}>
+    <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
         <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground hover:text-foreground h-9">
           <span className="flex items-center gap-1.5 text-xs">
