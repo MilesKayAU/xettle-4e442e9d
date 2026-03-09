@@ -9,7 +9,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
-  CheckSquare, Square, CheckCircle2, AlertTriangle, Eye, ChevronDown, ShieldCheck, ShieldAlert
+  CheckSquare, Square, CheckCircle2, AlertTriangle, Eye, ChevronDown, ShieldCheck, ShieldAlert,
+  Download, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
