@@ -85,6 +85,7 @@ function formatDateRange(start: string, end: string): string {
 const MARKETPLACE_COLORS: Record<string, string> = {
   amazon_au: 'bg-amber-500',
   shopify_payments: 'bg-emerald-500',
+  shopify_orders: 'bg-lime-600',
   bunnings: 'bg-red-600',
   kogan: 'bg-blue-600',
   catch: 'bg-purple-600',
