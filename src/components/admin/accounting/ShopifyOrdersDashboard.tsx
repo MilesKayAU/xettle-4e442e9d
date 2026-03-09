@@ -698,9 +698,22 @@ export default function ShopifyOrdersDashboard() {
                     <p className="text-sm font-semibold text-foreground flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-primary" /> Revenue recognised ✅
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      These $0.00 invoices have posted your revenue and GST correctly. Account 613 holds the balance until each marketplace pays you.
-                    </p>
+                    {pushStats && (
+                      <div className="grid grid-cols-3 gap-3 text-xs">
+                        <div className="bg-background rounded-lg p-2 text-center">
+                          <p className="text-muted-foreground">Invoices pushed</p>
+                          <p className="text-lg font-bold text-foreground">{pushStats.invoiceCount}</p>
+                        </div>
+                        <div className="bg-background rounded-lg p-2 text-center">
+                          <p className="text-muted-foreground">Total revenue</p>
+                          <p className="text-lg font-bold text-foreground">{formatAUD(pushStats.totalRevenue)}</p>
+                        </div>
+                        <div className="bg-background rounded-lg p-2 text-center">
+                          <p className="text-muted-foreground">Total GST</p>
+                          <p className="text-lg font-bold text-foreground">{formatAUD(pushStats.totalGst)}</p>
+                        </div>
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground space-y-2">
                       <p className="font-medium text-foreground">To complete reconciliation in Xero:</p>
                       <div>
