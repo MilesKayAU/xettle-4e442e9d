@@ -485,6 +485,18 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
                               <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
                             </div>
+                            {/* Bank verification status */}
+                            {s.bank_verified ? (
+                              <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                                <ShieldCheck className="h-3 w-3" />
+                                Bank verified {formatAUD(s.bank_verified_amount || 0)} — {s.bank_verified_at ? new Date(s.bank_verified_at).toLocaleDateString('en-AU') : ''}
+                              </p>
+                            ) : isSyncable ? (
+                              <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
+                                <ShieldAlert className="h-3 w-3" />
+                                Bank not verified
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
