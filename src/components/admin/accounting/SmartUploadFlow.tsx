@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/collapsible';
 import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
-  Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet,
+  Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink,
 } from 'lucide-react';
 import {
