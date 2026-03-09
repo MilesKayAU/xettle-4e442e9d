@@ -361,6 +361,13 @@ export function parseShopifyOrdersCSV(
         continue;
       }
 
+      // Track status breakdown
+      if (financialStatus === 'paid') {
+        statusBreakdown.paid++;
+      } else if (financialStatus === 'partially_refunded') {
+        statusBreakdown.partially_refunded++;
+      }
+
       // Order-level dedup: Shopify exports one row per line item.
       // Order-level totals (Subtotal, Shipping, Total) live on the first row only.
       // If we've already seen this order Name, skip it.
@@ -403,7 +410,7 @@ export function parseShopifyOrdersCSV(
     }
 
     if (allOrders.length === 0) {
-      return { success: false, error: 'No paid orders found in the CSV.' };
+      return { success: false, error: 'No paid or partially refunded orders found in the CSV.' };
     }
 
     // ── Group by marketplace_key + currency using JSON.stringify for safety ──
