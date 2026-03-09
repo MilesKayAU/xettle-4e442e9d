@@ -363,9 +363,9 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
         {readyGroups.map((g, i) => (
           <Card key={i} className="overflow-hidden">
             <CardContent className="flex items-center gap-4 p-4">
-              <div className="text-2xl">{g.registryEntry.icon || '🏪'}</div>
+              <div className="text-2xl">🏪</div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground truncate">{g.registryEntry.label || g.marketplaceKey}</p>
+                <p className="font-medium text-foreground truncate">{g.registryEntry.display_name || g.marketplaceKey}</p>
                 <p className="text-xs text-muted-foreground">
                   {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} • ${g.totalAmount.toLocaleString('en-AU', { minimumFractionDigits: 2 })} {g.currency}
                 </p>
@@ -382,9 +382,9 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
         {skippedGroups.map((g, i) => (
           <Card key={`skip-${i}`} className="overflow-hidden opacity-60">
             <CardContent className="flex items-center gap-4 p-4">
-              <div className="text-2xl">{g.registryEntry.icon || '💳'}</div>
+              <div className="text-2xl">💳</div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground truncate">{g.registryEntry.label || g.marketplaceKey}</p>
+                <p className="font-medium text-foreground truncate">{g.registryEntry.display_name || g.marketplaceKey}</p>
                 <p className="text-xs text-muted-foreground">
                   {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} • skipped
                 </p>
