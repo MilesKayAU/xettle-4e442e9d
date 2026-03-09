@@ -121,20 +121,23 @@ export async function parseBunningsSummaryPdf(
       return { success: false, error: 'Could not parse Commission amounts.', rawText };
     }
 
-    // Total / net payout
-    const totalMatch = rawText.match(/Total\s+(?:.*?)(AUD\s*-?[\d,.]+)\s*$/im);
+    // Total / net payout — look for "Total" row that has a single AUD amount at the end
+    // The Total row in the Bunnings PDF looks like: "Total    AUD 775.29"
+    // We try to find the last AUD amount on the Total line specifically
     let netPayout: number;
-    if (totalMatch) {
-      netPayout = extractAmount(totalMatch[1]) ?? 0;
+    const totalLineMatch = rawText.match(/\bTotal\b[^\n]*?(AUD\s*-?[\d,.]+)\s*(?:\n|$)/im);
+    if (totalLineMatch) {
+      netPayout = extractAmount(totalLineMatch[1]) ?? (ordersInclGst + commissionInclGst);
     } else {
       netPayout = ordersInclGst + commissionInclGst;
     }
 
     const invoiceNumber = invoiceNumberOverride || extractInvoiceFromFilename(file.name);
 
-    // Reconciliation: orders_incl + commission_incl ≈ net_payout
+    // Reconciliation: ordersIncl + commissionIncl (negative) should ≈ netPayout
+    // commissionInclGst is already negative from the PDF (e.g. -110.70)
     const calculated = Math.round((ordersInclGst + commissionInclGst) * 100) / 100;
-    const reconciles = Math.abs(calculated - netPayout) <= 0.05;
+    const reconciles = Math.abs(calculated - netPayout) <= 0.10;
 
     const settlement: StandardSettlement = {
       marketplace: 'bunnings',

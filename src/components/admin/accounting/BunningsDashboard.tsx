@@ -63,7 +63,7 @@ interface BatchItem {
 function statusBadge(status: string) {
   switch (status) {
     case 'synced':
-      return <Badge className="bg-green-100 text-green-800 border-green-200">Synced to Xero</Badge>;
+      return <Badge className="bg-primary/10 text-primary border-primary/20">Synced to Xero</Badge>;
     case 'saved':
     case 'parsed':
       return <Badge variant="secondary">Saved</Badge>;
@@ -76,19 +76,52 @@ function statusBadge(status: string) {
   }
 }
 
+const LS_KEY = 'bunnings_pending_upload';
+
+function saveParsedToStorage(
+  parsed: StandardSettlement,
+  extra: BunningsParseExtra | null,
+  warning: UploadWarning | null,
+  savedId: string | null,
+) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ parsed, extra, warning, savedId }));
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function loadParsedFromStorage(): {
+  parsed: StandardSettlement;
+  extra: BunningsParseExtra | null;
+  warning: UploadWarning | null;
+  savedId: string | null;
+} | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function clearParsedStorage() {
+  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+}
+
 export default function BunningsDashboard({ marketplace }: BunningsDashboardProps) {
-  const [activeTab, setActiveTab] = useState('upload');
+  // Restore persisted parse session on mount
+  const persisted = loadParsedFromStorage();
+
+  const [activeTab, setActiveTab] = useState(persisted?.parsed ? 'review' : 'upload');
 
   // Single file mode
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [parsed, setParsed] = useState<StandardSettlement | null>(null);
-  const [extra, setExtra] = useState<BunningsParseExtra | null>(null);
+  const [parsed, setParsed] = useState<StandardSettlement | null>(persisted?.parsed ?? null);
+  const [extra, setExtra] = useState<BunningsParseExtra | null>(persisted?.extra ?? null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
-  const [savedSettlementId, setSavedSettlementId] = useState<string | null>(null);
-  const [uploadWarning, setUploadWarning] = useState<UploadWarning | null>(null);
+  const [savedSettlementId, setSavedSettlementId] = useState<string | null>(persisted?.savedId ?? null);
+  const [uploadWarning, setUploadWarning] = useState<UploadWarning | null>(persisted?.warning ?? null);
 
   // Bulk mode
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
@@ -212,6 +245,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
         setExtra(result.extra);
         const warning = checkDuplicateAndGap(result.settlement, settlements);
         setUploadWarning(warning);
+        // Persist to localStorage so state survives navigation / logout
+        saveParsedToStorage(result.settlement, result.extra, warning, null);
         if (warning?.type === 'duplicate') {
           toast.warning('Duplicate detected — review before saving.');
         } else if (warning?.type === 'gap') {
@@ -306,6 +341,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     const result = await saveSettlement(parsed);
     if (result.success) {
       setSavedSettlementId(parsed.settlement_id);
+      // Persist the saved ID so the Push to Xero button still shows after navigation
+      saveParsedToStorage(parsed, extra, uploadWarning, parsed.settlement_id);
       toast.success('Settlement saved!');
       loadHistory();
     } else {
@@ -320,6 +357,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setPushing(true);
     const result = await syncSettlementToXero(targetId, 'bunnings');
     if (result.success) {
+      // Clear persisted state — successfully sent to Xero, no longer pending
+      clearParsedStorage();
       toast.success('Invoice created in Xero!');
       loadHistory();
     } else {
@@ -347,6 +386,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setParseError(null);
     setSavedSettlementId(null);
     setUploadWarning(null);
+    clearParsedStorage();
     if (inputRef.current) inputRef.current.value = '';
     setActiveTab('upload');
   };
@@ -438,10 +478,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                             Bunnings Mirakl portal → Billing cycles → click ⋮ → "Summary of transactions"
                           </p>
                         </div>
-                        <p className="text-muted-foreground mt-2">
-                          <strong>⚠️ Not the right file:</strong> The "Accounting documents" tab or "Order file" won't work.
-                          You need <strong>Summary of transactions</strong> specifically.
-                        </p>
+                        <div className="rounded border border-border bg-muted/40 p-2 space-y-1 mt-2">
+                          <p className="font-medium text-foreground">Which files does Bunnings provide?</p>
+                          <ul className="space-y-1 text-muted-foreground">
+                            <li><span className="text-primary font-medium">✓ Summary of Transactions PDF</span> — <strong>this is the one to upload.</strong> Contains the billing period totals, sales, commission and net payout.</li>
+                            <li><span className="text-muted-foreground">✗ Invoice PDF</span> — a tax invoice for the same period; not needed here.</li>
+                            <li><span className="text-muted-foreground">✗ Billing cycle orders CSV</span> — order-level detail; not required for accounting import.</li>
+                          </ul>
+                        </div>
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
@@ -457,7 +501,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 {isBulkMode ? <FolderUp className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
                 Summary of Transactions
                 {parsing && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
-                {parsed && !isBulkMode && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />}
+                {parsed && !isBulkMode && <CheckCircle2 className="h-4 w-4 text-primary ml-auto" />}
                 {parseError && <XCircle className="h-4 w-4 text-destructive ml-auto" />}
               </CardTitle>
               <CardDescription className="text-xs">
@@ -483,14 +527,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 <div className="mt-2 flex items-center gap-2">
                   {bulkProcessing
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                    : <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
+                    : <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
                   <p className="text-xs text-muted-foreground">
                     {bulkProcessing ? `Parsing ${bulkFiles.length} files…` : `${bulkFiles.length} files ready for review`}
                   </p>
                 </div>
               ) : file && (
                 <div className="flex items-center justify-between mt-2">
-                  <p className={`text-xs font-medium ${parseError ? 'text-destructive' : 'text-green-700'}`}>
+                  <p className={`text-xs font-medium ${parseError ? 'text-destructive' : 'text-primary'}`}>
                     {parseError ? `✗ ${parseError}` : `✓ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`}
                   </p>
                   <Button variant="ghost" size="sm" className="text-xs h-6" onClick={clearUpload}>
@@ -532,19 +576,19 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
               <div className="space-y-2">
                 {bulkBatch.map((item, idx) => (
-                  <Card key={idx} className={`border ${item.isDuplicate && !item.skipped ? 'border-amber-300 bg-amber-50/30' : item.error ? 'border-destructive/30' : item.saved ? 'border-green-300 bg-green-50/20' : 'border-border'}`}>
+                  <Card key={idx} className={`border ${item.isDuplicate && !item.skipped ? 'border-warning/40 bg-warning/5' : item.error ? 'border-destructive/30' : item.saved ? 'border-primary/30 bg-primary/5' : 'border-border'}`}>
                     <CardContent className="py-3 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-medium truncate">{item.file.name}</p>
                           {item.isDuplicate && !item.skipped && (
-                            <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700">Duplicate</Badge>
+                            <Badge variant="outline" className="text-[10px] border-primary/40 text-foreground">Duplicate</Badge>
                           )}
                           {item.skipped && (
                             <Badge variant="outline" className="text-[10px]">Skipped</Badge>
                           )}
                           {item.saved && (
-                            <Badge className="text-[10px] bg-green-100 text-green-800 border-green-200">Saved</Badge>
+                            <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20">Saved</Badge>
                           )}
                           {item.error && (
                             <Badge variant="destructive" className="text-[10px]">Error</Badge>
@@ -560,14 +604,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                           <p className="text-xs text-destructive mt-0.5">{item.error}</p>
                         )}
                         {item.isDuplicate && !item.skipped && (
-                          <p className="text-xs text-amber-700 mt-0.5">Already saved — skip or overwrite</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Already saved — skip or overwrite</p>
                         )}
                       </div>
                       <div>
                         {item.saving ? (
                           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         ) : item.saved ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
                         ) : item.error || item.skipped ? (
                           <XCircle className="h-4 w-4 text-muted-foreground" />
                         ) : null}
@@ -587,9 +631,9 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             <>
               {/* Upload warning */}
               {uploadWarning && (
-                <Card className={`border ${uploadWarning.type === 'duplicate' ? 'border-amber-400 bg-amber-50/30' : 'border-primary/30 bg-primary/5'}`}>
+                <Card className={`border ${uploadWarning.type === 'duplicate' ? 'border-primary/40 bg-primary/5' : 'border-primary/30 bg-primary/5'}`}>
                   <CardContent className="py-3 flex items-start gap-2">
-                    <AlertTriangle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${uploadWarning.type === 'duplicate' ? 'text-amber-600' : 'text-primary'}`} />
+                    <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
                     <p className="text-xs">{uploadWarning.message}</p>
                   </CardContent>
                 </Card>
@@ -601,7 +645,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                     <CardTitle className="text-base">Settlement Summary</CardTitle>
                     <div className="flex items-center gap-2">
                       {parsed.reconciles ? (
-                        <Badge className="bg-green-100 text-green-800 border-green-200">
+                        <Badge className="bg-primary/10 text-primary border-primary/20">
                           <CheckCircle2 className="h-3 w-3 mr-1" /> Reconciled
                         </Badge>
                       ) : (
@@ -744,8 +788,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                   <React.Fragment key={s.id}>
                     {hasGap && (
                       <div className="flex items-center gap-2 py-1 px-3">
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                        <p className="text-xs text-amber-600">
+                        <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
                           Gap: missing settlement between {formatSettlementDate(prev.period_end)} and {formatSettlementDate(s.period_start)}
                         </p>
                       </div>
