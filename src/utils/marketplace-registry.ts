@@ -81,7 +81,6 @@ export const MARKETPLACE_REGISTRY: Record<string, MarketplaceRegistryEntry> = {
       'Order placed from: Kogan',
       'KoganOrderID',
       'Tenant_id: Kogan',
-      'Channel_id:',
       'kogan',
     ],
     tags_patterns: [

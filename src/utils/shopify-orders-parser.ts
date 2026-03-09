@@ -65,6 +65,8 @@ export interface MarketplaceGroup {
   sampleNoteAttributes?: string[];
   /** Sample tags for unknown groups */
   sampleTags?: string[];
+  /** Financial status breakdown within this group */
+  statusBreakdown?: MarketplaceGroupStatusBreakdown;
 }
 
 export interface StatusBreakdown {
