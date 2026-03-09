@@ -70,6 +70,7 @@ interface SettlementRecord {
   bank_deposit: number;
   sales_principal: number;
   seller_fees: number;
+  sales_shipping: number;
   gst_on_income: number;
   gst_on_expenses: number;
   status: string;
@@ -108,7 +109,7 @@ export default function ShopifyOrdersDashboard() {
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [showBookkeeperInfo, setShowBookkeeperInfo] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [pushStats, setPushStats] = useState<{ invoiceCount: number; totalRevenue: number; totalGst: number } | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<Record<number, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>({}); 
 
