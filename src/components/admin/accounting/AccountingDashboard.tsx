@@ -486,6 +486,21 @@ export default function AccountingDashboard() {
       } as any);
       if (settError) throw settError;
 
+      // Fire-and-forget: extract fee observations for intelligence engine
+      import('@/utils/fee-observation-engine').then(({ extractAmazonFeeObservations }) => {
+        extractAmazonFeeObservations({
+          settlement_id: header.settlementId,
+          marketplace: selectedCountry,
+          period_start: header.periodStart,
+          period_end: header.periodEnd,
+          sales_principal: summary.salesPrincipal,
+          seller_fees: summary.sellerFees,
+          fba_fees: summary.fbaFees,
+          storage_fees: summary.storageFees,
+          refunds: summary.refunds,
+        }, user.id).catch(console.error);
+      });
+
       // 2. Insert settlement_lines (batch in chunks of 500)
       if (lines.length > 0) {
         const lineRows = lines.map(l => ({

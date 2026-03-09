@@ -140,6 +140,12 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
     } as any);
 
     if (error) return { success: false, error: error.message };
+
+    // Fire-and-forget: extract fee observations for intelligence engine
+    import('./fee-observation-engine').then(({ extractFeeObservations }) => {
+      extractFeeObservations(settlement, user.id).catch(console.error);
+    });
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Unknown error' };

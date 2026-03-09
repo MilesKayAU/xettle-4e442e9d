@@ -19,6 +19,8 @@ import {
   formatAUD,
 } from '@/utils/settlement-engine';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
+import MarketplaceInfoPanel from '@/components/MarketplaceInfoPanel';
+import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 
 interface BunningsDashboardProps {
   marketplace: { marketplace_code: string; marketplace_name: string };
@@ -176,6 +178,9 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
   return (
     <div className="space-y-6">
+      {/* Alerts Banner */}
+      <MarketplaceAlertsBanner marketplaceCode="bunnings" />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -187,7 +192,10 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             Upload your Summary of Transactions PDF → Review → Push to Xero.
           </p>
         </div>
-        <XeroConnectionStatus />
+        <div className="flex items-center gap-3">
+          <MarketplaceInfoPanel marketplaceCode="bunnings" />
+          <XeroConnectionStatus />
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

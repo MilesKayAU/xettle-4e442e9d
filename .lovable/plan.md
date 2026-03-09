@@ -1,152 +1,54 @@
 
-# Marketplace Intelligence Engine — Build Plan
 
-## What's being built
-A settlement-driven intelligence layer: every time a settlement is saved, Xettle automatically extracts fee observations, builds a per-user fee profile, and flags anomalies. No scraping. AI learns from real financial data.
+# Plan: Extract Accounting Module into Independent App
 
-## Database migration — 3 new tables
+## What You Have (Module Inventory)
 
-### `marketplaces` (system-level knowledge, admin-managed)
-| Column | Notes |
-|--------|-------|
-| `marketplace_code` UNIQUE | `amazon_au`, `bunnings_au` |
-| `name` | Display name |
-| `settlement_frequency` | `weekly` / `fortnightly` / `monthly` |
-| `gst_model` | `seller` / `marketplace` / `mixed` |
-| `payment_delay_days` | integer |
-| `currency` | `AUD` default |
-| `is_active` | boolean |
+The accounting module is self-contained with these components:
 
-RLS: authenticated users SELECT; admins INSERT/UPDATE/DELETE via `has_role('admin')`.
-Seeded immediately with Amazon AU and Bunnings AU.
+| Layer | Files | Lines |
+|-------|-------|-------|
+| **UI** | `src/components/admin/accounting/AccountingDashboard.tsx` | ~3,490 |
+| **Parser** | `src/utils/settlement-parser.ts` | ~716 |
+| **Xero Invoice Sync** | `supabase/functions/sync-amazon-journal/index.ts` | ~450 |
+| **Xero OAuth** | `supabase/functions/xero-auth/index.ts` | existing |
+| **Xero Connection UI** | `src/components/admin/XeroConnectionStatus.tsx` | existing |
+| **Xero Callback Page** | `src/pages/XeroCallback.tsx` | existing |
 
-### `marketplace_fee_observations` (one row per fee per settlement)
-| Column | Notes |
-|--------|-------|
-| `user_id` | owner |
-| `marketplace_code` | `amazon_au`, `bunnings` |
-| `settlement_id` | links to `settlements.settlement_id` |
-| `fee_type` | controlled: `commission`, `referral`, `fba_fulfilment`, `storage`, `refund_rate`, `shipping_fee`, `transaction_fee` |
-| `fee_category` | `settlement` / `tax` / `fees` / `shipping` |
-| `observed_rate` | numeric (e.g. 0.1249) — nullable for fixed-amount fees |
-| `observed_amount` | numeric |
-| `base_amount` | what the rate was calculated from |
-| `currency` | `AUD` / `USD` etc. |
-| `observation_method` | `parser` / `derived` / `manual` |
-| `period_start`, `period_end` | from the settlement |
+**Database tables**: `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
 
-RLS: users can SELECT/INSERT/DELETE their own rows.
+**Secrets needed**: `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `RESEND_API_KEY` (for notifications)
 
-### `marketplace_fee_alerts` (anomaly flags)
-| Column | Notes |
-|--------|-------|
-| `user_id` | |
-| `marketplace_code` | |
-| `settlement_id` | the triggering settlement |
-| `fee_type` | |
-| `expected_rate` | historical average |
-| `observed_rate` | new value |
-| `deviation_pct` | e.g. 0.25 = 25% higher |
-| `status` | `pending` / `acknowledged` / `dismissed` |
+## Recommended Approach
 
-RLS: users SELECT/UPDATE own rows; admins SELECT all via `has_role('admin')`.
+**Create a new Lovable project** and port the accounting module as the primary app. This is the cleanest path because:
 
----
+1. You get a fresh Supabase instance (clean DB, no legacy tables)
+2. Independent deployment and domain
+3. Own auth system focused on bookkeeper access
+4. No risk of breaking the Miles Kay e-commerce site
 
-## New utility: `src/utils/fee-observation-engine.ts`
+## What the New App Would Include
 
-### `extractFeeObservations(settlement, userId)`
-Called after `saveSettlement()` returns `{ success: true }`. Inserts observations into the DB.
+1. **Auth** — Supabase email auth with admin role
+2. **Dashboard** — The AccountingDashboard as the main page (upload, review, history, settings tabs)
+3. **Settlement Parser** — `settlement-parser.ts` copied directly
+4. **Edge Functions** — `sync-amazon-journal` and `xero-auth` deployed to new Supabase
+5. **Xero Integration** — OAuth connection UI + callback page
+6. **Settings** — Account code configuration, GST rate
+7. **Database** — Migrations for `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
 
-**For Bunnings** (uses `sales_principal` + `seller_fees` from StandardSettlement):
-```
-commission: rate = Math.abs(fees_ex_gst) / sales_ex_gst
-```
+## What I Cannot Do From Here
 
-**For Amazon AU** (uses saved settlement fields):
-```
-referral:       rate = Math.abs(seller_fees)  / sales_principal
-fba_fulfilment: rate = Math.abs(fba_fees)     / sales_principal
-storage:        amount = Math.abs(storage_fees)  (no rate — absolute cost)
-refund_rate:    rate = Math.abs(refunds)       / sales_principal
-```
+Lovable cannot programmatically create a separate project or copy files between projects. You would need to:
 
-Skips observations where `base_amount < 100` (prevents noise from tiny test uploads).
+1. **Create a new Lovable project** (click + New Project)
+2. **Come back here** and I can help you prepare all the code as a single prompt to paste into the new project, or you can reference this project
+3. Alternatively, **remix this project** (Settings → Remix) and then strip out everything except the accounting module
 
-### `detectAndSaveAnomalies(userId, marketplace_code, newObservations)`
-For each rate-based observation:
-1. Query last N observations for same `user_id + marketplace_code + fee_type`
-2. If fewer than 3 prior observations → skip
-3. Compute rolling avg
-4. If `Math.abs(newRate - avgRate) / avgRate > 0.15` → insert `marketplace_fee_alerts` with `status = 'pending'`
+## Recommended Next Step
 
----
+**Remix this project**, then in the new remixed project, ask me to strip it down to only the accounting module — removing all e-commerce pages (Products, Blog, Contact, Distributors, Where To Buy, etc.), the Alibaba invoice system, logistics, and Amazon product sync. This preserves all the accounting code, edge functions, and database schema intact while giving you an independent app.
 
-## Hook point in `settlement-engine.ts`
+The remix approach is fastest because all code, edge functions, and Supabase config carry over. You'd just need to connect a new Supabase project and run the database migrations.
 
-After the successful `supabase.from('settlements').insert(...)`, add:
-```ts
-// Fire-and-forget — doesn't block the save
-extractFeeObservations(settlement, user.id).catch(console.error);
-```
-This keeps `saveSettlement()` fast and non-breaking even if observation extraction fails.
-
----
-
-## New user-facing components
-
-### `src/components/MarketplaceInfoPanel.tsx`
-Compact read-only card. Two data sources:
-1. `marketplaces` table — static profile (GST model, settlement cycle, payment delay)
-2. Aggregate query on `marketplace_fee_observations` — user's actual avg rates + COUNT for sample_count
-
-```text
-┌──────────────────────────────────────────┐
-│  Bunnings                                 │
-│  Settlement cycle: Fortnightly            │
-│  GST: Seller responsible                 │
-│  Your avg commission: 12.5% (3 settlements) │
-│  Payment delay: ~14 days                 │
-└──────────────────────────────────────────┘
-```
-
-### `src/components/MarketplaceAlertsBanner.tsx`
-Shows when `marketplace_fee_alerts` has `pending` rows for current user + marketplace:
-```text
-⚠️ Bunnings commission 25% above your average (12.5% vs 10.0%) — Settlement BUN-123  [View] [Dismiss]
-```
-
-Both injected into `BunningsDashboard.tsx` and `AccountingDashboard.tsx` near the top.
-
----
-
-## Admin Panel: Marketplace Config tab
-
-Wrap `Admin.tsx` content in `<Tabs>` (Users | Marketplace Config).
-
-New file: `src/components/admin/marketplace/MarketplaceConfigTab.tsx`
-- **Left column**: list of marketplaces from the `marketplaces` table
-- **Right panel**:
-  - Edit profile fields (settlement frequency, GST model, payment delay, currency)
-  - All users' fee alerts with user email visible (admin-level SELECT policy on `marketplace_fee_alerts`)
-
----
-
-## Files summary
-
-| Action | File |
-|--------|------|
-| Create migration | `supabase/migrations/..._marketplace_intelligence.sql` |
-| Create | `src/utils/fee-observation-engine.ts` |
-| Create | `src/components/MarketplaceInfoPanel.tsx` |
-| Create | `src/components/MarketplaceAlertsBanner.tsx` |
-| Create | `src/components/admin/marketplace/MarketplaceConfigTab.tsx` |
-| Modify | `src/utils/settlement-engine.ts` — hook extraction after save |
-| Modify | `src/pages/Admin.tsx` — add Tabs + Marketplace Config tab |
-| Modify | `src/components/admin/accounting/BunningsDashboard.tsx` — add panels |
-| Modify | `src/components/admin/accounting/AccountingDashboard.tsx` — add panels |
-
-## What this does NOT do
-- No external scraping
-- No automatic rule changes — anomalies are flagged for human review
-- Amazon settlement saving path (the complex multi-step flow in `AccountingDashboard`) hooks via `StandardSettlement` through `settlement-engine.ts`, so the same extraction function covers all marketplaces
