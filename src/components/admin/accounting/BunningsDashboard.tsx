@@ -576,7 +576,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
               <div className="space-y-2">
                 {bulkBatch.map((item, idx) => (
-                  <Card key={idx} className={`border ${item.isDuplicate && !item.skipped ? 'border-amber-300 bg-amber-50/30' : item.error ? 'border-destructive/30' : item.saved ? 'border-green-300 bg-green-50/20' : 'border-border'}`}>
+                  <Card key={idx} className={`border ${item.isDuplicate && !item.skipped ? 'border-warning/40 bg-warning/5' : item.error ? 'border-destructive/30' : item.saved ? 'border-primary/30 bg-primary/5' : 'border-border'}`}>
                     <CardContent className="py-3 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
