@@ -89,7 +89,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     country: 'AU',
     countryFlag: '🇦🇺',
     connectionMethods: ['manual_csv'],
-    phase: 'coming_soon',
+    phase: 'csv_ready',
     description: 'Shopify Payments payouts — your direct store sales.',
   },
 ];

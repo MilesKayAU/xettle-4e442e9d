@@ -21,7 +21,7 @@ export interface StandardSettlement {
   fees_ex_gst: number;       // Marketplace fees excluding GST (negative)
   gst_on_fees: number;       // GST on fees (positive absolute value)
   net_payout: number;        // Amount deposited to bank
-  source: 'manual' | 'api';  // How this settlement was ingested
+  source: 'csv_upload' | 'api' | 'manual';  // How this settlement was ingested
   reconciles: boolean;       // Whether calculated total ≈ net_payout
   // Optional marketplace-specific metadata
   metadata?: Record<string, any>;
@@ -32,6 +32,7 @@ export interface StandardSettlement {
 export const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
   bunnings: 'Bunnings Marketplace',
+  shopify_payments: 'Shopify Payments',
   catch: 'Catch Marketplace',
   mydeal: 'MyDeal Marketplace',
   kogan: 'Kogan Marketplace',
@@ -42,6 +43,7 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
   AU: 'Amazon AU',
   bunnings: 'Bunnings',
+  shopify_payments: 'Shopify Payments',
   catch: 'Catch',
   mydeal: 'MyDeal',
   kogan: 'Kogan',

@@ -290,7 +290,7 @@ export async function parseBunningsSummaryPdf(
       fees_ex_gst: netFeesExGst,
       gst_on_fees: Math.abs(netFeesGst),
       net_payout: netPayout,
-      source: 'manual',
+      source: 'csv_upload' as const,
       reconciles,
       metadata,
     };
