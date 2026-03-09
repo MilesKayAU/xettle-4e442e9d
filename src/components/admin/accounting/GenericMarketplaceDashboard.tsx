@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash2, DollarSign, Calendar, CheckCircle2, Loader2, FileText } from 'lucide-react';
+import { Trash2, Loader2, FileText, Upload, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher';
-import SmartUploadFlow from './SmartUploadFlow';
 
 interface GenericMarketplaceDashboardProps {
   marketplace: UserMarketplace;
   onMarketplacesChanged?: () => void;
+  onSwitchToUpload?: () => void;
 }
 
 interface SettlementRow {
@@ -41,7 +41,7 @@ function formatDate(dateStr: string): string {
   }
 }
 
-export default function GenericMarketplaceDashboard({ marketplace, onMarketplacesChanged }: GenericMarketplaceDashboardProps) {
+export default function GenericMarketplaceDashboard({ marketplace, onMarketplacesChanged, onSwitchToUpload }: GenericMarketplaceDashboardProps) {
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
   const [settlements, setSettlements] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +67,17 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   useEffect(() => {
     loadSettlements(true);
   }, [loadSettlements]);
+
+  // Realtime: auto-refresh when settlements change
+  useEffect(() => {
+    const channel = supabase
+      .channel(`settlements-${marketplace.marketplace_code}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => {
+        loadSettlements();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadSettlements, marketplace.marketplace_code]);
 
   const handleDelete = useCallback(async (settlement: SettlementRow) => {
     setDeleting(settlement.id);
@@ -95,14 +106,35 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           {def?.name || marketplace.marketplace_name} Settlements
         </h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Upload settlement data, reconcile, and sync to Xero.
+          View saved settlements, reconcile, and sync to Xero.
         </p>
       </div>
 
-      <SmartUploadFlow
-        onSettlementsSaved={() => loadSettlements()}
-        onMarketplacesChanged={onMarketplacesChanged}
-      />
+      {/* Upload prompt — directs to Smart Upload */}
+      {onSwitchToUpload && (
+        <Card className="border-dashed border-2 border-primary/20 hover:border-primary/40 transition-colors cursor-pointer" onClick={onSwitchToUpload}>
+          <CardContent className="py-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Upload className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Upload {def?.name || marketplace.marketplace_name} files
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Use Smart Upload to drop files — auto-detects, previews, and saves
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Upload className="h-4 w-4" />
+              Smart Upload
+              <ArrowRight className="h-3 w-3" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Settlement History */}
       <div className="space-y-3">
@@ -122,8 +154,16 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           </Card>
         ) : settlements.length === 0 ? (
           <Card className="border-border">
-            <CardContent className="py-6 text-center text-sm text-muted-foreground">
-              No settlements saved yet. Upload files above to get started.
+            <CardContent className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No settlements saved yet.
+              </p>
+              {onSwitchToUpload && (
+                <Button variant="link" size="sm" onClick={onSwitchToUpload} className="mt-2 gap-1">
+                  <Upload className="h-3.5 w-3.5" />
+                  Upload files via Smart Upload
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -133,7 +173,6 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               const fees = s.seller_fees || 0;
               const net = s.bank_deposit || 0;
               const gstIncome = s.gst_on_income || 0;
-              const gstExpenses = s.gst_on_expenses || 0;
 
               return (
                 <Card key={s.id} className="border-border hover:border-primary/20 transition-colors">
@@ -145,10 +184,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                             {formatDate(s.period_start)} – {formatDate(s.period_end)}
                           </span>
                           <Badge
-                            variant={s.status === 'pushed_to_xero' ? 'default' : 'secondary'}
+                            variant={s.status === 'pushed_to_xero' || s.status === 'synced' ? 'default' : 'secondary'}
                             className="text-[10px]"
                           >
-                            {s.status === 'pushed_to_xero' ? 'Posted to Xero ✓' : s.status || 'Saved'}
+                            {s.status === 'pushed_to_xero' || s.status === 'synced' ? 'Posted to Xero ✓' : s.status || 'Saved'}
                           </Badge>
                         </div>
                         <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
