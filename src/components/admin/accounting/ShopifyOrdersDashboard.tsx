@@ -801,7 +801,25 @@ export default function ShopifyOrdersDashboard() {
                 ))}
 
                 {/* ── Unknown groups ── */}
-                {parseResult.unknownGroups.map((g, idx) => (
+                {parseResult.unknownGroups.map((g, idx) => {
+                  // Build unique pattern combinations for diagnostics
+                  const patternMap = new Map<string, { count: number; total: number }>();
+                  for (const order of g.orders) {
+                    const noteSnippet = (order.noteAttributes || '').substring(0, 100) || '—';
+                    const tagSnippet = (order.tags || '').substring(0, 100) || '—';
+                    const pm = order.paymentMethod || '—';
+                    const key = `${noteSnippet}|||${tagSnippet}|||${pm}`;
+                    const existing = patternMap.get(key) || { count: 0, total: 0 };
+                    patternMap.set(key, { count: existing.count + 1, total: existing.total + order.total });
+                  }
+                  const uniquePatterns = Array.from(patternMap.entries())
+                    .map(([key, val]) => {
+                      const [note, tags, pm] = key.split('|||');
+                      return { note, tags, pm, count: val.count, total: val.total };
+                    })
+                    .sort((a, b) => b.total - a.total);
+
+                  return (
                   <Card key={`unknown_${idx}`} className="border border-amber-400/50 bg-amber-50/20 dark:bg-amber-950/10">
                     <CardContent className="py-4 space-y-3">
                       <div className="flex items-center justify-between">
@@ -816,36 +834,68 @@ export default function ShopifyOrdersDashboard() {
                             </p>
                           </div>
                         </div>
-                        <p className="text-sm font-bold text-amber-700 dark:text-amber-400">{formatAUD(g.totalAmount)} {g.currency}</p>
-                      </div>
-
-                      {/* Sample data */}
-                      <div className="bg-muted/40 rounded-lg p-3 space-y-2 text-xs">
-                        {g.sampleNoteAttributes && g.sampleNoteAttributes.length > 0 && (
-                          <div>
-                            <span className="font-medium text-foreground">Note Attributes: </span>
-                            {g.sampleNoteAttributes.map((n, i) => (
-                              <span key={i} className="text-muted-foreground">
-                                {i > 0 && ' | '}{n.substring(0, 80)}{n.length > 80 ? '…' : ''}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {g.sampleTags && g.sampleTags.length > 0 && (
-                          <div>
-                            <span className="font-medium text-foreground">Tags: </span>
-                            {g.sampleTags.map((t, i) => (
-                              <span key={i} className="text-muted-foreground">
-                                {i > 0 && ' | '}{t.substring(0, 60)}{t.length > 60 ? '…' : ''}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div>
-                          <span className="font-medium text-foreground">Payment Method: </span>
-                          <span className="text-muted-foreground">{g.orders[0]?.paymentMethod || '—'}</span>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-amber-700 dark:text-amber-400">{formatAUD(g.totalAmount)} {g.currency}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            ex GST · {formatAUD(g.totalAmount * 1.1)} incl GST
+                          </p>
                         </div>
                       </div>
+
+                      {/* ── Unique pattern breakdown table ── */}
+                      <Collapsible>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-xs gap-1.5 h-7 w-full justify-start text-muted-foreground hover:text-foreground">
+                            <Eye className="h-3.5 w-3.5" />
+                            {uniquePatterns.length} unique pattern{uniquePatterns.length !== 1 ? 's' : ''} — click to expand
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="overflow-auto max-h-72 mt-2 rounded-lg border border-border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="text-[10px] w-[30%]">Note Attributes</TableHead>
+                                  <TableHead className="text-[10px] w-[30%]">Tags</TableHead>
+                                  <TableHead className="text-[10px] w-[15%]">Payment Method</TableHead>
+                                  <TableHead className="text-[10px] w-[10%] text-right">Orders</TableHead>
+                                  <TableHead className="text-[10px] w-[15%] text-right">Total (ex GST)</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {uniquePatterns.slice(0, 50).map((p, pIdx) => (
+                                  <TableRow key={pIdx}>
+                                    <TableCell className="text-[10px] text-muted-foreground font-mono break-all py-1.5">{p.note}</TableCell>
+                                    <TableCell className="text-[10px] text-muted-foreground font-mono break-all py-1.5">{p.tags}</TableCell>
+                                    <TableCell className="text-[10px] text-muted-foreground font-mono py-1.5">{p.pm}</TableCell>
+                                    <TableCell className="text-[10px] text-right font-medium py-1.5">{p.count}</TableCell>
+                                    <TableCell className="text-[10px] text-right font-medium py-1.5">{formatAUD(p.total)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                            {uniquePatterns.length > 50 && (
+                              <p className="text-[10px] text-muted-foreground text-center py-2">
+                                …and {uniquePatterns.length - 50} more patterns
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-[10px] mt-1 h-6 text-muted-foreground"
+                            onClick={() => {
+                              const text = uniquePatterns.map(p =>
+                                `Note: ${p.note} | Tags: ${p.tags} | PM: ${p.pm} | Orders: ${p.count} | Total: ${formatAUD(p.total)}`
+                              ).join('\n');
+                              navigator.clipboard.writeText(text);
+                              toast.success('Patterns copied to clipboard');
+                            }}
+                          >
+                            📋 Copy all patterns
+                          </Button>
+                        </CollapsibleContent>
+                      </Collapsible>
 
                       {/* AI suggestion */}
                       {aiSuggestions[idx] && !aiSuggestions[idx].loading && aiSuggestions[idx].confidence >= 70 && aiSuggestions[idx].confidence < 90 && (
@@ -895,7 +945,8 @@ export default function ShopifyOrdersDashboard() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
 
               {/* ── Profit Summary ── */}
