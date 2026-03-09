@@ -69,8 +69,8 @@ export default function Pricing() {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="container mx-auto max-w-5xl flex items-center justify-between h-16 px-4">
-          <Link to="/" className="text-xl font-bold text-foreground tracking-tight">
-            <span className="text-primary">X</span>ettle
+          <Link to="/" className="text-xl font-bold tracking-tight">
+            <span className="text-primary">Xe</span><span className="text-foreground">ttle</span>
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/dashboard">

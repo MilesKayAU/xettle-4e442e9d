@@ -171,8 +171,8 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Link to="/" className="text-2xl font-bold text-foreground tracking-tight">
-            <span className="text-primary">X</span>ettle
+          <Link to="/" className="text-2xl font-bold tracking-tight">
+            <span className="text-primary">Xe</span><span className="text-foreground">ttle</span>
           </Link>
           <p className="text-muted-foreground mt-2">Amazon settlements, Xettled.</p>
         </div>
