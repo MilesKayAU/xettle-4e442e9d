@@ -126,7 +126,12 @@ export default function Dashboard() {
                 Plans
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => window.dispatchEvent(new Event('xettle:open-settings'))}>
+            <Button variant="ghost" size="sm" onClick={() => {
+              switchView('settlements');
+              setSelectedMarketplace('amazon_au');
+              // Delay to let AccountingDashboard mount before dispatching
+              setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
+            }}>
               <Settings className="h-4 w-4 mr-1" />
               Settings
             </Button>
