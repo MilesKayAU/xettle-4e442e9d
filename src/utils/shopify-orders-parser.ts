@@ -512,6 +512,7 @@ export function parseShopifyOrdersCSV(
       periodStart: allDates[0] || '',
       periodEnd: allDates[allDates.length - 1] || '',
       partialPeriodWarning,
+      statusBreakdown,
     };
   } catch (err: any) {
     return { success: false, error: `CSV parsing failed: ${err.message || 'Unknown error'}` };
