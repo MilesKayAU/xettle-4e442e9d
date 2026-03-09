@@ -40,7 +40,6 @@ export function useAdminAuth() {
   const signIn = async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      console.log('Attempting Supabase sign-in with:', email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -48,7 +47,6 @@ export function useAdminAuth() {
       });
 
       if (error) {
-        console.error('Supabase sign-in failed:', error);
         toast({
           title: 'Authentication Failed',
           description: error.message || 'Invalid credentials',
@@ -56,8 +54,6 @@ export function useAdminAuth() {
         });
         return { success: false, error };
       }
-
-      console.log('Supabase sign-in successful:', data);
       
       toast({
         title: 'Signed In',
