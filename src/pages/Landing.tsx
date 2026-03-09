@@ -1,10 +1,12 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers, Users, ClipboardCheck, Ban } from 'lucide-react';
 import profitLeakImg from '@/assets/profit-leak-preview.png';
 import feeAlertsImg from '@/assets/fee-alerts-preview.png';
 import PublicDemoUpload from '@/components/PublicDemoUpload';
+import { supabase } from '@/integrations/supabase/client';
 
 const marketplaces = [
   { name: 'Amazon', icon: '📦', status: 'live' as const },
