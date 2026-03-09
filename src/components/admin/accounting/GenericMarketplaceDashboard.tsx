@@ -60,46 +60,40 @@ interface SettlementRow {
   bank_verified_by: string | null;
 }
 
-function statusBadge(s: SettlementRow) {
-  const status = s.status;
-  switch (status) {
-    case 'synced':
-    case 'pushed_to_xero':
-      return s.xero_invoice_number
-        ? <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">In Xero ({s.xero_invoice_number}) ✓</Badge>
-        : <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Pushed to Xero ✓</Badge>;
-    case 'synced_external':
-      return <Badge variant="outline" className="border-muted-foreground/40 text-[10px]">Already in Xero</Badge>;
-    case 'push_failed':
-      return <Badge variant="destructive" className="text-[10px]">Push failed</Badge>;
-    case 'saved':
-    case 'parsed':
-      return <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">Ready to push</Badge>;
-    default:
-      return <Badge variant="outline" className="text-[10px]">{status || 'Saved'}</Badge>;
-  }
-}
-
 export default function GenericMarketplaceDashboard({ marketplace, onMarketplacesChanged, onSwitchToUpload }: GenericMarketplaceDashboardProps) {
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
-  const [settlements, setSettlements] = useState<SettlementRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [pushing, setPushing] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [expandedLines, setExpandedLines] = useState<string | null>(null);
-  const [lineItems, setLineItems] = useState<Record<string, any[]>>({});
-  const [loadingLines, setLoadingLines] = useState<string | null>(null);
+  const code = marketplace.marketplace_code;
+
+  // ── Shared hooks (BaseMarketplaceDashboard pattern) ──────────────────────
+  const {
+    settlements, loading, hasLoadedOnce, deleting, loadSettlements, handleDelete,
+  } = useSettlementManager<SettlementRow>({
+    marketplaceCode: code,
+    additionalCodes: [`shopify_orders_${code}`, `woolworths_marketplus_${code}`],
+  });
+
+  const {
+    pushing, rollingBack, refreshingXero,
+    toStandardSettlement, handlePushToXero, handleRollback, handleRefreshXero,
+    handleMarkAlreadySynced, handleBulkMarkSynced,
+  } = useXeroSync({ loadSettlements });
+
+  const {
+    selected, setSelected, toggleSelect, toggleSelectAll,
+    bulkDeleting, bulkDeleteDialogOpen, syncedSelectedCount,
+    handleBulkDelete, confirmBulkDelete, cancelBulkDelete,
+  } = useBulkSelect({ settlements, onComplete: loadSettlements });
+
+  const { reconResults, expandedRecon, toggleReconCheck } =
+    useReconciliation({ toStandardSettlement });
+
+  const { expandedLines, lineItems, loadingLines, loadLineItems } =
+    useTransactionDrilldown();
+
+  // ── Local UI state ──────────────────────────────────────────────────────────
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [bankAmountInput, setBankAmountInput] = useState('');
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
-  const [reconResults, setReconResults] = useState<Record<string, UniversalReconciliationResult>>({});
-  const [expandedRecon, setExpandedRecon] = useState<string | null>(null);
-  const [rollingBack, setRollingBack] = useState<string | null>(null);
-  const [refreshingXero, setRefreshingXero] = useState(false);
-  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
   const loadLineItems = useCallback(async (settlementId: string) => {
     if (lineItems[settlementId]) {
