@@ -16,6 +16,7 @@ const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const AmazonCallback = lazy(() => import("@/pages/AmazonCallback"));
+const ShopifyCallback = lazy(() => import("@/pages/ShopifyCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
