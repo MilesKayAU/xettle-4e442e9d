@@ -1,138 +1,291 @@
-# Xettle Build Plan
 
-## Smart File Ingestion — IMPLEMENTED ✅
 
-3-level intelligent file ingestion: fingerprint detection → heuristic mapping → AI fallback.
-Users upload any file, Xettle auto-detects marketplace, warns on wrong files, creates settlements.
+# Full Codebase Audit — Xettle
 
-**Files created:** `file-fingerprint-engine.ts`, `generic-csv-parser.ts`, `SmartUploadFlow.tsx`, `ai-file-interpreter/index.ts`
-**DB:** `marketplace_file_fingerprints` table with RLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
----
+## 1. DATABASE TABLES
 
-# Plan: Extract Accounting Module into Independent App
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## What You Have (Module Inventory)
+**settlements**
+Columns: id (uuid PK), user_id, settlement_id, marketplace, period_start (date), period_end (date), sales_principal, sales_shipping, seller_fees, promotional_discounts, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, net_ex_gst, bank_deposit, deposit_date, status, reconciliation_status, source (default 'manual'), xero_journal_id, xero_journal_id_1, xero_journal_id_2, xero_invoice_number (text), xero_status (text), is_split_month, split_month_1_data (jsonb), split_month_2_data (jsonb), bank_verified, bank_verified_amount, bank_verified_at, bank_verified_by, parser_version, created_at, updated_at.
+RLS: Users CRUD own rows (auth.uid() = user_id).
 
-The accounting module is self-contained with these components:
+**settlement_lines**
+Columns: id, user_id, settlement_id, transaction_type, amount_type, amount_description, accounting_category, amount, order_id, sku, posted_date, marketplace_name.
+RLS: Users SELECT/INSERT/DELETE own rows. No UPDATE.
 
-| Layer | Files | Lines |
-|-------|-------|-------|
-| **UI** | `src/components/admin/accounting/AccountingDashboard.tsx` | ~3,490 |
-| **Parser** | `src/utils/settlement-parser.ts` | ~716 |
-| **Xero Invoice Sync** | `supabase/functions/sync-amazon-journal/index.ts` | ~450 |
-| **Xero OAuth** | `supabase/functions/xero-auth/index.ts` | existing |
-| **Xero Connection UI** | `src/components/admin/XeroConnectionStatus.tsx` | existing |
-| **Xero Callback Page** | `src/pages/XeroCallback.tsx` | existing |
+**settlement_unmapped**
+Columns: id, user_id, settlement_id, transaction_type, amount_type, amount_description, amount, raw_row (jsonb).
+RLS: Users SELECT/INSERT/DELETE own rows. No UPDATE.
 
-**Database tables**: `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
+**marketplace_connections**
+Columns: id, user_id, marketplace_code, marketplace_name, connection_status, connection_type, country_code, settings (jsonb), created_at, updated_at.
+RLS: Users full CRUD own rows.
 
-**Secrets needed**: `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `RESEND_API_KEY` (for notifications)
+**marketplaces** (global reference table)
+Columns: id, marketplace_code, name, currency, settlement_frequency, settlement_type, gst_model, payment_delay_days, is_active, created_at, updated_at.
+RLS: Authenticated SELECT all. Admin-only INSERT/UPDATE/DELETE via `has_role('admin')`.
 
-## Recommended Approach
+**xero_tokens**
+Columns: id, user_id, tenant_id, tenant_name, access_token, refresh_token, expires_at, token_type, scope, created_at, updated_at.
+RLS: Users full CRUD own rows.
 
-**Create a new Lovable project** and port the accounting module as the primary app. This is the cleanest path because:
+**amazon_tokens**
+Columns: id, user_id, selling_partner_id, marketplace_id, region, access_token, refresh_token, expires_at, created_at, updated_at.
+RLS: Users full CRUD own rows.
 
-1. You get a fresh Supabase instance (clean DB, no legacy tables)
-2. Independent deployment and domain
-3. Own auth system focused on bookkeeper access
-4. No risk of breaking the Miles Kay e-commerce site
+**app_settings**
+Columns: id, user_id, key, value, created_at, updated_at.
+RLS: Users SELECT/INSERT/UPDATE own rows. No DELETE.
 
-## What the New App Would Include
+**user_roles**
+Columns: id, user_id, role (app_role enum: admin, moderator, user), created_at.
+RLS: Users SELECT own roles only. No INSERT/UPDATE/DELETE.
 
-1. **Auth** — Supabase email auth with admin role
-2. **Dashboard** — The AccountingDashboard as the main page (upload, review, history, settings tabs)
-3. **Settlement Parser** — `settlement-parser.ts` copied directly
-4. **Edge Functions** — `sync-amazon-journal` and `xero-auth` deployed to new Supabase
-5. **Xero Integration** — OAuth connection UI + callback page
-6. **Settings** — Account code configuration, GST rate
-7. **Database** — Migrations for `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
+**sync_history**
+Columns: id, user_id, event_type, status, error_message, settlements_affected, details (jsonb), created_at.
+RLS: Users SELECT/INSERT own rows. No UPDATE/DELETE.
 
-## What I Cannot Do From Here
+**product_costs**
+Columns: id, user_id, sku, cost, currency, label, created_at, updated_at.
+RLS: Users full CRUD own rows.
 
-Lovable cannot programmatically create a separate project or copy files between projects. You would need to:
+**marketplace_fee_observations**
+Columns: id, user_id, marketplace_code, settlement_id, fee_type (enum), fee_category, observed_rate, observed_amount, base_amount, observation_method (enum), period_start, period_end, currency, created_at.
+RLS: Users SELECT/INSERT/DELETE own. No UPDATE.
 
-1. **Create a new Lovable project** (click + New Project)
-2. **Come back here** and I can help you prepare all the code as a single prompt to paste into the new project, or you can reference this project
-3. Alternatively, **remix this project** (Settings → Remix) and then strip out everything except the accounting module
+**marketplace_fee_alerts**
+Columns: id, user_id, marketplace_code, settlement_id, fee_type (enum), expected_rate, observed_rate, deviation_pct, status, created_at.
+RLS: Users SELECT/UPDATE own. Admins SELECT all. No DELETE.
 
-## Recommended Next Step
+**marketplace_fingerprints** (self-learning detection patterns)
+Columns: id, user_id (nullable), marketplace_code, field, pattern, confidence, match_count, source, created_at.
+RLS: Authenticated SELECT global + own. INSERT/UPDATE own. No DELETE.
 
-**Remix this project**, then in the new remixed project, ask me to strip it down to only the accounting module — removing all e-commerce pages (Products, Blog, Contact, Distributors, Where To Buy, etc.), the Alibaba invoice system, logistics, and Amazon product sync. This preserves all the accounting code, edge functions, and database schema intact while giving you an independent app.
+**marketplace_file_fingerprints** (per-user file column signatures)
+Columns: id, user_id, marketplace_code, column_signature (jsonb), column_mapping (jsonb), file_pattern, created_at.
+RLS: ALL own rows.
 
-The remix approach is fastest because all code, edge functions, and Supabase config carry over. You'd just need to connect a new Supabase project and run the database migrations.
+**marketplace_ad_spend**
+Columns: id, user_id, marketplace_code, period_start, period_end, spend_amount, source, notes, currency, created_at, updated_at.
+RLS: Users full CRUD own rows.
 
----
+**marketplace_shipping_costs**
+Columns: id, user_id, marketplace_code, cost_per_order, currency, notes, created_at, updated_at.
+RLS: Users full CRUD own rows.
 
-# Marketplace Dashboard Standard
+**DB Functions:**
+- `has_role(_role app_role)` — SECURITY DEFINER, checks user_roles for auth.uid()
+- `update_updated_at_column()` — trigger function for auto-updating updated_at
 
-Every new marketplace dashboard MUST include the following features before shipping. This serves as the architectural checklist for building marketplace parsers and their UI.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## Required Features
+## 2. EDGE FUNCTIONS
 
-### 1. CSV Upload & Parse
-- File marketplace detection (reject wrong-marketplace files with warning)
-- Auto-detect CSV format variations if applicable
-- Parse into `StandardSettlement` via marketplace-specific parser
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-### 2. Duplicate Detection (on parse)
-- **Exact match**: Check `settlement_id + marketplace` against existing `settlements` table
-- **Fingerprint match**: Same `period_start + period_end + bank_deposit (±$0.01)`
-- Show warning banner in review tab for duplicates
-- Mark duplicate payouts visually (dimmed, "Duplicate" badge)
-- `saveSettlement()` in settlement-engine.ts handles server-side dedup as final guard
+| Function | Purpose | Key calls |
+|----------|---------|-----------|
+| `xero-auth` | OAuth2 flow for Xero (exchange code for tokens, store in xero_tokens) | Xero identity API |
+| `sync-settlement-to-xero` | Push settlement as Xero invoice (create) or void invoice (rollback). Accepts line items, reference, contact, description. | Xero Invoices API |
+| `sync-xero-status` | Sync-back: dual-query Xero for invoices with `Xettle-` prefix (new) and `Settlement` keyword (legacy). Updates local settlement records with invoice number + status. | Xero Invoices API, settlements table |
+| `auto-push-xero` | Auto-push settlements to Xero (for paid-tier automation) | sync-settlement-to-xero pattern |
+| `amazon-auth` | Amazon SP-API OAuth flow | Amazon LWA token endpoint |
+| `fetch-amazon-settlements` | Fetch settlement reports from Amazon SP-API | Amazon SP-API Reports endpoint |
+| `sync-amazon-journal` | Sync Amazon settlement data as Xero journal entries | Xero API |
+| `ai-file-interpreter` | AI-powered file detection and column mapping. Two modes: `detect_marketplace` and `map_columns`. Uses Lovable AI (gemini). | Lovable AI proxy |
+| `admin-list-users` | List all users for admin dashboard | Supabase Admin API (auth.admin.listUsers) |
+| `admin-manage-users` | Manage users (reset password, delete, toggle roles) | Supabase Admin API |
 
-### 3. Gap Detection (on parse)
-- Compare earliest parsed payout's `period_start` against latest saved settlement's `period_end`
-- If gap exists, show orange warning banner: "Gap detected — you may be missing payouts"
+**Config registration (supabase/config.toml):**
+- `ai-file-interpreter`: verify_jwt = false
+- `sync-xero-status`: verify_jwt = false
 
-### 4. Reconciliation Checks (review tab)
-- Run `runUniversalReconciliation()` on each parsed settlement
-- Display checks inline with expandable "Checks" button per payout card
-- Show pass/warn/fail icons with detail text per check
-- Block Xero sync if `canSync === false` (critical failures)
-- Checks include: Balance, GST Consistency, Refund Completeness, Sanity, Historical Deviation, Invoice Accuracy
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-### 5. Review Tab — Individual Payout Management
-- Dismiss/remove button (X) on each payout card (removes from parsed array, not DB)
-- Persisted state in localStorage across page refreshes
-- Clear All button
-- Save All → Push All to Xero flow
+## 3. PARSERS / UTILITIES
 
-### 6. History Tab — Bulk Operations
-- Select one / Select all checkboxes
-- Bulk delete with confirmation dialog
-- **Xero sync-aware bulk delete**: Count synced items in selection, show breakdown ("3 selected, 1 synced to Xero"), warn that Xero invoices won't be removed
-- Individual delete for ALL statuses including `synced` (with confirmation dialog for synced items)
-- "Xero ✓" badge on synced items when selected
-- Push to Xero button for saved/parsed items
-- Single-item delete for synced items with warning dialog
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-### 7. Xero Sync
-- Use `syncSettlementToXero()` from settlement-engine.ts
-- Build marketplace-specific invoice lines via `buildXInvoiceLines()` function
-- Run `runUniversalReconciliation()` before sync — skip if `canSync === false`
-- Contact name from `MARKETPLACE_CONTACTS` map in settlement-engine.ts
+| File | Purpose | Key exports |
+|------|---------|-------------|
+| `settlement-parser.ts` (715 lines) | Amazon TSV parser. 5 parser rules. Split-month detection. LVGT international order detection. Category mapping → Xero accounts. | `parseSettlementTSV()`, `PARSER_VERSION`, `XERO_ACCOUNT_MAP`, `ParsedSettlement`, `SplitMonthInfo` |
+| `settlement-engine.ts` (421 lines) | Shared types + helpers for all marketplaces. Save to DB, push to Xero, rollback, sync-back, formatting. | `StandardSettlement`, `saveSettlement()`, `syncSettlementToXero()`, `rollbackSettlementFromXero()`, `syncXeroStatus()`, `deleteSettlement()`, `buildSimpleInvoiceLines()`, `buildInvoiceReference()`, `buildInvoiceDescription()`, `formatAUD()` |
+| `bunnings-summary-parser.ts` (316 lines) | Bunnings Mirakl PDF parser. Extracts line items from summary table using regex patterns (payable orders, commission, refunds, shipping, subscription, manual credits/debits). | `parseBunningsSummaryPdf()`, `BunningsParseResult` |
+| `woolworths-marketplus-parser.ts` (481 lines) | Woolworths MarketPlus CSV parser. Splits by Order Source (BigW, EverydayMarket, MyDeal). Builds $0 clearing invoices. | `parseWoolworthsMarketPlusCSV()`, `buildWoolworthsInvoiceLines()`, `isWoolworthsMarketPlusCSV()` |
+| `shopify-orders-parser.ts` (679 lines) | Shopify Orders CSV parser. Registry-based marketplace detection (Note Attributes → Tags → Payment Method). Deduplicates line-item rows. Multi-line CSV handling. Per-marketplace clearing invoices. | `parseShopifyOrdersCSV()`, `normaliseSku()`, `ShopifyOrdersResult`, `MarketplaceGroup` |
+| `shopify-payments-parser.ts` (648 lines) | Shopify Payments CSV parser. Auto-detects payout-level vs transaction-level format. Groups by Payout ID. | `parseShopifyPayoutCSV()`, `ShopifyParseResult`, `ShopifyPayoutGroup` |
+| `generic-csv-parser.ts` (343 lines) | Mapping-driven CSV/XLSX parser. Converts any file into StandardSettlement[] using ColumnMapping. Handles grouping, GST models. | `parseGenericCSV()`, `GenericParseOptions` |
+| `file-fingerprint-engine.ts` (556 lines) | 3-level detection: L1 instant fingerprint, L2 heuristic column mapping, L3 AI fallback. Confidence scoring. | `detectFileType()`, `FileDetectionResult`, `ColumnMapping` |
+| `fingerprint-library.ts` (166 lines) | Level 2 detection — learned patterns from `marketplace_fingerprints` table. In-memory cache. Save new patterns. | `lookupFingerprint()`, `saveFingerprint()`, `FingerprintMatch` |
+| `file-marketplace-detector.ts` (89 lines) | Simple filename + content-based marketplace detection. Legacy detector. | `detectFileMarketplace()` |
+| `marketplace-registry.ts` (319 lines) | Central registry for all marketplaces. Detection patterns (Note Attributes, Tags, Payment Method). Xero account codes. | `MARKETPLACE_REGISTRY`, `detectMarketplaceFromRow()`, `getRegistryEntry()` |
+| `fee-observation-engine.ts` (281 lines) | Extracts fee observations from settlements. Detects anomalies. Fire-and-forget after save. | `extractFeeObservations()`, `extractAmazonFeeObservations()` |
+| `reconciliation-engine.ts` (189 lines) | Amazon-specific reconciliation checks (fee rate, return ratio, unmapped rows, split-month). | `runReconciliation()`, `ReconciliationResult` |
+| `universal-reconciliation.ts` (209 lines) | All-marketplace reconciliation (net payout check, GST ratio, fee rate). | `runUniversalReconciliation()`, `UniversalReconciliationResult` |
+| `profit-engine.ts` (135 lines) | COGS + profit calculator per marketplace from SKU costs. | `calculateMarketplaceProfit()`, `MarketplaceProfitSummary` |
+| `xero-csv-export.ts` (620 lines) | Generates Xero Bill Import CSV format. Amazon-specific with multi-currency Bunnings order export. | `generateXeroBillCSV()`, `XeroBillRow` |
+| `input-sanitization.ts` (50 lines) | Basic text/email/URL sanitization. | `sanitizeText()`, `sanitizeEmail()`, `sanitizeUrl()` |
 
-### 8. Fee Observation Engine
-- `saveSettlement()` auto-fires `extractFeeObservations()` for intelligence tracking
-- No per-dashboard code needed — handled by settlement-engine.ts
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## File Structure for New Marketplaces
+## 4. COMPONENTS (src/components/admin/accounting/)
 
-```
-src/utils/{marketplace}-parser.ts          → CSV parser → StandardSettlement[]
-src/components/admin/accounting/{Name}Dashboard.tsx  → Dashboard UI
-src/utils/settlement-engine.ts             → Shared save/sync/delete (DO NOT DUPLICATE)
-src/utils/universal-reconciliation.ts      → Shared recon checks (DO NOT DUPLICATE)
-src/utils/file-marketplace-detector.ts     → Add detection pattern for new marketplace
-```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## Currently Implemented Marketplaces
+| Component | Purpose |
+|-----------|---------|
+| `AccountingDashboard.tsx` | Amazon AU-specific dashboard. Full settlement lifecycle: upload TSV, parse, view summary, split-month handling, push to Xero (multi-line invoices), rollback, bank verification, auto-import tab. |
+| `GenericMarketplaceDashboard.tsx` (837 lines) | Universal marketplace dashboard. Settlement list with rich status badges (Ready to push / In Xero / Push failed), push/retry/rollback buttons, bank verification, bulk delete, Xero sync-back ("Refresh from Xero"), duplicate prevention, drill-down. |
+| `MonthlyReconciliationStatus.tsx` (290 lines) | Monthly period selector with overlap-filtered settlement query. Missing marketplace detection (compares marketplace_connections vs settlements). Push All Ready button with progress. |
+| `MarketplaceSwitcher.tsx` | Tab bar for switching between connected marketplaces. MARKETPLACE_CATALOG definition. Add marketplace flow. |
+| `SmartUploadFlow.tsx` | 3-level intelligent file upload: fingerprint match → heuristic → AI fallback. Routes to correct parser. Confidence gates. |
+| `InsightsDashboard.tsx` | Analytics: fee trend charts, anomaly alerts, marketplace comparison. |
+| `BunningsDashboard.tsx` | Bunnings-specific PDF upload + parse + review flow. |
+| `ShopifyOrdersDashboard.tsx` | Shopify Orders CSV upload. Shows marketplace groups, skipped/unknown groups, per-group push-to-Xero. |
+| `ShopifyPaymentsDashboard.tsx` | Shopify Payments CSV upload. Shows payout groups, per-payout push-to-Xero. |
+| `AmazonConnectionPanel.tsx` | Amazon SP-API connection management. OAuth flow, auto-fetch settlements, sync status. |
+| `AutoImportedTab.tsx` | Shows auto-imported Amazon settlements (source = 'api'). |
+| `AutomationSettingsPanel.tsx` | Settings for auto-push-to-Xero (paid tier). |
+| `OnboardingChecklist.tsx` | Step-by-step onboarding guide. |
+| `SellerCentralGuide.tsx` | Guide for downloading Amazon Seller Central statements. |
+| `ShopifyOnboarding.tsx` | Guide for exporting Shopify CSV files. |
+| `SkuCostManager.tsx` | CRUD for product_costs table (SKU → cost mapping for profit engine). |
+| `SyncComponents.tsx` | Xero sync UI components (push button, status, progress). |
+| `UpgradePlanComponents.tsx` | Upgrade nudge UI for paid-tier features. |
+| `MarketplaceReturnRatio.tsx` | Return ratio analytics per marketplace. |
 
-| Marketplace | Parser | Dashboard | Dedup | Gap | Recon | Bulk Delete | Xero Sync |
-|---|---|---|---|---|---|---|---|
-| Amazon AU | ✅ settlement-parser.ts | ✅ AccountingDashboard.tsx | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Shopify Payments | ✅ shopify-payments-parser.ts | ✅ ShopifyPaymentsDashboard.tsx | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bunnings | ✅ bunnings-summary-parser.ts | ✅ BunningsDashboard.tsx | ✅ | — | ✅ | ✅ | ✅ |
-| Catch / MyDeal / Kogan / Woolworths | — | ✅ GenericMarketplaceDashboard.tsx (placeholder) | — | — | — | — | — |
+**Other key components:**
+- `src/components/admin/LoginForm.tsx` — Email/password login form with honeypot
+- `src/components/admin/XeroConnectionStatus.tsx` — Xero connection badge + OAuth trigger
+- `src/components/admin/marketplace/MarketplaceConfigTab.tsx` — Admin marketplace configuration
+- `src/components/PinGate.tsx` — Site-wide PIN gate (hardcoded: `1941`, sessionStorage)
+- `src/components/PublicDemoUpload.tsx` — Public landing page demo upload
+- `src/components/MarketplaceAlertsBanner.tsx` — Fee alert banners
+- `src/components/MarketplaceInfoPanel.tsx` — Marketplace info display
+- `src/components/ErrorBoundary.tsx` — React error boundary
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 5. PAGES
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+| Page | Route | Purpose |
+|------|-------|---------|
+| `Landing.tsx` | `/` | Marketing landing page. Feature list, marketplace logos, demo upload, CTA to sign up. |
+| `Dashboard.tsx` | `/dashboard` | Main app. Protected (redirects to /auth). Three views: settlements, insights, smart_upload. Mounts MonthlyReconciliationStatus, MarketplaceSwitcher, AccountingDashboard (Amazon), GenericMarketplaceDashboard (others), ShopifyOrdersDashboard. |
+| `Admin.tsx` | `/admin` | Admin panel. User management (list, delete, reset password, toggle roles). Marketplace config. Protected (requires admin role). |
+| `Auth.tsx` | `/auth` | Login/signup page. |
+| `Pricing.tsx` | `/pricing` | 3-tier pricing page: Free ($0), Starter ($14.99/mo or $129/yr), Pro ($24.99/mo or $249/yr). UI only — no Stripe integration. |
+| `XeroCallback.tsx` | `/xero/callback` | OAuth callback handler for Xero. |
+| `AmazonCallback.tsx` | `/amazon/callback` | OAuth callback handler for Amazon SP-API. |
+| `ResetPassword.tsx` | `/reset-password` | Password reset page. |
+| `Privacy.tsx` | `/privacy` | Privacy policy. |
+| `Terms.tsx` | `/terms` | Terms of service. |
+| `NotFound.tsx` | `*` | 404 page. |
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 6. MARKETPLACE REGISTRY
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: `src/utils/marketplace-registry.ts`
+
+| Key | Display Name | Detection Patterns | Xero Accounts (Sales/Shipping/Clearing/Fees) | Skip? |
+|-----|-------------|-------------------|----------------------------------------------|-------|
+| `mydeal` | MyDeal | Notes: MyDealOrderID, mydeal_order. Tags: mydeal. Payment: mydeal | 200/206/613/405 | No |
+| `bunnings` | Bunnings Marketplace | Notes: Order placed from: Bunnings, mirakl. Tags: bunnings, mirakl. Payment: mirakl, bunnings | 200/206/613/405 | No |
+| `kogan` | Kogan | Notes: KoganOrderID, Tenant_id: Kogan. Tags: kogan, cedcommerce. Payment: commercium, constacloud | 200/206/613/405 | No |
+| `bigw` | Big W Marketplace | Notes: Order placed from: Big W. Tags: big w, bigw | 200/206/613/405 | No |
+| `everyday_market` | Everyday Market | Notes: Everyday Market, woolworths. Tags: everyday market, woolworths | 200/206/613/405 | No |
+| `catch` | Catch | Notes: Order placed from: Catch, CatchOrderID. Tags: catch | 200/206/613/405 | No |
+| `ebay` | eBay | Notes: eBayOrderID. Tags: ebay. Payment: ebay | 200/206/613/405 | No |
+| `paypal` | PayPal | Payment: paypal express checkout, paypal | 201/206/613/405 | No |
+| `afterpay` | Afterpay | Payment: afterpay, afterpay_v2 | 201/206/613/405 | No |
+| `stripe` | Stripe | Payment: stripe | 201/206/613/405 | No |
+| `manual_order` | Manual Orders | Payment: manual | 201/206/613/405 | No |
+| `shopify_payments` | Shopify Payments | Payment: shopify_payments, shopify | 201/206/613/405 | **Yes** (handled by payout CSV) |
+
+Detection priority: Note Attributes → Tags → Payment Method.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 7. STRIPE / BILLING
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**No Stripe integration exists.** No Stripe keys configured. No billing API calls.
+
+The Pricing page (`/pricing`) defines 3 tiers as UI-only:
+- **Free** ($0): Manual upload, full parsing, manual Xero push
+- **Starter** ($14.99/mo or $129/yr): Amazon SP-API, auto-fetch
+- **Pro** ($24.99/mo or $249/yr): Auto-push to Xero, priority support
+
+Role gating exists (`paid` role in user_roles) for Amazon auto-fetch. The `UpgradePlanComponents.tsx` shows upgrade nudges. But **no checkout, no payment processing, no subscription management** is implemented.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 8. AUTHENTICATION
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- **Auth provider:** Supabase Auth (email/password)
+- **Auth hook:** `useAdminAuth()` — `onAuthStateChange`, `signIn`, `handleSignOut`
+- **Protected routes:** `/dashboard` redirects to `/auth` if not authenticated
+- **Admin check:** `Dashboard.tsx` calls `supabase.rpc('has_role', { _role: 'admin' })` — shows Admin link if true
+- **Admin page:** `/admin` — checks admin role, shows user management
+- **Paid role:** `paid` role gates Amazon SP-API auto-fetch
+- **PinGate:** Site-wide PIN gate (hardcoded `1941`) using sessionStorage. Wraps entire app in `App.tsx`.
+- **Email verification:** Not explicitly disabled (default requires verification)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 9. KNOWN GAPS / TODOs
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**TODO comments:**
+- `AccountingDashboard.tsx` line 1397: `// TODO: Implement sync-to-Xero from auto-imported` — clicking sync on auto-imported Amazon settlements shows "coming soon" toast
+
+**Hardcoded values:**
+- `PinGate.tsx` line 7: `const SITE_PIN = '1941'` — hardcoded PIN for site access
+
+**console.log statements that should be cleaned up:**
+- `settlement-parser.ts`: 8+ `console.log`/`console.info` debug statements (parser diagnostics)
+- `xero-csv-export.ts`: 2 `console.log` statements (adjustment ratio logging)
+- `AmazonConnectionPanel.tsx`: 1 `console.log` (sync details)
+- `LoginForm.tsx`: 1 `console.log` (spam detection — acceptable)
+
+**"INV-XXXX" placeholder text:**
+- `Landing.tsx` line 115 and `PublicDemoUpload.tsx` line 445 — cosmetic mock data for landing page previews (intentional)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 10. WHAT IS NOT YET BUILT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. **Stripe payment processing** — Pricing page exists with 3 tiers but no checkout, subscription management, or webhook handling. The `paid` role is manually assigned.
+
+2. **Auto-push to Xero from auto-imported Amazon settlements** — TODO in code. Auto-fetch works but auto-push shows "coming soon".
+
+3. **Email digest / notifications** — `RESEND_API_KEY` secret is configured but no email-sending edge function exists. No settlement reminder emails, no weekly digest.
+
+4. **Kogan, Catch, MyDeal, eBay dedicated parsers** — These marketplaces exist in the registry for Shopify Orders detection, and the generic CSV parser can handle them, but no marketplace-specific settlement file parsers exist. They rely on the generic parser or manual upload.
+
+5. **Scheduled/cron functions** — No scheduled edge functions for periodic Amazon settlement fetching or Xero sync-back. These are triggered manually or on-mount.
+
+6. **Storage buckets** — No file storage configured. Settlement files are parsed in-memory and not persisted.
+
+7. **Multi-currency support** — Parser infrastructure supports currency fields but Xero push assumes AUD throughout.
+
+8. **User profile / settings page** — No dedicated user profile page. Settings are stored in `app_settings` but no UI for managing them beyond automation toggles.
+
+9. **Webhook receivers** — No inbound webhooks for Xero, Shopify, or Amazon event notifications.
+
+10. **Mobile-responsive testing** — Components use Tailwind responsive classes but no dedicated mobile optimization has been verified.
+
