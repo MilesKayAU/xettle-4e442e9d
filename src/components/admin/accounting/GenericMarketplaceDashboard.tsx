@@ -229,7 +229,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               </div>
               <div className="flex items-center gap-2">
                 {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleBulkMarkSynced}>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleBulkMarkSynced(settlements)}>
                     <SkipForward className="h-3.5 w-3.5 mr-1" />
                     Mark All as Already in Xero
                   </Button>
