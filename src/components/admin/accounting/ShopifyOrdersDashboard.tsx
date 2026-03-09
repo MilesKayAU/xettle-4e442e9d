@@ -30,6 +30,12 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
+  detectFromFingerprints,
+  saveFingerprint,
+  incrementFingerprintMatch,
+  loadFingerprints,
+} from '@/utils/fingerprint-library';
+import {
   parseShopifyOrdersCSV,
   buildShopifyOrdersInvoiceLines,
   buildSettlementsFromGroups,
@@ -280,7 +286,7 @@ export default function ShopifyOrdersDashboard() {
   const requestAiDetection = async (groupIdx: number, group: MarketplaceGroup) => {
     if (group.orderCount < 3) return;
 
-    // Check cache first
+    // Check in-memory cache first
     const cacheKey = buildCacheKey(group);
     const cached = aiCacheRef.current.get(cacheKey);
     if (cached) {
@@ -291,10 +297,39 @@ export default function ShopifyOrdersDashboard() {
       return;
     }
 
+    // ── Level 2: Fingerprint library check (DB, fast) ──────────────
+    try {
+      const sampleNote = (group.sampleNoteAttributes || []).join(' ');
+      const sampleTags = (group.sampleTags || []).join(', ');
+      const samplePm = group.orders[0]?.paymentMethod || '';
+
+      const fpMatch = await detectFromFingerprints(sampleNote, sampleTags, samplePm);
+      if (fpMatch && fpMatch.confidence >= 0.85) {
+        const fpResult = {
+          marketplace_name: fpMatch.marketplace_code.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+          marketplace_code: fpMatch.marketplace_code,
+          confidence: Math.round(fpMatch.confidence * 100),
+          reasoning: `Matched fingerprint: "${fpMatch.pattern}" in ${fpMatch.field} (${fpMatch.match_count} prior matches)`,
+          loading: false,
+        };
+        aiCacheRef.current.set(cacheKey, fpResult);
+        setAiSuggestions(prev => ({ ...prev, [groupIdx]: fpResult }));
+        incrementFingerprintMatch(fpMatch.field, fpMatch.pattern);
+
+        if (fpResult.confidence >= 90) {
+          assignUnknownGroup(groupIdx, fpResult.marketplace_code);
+          toast.success(`Fingerprint detected: ${fpResult.marketplace_name} (instant)`);
+        }
+        return;
+      }
+    } catch {
+      // Fingerprint lookup failed — fall through to AI
+    }
+
+    // ── Level 3: AI fallback ────────────────────────────────────────
     setAiSuggestions(prev => ({ ...prev, [groupIdx]: { marketplace_name: '', marketplace_code: '', confidence: 0, reasoning: '', loading: true } }));
 
     try {
-      // 5-second timeout to prevent UI stalls
       const invokePromise = supabase.functions.invoke('ai-file-interpreter', {
         body: {
           action: 'detect_marketplace',
@@ -309,7 +344,6 @@ export default function ShopifyOrdersDashboard() {
       );
 
       const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
-
       if (error) throw error;
 
       const suggestion = {
@@ -320,11 +354,20 @@ export default function ShopifyOrdersDashboard() {
         loading: false,
       };
 
-      // Store in cache
       aiCacheRef.current.set(cacheKey, suggestion);
       setAiSuggestions(prev => ({ ...prev, [groupIdx]: suggestion }));
 
-      // Auto-assign if confidence >= 90
+      // Save AI detection as a fingerprint for future uploads
+      if (suggestion.confidence >= 70 && suggestion.marketplace_code && data.detection_field && data.pattern) {
+        saveFingerprint({
+          marketplace_code: suggestion.marketplace_code,
+          field: data.detection_field,
+          pattern: data.pattern,
+          confidence: suggestion.confidence / 100,
+          source: 'ai_detected',
+        });
+      }
+
       if (suggestion.confidence >= 90 && suggestion.marketplace_code) {
         assignUnknownGroup(groupIdx, suggestion.marketplace_code);
         toast.success(`AI auto-detected: ${suggestion.marketplace_name} (${suggestion.confidence}% confidence)`);
