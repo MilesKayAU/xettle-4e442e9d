@@ -889,6 +889,133 @@ export default function ShopifyOrdersDashboard() {
                 ))}
               </div>
 
+              {/* ── Profit Summary ── */}
+              {profitResult && profitResult.totalRevenue > 0 && (
+                <Card className="border-primary/20">
+                  <CardContent className="py-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-primary" />
+                        <span className="text-sm font-semibold text-foreground">Marketplace Profit</span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs gap-1.5"
+                        onClick={() => setShowSkuManager(!showSkuManager)}
+                      >
+                        <Package className="h-3 w-3" />
+                        {showSkuManager ? 'Hide costs' : 'Edit product costs'}
+                      </Button>
+                    </div>
+
+                    {profitResult.uncostedSKUs.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {profitResult.uncostedSKUs.length} of {profitResult.allSKUs.length} SKUs missing cost data — profit is estimated
+                      </div>
+                    )}
+
+                    {/* Per-marketplace profit cards */}
+                    <div className="grid gap-2">
+                      {profitResult.marketplaces.map(mp => (
+                        <div key={mp.marketplaceKey} className="bg-muted/40 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-foreground">{mp.marketplaceLabel}</span>
+                            {mp.isEstimated && (
+                              <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-300">estimated</Badge>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">Revenue</span>
+                              <p className="font-medium text-foreground">{formatAUD(mp.revenue)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">COGS</span>
+                              <p className="font-medium text-foreground">{formatAUD(mp.cogs)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Profit</span>
+                              <p className={`font-bold ${mp.grossProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                                {formatAUD(mp.grossProfit)}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Margin</span>
+                              <p className={`font-bold ${mp.marginPct >= 30 ? 'text-primary' : mp.marginPct >= 15 ? 'text-foreground' : 'text-destructive'}`}>
+                                {mp.marginPct.toFixed(1)}%
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Totals row */}
+                    {profitResult.marketplaces.length > 1 && (
+                      <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
+                        <div className="grid grid-cols-4 gap-2 text-xs">
+                          <div>
+                            <span className="text-muted-foreground font-medium">Total Revenue</span>
+                            <p className="font-bold text-foreground">{formatAUD(profitResult.totalRevenue)}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground font-medium">Total COGS</span>
+                            <p className="font-bold text-foreground">{formatAUD(profitResult.totalCogs)}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground font-medium">Total Profit</span>
+                            <p className={`font-bold ${profitResult.totalProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                              {formatAUD(profitResult.totalProfit)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground font-medium">Avg Margin</span>
+                            <p className="font-bold text-foreground">{profitResult.totalMarginPct.toFixed(1)}%</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── SKU Cost Manager (expandable) ── */}
+              {showSkuManager && detectedSKUs.length > 0 && (
+                <SkuCostManager
+                  skus={detectedSKUs}
+                  onCostsSaved={handleCostsSaved}
+                  compact
+                />
+              )}
+
+              {/* SKU prompt for users with no costs set */}
+              {profitResult && profitResult.costedSKUs.length === 0 && detectedSKUs.length > 0 && !showSkuManager && (
+                <Card className="border-dashed border-primary/30">
+                  <CardContent className="py-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            We found {detectedSKUs.length} unique SKUs
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Add product costs to see profit per marketplace
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="text-xs" onClick={() => setShowSkuManager(true)}>
+                          Add costs now
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Action buttons */}
               <div className="flex items-center gap-3 pt-2">
                 {!allSaved ? (
