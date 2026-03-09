@@ -392,6 +392,39 @@ export type Database = {
         }
         Relationships: []
       }
+      product_costs: {
+        Row: {
+          cost: number
+          created_at: string
+          currency: string
+          id: string
+          label: string | null
+          sku: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cost?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          label?: string | null
+          sku: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cost?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          label?: string | null
+          sku?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       settlement_lines: {
         Row: {
           accounting_category: string | null
