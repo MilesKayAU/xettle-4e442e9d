@@ -142,6 +142,52 @@ const ShopifyConnectionStatus = () => {
     }
   };
 
+  const handleManualSave = async () => {
+    const domain = manualDomain.trim();
+    const token = manualToken.trim();
+    if (!domain || !token) {
+      toast.error('Please enter both shop domain and access token');
+      return;
+    }
+
+    setSavingToken(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('You must be logged in');
+        setSavingToken(false);
+        return;
+      }
+
+      const { error } = await supabase.from('shopify_tokens').upsert({
+        user_id: session.user.id,
+        shop_domain: domain,
+        access_token: token,
+        scope: 'custom_app',
+      }, { onConflict: 'user_id' } as any);
+
+      if (error) throw error;
+
+      // Also save shop domain to app_settings
+      await supabase.from('app_settings').upsert({
+        user_id: session.user.id,
+        key: 'shopify_shop_domain',
+        value: domain,
+      }, { onConflict: 'user_id,key' } as any);
+
+      toast.success('Shopify token saved successfully');
+      setManualToken('');
+      setManualDomain('');
+      setManualOpen(false);
+      await fetchStatus();
+    } catch (error: any) {
+      console.error('Error saving Shopify token:', error);
+      toast.error(error.message || 'Failed to save token');
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
