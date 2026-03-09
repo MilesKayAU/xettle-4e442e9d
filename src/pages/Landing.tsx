@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Rocket, Store, BarChart3, AlertTriangle, ScanSearch } from 'lucide-react';
+import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Rocket, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers } from 'lucide-react';
 import profitLeakImg from '@/assets/profit-leak-preview.png';
 import feeAlertsImg from '@/assets/fee-alerts-preview.png';
 import PublicDemoUpload from '@/components/PublicDemoUpload';
@@ -54,10 +54,10 @@ const features = [
 const marketplaces = [
   { name: 'Amazon', status: 'live' },
   { name: 'Bunnings', status: 'live' },
+  { name: 'Shopify', status: 'live' },
   { name: 'Kogan', status: 'soon' },
   { name: 'MyDeal', status: 'soon' },
   { name: 'Woolworths', status: 'soon' },
-  { name: 'Big W', status: 'soon' },
 ];
 
 const trustSignals = [
@@ -104,10 +104,10 @@ export default function Landing() {
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6">
             Drop any settlement file.
             <br />
-            <span className="text-primary">See your Xero invoice.</span>
+            <span className="text-primary">Sync to Xero immediately.</span>
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-            No account needed — watch Xettle recognise your file, parse the settlement, and build your Xero invoice in seconds.
+          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
+            No account needed — try our challenge! Drop a file and watch Xettle recognise it, parse the settlement, and build your Xero invoice in seconds.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
             Works with files other tools can't handle — including Bunnings/Mirakl PDFs.
@@ -155,6 +155,60 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Bulk Upload / Smart Sorting */}
+      <section className="py-20 px-4 bg-card border-y border-border">
+        <div className="container-custom max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold mb-4">
+              <FolderUp className="h-3.5 w-3.5" />
+              Smart Bulk Upload
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              Drop 50 files. We sort them for you.
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Mix Amazon TSVs, Shopify CSVs, and Bunnings PDFs in a single upload. Xettle detects each marketplace, creates the tabs, and sorts every settlement into the right place.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center p-6 rounded-2xl border border-border bg-background">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <Layers className="h-7 w-7 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Auto-detect marketplace</h3>
+              <p className="text-muted-foreground text-sm">
+                Our AI fingerprint engine recognises Amazon, Shopify, Bunnings, Kogan and more — from the file structure alone. No manual labelling needed.
+              </p>
+            </div>
+            <div className="text-center p-6 rounded-2xl border border-border bg-background">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <Table className="h-7 w-7 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Sorted settlement table</h3>
+              <p className="text-muted-foreground text-sm">
+                Every settlement lands in a clean table under its marketplace tab — with period, deposit amount, reconciliation status, and Xero sync status at a glance.
+              </p>
+            </div>
+            <div className="text-center p-6 rounded-2xl border border-border bg-background">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <Settings2 className="h-7 w-7 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Approve & sync your way</h3>
+              <p className="text-muted-foreground text-sm">
+                Review each settlement before syncing to Xero manually — or upgrade to Pro and let Xettle auto-push on a schedule. You're always in control.
+              </p>
+            </div>
+          </div>
+          <div className="text-center mt-10">
+            <Button size="lg" asChild>
+              <Link to="/auth?tab=signup">
+                Try Bulk Upload Free <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section id="features" className="py-20 px-4">
         <div className="container-custom">
@@ -189,28 +243,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Trust Signals */}
-      <section className="py-16 px-4">
-        <div className="container-custom max-w-3xl mx-auto">
-          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12">
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-8">
-              Built for Australian Marketplace Sellers
-            </h2>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {trustSignals.map((signal) => (
-                <div key={signal} className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
-                  <span className="text-foreground font-medium">{signal}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground/70 text-center mt-6 italic">
-              Example insight: Amazon AU returned $0.44 per $1 sold after marketplace fees.
-            </p>
-          </div>
-        </div>
-      </section>
-
       {/* How it works */}
       <section className="py-20 px-4 bg-card border-y border-border">
         <div className="container-custom max-w-4xl mx-auto">
@@ -220,8 +252,8 @@ export default function Landing() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { step: '01', title: 'Connect Xero', desc: 'Securely link your Xero organisation with one click. Your tokens are encrypted per-user.' },
-              { step: '02', title: 'Upload or Auto-Sync', desc: 'Upload your marketplace settlement file — or let Pro auto-fetch from Amazon for you.' },
-              { step: '03', title: 'Xettle It', desc: 'Review the breakdown, confirm reconciliation, and push. Your invoice appears in Xero instantly.' },
+              { step: '02', title: 'Upload or Auto-Sync', desc: 'Drop all your settlement files at once — Amazon, Shopify, Bunnings, anything. Or let Pro auto-fetch from Amazon.' },
+              { step: '03', title: 'Xettle It', desc: 'Review settlements sorted by marketplace, approve, and push to Xero. Individually or in bulk.' },
             ].map((item) => (
               <div key={item.step} className="text-center">
                 <div className="text-5xl font-bold text-primary/20 mb-4">{item.step}</div>
@@ -333,7 +365,29 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Trust Signals */}
+      <section className="py-16 px-4">
+        <div className="container-custom max-w-3xl mx-auto">
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12">
+            <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-8">
+              Built for Australian Marketplace Sellers
+            </h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {trustSignals.map((signal) => (
+                <div key={signal} className="flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
+                  <span className="text-foreground font-medium">{signal}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground/70 text-center mt-6 italic">
+              Example insight: Amazon AU returned $0.44 per $1 sold after marketplace fees.
+            </p>
+          </div>
+        </div>
+      </section>
 
+      {/* Final CTA */}
       <section className="py-20 px-4">
         <div className="container-custom max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
@@ -358,6 +412,9 @@ export default function Landing() {
               © {new Date().getFullYear()} Xettle. Marketplace accounting for Xero.
             </p>
             <div className="flex gap-6">
+              <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Pricing
+              </Link>
               <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Privacy Policy
               </Link>
