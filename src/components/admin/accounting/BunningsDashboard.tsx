@@ -225,7 +225,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">Upload your Bunnings "Summary of Transactions" PDF</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    This is the fortnightly settlement PDF from your Bunnings Mirakl seller portal. 
+                    This is the fortnightly Summary of Transactions from your Bunnings Mirakl seller portal. 
                     We'll extract the totals and create a matching Xero invoice automatically.
                   </p>
 
@@ -274,13 +274,13 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
-                Settlement PDF
+                Summary of Transactions
                 {parsing && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
                 {parsed && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />}
                 {parseError && <XCircle className="h-4 w-4 text-destructive ml-auto" />}
               </CardTitle>
               <CardDescription className="text-xs">
-                Accepted: Summary of Transactions PDF from Bunnings Mirakl portal.
+                Upload the PDF from Bunnings Mirakl → Billing cycles → ⋮ → "Summary of transactions"
               </CardDescription>
             </CardHeader>
             <CardContent>
