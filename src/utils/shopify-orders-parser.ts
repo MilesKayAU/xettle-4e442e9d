@@ -124,15 +124,55 @@ function normaliseDate(raw: string): string {
   return trimmed;
 }
 
+/**
+ * Split CSV content into logical rows, correctly handling multi-line quoted fields.
+ * Shopify Note Attributes for Bunnings/Mirakl orders can span 7+ physical lines.
+ */
+function splitCSVIntoRows(content: string): string[] {
+  const rows: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+
+    if (ch === '"') {
+      // Handle escaped quotes ""
+      if (inQuotes && i + 1 < content.length && content[i + 1] === '"') {
+        current += '""';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      current += ch;
+    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      // End of logical row
+      if (ch === '\r' && i + 1 < content.length && content[i + 1] === '\n') {
+        i++; // skip \r\n pair
+      }
+      if (current.trim().length > 0) {
+        rows.push(current);
+      }
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim().length > 0) {
+    rows.push(current);
+  }
+  return rows;
+}
+
 function parseCSVRow(line: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '\"') {
-      if (inQuotes && i + 1 < line.length && line[i + 1] === '\"') {
-        current += '\"';
+    if (ch === '"') {
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+        current += '"';
         i++;
       } else {
         inQuotes = !inQuotes;
