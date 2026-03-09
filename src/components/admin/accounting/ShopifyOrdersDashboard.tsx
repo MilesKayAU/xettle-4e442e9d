@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ShopifyOnboarding from './ShopifyOnboarding';
+import SkuCostManager from './SkuCostManager';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,7 +23,7 @@ import {
 import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
   History, Loader2, Send, Eye, Trash2, Info, ShoppingCart,
-  SkipForward, HelpCircle, Sparkles, ArrowRight,
+  SkipForward, HelpCircle, Sparkles, ArrowRight, Package, TrendingUp,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -54,6 +55,12 @@ import {
   formatSettlementDate,
   formatAUD,
 } from '@/utils/settlement-engine';
+import {
+  extractUniqueSKUs,
+  calculateProfit,
+  type ProductCost,
+  type ProfitEngineResult,
+} from '@/utils/profit-engine';
 
 interface SettlementRecord {
   id: string;
