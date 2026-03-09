@@ -77,6 +77,23 @@ function statusBadge(status: string) {
 }
 
 const LS_KEY = 'bunnings_pending_upload';
+const LS_BULK_KEY = 'bunnings_pending_bulk';
+
+interface PersistedSingle {
+  parsed: StandardSettlement;
+  extra: BunningsParseExtra | null;
+  warning: UploadWarning | null;
+  savedId: string | null;
+}
+
+interface PersistedBulkItem {
+  fileName: string;
+  parsed: StandardSettlement | null;
+  error: string | null;
+  saved: boolean;
+  skipped: boolean;
+  isDuplicate: boolean;
+}
 
 function saveParsedToStorage(
   parsed: StandardSettlement,
@@ -89,12 +106,21 @@ function saveParsedToStorage(
   } catch { /* quota exceeded — ignore */ }
 }
 
-function loadParsedFromStorage(): {
-  parsed: StandardSettlement;
-  extra: BunningsParseExtra | null;
-  warning: UploadWarning | null;
-  savedId: string | null;
-} | null {
+function saveBulkToStorage(items: BatchItem[]) {
+  try {
+    const slim: PersistedBulkItem[] = items.map(b => ({
+      fileName: b.file?.name || b.fileName || 'unknown',
+      parsed: b.parsed,
+      error: b.error,
+      saved: b.saved,
+      skipped: b.skipped,
+      isDuplicate: b.isDuplicate,
+    }));
+    localStorage.setItem(LS_BULK_KEY, JSON.stringify(slim));
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function loadParsedFromStorage(): PersistedSingle | null {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return null;
@@ -102,8 +128,20 @@ function loadParsedFromStorage(): {
   } catch { return null; }
 }
 
+function loadBulkFromStorage(): PersistedBulkItem[] | null {
+  try {
+    const raw = localStorage.getItem(LS_BULK_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
 function clearParsedStorage() {
   try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+}
+
+function clearBulkStorage() {
+  try { localStorage.removeItem(LS_BULK_KEY); } catch { /* ignore */ }
 }
 
 export default function BunningsDashboard({ marketplace }: BunningsDashboardProps) {
