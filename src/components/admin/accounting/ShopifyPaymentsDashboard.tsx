@@ -153,7 +153,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
           toast.success(`${total} payouts parsed — ${reconciledCount}/${total} reconciled ✓`);
         }
         setActiveTab('review');
-      } else {
+      } else if (!result.success) {
         const errMsg = result.error;
         setParseError(errMsg);
         toast.error(errMsg);
