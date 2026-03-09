@@ -562,9 +562,18 @@ function parseTransactionLevelCSV(headers: string[], lines: string[]): ShopifyPa
 
   settlements.sort((a, b) => (b.metadata?.payoutDate || '').localeCompare(a.metadata?.payoutDate || ''));
 
+  // Build per-payout row mapping for settlement_lines saving
+  const rowsByPayout = new Map<string, ShopifyTransactionRow[]>();
+  for (const row of rows) {
+    if (!rowsByPayout.has(row.payoutId)) rowsByPayout.set(row.payoutId, []);
+    rowsByPayout.get(row.payoutId)!.push(row);
+  }
+
   return {
     success: true,
     settlements,
+    rawRows: rows,
+    rowsByPayout,
     extra: {
       rowCount: rows.length,
       currency: rows[0]?.currency || 'AUD',

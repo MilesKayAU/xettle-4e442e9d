@@ -574,42 +574,111 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                       {/* ── Transaction drill-down ── */}
                       {expandedLines === s.settlement_id && (
                         <div className="mt-3 pt-3 border-t border-border">
-                          {lineItems[s.settlement_id] && lineItems[s.settlement_id].length > 0 ? (
-                            <>
-                              <p className="text-[10px] text-muted-foreground mb-2 font-medium">
-                                {lineItems[s.settlement_id].length} transaction{lineItems[s.settlement_id].length !== 1 ? 's' : ''} — source: {s.marketplace.startsWith('shopify_orders_') ? 'Shopify Orders CSV' : 'Direct settlement'}
-                              </p>
-                              <div className="overflow-auto max-h-60 rounded-lg border border-border">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead className="text-[10px]">Date</TableHead>
-                                      <TableHead className="text-[10px]">Order</TableHead>
-                                      <TableHead className="text-[10px]">SKU / Detail</TableHead>
-                                      <TableHead className="text-[10px] text-right">Amount</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {lineItems[s.settlement_id].map((line: any, lIdx: number) => (
-                                      <TableRow key={lIdx}>
-                                        <TableCell className="text-[10px] text-muted-foreground py-1">{line.posted_date || '—'}</TableCell>
-                                        <TableCell className="text-[10px] font-mono py-1">{line.order_id || '—'}</TableCell>
-                                        <TableCell className="text-[10px] text-muted-foreground py-1">{line.amount_description || line.sku || '—'}</TableCell>
-                                        <TableCell className="text-[10px] text-right font-medium py-1">{formatAUD(line.amount || 0)}</TableCell>
+                          {lineItems[s.settlement_id] && lineItems[s.settlement_id].length > 0 ? (() => {
+                            const lines = lineItems[s.settlement_id];
+                            const PAGE_SIZE = 25;
+                            const totalLines = lines.length;
+                            const totalAmount = lines.reduce((sum: number, l: any) => sum + (l.amount || 0), 0);
+
+                            const getRowBg = (line: any) => {
+                              const type = (line.transaction_type || line.amount_type || '').toLowerCase();
+                              if (type.includes('refund') || type === 'refund') return 'bg-red-50 dark:bg-red-950/20';
+                              if (type.includes('fee') || type === 'fee') return 'bg-amber-50 dark:bg-amber-950/20';
+                              if (type.includes('adjustment') || type === 'adjustment') return 'bg-blue-50 dark:bg-blue-950/10';
+                              return '';
+                            };
+
+                            const exportCSV = () => {
+                              const csvHeader = 'Date,Order ID,SKU,Detail,Amount,Type\n';
+                              const csvRows = lines.map((l: any) =>
+                                `"${l.posted_date || ''}","${l.order_id || ''}","${l.sku || ''}","${(l.amount_description || '').replace(/"/g, '""')}",${l.amount || 0},"${l.transaction_type || l.amount_type || ''}"`
+                              ).join('\n');
+                              const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `${s.settlement_id}-transactions.csv`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            };
+
+                            return (
+                              <>
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="text-[10px] text-muted-foreground font-medium">
+                                    {totalLines} transaction{totalLines !== 1 ? 's' : ''} — source: {s.marketplace.startsWith('shopify_orders_') ? 'Shopify Orders CSV' : 'Settlement file'}
+                                  </p>
+                                  <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1" onClick={exportCSV}>
+                                    <Download className="h-3 w-3" /> Export CSV
+                                  </Button>
+                                </div>
+                                <div className="overflow-auto max-h-72 rounded-lg border border-border">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead className="text-[10px]">Date</TableHead>
+                                        <TableHead className="text-[10px]">Order</TableHead>
+                                        <TableHead className="text-[10px]">SKU / Detail</TableHead>
+                                        <TableHead className="text-[10px] text-right">Amount</TableHead>
+                                        <TableHead className="text-[10px]">Type</TableHead>
                                       </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
-                              <p className="text-[10px] text-muted-foreground mt-1.5">
-                                Total: <span className="font-semibold text-foreground">{formatAUD(lineItems[s.settlement_id].reduce((sum: number, l: any) => sum + (l.amount || 0), 0))}</span>
-                                {' · '}ex GST: <span className="font-medium">{formatAUD(sales)}</span>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {lines.map((line: any, lIdx: number) => (
+                                        <TableRow key={lIdx} className={getRowBg(line)}>
+                                          <TableCell className="text-[10px] text-muted-foreground py-1">{line.posted_date || '—'}</TableCell>
+                                          <TableCell className="text-[10px] font-mono py-1">{line.order_id || '—'}</TableCell>
+                                          <TableCell className="text-[10px] text-muted-foreground py-1 max-w-[200px] truncate">{line.amount_description || line.sku || '—'}</TableCell>
+                                          <TableCell className="text-[10px] text-right font-medium py-1">{formatAUD(line.amount || 0)}</TableCell>
+                                          <TableCell className="text-[10px] text-muted-foreground py-1">{line.transaction_type || line.amount_type || '—'}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                      {/* Totals row */}
+                                      <TableRow className="border-t-2 border-border bg-muted/30 font-semibold">
+                                        <TableCell className="text-[10px] py-1.5" colSpan={3}>
+                                          Totals ({totalLines} rows)
+                                        </TableCell>
+                                        <TableCell className="text-[10px] text-right py-1.5 font-bold">{formatAUD(totalAmount)}</TableCell>
+                                        <TableCell className="text-[10px] py-1.5" />
+                                      </TableRow>
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                                {/* Reconciliation footer */}
+                                <div className="mt-2 flex items-center justify-between">
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Net total: <span className="font-semibold text-foreground">{formatAUD(totalAmount)}</span>
+                                    {Math.abs(totalAmount - net) <= 0.05 ? (
+                                      <span className="text-green-600 dark:text-green-400 ml-2">✅ Matches settlement</span>
+                                    ) : (
+                                      <span className="text-amber-500 ml-2">⚠️ Difference of {formatAUD(Math.abs(totalAmount - net))}</span>
+                                    )}
+                                  </p>
+                                </div>
+                              </>
+                            );
+                          })() : lineItems[s.settlement_id] ? (
+                            <div className="py-4 px-3 text-center space-y-3">
+                              <p className="text-xs text-muted-foreground">
+                                📋 Transaction detail not available for this settlement — it was uploaded before detailed tracking was enabled.
                               </p>
-                            </>
-                          ) : lineItems[s.settlement_id] ? (
-                            <p className="text-xs text-muted-foreground py-2 text-center">
-                              No transaction detail available for this settlement.
-                            </p>
+                              <div className="bg-muted/30 rounded-lg px-4 py-3 inline-block text-left">
+                                <p className="text-[10px] text-muted-foreground mb-1 font-medium">Settlement summary:</p>
+                                <div className="flex gap-4 text-xs">
+                                  <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
+                                  <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
+                                  <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground">
+                                To see full detail, re-upload this settlement file via Smart Upload.
+                              </p>
+                              {onSwitchToUpload && (
+                                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onSwitchToUpload}>
+                                  <RefreshCw className="h-3 w-3" /> Re-upload settlement file
+                                </Button>
+                              )}
+                            </div>
                           ) : (
                             <div className="flex items-center gap-2 py-3 justify-center text-xs text-muted-foreground">
                               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading transactions…
