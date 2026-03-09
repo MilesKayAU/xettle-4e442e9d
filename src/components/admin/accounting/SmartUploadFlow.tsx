@@ -14,9 +14,14 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet,
-  DollarSign, Calendar,
+  DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink,
 } from 'lucide-react';
 import {
   Select,
