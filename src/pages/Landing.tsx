@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Rocket, Store, BarChart3, AlertTriangle, ScanSearch } from 'lucide-react';
 import profitLeakImg from '@/assets/profit-leak-preview.png';
 import feeAlertsImg from '@/assets/fee-alerts-preview.png';
+import PublicDemoUpload from '@/components/PublicDemoUpload';
 
 const features = [
   {
@@ -98,37 +99,40 @@ export default function Landing() {
             Marketplace settlement uploads · Paid auto-sync
           </div>
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6">
-            Marketplace settlements,
+            Drop any settlement file.
             <br />
-            <span className="text-primary">Xettled.</span>
+            <span className="text-primary">See your Xero invoice.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-            Turn marketplace settlement reports into clean Xero invoices in seconds.
-            <br />
-            Amazon today. Bunnings and more marketplaces soon.
+            No account needed — watch Xettle recognise your file, parse the settlement, and build your Xero invoice in seconds.
           </p>
-          <p className="text-sm text-muted-foreground/80 mb-8">
-            See exactly what each marketplace paid you — automatically.
+          <p className="text-sm text-muted-foreground/80 mb-10">
+            Works with files other tools can't handle — including Bunnings/Mirakl PDFs.
           </p>
 
+          {/* Public Demo Upload */}
+          <PublicDemoUpload />
+
           {/* Marketplace strip */}
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-3">Works with marketplaces like</p>
-          <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
-            {marketplaces.map((m) => (
-              <span
-                key={m.name}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border ${
-                  m.status === 'live'
-                    ? 'bg-primary/10 text-primary border-primary/20'
-                    : 'bg-background text-muted-foreground border-border/60'
-                }`}
-              >
-                {m.name}
-                {m.status === 'soon' && (
-                  <span className="text-[10px] opacity-60">soon</span>
-                )}
-              </span>
-            ))}
+          <div className="mt-10">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-3">Supports marketplaces like</p>
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+              {marketplaces.map((m) => (
+                <span
+                  key={m.name}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border ${
+                    m.status === 'live'
+                      ? 'bg-primary/10 text-primary border-primary/20'
+                      : 'bg-background text-muted-foreground border-border/60'
+                  }`}
+                >
+                  {m.name}
+                  {m.status === 'soon' && (
+                    <span className="text-[10px] opacity-60">soon</span>
+                  )}
+                </span>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
