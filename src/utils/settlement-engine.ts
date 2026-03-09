@@ -124,6 +124,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       return { success: false, error: 'This settlement has already been saved.', duplicate: true };
     }
 
+    const meta = settlement.metadata || {};
     const { error } = await supabase.from('settlements').insert({
       user_id: user.id,
       settlement_id: settlement.settlement_id,
@@ -131,7 +132,11 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       period_start: settlement.period_start,
       period_end: settlement.period_end,
       sales_principal: settlement.sales_ex_gst,
+      sales_shipping: meta.shippingExGst || 0,
       seller_fees: settlement.fees_ex_gst,
+      refunds: meta.refundsExGst || 0,
+      reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
+      other_fees: (meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0),
       gst_on_income: settlement.gst_on_sales,
       gst_on_expenses: settlement.gst_on_fees,
       bank_deposit: settlement.net_payout,
