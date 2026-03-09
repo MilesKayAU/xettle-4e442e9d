@@ -314,7 +314,88 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     }
   }, [settlements, loadSettlements]);
 
+  // ─── Rollback from Xero ─────────────────────────────────────────────────────
+
+  const handleRollback = useCallback(async (settlement: SettlementRow) => {
+    if (!settlement.xero_journal_id) return;
+    const confirmed = window.confirm(
+      `This will void invoice ${settlement.xero_invoice_number || settlement.xero_journal_id} in Xero and reset the settlement to "Ready to push". Continue?`
+    );
+    if (!confirmed) return;
+    setRollingBack(settlement.id);
+    try {
+      const invoiceIds = [settlement.xero_journal_id];
+      const result = await rollbackSettlementFromXero(settlement.settlement_id, settlement.marketplace, invoiceIds);
+      if (result.success) {
+        await supabase.from('settlements').update({ status: 'saved', xero_journal_id: null, xero_invoice_number: null, xero_status: null } as any).eq('id', settlement.id);
+        toast.success('Invoice voided in Xero — settlement reset to Ready');
+        loadSettlements();
+      } else {
+        toast.error(result.error || 'Rollback failed');
+      }
+    } catch (err: any) {
+      toast.error(`Rollback failed: ${err.message}`);
+    } finally {
+      setRollingBack(null);
+    }
+  }, [loadSettlements]);
+
+  // ─── Refresh from Xero ──────────────────────────────────────────────────────
+
+  const handleRefreshXero = useCallback(async () => {
+    setRefreshingXero(true);
+    try {
+      const result = await syncXeroStatus();
+      if (result.success) {
+        toast.success(`Xero status refreshed — ${result.updated || 0} record${(result.updated || 0) !== 1 ? 's' : ''} updated`);
+        loadSettlements();
+      } else {
+        toast.error(result.error || 'Failed to refresh from Xero');
+      }
+    } catch (err: any) {
+      toast.error(`Refresh failed: ${err.message}`);
+    } finally {
+      setRefreshingXero(false);
+    }
+  }, [loadSettlements]);
+
+  // ─── Inline Reconciliation ──────────────────────────────────────────────────
+
+  const toggleReconCheck = useCallback((settlement: SettlementRow) => {
+    const sid = settlement.settlement_id;
+    if (expandedRecon === sid) {
+      setExpandedRecon(null);
+      return;
+    }
+    // Run recon on demand
+    if (!reconResults[sid]) {
+      const stdSettlement: StandardSettlement = {
+        marketplace: settlement.marketplace,
+        settlement_id: settlement.settlement_id,
+        period_start: settlement.period_start,
+        period_end: settlement.period_end,
+        sales_ex_gst: settlement.sales_principal || 0,
+        gst_on_sales: settlement.gst_on_income || 0,
+        fees_ex_gst: settlement.seller_fees || 0,
+        gst_on_fees: settlement.gst_on_expenses || 0,
+        net_payout: settlement.bank_deposit || 0,
+        source: 'csv_upload',
+        reconciles: true,
+        metadata: {
+          refundsExGst: settlement.refunds || 0,
+          shippingExGst: settlement.sales_shipping || 0,
+          subscriptionAmount: settlement.other_fees || 0,
+          refundCommissionExGst: settlement.reimbursements || 0,
+        },
+      };
+      const result = runUniversalReconciliation(stdSettlement);
+      setReconResults(prev => ({ ...prev, [sid]: result }));
+    }
+    setExpandedRecon(sid);
+  }, [expandedRecon, reconResults]);
+
   // ─── Selection ──────────────────────────────────────────────────────────────
+
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
