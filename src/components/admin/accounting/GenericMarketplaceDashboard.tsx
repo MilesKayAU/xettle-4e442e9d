@@ -106,6 +106,11 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [bankAmountInput, setBankAmountInput] = useState('');
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
+  const [reconResults, setReconResults] = useState<Record<string, UniversalReconciliationResult>>({});
+  const [expandedRecon, setExpandedRecon] = useState<string | null>(null);
+  const [rollingBack, setRollingBack] = useState<string | null>(null);
+  const [refreshingXero, setRefreshingXero] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
   const loadLineItems = useCallback(async (settlementId: string) => {
     if (lineItems[settlementId]) {
