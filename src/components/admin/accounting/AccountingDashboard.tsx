@@ -3536,6 +3536,9 @@ function SettlementReview({
         </CardContent>
       </Card>
 
+      {/* Reconciliation Checks */}
+      <ReconciliationCard result={reconResult} />
+
       {/* Split Month Warning */}
       {splitMonth.isSplitMonth && splitMonth.month1 && splitMonth.month2 && (
         <Card className="border-2 border-purple-400 bg-purple-50/30">
