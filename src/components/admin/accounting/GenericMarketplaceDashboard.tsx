@@ -308,13 +308,17 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         ) : settlements.length === 0 ? (
           <Card className="border-border">
             <CardContent className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                No settlements saved yet.
+              <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground">
+                Processing uploads…
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Settlements are being parsed and saved — they'll appear here automatically.
               </p>
               {onSwitchToUpload && (
-                <Button variant="link" size="sm" onClick={onSwitchToUpload} className="mt-2 gap-1">
+                <Button variant="link" size="sm" onClick={onSwitchToUpload} className="mt-3 gap-1">
                   <Upload className="h-3.5 w-3.5" />
-                  Upload files via Smart Upload
+                  Upload more files via Smart Upload
                 </Button>
               )}
             </CardContent>
