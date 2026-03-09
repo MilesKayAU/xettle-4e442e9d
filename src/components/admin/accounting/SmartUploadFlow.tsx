@@ -235,6 +235,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 }
               }
               onMarketplacesChanged?.();
+            } else if (mktCode === 'shopify_orders' && settlements.length > 0) {
+              // Shopify Orders creates tabs for each detected sub-marketplace (kogan, mydeal, etc.)
+              const subCodes = new Set(settlements.map(s => {
+                const subKey = s.metadata?.marketplaceKey;
+                return subKey || mktCode;
+              }).filter(c => c !== 'unknown' && c !== 'shopify_orders'));
+              for (const code of subCodes) {
+                if (!createdTabs.has(code)) {
+                  createdTabs.add(code);
+                  await ensureMarketplaceConnection(code);
+                }
+              }
+              onMarketplacesChanged?.();
             } else if (!createdTabs.has(mktCode)) {
               createdTabs.add(mktCode);
               await ensureMarketplaceConnection(mktCode);
@@ -543,6 +556,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         for (const code of subCodes) {
           await ensureMarketplaceConnection(code as string);
         }
+      } else if (marketplace === 'shopify_orders') {
+        // Shopify Orders splits into sub-marketplaces (kogan, mydeal, bunnings, etc.)
+        const subCodes = new Set(settlements.map(s => s.metadata?.marketplaceKey).filter(c => c && c !== 'unknown'));
+        for (const code of subCodes) {
+          await ensureMarketplaceConnection(code as string);
+        }
       } else {
         await ensureMarketplaceConnection(marketplace);
       }
@@ -590,6 +609,37 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
               }
             }
+          }
+          // ── Save settlement_lines for Shopify Orders ──
+          if (user && marketplace === 'shopify_orders') {
+            try {
+              const text = await df.file.text();
+              const soResult = parseShopifyOrdersCSV(text);
+              if (soResult.success) {
+                const mktKey = s.metadata?.marketplaceKey;
+                const group = [...soResult.groups, ...soResult.unknownGroups].find(
+                  g => g.marketplaceKey === mktKey && g.currency === (s.metadata?.currency || 'AUD')
+                );
+                if (group && group.orders.length > 0) {
+                  const lineRows = group.orders.map(order => ({
+                    user_id: user.id,
+                    settlement_id: s.settlement_id,
+                    order_id: order.name,
+                    sku: order.lineitemSku || null,
+                    amount: order.total,
+                    amount_type: 'order_total',
+                    amount_description: `${order.lineitemSku || 'N/A'} × ${order.lineitemQuantity}`,
+                    transaction_type: 'Order',
+                    posted_date: order.paidAt ? order.paidAt.split('T')[0] : null,
+                    marketplace_name: s.metadata?.displayName || mktKey,
+                    accounting_category: 'sales',
+                  }));
+                  for (let i = 0; i < lineRows.length; i += 500) {
+                    await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
+                  }
+                }
+              }
+            } catch { /* silent */ }
           }
           // ── Save settlement_lines for Shopify Payments ──
           if (user && marketplace === 'shopify_payments') {
