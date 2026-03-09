@@ -167,8 +167,8 @@ export default function ShopifyOrdersDashboard() {
   };
 
   // ─── Assign unknown group to a marketplace ──────────────────────────
-
-  const assignUnknownGroup = (groupIdx: number, marketplaceKey: string) => {
+  // `fromFingerprint` flag prevents double-saving when fingerprint library already matched
+  const assignUnknownGroup = (groupIdx: number, marketplaceKey: string, fromFingerprint = false) => {
     if (!parseResult) return;
     const group = parseResult.unknownGroups[groupIdx];
     if (!group) return;
@@ -181,16 +181,20 @@ export default function ShopifyOrdersDashboard() {
     }
 
     // Save fingerprint from manual assignment (user_confirmed = highest trust)
-    const sampleNote = (group.sampleNoteAttributes || [])[0] || '';
-    const sampleTag = (group.sampleTags || [])[0] || '';
-    const samplePm = group.orders[0]?.paymentMethod || '';
-    // Pick the most distinctive field value to save as fingerprint
-    if (sampleNote) {
-      saveFingerprint({ marketplace_code: marketplaceKey, field: 'note_attributes', pattern: sampleNote, confidence: 1.0, source: 'user_confirmed' });
-    } else if (sampleTag) {
-      saveFingerprint({ marketplace_code: marketplaceKey, field: 'tags', pattern: sampleTag, confidence: 1.0, source: 'user_confirmed' });
-    } else if (samplePm) {
-      saveFingerprint({ marketplace_code: marketplaceKey, field: 'payment_method', pattern: samplePm, confidence: 1.0, source: 'user_confirmed' });
+    // Skip if this assignment came from the fingerprint library (already stored)
+    if (!fromFingerprint) {
+      const sampleNote = (group.sampleNoteAttributes || [])[0] || '';
+      const sampleTag = (group.sampleTags || [])[0] || '';
+      const samplePm = group.orders[0]?.paymentMethod || '';
+      // Truncate to max 200 chars to avoid saving giant note attribute blobs
+      const truncate = (s: string) => s.length > 200 ? s.substring(0, 200) : s;
+      if (sampleNote) {
+        saveFingerprint({ marketplace_code: marketplaceKey, field: 'note_attributes', pattern: truncate(sampleNote), confidence: 1.0, source: 'user_confirmed' });
+      } else if (sampleTag) {
+        saveFingerprint({ marketplace_code: marketplaceKey, field: 'tags', pattern: truncate(sampleTag), confidence: 1.0, source: 'user_confirmed' });
+      } else if (samplePm) {
+        saveFingerprint({ marketplace_code: marketplaceKey, field: 'payment_method', pattern: truncate(samplePm), confidence: 1.0, source: 'user_confirmed' });
+      }
     }
 
     const entry = getRegistryEntry(marketplaceKey);
