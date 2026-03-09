@@ -430,6 +430,21 @@ export default function ShopifyOrdersDashboard() {
                 </CardContent>
               </Card>
 
+              {/* Partial period warning */}
+              {parseResult.partialPeriodWarning && (
+                <Card className="border-orange-400/50 bg-orange-50/30 dark:bg-orange-950/10">
+                  <CardContent className="py-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-600" />
+                      <p className="text-sm text-orange-700 dark:text-orange-400">
+                        ⚠ These orders include the last 3 days. You may not yet have all marketplace orders.
+                        Importing a partial period can cause incomplete revenue recognition.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {parseResult.unpaidCount > 0 && (
                 <Card className="border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10">
                   <CardContent className="py-3">
@@ -437,6 +452,9 @@ export default function ShopifyOrdersDashboard() {
                       <AlertTriangle className="h-4 w-4 text-amber-600" />
                       <p className="text-sm text-amber-700 dark:text-amber-400">
                         {parseResult.unpaidCount} order{parseResult.unpaidCount !== 1 ? 's are' : ' is'} unpaid — skipped. Only paid orders create accounting entries.
+                        {parseResult.duplicateLineItemCount > 0 && (
+                          <> · {parseResult.duplicateLineItemCount} duplicate line item row{parseResult.duplicateLineItemCount !== 1 ? 's' : ''} merged.</>
+                        )}
                       </p>
                     </div>
                   </CardContent>
