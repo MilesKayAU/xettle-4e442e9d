@@ -996,10 +996,15 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                     Save Settlement
                   </Button>
                 ) : (
-                  <Button onClick={() => handlePushToXero()} disabled={pushing} className="flex-1">
-                    {pushing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                    Send to Xero
-                  </Button>
+                  <>
+                    <Button onClick={() => handlePushToXero()} disabled={pushing} className="flex-1">
+                      {pushing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                      Send to Xero
+                    </Button>
+                    <Button variant="outline" onClick={() => { clearUpload(); setActiveTab('history'); }}>
+                      Dismiss
+                    </Button>
+                  </>
                 )}
                 <Button variant="outline" onClick={clearUpload}>
                   Upload Another
