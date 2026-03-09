@@ -443,13 +443,28 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setSaving(false);
   };
 
-  const handlePushToXero = async (settlementId?: string) => {
+  const handlePushToXero = async (settlementId?: string, settlementData?: StandardSettlement) => {
     const targetId = settlementId || savedSettlementId || parsed?.settlement_id;
     if (!targetId) return;
+
+    // Run reconciliation check before sync
+    const dataToCheck = settlementData || parsed;
+    if (dataToCheck) {
+      const reconResult = runUniversalReconciliation(dataToCheck);
+      if (!reconResult.canSync) {
+        toast.error('Critical reconciliation issues detected — resolve before syncing to Xero.');
+        return;
+      }
+      if (reconResult.overallStatus === 'warn') {
+        toast.warning('Reconciliation warnings exist — proceeding with sync.');
+      }
+    }
+
     setPushing(true);
-    const result = await syncSettlementToXero(targetId, 'bunnings');
+    // Build proper invoice lines including refunds
+    const lineItems = dataToCheck ? buildSimpleInvoiceLines(dataToCheck) : undefined;
+    const result = await syncSettlementToXero(targetId, 'bunnings', lineItems ? { lineItems } : undefined);
     if (result.success) {
-      // Clear persisted state — successfully sent to Xero, no longer pending
       clearParsedStorage();
       toast.success('Invoice created in Xero!');
       loadHistory();
