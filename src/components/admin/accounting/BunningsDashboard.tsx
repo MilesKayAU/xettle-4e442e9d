@@ -245,6 +245,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
         setExtra(result.extra);
         const warning = checkDuplicateAndGap(result.settlement, settlements);
         setUploadWarning(warning);
+        // Persist to localStorage so state survives navigation / logout
+        saveParsedToStorage(result.settlement, result.extra, warning, null);
         if (warning?.type === 'duplicate') {
           toast.warning('Duplicate detected — review before saving.');
         } else if (warning?.type === 'gap') {
