@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
-  CheckSquare, Square, CheckCircle2, AlertTriangle
+  CheckSquare, Square, CheckCircle2, AlertTriangle, Eye, ChevronDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
