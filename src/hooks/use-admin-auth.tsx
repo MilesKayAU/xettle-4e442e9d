@@ -9,23 +9,15 @@ export function useAdminAuth() {
   const [session, setSession] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
 
-  // Check authentication state on mount
   useEffect(() => {
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setIsAuthenticated(!!session);
-        if (session) {
-          localStorage.setItem('adminLoggedIn', 'true');
-        } else {
-          localStorage.removeItem('adminLoggedIn');
-        }
       }
     );
 
-    // Check for existing session
     checkSession();
 
     return () => subscription.unsubscribe();
@@ -33,20 +25,11 @@ export function useAdminAuth() {
 
   async function checkSession() {
     try {
-      console.log('Checking authentication session...');
-      
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('Current Supabase session:', session);
       
       setSession(session);
       setUser(session?.user ?? null);
       setIsAuthenticated(!!session);
-      
-      if (session) {
-        localStorage.setItem('adminLoggedIn', 'true');
-      } else {
-        localStorage.removeItem('adminLoggedIn');
-      }
     } catch (error) {
       console.error("Error checking auth session:", error);
     } finally {
@@ -57,7 +40,6 @@ export function useAdminAuth() {
   const signIn = async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      console.log('Attempting Supabase sign-in with:', email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -65,7 +47,6 @@ export function useAdminAuth() {
       });
 
       if (error) {
-        console.error('Supabase sign-in failed:', error);
         toast({
           title: 'Authentication Failed',
           description: error.message || 'Invalid credentials',
@@ -73,8 +54,6 @@ export function useAdminAuth() {
         });
         return { success: false, error };
       }
-
-      console.log('Supabase sign-in successful:', data);
       
       toast({
         title: 'Signed In',
@@ -96,20 +75,18 @@ export function useAdminAuth() {
     }
   };
 
-  function handleSignOut() {
-    return async () => {
-      try {
-        await supabase.auth.signOut();
-      } catch (error) {
-        console.error("Error signing out:", error);
-      }
-      
-      toast({
-        title: "Signed Out",
-        description: "You have been signed out successfully",
-      });
-    };
-  }
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+    
+    toast({
+      title: "Signed Out",
+      description: "You have been signed out successfully",
+    });
+  };
 
   return {
     isAuthenticated,

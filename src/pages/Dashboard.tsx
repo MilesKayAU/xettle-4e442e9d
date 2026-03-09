@@ -55,9 +55,10 @@ export default function Dashboard() {
 
       if (data && data.length > 0) {
         setUserMarketplaces(data as UserMarketplace[]);
-        if (!data.find((m: any) => m.marketplace_code === selectedMarketplace)) {
-          setSelectedMarketplace(data[0].marketplace_code);
-        }
+        setSelectedMarketplace(prev => {
+          if (data.find((m: any) => m.marketplace_code === prev)) return prev;
+          return data[0].marketplace_code;
+        });
       } else {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
@@ -87,11 +88,11 @@ export default function Dashboard() {
     } finally {
       setMarketplacesLoading(false);
     }
-  }, [user, selectedMarketplace]);
+  }, [user]);
 
   useEffect(() => {
     if (user) loadMarketplaces();
-  }, [user]);
+  }, [user, loadMarketplaces]);
 
   // ─── Claim demo session (post-signup from landing page) ───────────────────
   useEffect(() => {
@@ -209,7 +210,7 @@ export default function Dashboard() {
             <span className="text-sm text-muted-foreground hidden sm:inline">
               {user?.email}
             </span>
-            <Button variant="ghost" size="sm" onClick={handleSignOut()}>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-1" />
               Sign Out
             </Button>

@@ -165,7 +165,7 @@ export default function Admin() {
                 Dashboard
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleSignOut()}>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-1" />
               Sign Out
             </Button>
