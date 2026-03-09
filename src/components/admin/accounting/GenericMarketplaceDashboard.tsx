@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher';
 import {
   syncSettlementToXero,
+  syncXeroStatus,
   deleteSettlement,
   formatSettlementDate,
   formatAUD,
