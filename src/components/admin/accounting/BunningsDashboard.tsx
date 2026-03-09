@@ -354,6 +354,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setBulkProcessing(true);
     const items: BatchItem[] = files.map(f => ({
       file: f,
+      fileName: f.name,
       parsed: null,
       extra: null,
       error: null,
@@ -374,7 +375,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
     for (let i = 0; i < items.length; i++) {
       try {
-        const result = await parseBunningsSummaryPdf(items[i].file);
+        const result = await parseBunningsSummaryPdf(items[i].file!);
         if (result.success) {
           items[i].parsed = result.settlement;
           items[i].extra = result.extra;
@@ -389,6 +390,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
       setBulkBatch([...items]);
     }
 
+    // Persist bulk batch to localStorage
+    saveBulkToStorage(items);
     setBulkProcessing(false);
     setActiveTab('review');
   };
