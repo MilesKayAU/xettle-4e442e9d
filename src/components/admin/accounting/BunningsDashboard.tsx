@@ -341,6 +341,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     const result = await saveSettlement(parsed);
     if (result.success) {
       setSavedSettlementId(parsed.settlement_id);
+      // Persist the saved ID so the Push to Xero button still shows after navigation
+      saveParsedToStorage(parsed, extra, uploadWarning, parsed.settlement_id);
       toast.success('Settlement saved!');
       loadHistory();
     } else {
@@ -355,6 +357,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setPushing(true);
     const result = await syncSettlementToXero(targetId, 'bunnings');
     if (result.success) {
+      // Clear persisted state — successfully sent to Xero, no longer pending
+      clearParsedStorage();
       toast.success('Invoice created in Xero!');
       loadHistory();
     } else {
@@ -382,6 +386,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setParseError(null);
     setSavedSettlementId(null);
     setUploadWarning(null);
+    clearParsedStorage();
     if (inputRef.current) inputRef.current.value = '';
     setActiveTab('upload');
   };
