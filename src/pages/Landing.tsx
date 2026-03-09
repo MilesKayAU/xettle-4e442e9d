@@ -340,7 +340,7 @@ export default function Landing() {
               See your real marketplace profit
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Get a clear breakdown of fees, refunds, and shipping for every marketplace.
+              See the real cost of selling — what landed in your bank after every marketplace fee and refund.
             </p>
           </div>
           <div className="grid lg:grid-cols-2 gap-12 items-center">
