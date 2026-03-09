@@ -67,6 +67,18 @@ export interface MarketplaceGroup {
   sampleTags?: string[];
 }
 
+export interface StatusBreakdown {
+  paid: number;
+  partially_refunded: number;
+  refunded: number;
+  other_excluded: number;
+}
+
+export interface MarketplaceGroupStatusBreakdown {
+  paid: number;
+  partially_refunded: number;
+}
+
 export interface ShopifyOrdersParseResult {
   success: true;
   groups: MarketplaceGroup[];
@@ -81,6 +93,8 @@ export interface ShopifyOrdersParseResult {
   periodEnd: string;
   /** True if period_end is within last 3 days — may be a partial import */
   partialPeriodWarning: boolean;
+  /** Breakdown of all financial statuses found */
+  statusBreakdown: StatusBreakdown;
 }
 
 export interface ShopifyOrdersParseError {
