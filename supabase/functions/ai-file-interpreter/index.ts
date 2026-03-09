@@ -260,6 +260,10 @@ Sample rows (first 3, PII stripped): ${JSON.stringify(sampleRows?.slice(0, 3) ||
                   type: "number",
                   description: "Confidence level 0-100 in the detection",
                 },
+                confidence_reason: {
+                  type: "string",
+                  description: "Human-readable explanation referencing specific column names or values that justify the confidence score",
+                },
                 file_type_detected: {
                   type: "string",
                   enum: ["settlement", "orders", "inventory", "advertising", "customers", "unknown"],
