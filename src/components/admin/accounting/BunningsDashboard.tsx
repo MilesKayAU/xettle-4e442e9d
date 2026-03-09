@@ -474,11 +474,45 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setSavedSettlementId(null);
     setUploadWarning(null);
     clearParsedStorage();
+    clearBulkStorage();
     if (inputRef.current) inputRef.current.value = '';
     setActiveTab('upload');
   };
 
-  const isBulkMode = !!bulkFiles && bulkFiles.length > 0;
+  const handleMarkAlreadySynced = async (settlementId: string) => {
+    const { error } = await supabase
+      .from('settlements')
+      .update({ status: 'synced_external' })
+      .eq('settlement_id', settlementId);
+    if (error) {
+      toast.error('Failed to update status');
+    } else {
+      toast.success('Marked as Already in Xero');
+      loadHistory();
+    }
+  };
+
+  const handleBulkMarkSynced = async () => {
+    const unsyncedIds = settlements
+      .filter(s => s.status === 'saved' || s.status === 'parsed')
+      .map(s => s.settlement_id);
+    if (unsyncedIds.length === 0) {
+      toast.info('No unsynced settlements to mark');
+      return;
+    }
+    const { error } = await supabase
+      .from('settlements')
+      .update({ status: 'synced_external' })
+      .in('settlement_id', unsyncedIds);
+    if (error) {
+      toast.error('Failed to update statuses');
+    } else {
+      toast.success(`Marked ${unsyncedIds.length} settlements as Already in Xero`);
+      loadHistory();
+    }
+  };
+
+  const isBulkMode = (!!bulkFiles && bulkFiles.length > 0) || bulkBatch.length > 0;
 
   return (
     <div className="space-y-6">
