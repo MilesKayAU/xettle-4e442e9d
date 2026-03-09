@@ -28,8 +28,9 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
       const text = await slice.text();
       const lower = text.toLowerCase();
 
-      // Shopify Payments CSV signals
+      // Shopify Payments CSV signals (transaction-level or payout-level)
       if (lower.includes('payout id') || lower.includes('payout date') ||
+          (lower.includes('card brand') && lower.includes('payout')) ||
           (lower.includes('shopify') && (lower.includes('gross') || lower.includes('charges')))) {
         return 'shopify_payments';
       }

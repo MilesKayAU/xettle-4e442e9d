@@ -5,12 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
-  History, Loader2, Send, Eye, Trash2, Info, ChevronDown, SkipForward,
+  History, Loader2, Send, Eye, Trash2, Info,
   CheckSquare, Square
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { parseShopifyPayoutCSV, buildShopifyInvoiceLines, type ShopifyParseExtra } from '@/utils/shopify-payments-parser';
+import { parseShopifyPayoutCSV, buildShopifyInvoiceLines } from '@/utils/shopify-payments-parser';
 import {
   type StandardSettlement,
   saveSettlement,
@@ -43,11 +43,6 @@ interface SettlementRecord {
   marketplace: string;
 }
 
-interface UploadWarning {
-  type: 'duplicate' | 'gap';
-  message: string;
-}
-
 function statusBadge(status: string) {
   switch (status) {
     case 'synced':
@@ -67,7 +62,6 @@ function statusBadge(status: string) {
 const LS_KEY = 'shopify_payments_pending_upload';
 
 export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPaymentsDashboardProps) {
-  // Restore persisted state
   const persisted = (() => {
     try {
       const raw = localStorage.getItem(LS_KEY);
@@ -78,13 +72,15 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
   const [activeTab, setActiveTab] = useState(persisted?.parsed ? 'review' : 'upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [parsed, setParsed] = useState<StandardSettlement | null>(persisted?.parsed ?? null);
-  const [extra, setExtra] = useState<ShopifyParseExtra | null>(persisted?.extra ?? null);
+
+  // Bulk: array of parsed settlements
+  const [parsedPayouts, setParsedPayouts] = useState<StandardSettlement[]>(persisted?.parsed || []);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set(persisted?.savedIds || []));
   const [parseError, setParseError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
-  const [savedSettlementId, setSavedSettlementId] = useState<string | null>(persisted?.savedId ?? null);
-  const [uploadWarning, setUploadWarning] = useState<UploadWarning | null>(persisted?.warning ?? null);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkPushing, setBulkPushing] = useState(false);
 
   const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -92,11 +88,11 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function persistState(p: StandardSettlement | null, e: ShopifyParseExtra | null, w: UploadWarning | null, sid: string | null) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify({ parsed: p, extra: e, warning: w, savedId: sid })); } catch { /* ignore */ }
+  function persistState(p: StandardSettlement[], sIds: string[]) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ parsed: p, savedIds: sIds })); } catch { /* */ }
   }
   function clearPersistedState() {
-    try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(LS_KEY); } catch { /* */ }
   }
 
   const loadHistory = useCallback(async () => {
@@ -107,7 +103,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
         .select('*')
         .eq('marketplace', 'shopify_payments')
         .order('period_end', { ascending: false })
-        .limit(50);
+        .limit(200);
       if (error) throw error;
       setSettlements((data || []) as SettlementRecord[]);
     } catch { /* silent */ } finally {
@@ -117,37 +113,12 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
-  // ─── Duplicate / gap checks ─────────────────────────────────────────────
-
-  function checkDuplicateAndGap(incoming: StandardSettlement, existing: SettlementRecord[]): UploadWarning | null {
-    const exactMatch = existing.find(s => s.settlement_id === incoming.settlement_id);
-    if (exactMatch) {
-      return {
-        type: 'duplicate',
-        message: `Payout ${incoming.settlement_id} is already saved (${formatSettlementDate(exactMatch.period_start)}). Saving will overwrite it.`,
-      };
-    }
-    const fingerprint = existing.find(s =>
-      s.period_start === incoming.period_start &&
-      s.period_end === incoming.period_end &&
-      Math.abs((s.bank_deposit || 0) - incoming.net_payout) < 1.00
-    );
-    if (fingerprint) {
-      return {
-        type: 'duplicate',
-        message: `A payout on ${formatSettlementDate(incoming.period_start)} with similar amount already exists (${fingerprint.settlement_id}). This appears to be a duplicate.`,
-      };
-    }
-    return null;
-  }
-
   // ─── CSV Upload & Parse ─────────────────────────────────────────────────
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
 
-    // Cross-marketplace detection
     const { detectFileMarketplace, MARKETPLACE_LABELS } = await import('@/utils/file-marketplace-detector');
     const detected = await detectFileMarketplace(f);
     if (detected && detected !== 'shopify_payments') {
@@ -156,28 +127,30 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
     }
 
     setFile(f);
-    setParsed(null);
-    setExtra(null);
+    setParsedPayouts([]);
+    setSavedIds(new Set());
     setParseError(null);
-    setSavedSettlementId(null);
-    setUploadWarning(null);
     setParsing(true);
 
     try {
       const text = await f.text();
       const result = parseShopifyPayoutCSV(text);
       if (result.success) {
-        setParsed(result.settlement);
-        setExtra(result.extra);
-        const warning = checkDuplicateAndGap(result.settlement, settlements);
-        setUploadWarning(warning);
-        persistState(result.settlement, result.extra, warning, null);
-        if (warning?.type === 'duplicate') {
-          toast.warning('Duplicate detected — review before saving.');
-        } else if (result.settlement.reconciles) {
-          toast.success(`Payout ${result.settlement.settlement_id} parsed & reconciled ✓`);
+        const payouts = result.settlements;
+        setParsedPayouts(payouts);
+        persistState(payouts, []);
+
+        const reconciledCount = payouts.filter(p => p.reconciles).length;
+        const total = payouts.length;
+
+        if (total === 1) {
+          if (payouts[0].reconciles) {
+            toast.success(`Payout ${payouts[0].settlement_id} parsed & reconciled ✓`);
+          } else {
+            toast.warning(`Payout parsed but reconciliation failed — diff: ${formatAUD(payouts[0].metadata?.reconciliationDiff || 0)}`);
+          }
         } else {
-          toast.warning(`Payout parsed but reconciliation failed — diff: ${formatAUD(result.settlement.metadata?.reconciliationDiff || 0)}`);
+          toast.success(`${total} payouts parsed — ${reconciledCount}/${total} reconciled ✓`);
         }
         setActiveTab('review');
       } else {
@@ -193,52 +166,70 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
     }
   };
 
-  // ─── Save ───────────────────────────────────────────────────────────────
+  // ─── Save All ───────────────────────────────────────────────────────────
 
-  const handleSave = async () => {
-    if (!parsed) return;
-    if (!parsed.reconciles) {
-      toast.error('Cannot save — payout does not reconcile within $0.05');
+  const handleSaveAll = async () => {
+    const toSave = parsedPayouts.filter(p => p.reconciles && !savedIds.has(p.settlement_id));
+    if (toSave.length === 0) {
+      toast.warning('No reconciled payouts to save.');
       return;
     }
-    setSaving(true);
-    const result = await saveSettlement(parsed);
-    if (result.success) {
-      setSavedSettlementId(parsed.settlement_id);
-      persistState(parsed, extra, uploadWarning, parsed.settlement_id);
-      toast.success('Payout saved!');
-      loadHistory();
-    } else if (result.duplicate) {
-      toast.warning('Already saved — use overwrite if needed.');
-    } else {
-      toast.error(result.error || 'Failed to save');
-    }
-    setSaving(false);
-  };
+    setBulkSaving(true);
+    let saved = 0;
+    const newSavedIds = new Set(savedIds);
 
-  // ─── Push to Xero ──────────────────────────────────────────────────────
-
-  const handlePushToXero = async (settlementId?: string, settlementData?: StandardSettlement) => {
-    const targetId = settlementId || savedSettlementId || parsed?.settlement_id;
-    if (!targetId) return;
-
-    const dataToCheck = settlementData || parsed;
-    if (dataToCheck) {
-      const reconResult = runUniversalReconciliation(dataToCheck);
-      if (!reconResult.canSync) {
-        toast.error('Critical reconciliation issues — resolve before syncing to Xero.');
-        return;
+    for (const payout of toSave) {
+      const result = await saveSettlement(payout);
+      if (result.success || result.duplicate) {
+        saved++;
+        newSavedIds.add(payout.settlement_id);
       }
     }
 
+    setSavedIds(newSavedIds);
+    persistState(parsedPayouts, Array.from(newSavedIds));
+    setBulkSaving(false);
+    toast.success(`Saved ${saved} of ${toSave.length} payouts`);
+    loadHistory();
+  };
+
+  // ─── Push All to Xero ──────────────────────────────────────────────────
+
+  const handlePushAllToXero = async () => {
+    const toPush = parsedPayouts.filter(p => savedIds.has(p.settlement_id));
+    if (toPush.length === 0) {
+      toast.warning('Save payouts first before pushing to Xero.');
+      return;
+    }
+    setBulkPushing(true);
+    let pushed = 0;
+
+    for (const payout of toPush) {
+      const reconResult = runUniversalReconciliation(payout);
+      if (!reconResult.canSync) continue;
+
+      const lineItems = buildShopifyInvoiceLines(payout);
+      const result = await syncSettlementToXero(payout.settlement_id, 'shopify_payments', {
+        lineItems,
+        contactName: 'Shopify Payments',
+      });
+      if (result.success) pushed++;
+    }
+
+    setBulkPushing(false);
+    clearPersistedState();
+    toast.success(`Pushed ${pushed} of ${toPush.length} payouts to Xero`);
+    loadHistory();
+  };
+
+  // ─── Single payout push from history ────────────────────────────────────
+
+  const handlePushToXero = async (settlementId: string) => {
     setPushing(true);
-    const lineItems = dataToCheck ? buildShopifyInvoiceLines(dataToCheck) : undefined;
-    const result = await syncSettlementToXero(targetId, 'shopify_payments', {
-      lineItems,
+    const result = await syncSettlementToXero(settlementId, 'shopify_payments', {
       contactName: 'Shopify Payments',
     });
     if (result.success) {
-      clearPersistedState();
       toast.success(`Invoice created in Xero! (${result.invoiceId})`);
       loadHistory();
     } else {
@@ -276,11 +267,9 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
 
   const clearUpload = () => {
     setFile(null);
-    setParsed(null);
-    setExtra(null);
+    setParsedPayouts([]);
+    setSavedIds(new Set());
     setParseError(null);
-    setSavedSettlementId(null);
-    setUploadWarning(null);
     clearPersistedState();
     if (inputRef.current) inputRef.current.value = '';
     setActiveTab('upload');
@@ -302,7 +291,8 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
     }
   };
 
-  const meta = parsed?.metadata || {};
+  const reconciledCount = parsedPayouts.filter(p => p.reconciles).length;
+  const allSaved = parsedPayouts.length > 0 && parsedPayouts.every(p => savedIds.has(p.settlement_id));
 
   return (
     <div className="space-y-6">
@@ -312,7 +302,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
           Shopify Payments Settlements
         </h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Upload payout CSVs, reconcile, and sync to Xero.
+          Upload transaction CSVs, reconcile by payout, and sync to Xero.
         </p>
       </div>
 
@@ -323,8 +313,11 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
           <TabsTrigger value="upload" className="gap-1.5">
             <Upload className="h-3.5 w-3.5" /> Upload
           </TabsTrigger>
-          <TabsTrigger value="review" className="gap-1.5" disabled={!parsed}>
+          <TabsTrigger value="review" className="gap-1.5" disabled={parsedPayouts.length === 0}>
             <Eye className="h-3.5 w-3.5" /> Review
+            {parsedPayouts.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5">{parsedPayouts.length}</Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5">
             <History className="h-3.5 w-3.5" /> History
@@ -340,11 +333,12 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
-                Shopify Payments Payout CSV
+                Shopify Payments Transaction CSV
                 {file && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />}
               </CardTitle>
               <CardDescription className="text-xs">
-                Export from Shopify Admin → Settings → Payments → View payouts → Export.
+                Export from Shopify Admin → Settings → Payments → View payouts → Export transactions.
+                Supports bulk upload — all payouts in the file will be grouped automatically.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -362,7 +356,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
               />
               {parsing && (
                 <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Parsing...
+                  <Loader2 className="h-4 w-4 animate-spin" /> Parsing transactions...
                 </div>
               )}
               {parseError && (
@@ -380,13 +374,16 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
               <div className="flex items-start gap-3">
                 <Info className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p className="font-medium text-foreground">How to export your Shopify Payments payout</p>
+                  <p className="font-medium text-foreground">How to export Shopify Payments transactions</p>
                   <ol className="list-decimal list-inside space-y-0.5">
                     <li>Go to Shopify Admin → Settings → Payments → View payouts</li>
-                    <li>Click on a specific payout to see its details</li>
-                    <li>Click "Export" to download the CSV</li>
-                    <li>Upload the CSV here</li>
+                    <li>Click "Export" → "Transactions" to download the CSV</li>
+                    <li>The file contains all transactions grouped by Payout ID</li>
+                    <li>Upload here — Xettle will group by payout automatically</li>
                   </ol>
+                  <p className="mt-2 text-muted-foreground/80">
+                    💡 One CSV can contain hundreds of payouts — they'll all be parsed at once.
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -395,123 +392,121 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
 
         {/* ─── Review Tab ─────────────────────────────────────────── */}
         <TabsContent value="review" className="space-y-4">
-          {parsed && (
+          {parsedPayouts.length > 0 ? (
             <>
-              {/* Warning banner */}
-              {uploadWarning && (
-                <div className={`p-3 rounded-md border ${uploadWarning.type === 'duplicate' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-                  <p className="text-sm flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" /> {uploadWarning.message}
-                  </p>
-                </div>
-              )}
-
-              {/* Reconciliation status */}
-              <Card className={parsed.reconciles ? 'border-green-300 bg-green-50/30' : 'border-destructive bg-destructive/5'}>
+              {/* Summary banner */}
+              <Card className="border-primary/20 bg-primary/5">
                 <CardContent className="py-4">
-                  <div className="flex items-center gap-3">
-                    {parsed.reconciles ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-destructive" />
-                    )}
+                  <div className="flex items-center justify-between flex-wrap gap-3">
                     <div>
                       <p className="text-sm font-medium">
-                        {parsed.reconciles ? 'Reconciled ✓' : 'Reconciliation FAILED'}
+                        {parsedPayouts.length} payout{parsedPayouts.length !== 1 ? 's' : ''} found
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Gross {formatAUD(meta.grossSalesInclGst || 0)} + Refunds {formatAUD(meta.refundsInclGst || 0)} + Fees {formatAUD(meta.chargesInclGst || 0)}
-                        {meta.adjustments ? ` + Adj ${formatAUD(meta.adjustments)}` : ''}
-                        {' '}= {formatAUD(meta.calculatedNet || 0)} vs Bank Deposit {formatAUD(parsed.net_payout)}
-                        {!parsed.reconciles && ` (diff: ${formatAUD(meta.reconciliationDiff || 0)})`}
+                        {reconciledCount}/{parsedPayouts.length} reconciled •{' '}
+                        Total: {formatAUD(parsedPayouts.reduce((sum, p) => sum + p.net_payout, 0))}
                       </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={clearUpload}>
+                        Clear
+                      </Button>
+                      {!allSaved ? (
+                        <Button size="sm" onClick={handleSaveAll} disabled={bulkSaving || reconciledCount === 0}>
+                          {bulkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                          Save All ({reconciledCount})
+                        </Button>
+                      ) : (
+                        <Button size="sm" onClick={handlePushAllToXero} disabled={bulkPushing}>
+                          {bulkPushing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                          Push All to Xero
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Payout summary */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">
-                    Payout {parsed.settlement_id}
-                  </CardTitle>
-                  <CardDescription>
-                    {formatSettlementDate(parsed.period_start)}
-                    {parsed.period_start !== parsed.period_end && ` – ${formatSettlementDate(parsed.period_end)}`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Gross Sales</p>
-                      <p className="font-mono font-medium text-green-700">{formatAUD(meta.grossSalesInclGst || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Refunds</p>
-                      <p className="font-mono font-medium text-red-600">{formatAUD(meta.refundsInclGst || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Shopify Fees</p>
-                      <p className="font-mono font-medium text-red-600">{formatAUD(meta.chargesInclGst || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Net Payout (Bank)</p>
-                      <p className="font-mono font-semibold text-foreground">{formatAUD(parsed.net_payout)}</p>
-                    </div>
-                  </div>
+              {/* Individual payout cards */}
+              <div className="space-y-2">
+                {parsedPayouts.map((payout) => {
+                  const meta = payout.metadata || {};
+                  const isSaved = savedIds.has(payout.settlement_id);
+                  return (
+                    <Card key={payout.settlement_id} className={`transition-colors ${payout.reconciles ? '' : 'border-destructive/30'}`}>
+                      <CardContent className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0">
+                            {payout.reconciles ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-destructive" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium font-mono">{payout.settlement_id}</span>
+                              {isSaved && <Badge variant="secondary" className="text-[10px]">Saved</Badge>}
+                              {!payout.reconciles && (
+                                <Badge variant="destructive" className="text-[10px]">
+                                  Diff: {formatAUD(meta.reconciliationDiff || 0)}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {formatSettlementDate(payout.period_start)}
+                              {payout.period_start !== payout.period_end && ` – ${formatSettlementDate(payout.period_end)}`}
+                              {' • '}{meta.transactionCount || 0} txns
+                              {meta.payoutDate && ` • Payout: ${formatSettlementDate(meta.payoutDate)}`}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-mono font-medium">{formatAUD(payout.net_payout)}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              Sales {formatAUD(meta.grossSalesInclGst || 0)} • Fees {formatAUD(meta.chargesInclGst || 0)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
 
-                  {/* Xero mapping preview */}
-                  <div className="mt-6 border-t pt-4">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Xero Invoice Preview</p>
+              {/* Xero mapping preview for first payout */}
+              {parsedPayouts.length > 0 && (
+                <Card className="border-muted">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Xero Mapping Preview (per payout)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
                     <div className="text-xs space-y-1 font-mono">
                       <div className="flex justify-between">
                         <span>Sales (200, GST on Income)</span>
-                        <span className="text-green-700">{formatAUD(parsed.sales_ex_gst)}</span>
+                        <span className="text-green-700">ex GST amount</span>
                       </div>
-                      {meta.refundsExGst && meta.refundsExGst !== 0 && (
-                        <div className="flex justify-between">
-                          <span>Refunds (200, GST on Income)</span>
-                          <span className="text-red-600">{formatAUD(meta.refundsExGst)}</span>
-                        </div>
-                      )}
+                      <div className="flex justify-between">
+                        <span>Refunds (200, GST on Income)</span>
+                        <span className="text-red-600">negative if applicable</span>
+                      </div>
                       <div className="flex justify-between">
                         <span>Shopify Fees (404, GST on Expenses)</span>
-                        <span className="text-red-600">{formatAUD(parsed.fees_ex_gst)}</span>
+                        <span className="text-red-600">ex GST fees</span>
                       </div>
-                      <div className="flex justify-between border-t pt-1 font-medium">
-                        <span>Invoice Total</span>
-                        <span>{formatAUD(parsed.net_payout)}</span>
+                      <div className="flex justify-between border-t pt-1 text-muted-foreground">
+                        <span>Contact: Shopify Payments</span>
+                        <span>1 invoice per payout</span>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Action buttons */}
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={clearUpload}>
-                  Clear
-                </Button>
-                {!savedSettlementId ? (
-                  <Button onClick={handleSave} disabled={saving || !parsed.reconciles}>
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                    Save Payout
-                  </Button>
-                ) : (
-                  <Button onClick={() => handlePushToXero()} disabled={pushing}>
-                    {pushing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
-                    Push to Xero
-                  </Button>
-                )}
-              </div>
+                  </CardContent>
+                </Card>
+              )}
             </>
-          )}
-          {!parsed && (
+          ) : (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 <Upload className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">Upload a Shopify Payments payout CSV to review.</p>
+                <p className="text-sm">Upload a Shopify Payments CSV to review.</p>
               </CardContent>
             </Card>
           )}
@@ -519,10 +514,8 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
 
         {/* ─── History Tab ────────────────────────────────────────── */}
         <TabsContent value="history" className="space-y-4">
-          {/* Xero connection status */}
           <XeroConnectionStatus />
 
-          {/* Bulk actions */}
           {settlements.length > 0 && (
             <div className="flex items-center gap-3 text-sm">
               <button onClick={toggleSelectAll} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
@@ -547,7 +540,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
               <CardContent className="py-12 text-center text-muted-foreground">
                 <History className="h-8 w-8 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">No Shopify Payments settlements yet.</p>
-                <p className="text-xs mt-1">Upload a payout CSV to get started.</p>
+                <p className="text-xs mt-1">Upload a transaction CSV to get started.</p>
               </CardContent>
             </Card>
           ) : (
@@ -574,12 +567,13 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                         <p className="text-xs text-muted-foreground">Net payout</p>
                       </div>
                       <div className="flex items-center gap-1">
-                        {s.status === 'saved' && (
+                        {(s.status === 'saved' || s.status === 'parsed') && (
                           <Button
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs"
                             onClick={() => handlePushToXero(s.settlement_id)}
+                            disabled={pushing}
                           >
                             <Send className="h-3 w-3 mr-1" /> Push
                           </Button>
