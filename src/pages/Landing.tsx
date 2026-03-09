@@ -1,10 +1,12 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers, Users, ClipboardCheck, Ban } from 'lucide-react';
 import profitLeakImg from '@/assets/profit-leak-preview.png';
 import feeAlertsImg from '@/assets/fee-alerts-preview.png';
 import PublicDemoUpload from '@/components/PublicDemoUpload';
+import { supabase } from '@/integrations/supabase/client';
 
 const marketplaces = [
   { name: 'Amazon', icon: '📦', status: 'live' as const },
@@ -16,6 +18,28 @@ const marketplaces = [
 ];
 
 export default function Landing() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Handle Shopify redirecting to App URL (/) instead of callback URL
+  useEffect(() => {
+    const shop = searchParams.get('shop');
+    const hmac = searchParams.get('hmac');
+    const host = searchParams.get('host');
+    const code = searchParams.get('code');
+
+    if (shop && hmac && host && !code) {
+      // Shopify app redirect without auth code — route user appropriately
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          navigate('/dashboard', { replace: true });
+        } else {
+          navigate('/auth', { replace: true });
+        }
+      });
+    }
+  }, [searchParams, navigate]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
