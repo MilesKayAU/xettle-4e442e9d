@@ -519,12 +519,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 </div>
                 {/* Format pills */}
                 <div className="flex flex-wrap justify-center gap-1.5 mt-1">
-                  {['Amazon TSV', 'Shopify CSV', 'Bunnings PDF', 'XLSX', 'Any CSV'].map(fmt => (
+                  {[
+                    { label: 'Amazon TSV', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+                    { label: 'Shopify CSV', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+                    { label: 'Bunnings PDF', color: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
+                    { label: 'XLSX', color: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' },
+                    { label: 'Any CSV', color: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300' },
+                  ].map(fmt => (
                     <span
-                      key={fmt}
-                      className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium"
+                      key={fmt.label}
+                      className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${fmt.color}`}
                     >
-                      {fmt}
+                      {fmt.label}
                     </span>
                   ))}
                 </div>
