@@ -95,6 +95,8 @@ export default function ShopifyOrdersDashboard() {
   const [pushing, setPushing] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showBookkeeperInfo, setShowBookkeeperInfo] = useState(false);
+  const [pushStats, setPushStats] = useState<{ invoiceCount: number; totalRevenue: number; totalGst: number } | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<Record<number, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>({}); 
 
   const inputRef = useRef<HTMLInputElement>(null);
 
