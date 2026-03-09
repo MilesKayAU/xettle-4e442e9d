@@ -86,6 +86,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [expandedLines, setExpandedLines] = useState<string | null>(null);
   const [lineItems, setLineItems] = useState<Record<string, any[]>>({});
   const [loadingLines, setLoadingLines] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [bankAmountInput, setBankAmountInput] = useState('');
+  const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
 
   const loadLineItems = useCallback(async (settlementId: string) => {
     if (lineItems[settlementId]) {
