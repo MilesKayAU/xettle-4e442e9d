@@ -955,6 +955,11 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                       </Badge>
                     )}
                   </div>
+                  {detection.confidenceReason && (
+                    <p className="text-[11px] italic text-muted-foreground mt-1">
+                      Why we think this: {detection.confidenceReason}
+                    </p>
+                  )}
 
                   {/* Summary preview (collapsed view) */}
                   {!isReviewing && previewData && (
