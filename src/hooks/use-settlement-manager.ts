@@ -60,7 +60,7 @@ export function useSettlementManager<T extends BaseSettlementRow = BaseSettlemen
         .or(orFilter)
         .order('period_end', { ascending: false });
       if (error) throw error;
-      setSettlements((data || []) as T[]);
+      setSettlements((data || []) as unknown as T[]);
       setHasLoadedOnce(true);
     } catch {
       // silent
