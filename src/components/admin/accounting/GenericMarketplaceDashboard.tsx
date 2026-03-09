@@ -195,6 +195,13 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   const handleBulkDelete = useCallback(async () => {
     if (selected.size === 0) return;
+    // Check for synced items — show Xero-aware dialog
+    const syncedCount = settlements.filter(s => selected.has(s.id) && (s.status === 'synced' || s.status === 'pushed_to_xero' || s.xero_journal_id)).length;
+    if (syncedCount > 0 && !bulkDeleteDialogOpen) {
+      setBulkDeleteDialogOpen(true);
+      return;
+    }
+    setBulkDeleteDialogOpen(false);
     setBulkDeleting(true);
     let deleted = 0;
     for (const id of selected) {
@@ -205,7 +212,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     setBulkDeleting(false);
     toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
     loadSettlements();
-  }, [selected, loadSettlements]);
+  }, [selected, loadSettlements, settlements, bulkDeleteDialogOpen]);
 
   const handlePushToXero = useCallback(async (settlement: SettlementRow, bankAmount?: number) => {
     setPushing(settlement.id);
