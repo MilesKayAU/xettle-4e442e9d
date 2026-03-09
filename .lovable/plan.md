@@ -1,42 +1,54 @@
 
 
-## Shopify Settlements: Delete & Xero Sync Tagging
+# Plan: Extract Accounting Module into Independent App
 
-### Current State
+## What You Have (Module Inventory)
 
-The History tab already has:
-- Select one / select all checkboxes
-- Bulk delete button
-- Individual delete button (but **hidden** for `synced` status settlements)
+The accounting module is self-contained with these components:
 
-**Gaps found:**
-1. **Review tab** — no way to remove individual parsed payouts before saving (e.g., deselect bad ones from a bulk upload)
-2. **History bulk delete** — no guard for Xero-synced items. User can select-all and bulk delete synced settlements without warning
-3. **No visual tag** on selected items showing which are already synced to Xero vs which are just saved
-4. Individual delete hidden entirely for synced items — should be available with a confirmation warning instead
+| Layer | Files | Lines |
+|-------|-------|-------|
+| **UI** | `src/components/admin/accounting/AccountingDashboard.tsx` | ~3,490 |
+| **Parser** | `src/utils/settlement-parser.ts` | ~716 |
+| **Xero Invoice Sync** | `supabase/functions/sync-amazon-journal/index.ts` | ~450 |
+| **Xero OAuth** | `supabase/functions/xero-auth/index.ts` | existing |
+| **Xero Connection UI** | `src/components/admin/XeroConnectionStatus.tsx` | existing |
+| **Xero Callback Page** | `src/pages/XeroCallback.tsx` | existing |
 
-### Plan
+**Database tables**: `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
 
-**1. Review tab — individual payout removal**
-- Add a dismiss/remove button (X icon) on each parsed payout card in the review tab
-- Removes it from `parsedPayouts` array (doesn't touch DB since it's not saved yet)
-- Updates persisted localStorage state
+**Secrets needed**: `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `RESEND_API_KEY` (for notifications)
 
-**2. History tab — Xero sync awareness on bulk actions**
-- When items are selected, show a count breakdown: "3 selected (1 synced to Xero)"
-- If any synced items are in the selection, the Delete button shows a confirmation dialog warning: "X of these settlements are already synced to Xero. Deleting will NOT remove the Xero invoice. Continue?"
-- Allow delete of synced items (with warning) rather than blocking
+## Recommended Approach
 
-**3. Individual delete for synced items**
-- Show the delete button for synced items too, but with a confirmation toast/dialog
-- "This settlement has been synced to Xero. Deleting it here won't remove the Xero invoice."
+**Create a new Lovable project** and port the accounting module as the primary app. This is the cleanest path because:
 
-**4. Visual tagging in selection**
-- In the history list, when items are selected, show a small "Xero ✓" tag next to synced items so user can see at a glance which ones have been pushed
+1. You get a fresh Supabase instance (clean DB, no legacy tables)
+2. Independent deployment and domain
+3. Own auth system focused on bookkeeper access
+4. No risk of breaking the Miles Kay e-commerce site
 
-### Files Modified
+## What the New App Would Include
 
-- `src/components/admin/accounting/ShopifyPaymentsDashboard.tsx` — all changes in this single file
+1. **Auth** — Supabase email auth with admin role
+2. **Dashboard** — The AccountingDashboard as the main page (upload, review, history, settings tabs)
+3. **Settlement Parser** — `settlement-parser.ts` copied directly
+4. **Edge Functions** — `sync-amazon-journal` and `xero-auth` deployed to new Supabase
+5. **Xero Integration** — OAuth connection UI + callback page
+6. **Settings** — Account code configuration, GST rate
+7. **Database** — Migrations for `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
 
-### No database or schema changes needed.
+## What I Cannot Do From Here
+
+Lovable cannot programmatically create a separate project or copy files between projects. You would need to:
+
+1. **Create a new Lovable project** (click + New Project)
+2. **Come back here** and I can help you prepare all the code as a single prompt to paste into the new project, or you can reference this project
+3. Alternatively, **remix this project** (Settings → Remix) and then strip out everything except the accounting module
+
+## Recommended Next Step
+
+**Remix this project**, then in the new remixed project, ask me to strip it down to only the accounting module — removing all e-commerce pages (Products, Blog, Contact, Distributors, Where To Buy, etc.), the Alibaba invoice system, logistics, and Amazon product sync. This preserves all the accounting code, edge functions, and database schema intact while giving you an independent app.
+
+The remix approach is fastest because all code, edge functions, and Supabase config carry over. You'd just need to connect a new Supabase project and run the database migrations.
 

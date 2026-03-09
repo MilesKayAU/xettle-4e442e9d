@@ -6,8 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
   History, Loader2, Send, Eye, Trash2, Info,
-  CheckSquare, Square
+  CheckSquare, Square, X
 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { parseShopifyPayoutCSV, buildShopifyInvoiceLines } from '@/utils/shopify-payments-parser';
@@ -86,6 +91,8 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function persistState(p: StandardSettlement[], sIds: string[]) {
@@ -261,9 +268,25 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
     }
     setSelected(new Set());
     setBulkDeleting(false);
+    setDeleteConfirmOpen(false);
     toast.success(`Deleted ${deleted} payout${deleted !== 1 ? 's' : ''}`);
     loadHistory();
   };
+
+  const handleSingleSyncedDelete = async () => {
+    if (!singleDeleteId) return;
+    const result = await deleteSettlement(singleDeleteId);
+    if (result.success) {
+      toast.success('Payout deleted (Xero invoice unchanged)');
+      setSelected(prev => { const n = new Set(prev); n.delete(singleDeleteId); return n; });
+      loadHistory();
+    } else {
+      toast.error(result.error || 'Failed to delete');
+    }
+    setSingleDeleteId(null);
+  };
+
+  const selectedSyncedCount = settlements.filter(s => selected.has(s.id) && s.status === 'synced').length;
 
   const clearUpload = () => {
     setFile(null);
@@ -466,6 +489,24 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                               Sales {formatAUD(meta.grossSalesInclGst || 0)} • Fees {formatAUD(meta.chargesInclGst || 0)}
                             </p>
                           </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive flex-shrink-0"
+                            onClick={() => {
+                              const updated = parsedPayouts.filter(p => p.settlement_id !== payout.settlement_id);
+                              setParsedPayouts(updated);
+                              const newSaved = new Set(savedIds);
+                              newSaved.delete(payout.settlement_id);
+                              setSavedIds(newSaved);
+                              persistState(updated, Array.from(newSaved));
+                              toast.info(`Removed payout ${payout.settlement_id} from review`);
+                              if (updated.length === 0) clearUpload();
+                            }}
+                            title="Remove from review"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -520,13 +561,41 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
             <div className="flex items-center gap-3 text-sm">
               <button onClick={toggleSelectAll} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
                 {selected.size === settlements.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
+                {selected.size > 0 ? (
+                  <span>
+                    {selected.size} selected
+                    {selectedSyncedCount > 0 && (
+                      <span className="text-muted-foreground"> ({selectedSyncedCount} synced to Xero)</span>
+                    )}
+                  </span>
+                ) : 'Select all'}
               </button>
               {selected.size > 0 && (
-                <Button variant="destructive" size="sm" onClick={handleBulkDelete} disabled={bulkDeleting}>
-                  {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Trash2 className="h-3 w-3 mr-1" />}
-                  Delete Selected
-                </Button>
+                <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={bulkDeleting}>
+                      {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Trash2 className="h-3 w-3 mr-1" />}
+                      Delete Selected
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete {selected.size} settlement{selected.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {selectedSyncedCount > 0
+                          ? `${selectedSyncedCount} of these settlement${selectedSyncedCount !== 1 ? 's are' : ' is'} already synced to Xero. Deleting will NOT remove the Xero invoice. This action cannot be undone.`
+                          : 'This action cannot be undone. The selected settlements will be permanently deleted.'}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
           )}
@@ -556,6 +625,9 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium">{s.settlement_id}</span>
                           {statusBadge(s.status)}
+                          {s.status === 'synced' && selected.has(s.id) && (
+                            <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">Xero ✓</Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {formatSettlementDate(s.period_start)}
@@ -578,7 +650,34 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                             <Send className="h-3 w-3 mr-1" /> Push
                           </Button>
                         )}
-                        {s.status !== 'synced' && (
+                        {s.status === 'synced' ? (
+                          <AlertDialog open={singleDeleteId === s.id} onOpenChange={(open) => !open && setSingleDeleteId(null)}>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs text-destructive hover:text-destructive"
+                                onClick={() => setSingleDeleteId(s.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete synced settlement?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This settlement has been synced to Xero. Deleting it here will NOT remove the Xero invoice. Continue?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleSingleSyncedDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        ) : (
                           <Button
                             size="sm"
                             variant="ghost"
