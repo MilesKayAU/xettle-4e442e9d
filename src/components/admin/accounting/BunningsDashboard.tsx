@@ -188,6 +188,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
   const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loadHistory = useCallback(async () => {
