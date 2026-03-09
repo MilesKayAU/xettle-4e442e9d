@@ -269,7 +269,8 @@ export function parseShopifyOrdersCSV(
   const taxRate = options?.taxRate ?? 0.10;
 
   try {
-    const lines = csvContent.split('\n').filter(l => l.trim().length > 0);
+    // Use multi-line-aware CSV splitter (handles Bunnings Note Attributes spanning 7+ lines)
+    const lines = splitCSVIntoRows(csvContent);
     if (lines.length < 2) {
       return { success: false, error: 'CSV must have at least a header row and one data row.' };
     }
@@ -283,9 +284,15 @@ export function parseShopifyOrdersCSV(
       };
     }
 
-    // Parse all rows
+    // Parse all rows — deduplicate by order Name (multi-line-item orders have
+    // order-level totals only on the first row; continuation rows have empty
+    // Financial Status, so the 'paid' filter already excludes them. This Map
+    // is a safety net in case a CSV ever duplicates the header row for the
+    // same order.)
+    const seenOrders = new Set<string>();
     const allOrders: ShopifyOrderRow[] = [];
     let unpaidCount = 0;
+    let duplicateLineItemCount = 0;
 
     for (let i = 1; i < lines.length; i++) {
       const fields = parseCSVRow(lines[i]);
@@ -302,6 +309,16 @@ export function parseShopifyOrdersCSV(
         continue;
       }
 
+      // Order-level dedup: Shopify exports one row per line item.
+      // Order-level totals (Subtotal, Shipping, Total) live on the first row only.
+      // If we've already seen this order Name, skip it.
+      const orderName = colMap.name >= 0 ? fields[colMap.name]?.trim() || '' : '';
+      if (orderName && seenOrders.has(orderName)) {
+        duplicateLineItemCount++;
+        continue;
+      }
+      if (orderName) seenOrders.add(orderName);
+
       const noteAttributes = colMap.noteAttributes >= 0 ? fields[colMap.noteAttributes]?.trim() || '' : '';
       const tags = colMap.tags >= 0 ? fields[colMap.tags]?.trim() || '' : '';
 
@@ -309,7 +326,7 @@ export function parseShopifyOrdersCSV(
       const detectedMarketplace = detectMarketplaceFromRow(noteAttributes, tags, paymentMethod);
 
       allOrders.push({
-        name: colMap.name >= 0 ? fields[colMap.name]?.trim() || '' : '',
+        name: orderName,
         financialStatus,
         paymentMethod,
         paidAt: colMap.paidAt >= 0 ? normaliseDate(fields[colMap.paidAt]?.trim() || '') : '',
