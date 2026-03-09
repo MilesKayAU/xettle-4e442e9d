@@ -501,7 +501,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 {isBulkMode ? <FolderUp className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
                 Summary of Transactions
                 {parsing && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
-                {parsed && !isBulkMode && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />}
+                {parsed && !isBulkMode && <CheckCircle2 className="h-4 w-4 text-primary ml-auto" />}
                 {parseError && <XCircle className="h-4 w-4 text-destructive ml-auto" />}
               </CardTitle>
               <CardDescription className="text-xs">
