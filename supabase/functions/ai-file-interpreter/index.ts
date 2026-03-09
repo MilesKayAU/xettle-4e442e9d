@@ -295,7 +295,7 @@ Sample rows (first 3, PII stripped): ${JSON.stringify(sampleRows?.slice(0, 3) ||
                     "If wrong file type, provide step-by-step path to download the correct settlement/payout report from the marketplace",
                 },
               },
-              required: ["is_settlement_file", "marketplace_guess", "confidence", "file_type_detected"],
+              required: ["is_settlement_file", "marketplace_guess", "confidence", "confidence_reason", "file_type_detected"],
               additionalProperties: false,
             },
           },
