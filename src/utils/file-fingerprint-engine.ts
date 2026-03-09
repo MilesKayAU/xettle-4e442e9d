@@ -167,31 +167,19 @@ const FINGERPRINTS: Fingerprint[] = [
     priority: 80,
   },
 
-  // Shopify Orders CSV — gateway/marketplace clearing invoices
+  // Shopify Orders CSV — gateway/marketplace clearing invoices (VALID file)
+  // Broad matching: 'financial status' + at least one Shopify order signal
   {
     marketplace: 'shopify_orders',
     marketplaceLabel: 'Shopify Orders',
     isSettlementFile: true,
-    requiredColumns: ['payment method', 'financial status', 'paid at'],
-    anyOfColumns: ['note attributes', 'tags', 'subtotal', 'total'],
+    requiredColumns: ['financial status'],
+    anyOfColumns: ['payment method', 'paid at', 'note attributes', 'tags', 'lineitem quantity', 'lineitem sku'],
     columnMapping: {
       gross_sales: 'Subtotal',
       net_payout: 'Total',
     },
     priority: 95,
-  },
-
-  // Shopify Orders (WRONG for payout — but now routed to shopify_orders parser)
-  // Keep lower priority variant for files missing 'paid at'
-  {
-    marketplace: 'shopify_payments',
-    marketplaceLabel: 'Shopify',
-    isSettlementFile: false,
-    requiredColumns: ['name', 'email'],
-    anyOfColumns: ['financial status', 'fulfillment status', 'lineitem quantity'],
-    wrongFileMessage: 'This is a Shopify Orders export, not a Payouts report. However, you can use it to create gateway clearing invoices — upload it to Smart Upload.',
-    correctReportPath: 'Shopify Admin → Settings → Payments → View payouts → Export',
-    priority: 70,
   },
 
   // Amazon Inventory (WRONG)
