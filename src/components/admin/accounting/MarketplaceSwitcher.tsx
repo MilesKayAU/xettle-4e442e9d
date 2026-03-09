@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, Plus, Loader2, ChevronDown } from 'lucide-react';
+import { CheckCircle2, Plus, Loader2, X } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +17,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -120,7 +130,12 @@ export default function MarketplaceSwitcher({
   const [addingCode, setAddingCode] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
-  const selectedDef = MARKETPLACE_CATALOG.find(m => m.code === selectedMarketplace);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingCode, setDeletingCode] = useState<string | null>(null);
+  const [deletingName, setDeletingName] = useState('');
+  const [deleteSettlementCount, setDeleteSettlementCount] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+
   const connectedCodes = new Set(userMarketplaces.map(m => m.marketplace_code));
 
   const handleAddMarketplace = async (def: MarketplaceDefinition) => {
@@ -154,6 +169,66 @@ export default function MarketplaceSwitcher({
     }
   };
 
+  const handleDeleteClick = async (code: string, name: string) => {
+    // Count settlements for this marketplace
+    const { count } = await supabase
+      .from('settlements')
+      .select('*', { count: 'exact', head: true })
+      .eq('marketplace', code);
+
+    setDeletingCode(code);
+    setDeletingName(name);
+    setDeleteSettlementCount(count || 0);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingCode) return;
+    setDeleting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Delete related data in parallel
+      await Promise.all([
+        supabase.from('settlement_lines').delete().eq('user_id', user.id).in(
+          'settlement_id',
+          (await supabase.from('settlements').select('settlement_id').eq('marketplace', deletingCode).eq('user_id', user.id)).data?.map(s => s.settlement_id) || []
+        ),
+        supabase.from('settlement_unmapped').delete().eq('user_id', user.id).in(
+          'settlement_id',
+          (await supabase.from('settlements').select('settlement_id').eq('marketplace', deletingCode).eq('user_id', user.id)).data?.map(s => s.settlement_id) || []
+        ),
+        supabase.from('marketplace_fee_alerts').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+        supabase.from('marketplace_fee_observations').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+        supabase.from('marketplace_file_fingerprints').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+        supabase.from('marketplace_ad_spend').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+        supabase.from('marketplace_shipping_costs').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+      ]);
+
+      // Delete settlements
+      await supabase.from('settlements').delete().eq('marketplace', deletingCode).eq('user_id', user.id);
+
+      // Delete the marketplace connection
+      await supabase.from('marketplace_connections').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id);
+
+      toast.success(`${deletingName} removed`);
+      setDeleteDialogOpen(false);
+      setDeletingCode(null);
+
+      // Switch to first remaining tab
+      const remaining = userMarketplaces.filter(m => m.marketplace_code !== deletingCode);
+      if (remaining.length > 0) {
+        onMarketplaceChange(remaining[0].marketplace_code);
+      }
+      onMarketplacesChanged();
+    } catch (err: any) {
+      toast.error(`Failed to remove: ${err.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const availableToAdd = MARKETPLACE_CATALOG.filter(
     m => !connectedCodes.has(m.code) && m.phase !== 'coming_soon'
   );
@@ -166,19 +241,31 @@ export default function MarketplaceSwitcher({
           const def = MARKETPLACE_CATALOG.find(m => m.code === um.marketplace_code);
           const isActive = um.marketplace_code === selectedMarketplace;
           return (
-            <button
-              key={um.id}
-              onClick={() => onMarketplaceChange(um.marketplace_code)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-sm
-                ${isActive
-                  ? 'border-primary bg-primary/10 text-foreground font-medium shadow-sm'
-                  : 'border-border bg-background text-muted-foreground hover:bg-muted hover:border-muted-foreground/30 cursor-pointer'
-                }`}
-            >
-              <span className="text-base">{def?.icon || '📋'}</span>
-              <span>{def?.name || um.marketplace_name}</span>
-              <CheckCircle2 className="h-3 w-3 text-green-600" />
-            </button>
+            <div key={um.id} className="group relative flex items-center">
+              <button
+                onClick={() => onMarketplaceChange(um.marketplace_code)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-sm
+                  ${isActive
+                    ? 'border-primary bg-primary/10 text-foreground font-medium shadow-sm'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted hover:border-muted-foreground/30 cursor-pointer'
+                  }`}
+              >
+                <span className="text-base">{def?.icon || '📋'}</span>
+                <span>{def?.name || um.marketplace_name}</span>
+                <CheckCircle2 className="h-3 w-3 text-green-600" />
+              </button>
+              {/* Delete X button - visible on hover */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick(um.marketplace_code, def?.name || um.marketplace_name);
+                }}
+                className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90"
+                title={`Remove ${def?.name || um.marketplace_name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           );
         })}
 
@@ -271,6 +358,32 @@ export default function MarketplaceSwitcher({
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Delete marketplace confirmation */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {deletingName}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteSettlementCount > 0
+                ? `This will permanently delete ${deleteSettlementCount} settlement${deleteSettlementCount === 1 ? '' : 's'} and all associated data (fee observations, alerts, fingerprints). This cannot be undone.`
+                : `This will remove the ${deletingName} tab from your dashboard. You can add it back later.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {deleteSettlementCount > 0 ? `Delete ${deleteSettlementCount} settlement${deleteSettlementCount === 1 ? '' : 's'}` : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
