@@ -93,6 +93,8 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<{ type: 'duplicate' | 'gap'; message: string; duplicateIds?: string[] } | null>(null);
+  const [expandedRecon, setExpandedRecon] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
   function persistState(p: StandardSettlement[], sIds: string[]) {
