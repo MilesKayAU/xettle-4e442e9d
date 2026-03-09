@@ -37,6 +37,7 @@ import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
+import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, type StandardSettlement } from '@/utils/settlement-engine';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 
