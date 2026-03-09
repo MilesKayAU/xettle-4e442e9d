@@ -395,24 +395,24 @@ export default function InsightsDashboard() {
                   </div>
 
                   {/* Stacked $1 breakdown bar */}
-                  <div className="h-5 rounded-full overflow-hidden flex">
+                  <div className="h-6 rounded-full overflow-hidden flex bg-muted/30">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="h-full bg-primary transition-all duration-700 ease-out" style={{ width: `${segments.net}%` }} />
+                        <div className="h-full bg-primary rounded-l-full transition-all duration-700 ease-out" style={{ width: `${segments.net}%` }} />
                       </TooltipTrigger>
                       <TooltipContent className="text-xs">${(segments.net / 100).toFixed(2)} you keep</TooltipContent>
                     </Tooltip>
                     {segments.ads > 0 && (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <div className="h-full bg-accent transition-all duration-500" style={{ width: `${segments.ads}%` }} />
+                          <div className="h-full bg-amber-400 transition-all duration-500" style={{ width: `${segments.ads}%` }} />
                         </TooltipTrigger>
                         <TooltipContent className="text-xs">${(segments.ads / 100).toFixed(2)} advertising</TooltipContent>
                       </Tooltip>
                     )}
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="h-full bg-muted-foreground/25 transition-all duration-500" style={{ width: `${segments.fees}%` }} />
+                        <div className="h-full bg-muted-foreground/50 rounded-r-full transition-all duration-500" style={{ width: `${segments.fees}%` }} />
                       </TooltipTrigger>
                       <TooltipContent className="text-xs">${(segments.fees / 100).toFixed(2)} marketplace fees</TooltipContent>
                     </Tooltip>
@@ -431,7 +431,7 @@ export default function InsightsDashboard() {
                       </span>
                     )}
                     <span className="flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-muted-foreground/25 inline-block" />
+                      <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" />
                       ${(segments.fees / 100).toFixed(2)} fees
                     </span>
                   </div>
