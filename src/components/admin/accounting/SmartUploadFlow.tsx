@@ -536,7 +536,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         throw new Error('No settlements could be parsed from this file.');
       }
 
-      await ensureMarketplaceConnection(marketplace);
+      // For woolworths_marketplus, ensure sub-marketplace connections exist
+      if (marketplace === 'woolworths_marketplus') {
+        const subCodes = new Set(settlements.map(s => s.metadata?.marketplaceCode).filter(Boolean));
+        for (const code of subCodes) {
+          await ensureMarketplaceConnection(code as string);
+        }
+      } else {
+        await ensureMarketplaceConnection(marketplace);
+      }
 
       let savedCount = 0;
       let dupCount = 0;
