@@ -918,7 +918,7 @@ export default function AccountingDashboard() {
       } else {
         // SINGLE MONTH: Post one invoice with marketplace-aware TaxType
         const lineItems = buildInvoiceLineItems(parsedLines, period, header.settlementId, undefined, parsed.summary.bankDeposit);
-        const reference = `Amazon AU Settlement ${header.settlementId}`;
+        const reference = `Xettle-${header.settlementId}`;
 
         const { data, error } = await supabase.functions.invoke('sync-amazon-journal', {
           body: { userId: user.id, reference, date: header.periodEnd, dueDate: header.periodEnd, lineItems, country: selectedMarketplace },
