@@ -134,6 +134,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         return result.settlements;
       }
 
+      if (marketplace === 'woolworths_marketplus') {
+        const text = await file.text();
+        const result = parseWoolworthsMarketPlusCSV(text);
+        if (!result.success) return [];
+        return result.settlements;
+      }
+
       // Generic parser
       const mapping = detection.columnMapping || {};
       const name = file.name.toLowerCase();

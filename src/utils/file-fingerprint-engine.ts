@@ -548,5 +548,6 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   catch: 'Catch',
   mydeal: 'MyDeal',
   woolworths: 'Woolworths',
+  woolworths_marketplus: 'Woolworths MarketPlus',
   unknown: 'Unknown Marketplace',
 };

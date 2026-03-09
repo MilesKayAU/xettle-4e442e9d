@@ -85,4 +85,5 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   bunnings: 'Bunnings',
   shopify_payments: 'Shopify Payments',
   shopify_orders: 'Shopify Orders',
+  woolworths_marketplus: 'Woolworths MarketPlus',
 };
