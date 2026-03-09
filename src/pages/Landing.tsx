@@ -79,6 +79,9 @@ export default function Landing() {
             <span className="text-primary">X</span>ettle
           </Link>
           <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/pricing">Pricing</Link>
+            </Button>
             <Button variant="ghost" asChild>
               <Link to="/auth">Sign In</Link>
             </Button>
@@ -142,119 +145,13 @@ export default function Landing() {
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="text-lg px-8 py-6" asChild>
-              <a href="#pricing">See Plans</a>
+              <Link to="/pricing">See Plans</Link>
             </Button>
           </div>
 
           <p className="text-xs text-muted-foreground/60 max-w-lg mx-auto">
             Every settlement you upload also shows what each marketplace really returned after fees.
           </p>
-        </div>
-      </section>
-
-      {/* Pricing / Plans */}
-      <section id="pricing" className="py-16 px-4 bg-card border-y border-border">
-        <div className="container-custom max-w-4xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-center text-foreground mb-3">
-            Simple pricing
-          </h2>
-          <p className="text-muted-foreground text-center mb-10 max-w-xl mx-auto">
-            Manual uploads are free forever. Upgrade when you want automation.
-          </p>
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {/* Free */}
-            <div className="rounded-2xl border-2 border-border bg-background p-8">
-              <div className="flex items-center gap-2 mb-1">
-                <Upload className="h-5 w-5 text-muted-foreground" />
-                <h3 className="text-lg font-bold text-foreground">Free</h3>
-              </div>
-              <p className="text-4xl font-black text-foreground mb-1">$0</p>
-              <p className="text-sm text-muted-foreground mb-6">forever</p>
-              <ul className="space-y-3 text-sm mb-8">
-                {[
-                  'Upload settlement files manually',
-                  'Full parsing & categorisation',
-                  'Push to Xero with one click',
-                  'GST handling for AU sellers',
-                  'Smart settlement checks',
-                  'Settlement return insights',
-                  'Unlimited settlements',
-                ].map(item => (
-                  <li key={item} className="flex items-start gap-2">
-                    <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                    <span className="text-foreground">{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <Button variant="outline" className="w-full" asChild>
-                <Link to="/auth?tab=signup">Get Started Free</Link>
-              </Button>
-            </div>
-
-            {/* Starter */}
-            <div className="rounded-2xl border-2 border-primary bg-primary/5 p-8 relative">
-              <div className="absolute -top-3 right-6">
-                <span className="bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
-                  POPULAR
-                </span>
-              </div>
-              <div className="flex items-center gap-2 mb-1">
-                <Rocket className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-bold text-foreground">Starter</h3>
-              </div>
-              <p className="text-4xl font-black text-foreground mb-1">$129</p>
-              <p className="text-sm text-muted-foreground mb-6">per year</p>
-              <ul className="space-y-3 text-sm mb-8">
-                {[
-                  'Everything in Free, plus:',
-                  'Automatic Amazon settlement import',
-                  'New settlements fetched daily',
-                  'Manual review & push to Xero',
-                  'No more downloading CSVs',
-                ].map((item, i) => (
-                  <li key={item} className="flex items-start gap-2">
-                    <CheckCircle className={`h-4 w-4 shrink-0 mt-0.5 ${i === 0 ? 'text-muted-foreground' : 'text-primary'}`} />
-                    <span className={`${i === 0 ? 'text-muted-foreground font-medium' : 'text-foreground'}`}>{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <Button className="w-full" disabled>
-                Coming Soon
-              </Button>
-            </div>
-
-            {/* Pro */}
-            <div className="rounded-2xl border-2 border-border bg-background p-8 relative">
-              <div className="absolute -top-3 right-6">
-                <span className="bg-muted text-muted-foreground text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                  <Crown className="h-3 w-3" /> PRO
-                </span>
-              </div>
-              <div className="flex items-center gap-2 mb-1">
-                <Crown className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-bold text-foreground">Pro</h3>
-              </div>
-              <p className="text-4xl font-black text-foreground mb-1">$229</p>
-              <p className="text-sm text-muted-foreground mb-6">per year</p>
-              <ul className="space-y-3 text-sm mb-8">
-                {[
-                  'Everything in Starter, plus:',
-                  'Auto-push to Xero on schedule',
-                  'Every 12 or 24 hour sync cycle',
-                  'Toggle automations on/off anytime',
-                  'Priority support & early access',
-                ].map((item, i) => (
-                  <li key={item} className="flex items-start gap-2">
-                    <CheckCircle className={`h-4 w-4 shrink-0 mt-0.5 ${i === 0 ? 'text-muted-foreground' : 'text-primary'}`} />
-                    <span className={`${i === 0 ? 'text-muted-foreground font-medium' : 'text-foreground'}`}>{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <Button className="w-full" variant="outline" disabled>
-                Coming Soon
-              </Button>
-            </div>
-          </div>
         </div>
       </section>
 
