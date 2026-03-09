@@ -625,71 +625,54 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       {/* File results */}
       {hasFiles && (
         <div className="space-y-3">
-          {/* Top bulk action — large prominent button */}
-          {confirmedCount > 0 && (
-            <Button
-              onClick={processAllConfirmed}
-              disabled={processingAll}
-              size="lg"
-              className="w-full gap-2 text-base py-6"
-            >
-              {processingAll ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-5 w-5" />
-              )}
-              Save All {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} for Review
-            </Button>
-          )}
-
-          {files.map((df, idx) => (
-            <FileResultCard
-              key={`${df.file.name}-${idx}`}
-              df={df}
-              idx={idx}
-              onRemove={removeFile}
-              onOverride={overrideMarketplace}
-              onAnalyzeAI={analyzeWithAI}
-              onProcess={processFile}
-              onSetStatus={setFileStatus}
-            />
-          ))}
-
-          {/* Bulk action bar */}
-          {confirmedCount > 0 && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-medium text-foreground">
-                      {totalSettlements > 0
-                        ? `${totalSettlements} settlement${totalSettlements !== 1 ? 's' : ''} ready`
-                        : `${confirmedCount} file${confirmedCount !== 1 ? 's' : ''} ready`
-                      }
-                      {savedCount > 0 && (
-                        <span className="text-muted-foreground"> · {savedCount} saved</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      ✓ Ready to save for review
-                    </p>
-                  </div>
-                  <Button
-                    onClick={processAllConfirmed}
-                    disabled={processingAll}
-                    className="gap-2"
-                  >
-                    {processingAll ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    Save {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} for Review
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Top bulk action — Review All or Save All depending on state */}
+          {(() => {
+            const reviewingFiles = files.filter(f => f.status === 'reviewing' && f.detection?.isSettlementFile);
+            const detectedOnly = files.filter(f => f.status === 'detected' && f.detection?.isSettlementFile);
+            const reviewingSettlements = reviewingFiles.reduce((sum, f) => sum + (f.settlements?.length || 0), 0);
+            
+            if (reviewingFiles.length > 0) {
+              // Some files are in review — offer bulk save
+              return (
+                <Button
+                  onClick={processAllConfirmed}
+                  disabled={processingAll}
+                  size="lg"
+                  className="w-full gap-2 text-base py-6"
+                >
+                  {processingAll ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-5 w-5" />
+                  )}
+                  Confirm & Save {reviewingSettlements > 1 ? `${reviewingSettlements} Settlements` : 'Settlement'}
+                </Button>
+              );
+            }
+            if (detectedOnly.length > 0) {
+              // Files detected but not yet reviewed
+              return (
+                <Button
+                  onClick={() => {
+                    // Open all detected files for review
+                    const currentFiles = filesRef.current;
+                    setFiles(prev => prev.map((f, i) => 
+                      f.status === 'detected' && f.detection?.isSettlementFile 
+                        ? { ...f, status: 'reviewing' as FileStatus }
+                        : f
+                    ));
+                  }}
+                  size="lg"
+                  variant="outline"
+                  className="w-full gap-2 text-base py-6 border-primary/30 text-primary hover:bg-primary/5"
+                >
+                  <Eye className="h-5 w-5" />
+                  Review All {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'}
+                </Button>
+              );
+            }
+            return null;
+          })()}
 
           {/* All saved — prompt to view in Settlements tab */}
           {savedCount > 0 && confirmedCount === 0 && onViewSettlements && (
