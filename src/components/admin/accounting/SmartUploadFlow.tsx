@@ -600,6 +600,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       {/* File results */}
       {hasFiles && (
         <div className="space-y-3">
+          {/* Top bulk action — large prominent button */}
+          {confirmedCount > 0 && (
+            <Button
+              onClick={processAllConfirmed}
+              disabled={processingAll}
+              size="lg"
+              className="w-full gap-2 text-base py-6"
+            >
+              {processingAll ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5" />
+              )}
+              Create All {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} & Prepare for Xero
+            </Button>
+          )}
+
           {files.map((df, idx) => (
             <FileResultCard
               key={`${df.file.name}-${idx}`}
