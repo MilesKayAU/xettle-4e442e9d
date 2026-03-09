@@ -69,9 +69,12 @@ export interface ShopifyOrdersParseResult {
   unpaidCount: number;
   totalOrderCount: number;
   paidCount: number;
+  duplicateLineItemCount: number;
   settlements: StandardSettlement[];
   periodStart: string;
   periodEnd: string;
+  /** True if period_end is within last 3 days — may be a partial import */
+  partialPeriodWarning: boolean;
 }
 
 export interface ShopifyOrdersParseError {
@@ -412,17 +415,29 @@ export function parseShopifyOrdersCSV(
     // Overall period
     const allDates = allOrders.map(o => o.paidAt).filter(Boolean).sort();
 
+    // Detect partial period: warn if period_end is within last 3 days
+    const lastDate = allDates[allDates.length - 1] || '';
+    let partialPeriodWarning = false;
+    if (lastDate) {
+      const endMs = new Date(lastDate + 'T23:59:59').getTime();
+      const nowMs = Date.now();
+      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+      partialPeriodWarning = (nowMs - endMs) < threeDaysMs;
+    }
+
     return {
       success: true,
       groups: readyGroups,
       skippedGroups,
       unknownGroups,
       unpaidCount,
-      totalOrderCount: allOrders.length + unpaidCount,
+      totalOrderCount: allOrders.length + unpaidCount + duplicateLineItemCount,
       paidCount: allOrders.length,
+      duplicateLineItemCount,
       settlements,
       periodStart: allDates[0] || '',
       periodEnd: allDates[allDates.length - 1] || '',
+      partialPeriodWarning,
     };
   } catch (err: any) {
     return { success: false, error: `CSV parsing failed: ${err.message || 'Unknown error'}` };
