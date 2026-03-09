@@ -41,7 +41,7 @@ import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type FileStatus = 'detecting' | 'detected' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error';
+type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error';
 
 interface DetectedFile {
   file: File;
