@@ -134,7 +134,10 @@ export default function InsightsDashboard() {
         const totalFees = rows.reduce((sum, r) =>
           sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
         const totalRefunds = rows.reduce((sum, r) => sum + Math.abs(r.refunds || 0), 0);
-        const netPayout = rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
+        const isShopifyOrders = mp.startsWith('shopify_orders_');
+        const netPayout = isShopifyOrders
+          ? totalSales // Clearing invoices have $0 bank_deposit; revenue IS the payout via gateway
+          : rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
         // Cap ratio at 1.0 — a return > $1 per $1 sold is impossible
         const returnRatio = totalSales > 0 ? Math.min(netPayout / totalSales, 1) : 0;
         const feeLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;

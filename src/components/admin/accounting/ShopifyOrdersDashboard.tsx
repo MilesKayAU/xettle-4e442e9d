@@ -70,6 +70,7 @@ interface SettlementRecord {
   bank_deposit: number;
   sales_principal: number;
   seller_fees: number;
+  sales_shipping: number;
   gst_on_income: number;
   gst_on_expenses: number;
   status: string;
@@ -108,6 +109,7 @@ export default function ShopifyOrdersDashboard() {
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [showBookkeeperInfo, setShowBookkeeperInfo] = useState(false);
   const [pushStats, setPushStats] = useState<{ invoiceCount: number; totalRevenue: number; totalGst: number } | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<Record<number, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>({}); 
@@ -1096,9 +1098,11 @@ export default function ShopifyOrdersDashboard() {
             </Card>
           ) : (
             <div className="space-y-2">
-              {history.map((s) => {
+          {history.map((s) => {
                 const mktKey = s.marketplace.replace('shopify_orders_', '');
                 const entry = getRegistryEntry(mktKey);
+                const revenue = (s.sales_principal || 0) + (s.gst_on_income || 0);
+                const isExpanded = expandedHistoryId === s.id;
                 return (
                   <Card key={s.id}>
                     <CardContent className="py-3">
@@ -1114,8 +1118,19 @@ export default function ShopifyOrdersDashboard() {
                             {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-muted-foreground">$0.00</span>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <span className="text-sm font-semibold text-foreground">{formatAUD(revenue)}</span>
+                            <p className="text-[10px] text-muted-foreground">clearing invoice: $0.00</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => setExpandedHistoryId(isExpanded ? null : s.id)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
                           {s.status !== 'synced' && (
                             <Button
                               variant="outline"
@@ -1137,6 +1152,33 @@ export default function ShopifyOrdersDashboard() {
                           </Button>
                         </div>
                       </div>
+                      {isExpanded && (
+                        <div className="mt-3 pt-3 border-t border-border space-y-1.5">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Sales ex GST</span>
+                            <span className="font-medium text-foreground">{formatAUD(s.sales_principal || 0)}</span>
+                          </div>
+                          {(s.gst_on_income || 0) !== 0 && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">GST on Sales</span>
+                              <span className="font-medium text-foreground">{formatAUD(s.gst_on_income || 0)}</span>
+                            </div>
+                          )}
+                          {(s.seller_fees || 0) !== 0 && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Fees</span>
+                              <span className="font-medium text-foreground">{formatAUD(s.seller_fees || 0)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-xs pt-1 border-t border-border/50">
+                            <span className="text-muted-foreground">Clearing Line</span>
+                            <span className="font-medium text-foreground">{formatAUD(-(s.sales_principal || 0) - (s.gst_on_income || 0))}</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground pt-1">
+                            Net invoice total: $0.00 — revenue offset by gateway clearing account
+                          </p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 );
