@@ -144,6 +144,25 @@ export default function ShopifyOrdersDashboard() {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
+  // Check Shopify connection status
+  useEffect(() => {
+    const checkShopifyStatus = async () => {
+      try {
+        const { data: result } = await supabase.functions.invoke('shopify-auth', {
+          method: 'GET',
+          headers: { 'x-action': 'status' },
+        });
+        if (result?.connected && result?.shops?.length > 0) {
+          setShopifyConnected(true);
+          setShopifyShopDomain(result.shops[0].shop_domain);
+        }
+      } catch { /* silent */ } finally {
+        setShopifyStatusLoading(false);
+      }
+    };
+    checkShopifyStatus();
+  }, []);
+
   // Show onboarding ONLY on first visit with no data
   // Once history loads or user uploads, onboarding never returns (unless manually re-triggered)
   useEffect(() => {
