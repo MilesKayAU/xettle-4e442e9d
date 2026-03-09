@@ -3,7 +3,7 @@
  * Returns null if detection is inconclusive.
  */
 
-export type DetectedMarketplace = 'amazon_au' | 'bunnings' | null;
+export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'shopify_payments' | null;
 
 /** Sniff a file and return the detected marketplace */
 export async function detectFileMarketplace(file: File): Promise<DetectedMarketplace> {
@@ -12,6 +12,9 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
   // ── Filename-based signals ──
   if (name.includes('bunnings') || name.includes('bun-') || name.includes('summary-of-transactions')) {
     return 'bunnings';
+  }
+  if (name.includes('shopify') || name.includes('payout')) {
+    return 'shopify_payments';
   }
   if (name.includes('amazon') || name.match(/^\d{10,}\.csv/) || name.match(/flat.*file/i)) {
     return 'amazon_au';
@@ -24,6 +27,12 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
       const slice = file.slice(0, 2048);
       const text = await slice.text();
       const lower = text.toLowerCase();
+
+      // Shopify Payments CSV signals
+      if (lower.includes('payout id') || lower.includes('payout date') ||
+          (lower.includes('shopify') && (lower.includes('gross') || lower.includes('charges')))) {
+        return 'shopify_payments';
+      }
 
       if (lower.includes('settlement-id') || lower.includes('settlement-start-date') ||
           lower.includes('amzn') || lower.includes('amazon') || lower.includes('fba')) {
@@ -62,4 +71,5 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
 export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
   bunnings: 'Bunnings',
+  shopify_payments: 'Shopify Payments',
 };

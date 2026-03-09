@@ -181,8 +181,9 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
         }
         setActiveTab('review');
       } else {
-        setParseError(result.error);
-        toast.error(result.error);
+        const errMsg = result.error;
+        setParseError(errMsg);
+        toast.error(errMsg);
       }
     } catch (err: any) {
       setParseError(err.message || 'Unknown error');
@@ -519,7 +520,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
         {/* ─── History Tab ────────────────────────────────────────── */}
         <TabsContent value="history" className="space-y-4">
           {/* Xero connection status */}
-          <XeroConnectionStatus compact />
+          <XeroConnectionStatus />
 
           {/* Bulk actions */}
           {settlements.length > 0 && (
