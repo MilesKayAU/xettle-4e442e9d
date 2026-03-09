@@ -253,14 +253,22 @@ export default function InsightsDashboard() {
   }
 
   // Generate the main insight sentence
+  const topRevenue = [...stats].sort((a, b) => b.totalSales - a.totalSales)[0];
+  const bestProfit = [...stats].sort((a, b) => b.returnRatio - a.returnRatio)[0];
+
   function getHeroInsight(): string {
     if (stats.length === 1) {
       return `${stats[0].label} returns $${stats[0].returnRatio.toFixed(2)} for every $1 sold after marketplace fees.`;
     }
-    const best = stats[0];
-    const worst = stats[stats.length - 1];
-    const diffPct = ((best.returnRatio - worst.returnRatio) / worst.returnRatio * 100).toFixed(0);
-    return `${best.label} returns $${best.returnRatio.toFixed(2)} per $1 sold — ${diffPct}% higher than ${worst.label}.`;
+    // If same marketplace leads both, simple message
+    if (topRevenue.marketplace === bestProfit.marketplace) {
+      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and profit efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1).`;
+    }
+    const profitMultiple = bestProfit.returnRatio / topRevenue.returnRatio;
+    if (profitMultiple >= 1.5) {
+      return `${topRevenue.label} generates the most revenue, but ${bestProfit.label} returns ${profitMultiple.toFixed(1)}× more profit per sale.`;
+    }
+    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} keeps $${bestProfit.returnRatio.toFixed(2)} per $1 sold.`;
   }
 
   // Stacked bar segments for $1 breakdown
@@ -294,7 +302,7 @@ export default function InsightsDashboard() {
         </div>
 
         {/* Summary cards row — 5 cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground">Total Sales</p>
@@ -330,20 +338,26 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">
-                {totalAllAdSpend > 0 ? 'After Advertising' : 'Best Performer'}
-              </p>
-              {totalAllAdSpend > 0 && overallAfterAds !== null ? (
-                <>
-                  <p className={`text-xl font-bold mt-1 ${getRatioColor(overallAfterAds)}`}>${overallAfterAds.toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Per $1 after ads</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xl font-bold text-primary mt-1">{stats[0].label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">${stats[0].returnRatio.toFixed(2)} per $1</p>
-                </>
-              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Top Revenue</p>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">The marketplace generating the highest total sales volume — your volume engine.</TooltipContent>
+              </Tooltip>
+              <p className="text-xl font-bold text-foreground mt-1">{topRevenue.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(topRevenue.totalSales)} sales</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Best Performer</p>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">The marketplace returning the most profit per $1 sold — your efficiency engine.</TooltipContent>
+              </Tooltip>
+              <p className="text-xl font-bold text-primary mt-1">{bestProfit.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">${bestProfit.returnRatio.toFixed(2)} per $1</p>
             </CardContent>
           </Card>
         </div>
