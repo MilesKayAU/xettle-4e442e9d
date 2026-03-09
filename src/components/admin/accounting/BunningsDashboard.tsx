@@ -461,9 +461,40 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     const result = await deleteSettlement(id);
     if (result.success) {
       toast.success('Settlement deleted');
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
       loadHistory();
     } else {
       toast.error(result.error || 'Failed to delete');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    setBulkDeleting(true);
+    let deleted = 0;
+    for (const id of selected) {
+      const result = await deleteSettlement(id);
+      if (result.success) deleted++;
+    }
+    setSelected(new Set());
+    setBulkDeleting(false);
+    toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
+    loadHistory();
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === settlements.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(settlements.map(s => s.id)));
     }
   };
 
