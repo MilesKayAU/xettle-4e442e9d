@@ -272,7 +272,6 @@ const ShopifyConnectionStatus = () => {
               onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
               autoComplete="off"
             />
-            />
             <Button
               onClick={handleConnect}
               disabled={connecting || !isValidDomain(shopDomain)}
