@@ -336,6 +336,7 @@ export function parseShopifyOrdersCSV(
     const allOrders: ShopifyOrderRow[] = [];
     let unpaidCount = 0;
     let duplicateLineItemCount = 0;
+    const statusBreakdown: StatusBreakdown = { paid: 0, partially_refunded: 0, refunded: 0, other_excluded: 0 };
 
     for (let i = 1; i < lines.length; i++) {
       const fields = parseCSVRow(lines[i]);
@@ -346,9 +347,17 @@ export function parseShopifyOrdersCSV(
 
       if (!paymentMethod && !financialStatus) continue;
 
-      // Only include paid orders
-      if (financialStatus !== 'paid') {
+      // Include paid and partially_refunded orders (at original Total).
+      // Partial refunds are handled as separate accounting entries (like LMB).
+      // Exclude fully refunded and other statuses.
+      const includedStatuses = ['paid', 'partially_refunded'];
+      if (!includedStatuses.includes(financialStatus)) {
         unpaidCount++;
+        if (financialStatus === 'refunded') {
+          statusBreakdown.refunded++;
+        } else {
+          statusBreakdown.other_excluded++;
+        }
         continue;
       }
 
