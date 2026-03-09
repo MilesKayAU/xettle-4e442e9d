@@ -164,16 +164,3 @@ export function incrementFingerprintMatch(field: string, pattern: string) {
     }
   })();
 }
-      .from('marketplace_fingerprints')
-      .select('id, match_count')
-      .eq('field', field)
-      .eq('pattern', pattern)
-      .maybeSingle();
-    if (data) {
-      await supabase
-        .from('marketplace_fingerprints')
-        .update({ match_count: (data.match_count || 0) + 1 })
-        .eq('id', data.id);
-    }
-  })();
-}
