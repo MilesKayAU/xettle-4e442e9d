@@ -548,10 +548,49 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
       let savedCount = 0;
       let dupCount = 0;
+
+      // For Woolworths MarketPlus, parse the raw rows for drill-down
+      let woolworthsRows: any[] = [];
+      if (marketplace === 'woolworths_marketplus' && df.settlements) {
+        try {
+          const text = await df.file.text();
+          const { parseWoolworthsMarketPlusCSV: parse } = await import('@/utils/woolworths-marketplus-parser');
+          const parsed = parse(text);
+          if (parsed.success) woolworthsRows = parsed.allRows;
+        } catch { /* silent */ }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+
       for (const s of settlements) {
         const result = await saveSettlement(s);
-        if (result.success) savedCount++;
-        else if (result.duplicate) dupCount++;
+        if (result.success) {
+          savedCount++;
+
+          // Save settlement_lines for drill-down
+          if (user && marketplace === 'woolworths_marketplus' && woolworthsRows.length > 0) {
+            const orderSource = s.metadata?.orderSource;
+            const groupRows = woolworthsRows.filter((r: any) => r.orderSource === orderSource);
+            if (groupRows.length > 0) {
+              const lineRows = groupRows.map((row: any) => ({
+                user_id: user.id,
+                settlement_id: s.settlement_id,
+                order_id: row.orderId || null,
+                sku: row.sku || null,
+                amount: row.netAmount || 0,
+                amount_type: row.totalSalePrice < 0 ? 'refund' : 'order',
+                amount_description: row.product ? row.product.substring(0, 100) : null,
+                transaction_type: row.totalSalePrice < 0 ? 'Refund' : (row.commissionFee !== 0 && row.totalSalePrice === 0 ? 'Fee' : 'Order'),
+                posted_date: row.orderedDate || null,
+                marketplace_name: s.metadata?.displayName || orderSource,
+                accounting_category: row.totalSalePrice < 0 ? 'refunds' : (row.totalSalePrice === 0 ? 'fees' : 'sales'),
+              }));
+              for (let i = 0; i < lineRows.length; i += 500) {
+                await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
+              }
+            }
+          }
+        } else if (result.duplicate) dupCount++;
         else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
       }
 
