@@ -387,6 +387,25 @@ export async function deleteSettlement(id: string): Promise<{ success: boolean; 
   }
 }
 
+// ─── Xero Sync Back ─────────────────────────────────────────────────────────
+
+export async function syncXeroStatus(): Promise<{ success: boolean; updated?: number; error?: string }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    const { data, error } = await supabase.functions.invoke('sync-xero-status', {
+      body: { userId: user.id },
+    });
+
+    if (error) return { success: false, error: error.message };
+    if (!data?.success) return { success: false, error: data?.error || 'Sync failed' };
+    return { success: true, updated: data.updated || 0 };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
+  }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 export function formatSettlementDate(d: string): string {
