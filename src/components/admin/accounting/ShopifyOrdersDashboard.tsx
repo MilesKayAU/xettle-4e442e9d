@@ -125,10 +125,13 @@ export default function ShopifyOrdersDashboard() {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
-  // Show onboarding when no history and no file uploaded yet
+  // Show onboarding ONLY on first visit with no data
+  // Once history loads or user uploads, onboarding never returns (unless manually re-triggered)
   useEffect(() => {
     if (!historyLoading && history.length === 0 && !file && !parseResult) {
       setShowOnboarding(true);
+    } else if (history.length > 0) {
+      setShowOnboarding(false);
     }
   }, [historyLoading, history.length, file, parseResult]);
 
@@ -573,6 +576,19 @@ export default function ShopifyOrdersDashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Re-run setup button */}
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => { clearUpload(); setShowOnboarding(true); }}
+            >
+              <ShoppingCart className="h-3.5 w-3.5 mr-1" />
+              Re-run Shopify setup
+            </Button>
+          </div>
         </TabsContent>
 
         {/* ─── Review Tab ─────────────────────────────────────────── */}

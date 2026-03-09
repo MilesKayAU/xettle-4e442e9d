@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import {
   Upload, CheckCircle2, ChevronDown, FileText, ShoppingCart,
-  ArrowRight, Loader2, SkipForward, Calendar,
+  ArrowRight, Loader2, SkipForward, Calendar, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -80,6 +80,7 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
   // Results phase
   const [result, setResult] = useState<ShopifyOrdersParseResult | null>(null);
   const [unknownAssignments, setUnknownAssignments] = useState<Record<number, string>>({});
+  const [pushed, setPushed] = useState(false);
 
   // ─── Upload handling ──────────────────────────────────────────────
 
@@ -434,11 +435,47 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
 
       {/* Actions */}
       <div className="flex gap-3 justify-center">
-        <Button onClick={handleFinish} className="gap-2">
+        <Button onClick={() => { setPushed(true); handleFinish(); }} className="gap-2">
           <ArrowRight className="h-4 w-4" />
           Review & push to Xero
         </Button>
       </div>
+
+      {/* Bookkeeper reconciliation note — shown after push */}
+      {pushed && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+              <p className="text-sm font-semibold text-foreground">
+                {readyGroups.length} invoice{readyGroups.length !== 1 ? 's' : ''} pushed to Xero
+              </p>
+            </div>
+            <div className="flex items-start gap-2">
+              <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <div className="text-xs text-muted-foreground space-y-1.5">
+                <p className="font-medium text-foreground">Bookkeeper reconciliation:</p>
+                {readyGroups.some(g => g.registryEntry.payment_type === 'direct_bank_transfer') && (
+                  <p>
+                    {readyGroups.filter(g => g.registryEntry.payment_type === 'direct_bank_transfer').map(g => g.registryEntry.display_name || g.marketplaceKey).join(', ')} → match bank transfers to account 613
+                  </p>
+                )}
+                {readyGroups.some(g => g.registryEntry.payment_type === 'gateway_clearing') && (
+                  <p>
+                    {readyGroups.filter(g => g.registryEntry.payment_type === 'gateway_clearing').map(g => g.registryEntry.display_name || g.marketplaceKey).join(', ')} → match payout to account 613
+                  </p>
+                )}
+                {skippedGroups.length > 0 && (
+                  <p>Shopify Payments → upload payout CSV next</p>
+                )}
+                <p className="pt-1 text-muted-foreground/70">
+                  These are $0.00 clearing invoices — they recognise revenue when orders ship, not when you get paid.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Monthly sync card */}
       <Card className="bg-muted/30">
