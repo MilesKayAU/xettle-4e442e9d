@@ -1103,6 +1103,63 @@ export default function InsightsDashboard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Add Shipping Cost Dialog */}
+        <Dialog open={shippingDialogOpen} onOpenChange={setShippingDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Shipping Cost Estimate</DialogTitle>
+              <DialogDescription>
+                Estimate avg cost per order for <strong>{MARKETPLACE_LABELS[shippingDialogMarketplace] || shippingDialogMarketplace}</strong>. This is your estimated shipping cost (to Amazon FBA or direct to customer) — analytics only.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="shipping-cost">Cost Per Order</Label>
+                <Input
+                  id="shipping-cost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={shippingCostPerOrder}
+                  onChange={(e) => setShippingCostPerOrder(e.target.value)}
+                  placeholder="e.g. 10.00 for Bunnings, 2.00 for Amazon FBA"
+                />
+                <p className="text-xs text-muted-foreground">Your estimated shipping cost per order (not tracked in settlements)</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="shipping-currency">Currency</Label>
+                <Select value={shippingCurrency} onValueChange={setShippingCurrency}>
+                  <SelectTrigger id="shipping-currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AUD">AUD</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="shipping-notes">Notes (optional)</Label>
+                <Textarea
+                  id="shipping-notes"
+                  value={shippingNotes}
+                  onChange={(e) => setShippingNotes(e.target.value)}
+                  placeholder="e.g. Direct to customer, avg weight 2kg"
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShippingDialogOpen(false)}>Cancel</Button>
+              <Button onClick={saveShippingCost} disabled={shippingSaving}>
+                {shippingSaving ? 'Saving...' : 'Save Shipping Cost'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );
