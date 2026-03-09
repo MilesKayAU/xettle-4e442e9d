@@ -1,11 +1,25 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash2, Loader2, FileText, Upload, ArrowRight } from 'lucide-react';
+import {
+  Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
+  CheckSquare, Square, CheckCircle2, AlertTriangle
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher';
+import {
+  syncSettlementToXero,
+  deleteSettlement,
+  formatSettlementDate,
+  formatAUD,
+  buildSimpleInvoiceLines,
+  type StandardSettlement,
+} from '@/utils/settlement-engine';
+import { runUniversalReconciliation } from '@/utils/universal-reconciliation';
+import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
+import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 
 interface GenericMarketplaceDashboardProps {
   marketplace: UserMarketplace;
@@ -26,18 +40,28 @@ interface SettlementRow {
   created_at: string;
   gst_on_income: number | null;
   gst_on_expenses: number | null;
+  refunds: number | null;
+  reimbursements: number | null;
+  other_fees: number | null;
+  xero_journal_id: string | null;
+  sales_shipping: number | null;
 }
 
-function formatAUD(amount: number): string {
-  const sign = amount < 0 ? '-' : '';
-  return `${sign}$${Math.abs(amount).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatDate(dateStr: string): string {
-  try {
-    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-  } catch {
-    return dateStr;
+function statusBadge(status: string | null) {
+  switch (status) {
+    case 'synced':
+      return <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Synced to Xero ✓</Badge>;
+    case 'pushed_to_xero':
+      return <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Posted to Xero ✓</Badge>;
+    case 'synced_external':
+      return <Badge variant="outline" className="border-muted-foreground/40 text-[10px]">Already in Xero</Badge>;
+    case 'saved':
+    case 'parsed':
+      return <Badge variant="secondary" className="text-[10px]">Saved</Badge>;
+    case 'error':
+      return <Badge variant="destructive" className="text-[10px]">Error</Badge>;
+    default:
+      return <Badge variant="outline" className="text-[10px]">{status || 'Saved'}</Badge>;
   }
 }
 
@@ -46,13 +70,16 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [settlements, setSettlements] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pushing, setPushing] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const loadSettlements = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('settlements')
-        .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses')
+        .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, refunds, reimbursements, other_fees, xero_journal_id, sales_shipping')
         .eq('marketplace', marketplace.marketplace_code)
         .order('period_end', { ascending: false });
       if (error) throw error;
@@ -79,6 +106,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     return () => { supabase.removeChannel(channel); };
   }, [loadSettlements, marketplace.marketplace_code]);
 
+  // ─── Actions ────────────────────────────────────────────────────────────────
+
   const handleDelete = useCallback(async (settlement: SettlementRow) => {
     setDeleting(settlement.id);
     try {
@@ -90,6 +119,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       await supabase.from('settlements').delete().eq('id', settlement.id);
 
       toast.success(`Deleted settlement ${settlement.settlement_id}`);
+      setSelected(prev => { const n = new Set(prev); n.delete(settlement.id); return n; });
       loadSettlements();
     } catch (err: any) {
       toast.error(`Failed to delete: ${err.message}`);
@@ -98,16 +128,139 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     }
   }, [loadSettlements]);
 
+  const handleBulkDelete = useCallback(async () => {
+    if (selected.size === 0) return;
+    setBulkDeleting(true);
+    let deleted = 0;
+    for (const id of selected) {
+      const result = await deleteSettlement(id);
+      if (result.success) deleted++;
+    }
+    setSelected(new Set());
+    setBulkDeleting(false);
+    toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
+    loadSettlements();
+  }, [selected, loadSettlements]);
+
+  const handlePushToXero = useCallback(async (settlement: SettlementRow) => {
+    setPushing(settlement.id);
+    try {
+      // Build a StandardSettlement from the DB record for reconciliation check
+      const stdSettlement: StandardSettlement = {
+        marketplace: settlement.marketplace,
+        settlement_id: settlement.settlement_id,
+        period_start: settlement.period_start,
+        period_end: settlement.period_end,
+        sales_ex_gst: settlement.sales_principal || 0,
+        gst_on_sales: settlement.gst_on_income || 0,
+        fees_ex_gst: settlement.seller_fees || 0,
+        gst_on_fees: settlement.gst_on_expenses || 0,
+        net_payout: settlement.bank_deposit || 0,
+        source: 'csv_upload',
+        reconciles: true,
+        metadata: {
+          refundsExGst: settlement.refunds || 0,
+          shippingExGst: settlement.sales_shipping || 0,
+          subscriptionAmount: settlement.other_fees || 0,
+          refundCommissionExGst: settlement.reimbursements || 0,
+        },
+      };
+
+      // Run reconciliation check
+      const reconResult = runUniversalReconciliation(stdSettlement);
+      if (!reconResult.canSync) {
+        toast.error('Critical reconciliation issues — resolve before syncing to Xero.');
+        return;
+      }
+      if (reconResult.overallStatus === 'warn') {
+        toast.warning('Reconciliation warnings exist — proceeding with sync.');
+      }
+
+      const lineItems = buildSimpleInvoiceLines(stdSettlement);
+      const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace, { lineItems });
+      if (result.success) {
+        toast.success('Invoice created in Xero!');
+        loadSettlements();
+      } else {
+        toast.error(result.error || 'Failed to push to Xero');
+      }
+    } catch (err: any) {
+      toast.error(`Xero sync failed: ${err.message}`);
+    } finally {
+      setPushing(null);
+    }
+  }, [loadSettlements]);
+
+  const handleMarkAlreadySynced = useCallback(async (settlementId: string) => {
+    const { error } = await supabase
+      .from('settlements')
+      .update({ status: 'synced_external' })
+      .eq('settlement_id', settlementId);
+    if (error) {
+      toast.error('Failed to update status');
+    } else {
+      toast.success('Marked as Already in Xero');
+      loadSettlements();
+    }
+  }, [loadSettlements]);
+
+  const handleBulkMarkSynced = useCallback(async () => {
+    const unsyncedIds = settlements
+      .filter(s => s.status === 'saved' || s.status === 'parsed')
+      .map(s => s.settlement_id);
+    if (unsyncedIds.length === 0) {
+      toast.info('No unsynced settlements to mark');
+      return;
+    }
+    const { error } = await supabase
+      .from('settlements')
+      .update({ status: 'synced_external' })
+      .in('settlement_id', unsyncedIds);
+    if (error) {
+      toast.error('Failed to update statuses');
+    } else {
+      toast.success(`Marked ${unsyncedIds.length} settlements as Already in Xero`);
+      loadSettlements();
+    }
+  }, [settlements, loadSettlements]);
+
+  // ─── Selection ──────────────────────────────────────────────────────────────
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === settlements.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(settlements.map(s => s.id)));
+    }
+  };
+
+  const marketplaceName = def?.name || marketplace.marketplace_name;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold flex items-center gap-2">
-          <span className="text-xl">{def?.icon || '📋'}</span>
-          {def?.name || marketplace.marketplace_name} Settlements
-        </h3>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          View saved settlements, reconcile, and sync to Xero.
-        </p>
+      {/* Alerts Banner */}
+      <MarketplaceAlertsBanner marketplaceCode={marketplace.marketplace_code} />
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <span className="text-xl">{def?.icon || '📋'}</span>
+            {marketplaceName} Settlements
+          </h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            View saved settlements, reconcile, and sync to Xero.
+          </p>
+        </div>
+        <XeroConnectionStatus />
       </div>
 
       {/* Upload prompt — directs to Smart Upload */}
@@ -120,7 +273,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               </div>
               <div>
                 <p className="text-sm font-medium text-foreground">
-                  Upload {def?.name || marketplace.marketplace_name} files
+                  Upload {marketplaceName} files
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Use Smart Upload to drop files — auto-detects, previews, and saves
@@ -168,54 +321,131 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           </Card>
         ) : (
           <div className="space-y-2">
-            {settlements.map(s => {
+            {/* Bulk actions bar */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1"
+                  onClick={toggleSelectAll}
+                >
+                  {selected.size === settlements.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                  {selected.size === settlements.length ? 'Deselect All' : 'Select All'}
+                </Button>
+                {selected.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleting}
+                  >
+                    {bulkDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    Delete {selected.size} Selected
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleBulkMarkSynced}>
+                    <SkipForward className="h-3.5 w-3.5 mr-1" />
+                    Mark All as Already in Xero
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {settlements.map((s, idx) => {
               const sales = s.sales_principal || 0;
               const fees = s.seller_fees || 0;
               const net = s.bank_deposit || 0;
               const gstIncome = s.gst_on_income || 0;
+              const isSelected = selected.has(s.id);
+              const isSyncable = s.status === 'saved' || s.status === 'parsed';
+
+              // Gap detection
+              const prev = settlements[idx + 1];
+              const hasGap = prev && s.period_start > prev.period_end;
 
               return (
-                <Card key={s.id} className="border-border hover:border-primary/20 transition-colors">
-                  <CardContent className="py-3 px-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-foreground">
-                            {formatDate(s.period_start)} – {formatDate(s.period_end)}
-                          </span>
-                          <Badge
-                            variant={s.status === 'pushed_to_xero' || s.status === 'synced' ? 'default' : 'secondary'}
-                            className="text-[10px]"
+                <React.Fragment key={s.id}>
+                  {hasGap && (
+                    <div className="flex items-center gap-2 py-1 px-3">
+                      <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">
+                        Gap: missing settlement between {formatSettlementDate(prev.period_end)} and {formatSettlementDate(s.period_start)}
+                      </p>
+                    </div>
+                  )}
+                  <Card className={`border-border hover:border-primary/20 transition-colors ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}>
+                    <CardContent className="py-3 px-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <button
+                            onClick={() => toggleSelect(s.id)}
+                            className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
                           >
-                            {s.status === 'pushed_to_xero' || s.status === 'synced' ? 'Posted to Xero ✓' : s.status || 'Saved'}
-                          </Badge>
+                            {isSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold text-foreground">
+                                {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
+                              </span>
+                              {statusBadge(s.status)}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                              ID: {s.settlement_id}
+                            </p>
+                            <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
+                              <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
+                              <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
+                              {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
+                              <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                          ID: {s.settlement_id}
-                        </p>
-                        <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
-                          <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
-                          <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
-                          {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
-                          <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {isSyncable && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handlePushToXero(s)}
+                                disabled={pushing === s.id}
+                              >
+                                {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                                Push to Xero
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleMarkAlreadySynced(s.settlement_id)}
+                              >
+                                <SkipForward className="h-3.5 w-3.5 mr-1" />
+                                Already in Xero
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            disabled={deleting === s.id}
+                            onClick={() => handleDelete(s)}
+                          >
+                            {deleting === s.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                        disabled={deleting === s.id}
-                        onClick={() => handleDelete(s)}
-                      >
-                        {deleting === s.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </React.Fragment>
               );
             })}
           </div>
