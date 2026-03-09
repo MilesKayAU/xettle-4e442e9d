@@ -701,7 +701,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                     <CardContent className="py-3 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-medium truncate">{item.file.name}</p>
+                          <p className="text-sm font-medium truncate">{item.fileName || item.file?.name || 'Unknown file'}</p>
                           {item.isDuplicate && !item.skipped && (
                             <Badge variant="outline" className="text-[10px] border-primary/40 text-foreground">Duplicate</Badge>
                           )}
@@ -921,6 +921,15 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             </Card>
           ) : (
             <div className="space-y-3">
+              {/* Bulk actions */}
+              {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm" onClick={handleBulkMarkSynced}>
+                    <SkipForward className="h-3.5 w-3.5 mr-1" />
+                    Mark All as Already in Xero
+                  </Button>
+                </div>
+              )}
               {settlements.map((s, idx) => {
                 // Gap indicator: check if there's a gap to the previous settlement
                 const prev = settlements[idx + 1];
