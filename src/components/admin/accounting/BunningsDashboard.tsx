@@ -148,8 +148,11 @@ function clearBulkStorage() {
 export default function BunningsDashboard({ marketplace }: BunningsDashboardProps) {
   // Restore persisted parse session on mount
   const persisted = loadParsedFromStorage();
+  const persistedBulk = loadBulkFromStorage();
 
-  const [activeTab, setActiveTab] = useState(persisted?.parsed ? 'review' : 'upload');
+  const [activeTab, setActiveTab] = useState(
+    persistedBulk && persistedBulk.length > 0 ? 'review' : persisted?.parsed ? 'review' : 'upload'
+  );
 
   // Single file mode
   const [file, setFile] = useState<File | null>(null);
@@ -162,9 +165,24 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const [savedSettlementId, setSavedSettlementId] = useState<string | null>(persisted?.savedId ?? null);
   const [uploadWarning, setUploadWarning] = useState<UploadWarning | null>(persisted?.warning ?? null);
 
-  // Bulk mode
+  // Bulk mode — restore from localStorage if available
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
-  const [bulkBatch, setBulkBatch] = useState<BatchItem[]>([]);
+  const [bulkBatch, setBulkBatch] = useState<BatchItem[]>(() => {
+    if (persistedBulk && persistedBulk.length > 0) {
+      return persistedBulk.map(p => ({
+        file: null,
+        fileName: p.fileName,
+        parsed: p.parsed,
+        extra: null,
+        error: p.error,
+        saved: p.saved,
+        saving: false,
+        skipped: p.skipped,
+        isDuplicate: p.isDuplicate,
+      }));
+    }
+    return [];
+  });
   const [bulkProcessing, setBulkProcessing] = useState(false);
 
   const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
