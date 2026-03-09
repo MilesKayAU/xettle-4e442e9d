@@ -40,6 +40,7 @@ export const MARKETPLACE_CONTACTS: Record<string, string> = {
 
 export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
+  AU: 'Amazon AU',
   bunnings: 'Bunnings',
   catch: 'Catch',
   mydeal: 'MyDeal',
