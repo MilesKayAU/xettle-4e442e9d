@@ -36,10 +36,12 @@ interface InvoiceRequest {
   action?: 'create' | 'rollback';
   // Create fields
   reference?: string;
+  description?: string;
   date?: string;
   dueDate?: string;
   lineItems?: InvoiceLineItem[];
   country?: string;
+  contactName?: string;
   // Rollback fields
   invoiceIds?: string[];
   settlementId?: string;
