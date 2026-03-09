@@ -471,17 +471,71 @@ export default function PublicDemoUpload() {
 
         {/* CTA */}
         <div className="space-y-3">
-          <Button
-            size="lg"
-            className="w-full text-base py-6"
-            onClick={() => navigate('/auth?tab=signup&demo=1')}
-          >
-            Push to Xero — Create free account
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
+          {currentUser ? (
+            <Button
+              size="lg"
+              className="w-full text-base py-6"
+              disabled={saving}
+              onClick={async () => {
+                if (!state.settlements || !state.detection) return;
+                setSaving(true);
+                try {
+                  const marketplace = state.detection.marketplace;
+                  const { saveSettlement } = await import('@/utils/settlement-engine');
+                  const { MARKETPLACE_CATALOG } = await import('@/components/admin/accounting/MarketplaceSwitcher');
+
+                  // Ensure marketplace connection exists
+                  const { data: existing } = await supabase
+                    .from('marketplace_connections')
+                    .select('id')
+                    .eq('marketplace_code', marketplace)
+                    .maybeSingle();
+
+                  if (!existing) {
+                    const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
+                    await supabase.from('marketplace_connections').insert({
+                      user_id: currentUser.id,
+                      marketplace_code: marketplace,
+                      marketplace_name: catDef?.name || marketplace,
+                      country_code: catDef?.country || 'AU',
+                      connection_type: 'auto_detected',
+                      connection_status: 'active',
+                    } as any);
+                  }
+
+                  // Save settlements
+                  for (const s of state.settlements) {
+                    await saveSettlement(s);
+                  }
+
+                  navigate('/dashboard');
+                } catch (err: any) {
+                  console.error('Failed to save:', err);
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : null}
+              Save to my account & go to dashboard
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              className="w-full text-base py-6"
+              onClick={() => navigate('/auth?tab=signup&demo=1')}
+            >
+              Push to Xero — Create free account
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          )}
           <p className="text-xs text-muted-foreground/70 text-center flex items-center justify-center gap-1.5">
             <Shield className="h-3 w-3" />
-            Your file was analysed in your browser only. Nothing was stored.
+            {currentUser
+              ? 'Your settlement will be saved to your account and ready to sync.'
+              : 'Your file was analysed in your browser only. Nothing was stored.'
+            }
           </p>
           <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={reset}>
             Try another file
