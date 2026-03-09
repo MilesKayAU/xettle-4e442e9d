@@ -222,7 +222,7 @@ export function parseShopifyPayoutCSV(csvContent: string): ShopifyParseResult {
       fees_ex_gst: feesExGst,
       gst_on_fees: gstOnFees,
       net_payout: bankDeposit,
-      source: 'manual',
+      source: 'csv_upload',
       reconciles,
       metadata: {
         grossSalesInclGst: grossSales,
