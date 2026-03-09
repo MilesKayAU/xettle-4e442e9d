@@ -93,6 +93,8 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<{ type: 'duplicate' | 'gap'; message: string; duplicateIds?: string[] } | null>(null);
+  const [expandedRecon, setExpandedRecon] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
   function persistState(p: StandardSettlement[], sIds: string[]) {
@@ -137,6 +139,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
     setParsedPayouts([]);
     setSavedIds(new Set());
     setParseError(null);
+    setUploadWarning(null);
     setParsing(true);
 
     try {
@@ -146,6 +149,40 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
         const payouts = result.settlements;
         setParsedPayouts(payouts);
         persistState(payouts, []);
+
+        // ── Duplicate detection ──
+        const duplicateIds: string[] = [];
+        for (const p of payouts) {
+          const exactMatch = settlements.find(s => s.settlement_id === p.settlement_id);
+          const fingerprint = !exactMatch ? settlements.find(s =>
+            s.period_start === p.period_start &&
+            s.period_end === p.period_end &&
+            Math.abs((s.bank_deposit || 0) - p.net_payout) < 0.01
+          ) : null;
+          if (exactMatch || fingerprint) duplicateIds.push(p.settlement_id);
+        }
+
+        if (duplicateIds.length > 0) {
+          setUploadWarning({
+            type: 'duplicate',
+            message: duplicateIds.length === 1
+              ? `Payout ${duplicateIds[0]} already exists. Saving will skip duplicates.`
+              : `${duplicateIds.length} of ${payouts.length} payouts already exist and will be skipped on save.`,
+            duplicateIds,
+          });
+        }
+
+        // ── Gap detection ──
+        if (!duplicateIds.length && settlements.length > 0) {
+          const latestHistoryEnd = settlements[0]?.period_end;
+          const earliestParsed = [...payouts].sort((a, b) => a.period_start.localeCompare(b.period_start))[0];
+          if (latestHistoryEnd && earliestParsed && earliestParsed.period_start > latestHistoryEnd) {
+            setUploadWarning({
+              type: 'gap',
+              message: `Gap detected: last saved payout ends ${formatSettlementDate(latestHistoryEnd)}, but this upload starts ${formatSettlementDate(earliestParsed.period_start)}. You may be missing payouts.`,
+            });
+          }
+        }
 
         const reconciledCount = payouts.filter(p => p.reconciles).length;
         const total = payouts.length;
@@ -450,13 +487,28 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                 </CardContent>
               </Card>
 
-              {/* Individual payout cards */}
+              {/* Duplicate / Gap warning */}
+              {uploadWarning && (
+                <Card className={`border-2 ${uploadWarning.type === 'duplicate' ? 'border-yellow-400 bg-yellow-50/30' : 'border-orange-400 bg-orange-50/30'}`}>
+                  <CardContent className="py-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className={`h-4 w-4 flex-shrink-0 mt-0.5 ${uploadWarning.type === 'duplicate' ? 'text-yellow-600' : 'text-orange-600'}`} />
+                      <p className="text-sm">{uploadWarning.message}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Individual payout cards with reconciliation checks */}
               <div className="space-y-2">
                 {parsedPayouts.map((payout) => {
                   const meta = payout.metadata || {};
                   const isSaved = savedIds.has(payout.settlement_id);
+                  const isDuplicate = uploadWarning?.duplicateIds?.includes(payout.settlement_id);
+                  const reconResult = runUniversalReconciliation(payout);
+                  const isExpanded = expandedRecon.has(payout.settlement_id);
                   return (
-                    <Card key={payout.settlement_id} className={`transition-colors ${payout.reconciles ? '' : 'border-destructive/30'}`}>
+                    <Card key={payout.settlement_id} className={`transition-colors ${isDuplicate ? 'border-yellow-400/50 opacity-60' : payout.reconciles ? '' : 'border-destructive/30'}`}>
                       <CardContent className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <div className="flex-shrink-0">
@@ -470,10 +522,14 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-medium font-mono">{payout.settlement_id}</span>
                               {isSaved && <Badge variant="secondary" className="text-[10px]">Saved</Badge>}
+                              {isDuplicate && <Badge variant="outline" className="text-[10px] border-yellow-500 text-yellow-700">Duplicate</Badge>}
                               {!payout.reconciles && (
                                 <Badge variant="destructive" className="text-[10px]">
                                   Diff: {formatAUD(meta.reconciliationDiff || 0)}
                                 </Badge>
+                              )}
+                              {reconResult.overallStatus === 'warn' && payout.reconciles && (
+                                <Badge variant="outline" className="text-[10px] border-yellow-500 text-yellow-700">Warnings</Badge>
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">
@@ -489,6 +545,16 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                               Sales {formatAUD(meta.grossSalesInclGst || 0)} • Fees {formatAUD(meta.chargesInclGst || 0)}
                             </p>
                           </div>
+                          <button
+                            className="text-xs text-muted-foreground hover:text-foreground underline flex-shrink-0"
+                            onClick={() => setExpandedRecon(prev => {
+                              const n = new Set(prev);
+                              n.has(payout.settlement_id) ? n.delete(payout.settlement_id) : n.add(payout.settlement_id);
+                              return n;
+                            })}
+                          >
+                            {isExpanded ? 'Hide' : 'Checks'}
+                          </button>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -508,6 +574,26 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
                             <X className="h-3.5 w-3.5" />
                           </Button>
                         </div>
+                        {/* Expandable reconciliation checks */}
+                        {isExpanded && (
+                          <div className="mt-3 pt-3 border-t border-border space-y-1.5">
+                            {reconResult.checks.map(check => (
+                              <div key={check.id} className="flex items-start gap-2 text-xs">
+                                {check.status === 'pass' ? (
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600 flex-shrink-0 mt-0.5" />
+                                ) : check.status === 'warn' ? (
+                                  <AlertTriangle className="h-3.5 w-3.5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                                ) : (
+                                  <XCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0 mt-0.5" />
+                                )}
+                                <div>
+                                  <span className="font-medium">{check.label}:</span>{' '}
+                                  <span className="text-muted-foreground">{check.detail}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
