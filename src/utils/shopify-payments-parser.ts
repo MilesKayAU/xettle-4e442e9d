@@ -116,7 +116,7 @@ function parseAmount(raw: string): number {
   return isNaN(val) ? 0 : val;
 }
 
-// ─── Column Matching ────────────────────────────────────────────────────────
+// ─── Column Matching — Transaction-Level ────────────────────────────────────
 
 interface ColumnMap {
   transactionDate: number;
@@ -178,6 +178,91 @@ function matchColumns(headers: string[]): ColumnMap | null {
     currency:        map.currency ?? -1,
     gst:             map.gst ?? -1,
   };
+}
+
+// ─── Column Matching — Payout-Level ─────────────────────────────────────────
+
+interface PayoutLevelColumnMap {
+  payoutDate: number;
+  status: number;
+  charges: number;
+  refunds: number;
+  adjustments: number;
+  fees: number;
+  total: number;
+  currency: number;
+  bankReference: number;
+  reservedFunds: number;
+  advances: number;
+  retriedAmount: number;
+  marketplaceSalesTax: number;
+}
+
+const PAYOUT_LEVEL_PATTERNS: Record<keyof PayoutLevelColumnMap, RegExp[]> = {
+  payoutDate:         [/^payout\s*date$/i],
+  status:             [/^status$/i],
+  charges:            [/^charges$/i, /^gross\s*sales$/i],
+  refunds:            [/^refunds$/i],
+  adjustments:        [/^adjustments$/i],
+  fees:               [/^fees$/i],
+  total:              [/^total$/i, /^net\s*payout$/i],
+  currency:           [/^currency$/i],
+  bankReference:      [/^bank\s*reference$/i, /^bank\s*ref$/i],
+  reservedFunds:      [/^reserved\s*funds$/i],
+  advances:           [/^advances$/i],
+  retriedAmount:      [/^retried\s*amount$/i],
+  marketplaceSalesTax:[/^marketplace\s*sales\s*tax$/i],
+};
+
+function matchPayoutLevelColumns(headers: string[]): PayoutLevelColumnMap | null {
+  const lower = headers.map(h => h.toLowerCase().trim());
+  const map: Partial<PayoutLevelColumnMap> = {};
+
+  for (const [key, patterns] of Object.entries(PAYOUT_LEVEL_PATTERNS)) {
+    for (const pattern of patterns) {
+      const idx = lower.findIndex(h => pattern.test(h));
+      if (idx !== -1 && !(key in map)) {
+        map[key as keyof PayoutLevelColumnMap] = idx;
+        break;
+      }
+    }
+  }
+
+  // Require minimum: charges, total (or fees)
+  if (map.charges === undefined || map.total === undefined) {
+    return null;
+  }
+
+  return {
+    payoutDate:          map.payoutDate ?? -1,
+    status:              map.status ?? -1,
+    charges:             map.charges!,
+    refunds:             map.refunds ?? -1,
+    adjustments:         map.adjustments ?? -1,
+    fees:                map.fees ?? -1,
+    total:               map.total!,
+    currency:            map.currency ?? -1,
+    bankReference:       map.bankReference ?? -1,
+    reservedFunds:       map.reservedFunds ?? -1,
+    advances:            map.advances ?? -1,
+    retriedAmount:       map.retriedAmount ?? -1,
+    marketplaceSalesTax: map.marketplaceSalesTax ?? -1,
+  };
+}
+
+/** Detect CSV format: 'payout_level' (one row per payout) or 'transaction_level' */
+function detectFormat(headers: string[]): 'payout_level' | 'transaction_level' {
+  const lower = headers.map(h => h.toLowerCase().trim());
+  // Payout-level has "Charges" and "Total" columns without "Payout ID"
+  const hasCharges = lower.some(h => /^charges$/i.test(h));
+  const hasTotal = lower.some(h => /^total$/i.test(h));
+  const hasBankRef = lower.some(h => /bank\s*reference/i.test(h));
+  const hasPayoutId = lower.some(h => /payout\s*id/i.test(h));
+
+  if ((hasCharges && hasTotal) || hasBankRef) {
+    if (!hasPayoutId) return 'payout_level';
+  }
+  return 'transaction_level';
 }
 
 // ─── CSV Row Parser ─────────────────────────────────────────────────────────
