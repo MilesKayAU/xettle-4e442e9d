@@ -502,15 +502,35 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {isSyncable && (
                             <>
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handlePushToXero(s)}
-                                disabled={pushing === s.id}
-                              >
-                                {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-                                Push to Xero
-                              </Button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant={verifyingId === s.id || s.bank_verified ? 'default' : 'outline'}
+                                      onClick={() => {
+                                        if (verifyingId === s.id) {
+                                          setVerifyingId(null);
+                                          setBankAmountInput('');
+                                          setBankVerifyConfirmed(false);
+                                        } else {
+                                          setVerifyingId(s.id);
+                                          setBankAmountInput('');
+                                          setBankVerifyConfirmed(false);
+                                        }
+                                      }}
+                                    >
+                                      <Send className="h-3.5 w-3.5 mr-1" />
+                                      Push to Xero
+                                    </Button>
+                                  </TooltipTrigger>
+                                  {!s.bank_verified && verifyingId !== s.id && (
+                                    <TooltipContent>
+                                      <p className="text-xs">Bank amount not verified — we recommend checking your bank statement before pushing</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
                               <Button
                                 size="sm"
                                 variant="outline"
