@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
-  History, Loader2, Send, Eye, Trash2, Info
+  History, Loader2, Send, Eye, Trash2, Info, HelpCircle, ChevronDown
 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import bunningsBillingImg from '@/assets/bunnings-billing-cycles.png';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { parseBunningsSummaryPdf, type BunningsParseExtra } from '@/utils/bunnings-summary-parser';
