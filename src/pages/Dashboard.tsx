@@ -203,7 +203,7 @@ export default function Dashboard() {
             ) : isShopifyPayments && selectedUserMarketplace ? (
               <ShopifyPaymentsDashboard marketplace={selectedUserMarketplace} />
             ) : selectedUserMarketplace ? (
-              <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} />
+              <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} />
             ) : null}
           </div>
         ) : (

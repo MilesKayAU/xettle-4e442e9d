@@ -8,13 +8,12 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import {
-  Upload, FileText, CheckCircle2, XCircle, AlertTriangle, Loader2,
-  Sparkles, ArrowRight, ChevronDown, Info, Trash2,
+  Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
+  Sparkles, ArrowRight, Info, Trash2,
 } from 'lucide-react';
 import {
   Select,
@@ -57,6 +56,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [files, setFiles] = useState<DetectedFile[]>([]);
   const [processingAll, setProcessingAll] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const filesRef = useRef<DetectedFile[]>([]);
+  // Keep ref in sync with state
+  filesRef.current = files;
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
@@ -152,7 +154,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     });
 
     try {
-      const file = files[idx].file;
+      const file = filesRef.current[idx]?.file;
+      if (!file) return;
       const extracted = await extractFileHeaders(file);
       if (!extracted) {
         setFiles(prev => {
@@ -240,12 +243,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         return updated;
       });
     }
-  }, [files]);
+  }, []);
 
   // ── Parse & save a single file ──
   const processFile = useCallback(async (idx: number) => {
-    const df = files[idx];
-    if (!df.detection || !df.detection.isSettlementFile) return;
+    const df = filesRef.current[idx];
+    if (!df?.detection || !df.detection.isSettlementFile) return;
 
     const marketplace = df.overrideMarketplace || df.detection.marketplace;
 
@@ -364,18 +367,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       });
       toast.error(`Failed to process ${df.file.name}: ${err.message}`);
     }
-  }, [files, onSettlementsSaved]);
+  }, [onSettlementsSaved]);
 
   // ── Process all confirmed files ──
   const processAllConfirmed = useCallback(async () => {
     setProcessingAll(true);
-    for (let i = 0; i < files.length; i++) {
-      if (files[i].status === 'detected' && files[i].detection?.isSettlementFile) {
+    const currentFiles = filesRef.current;
+    for (let i = 0; i < currentFiles.length; i++) {
+      if (currentFiles[i].status === 'detected' && currentFiles[i].detection?.isSettlementFile) {
         await processFile(i);
       }
     }
     setProcessingAll(false);
-  }, [files, processFile]);
+  }, [processFile]);
 
   const confirmedCount = files.filter(f => f.status === 'detected' && f.detection?.isSettlementFile).length;
   const savedCount = files.filter(f => f.status === 'saved').length;
