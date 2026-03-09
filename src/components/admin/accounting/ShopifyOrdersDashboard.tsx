@@ -95,6 +95,8 @@ export default function ShopifyOrdersDashboard() {
   const [pushing, setPushing] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showBookkeeperInfo, setShowBookkeeperInfo] = useState(false);
+  const [pushStats, setPushStats] = useState<{ invoiceCount: number; totalRevenue: number; totalGst: number } | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<Record<number, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>({}); 
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -257,10 +259,59 @@ export default function ShopifyOrdersDashboard() {
     }
 
     setPushing(false);
+    setPushStats({ invoiceCount: pushed, totalRevenue, totalGst });
     toast.success(`Pushed ${pushed} of ${toPush.length} clearing invoices to Xero`);
     setShowBookkeeperInfo(true);
     loadHistory();
   };
+
+  // ─── AI Marketplace Detection for Unknown Groups ──────────────────
+  const requestAiDetection = async (groupIdx: number, group: MarketplaceGroup) => {
+    if (group.orderCount < 3) return;
+    setAiSuggestions(prev => ({ ...prev, [groupIdx]: { marketplace_name: '', marketplace_code: '', confidence: 0, reasoning: '', loading: true } }));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-file-interpreter', {
+        body: {
+          action: 'detect_marketplace',
+          note_attributes_samples: group.sampleNoteAttributes || [],
+          tags_samples: group.sampleTags || [],
+          payment_method: group.orders[0]?.paymentMethod || '',
+          row_count: group.orderCount,
+        },
+      });
+
+      if (error) throw error;
+
+      const suggestion = {
+        marketplace_name: data.marketplace_name || '',
+        marketplace_code: data.marketplace_code || '',
+        confidence: data.confidence || 0,
+        reasoning: data.reasoning || '',
+        loading: false,
+      };
+
+      setAiSuggestions(prev => ({ ...prev, [groupIdx]: suggestion }));
+
+      // Auto-assign if confidence >= 90
+      if (suggestion.confidence >= 90 && suggestion.marketplace_code) {
+        assignUnknownGroup(groupIdx, suggestion.marketplace_code);
+        toast.success(`AI auto-detected: ${suggestion.marketplace_name} (${suggestion.confidence}% confidence)`);
+      }
+    } catch {
+      setAiSuggestions(prev => ({ ...prev, [groupIdx]: { marketplace_name: '', marketplace_code: '', confidence: 0, reasoning: 'AI detection failed', loading: false } }));
+    }
+  };
+
+  // Trigger AI detection for unknown groups with 3+ orders on parse
+  useEffect(() => {
+    if (!parseResult) return;
+    parseResult.unknownGroups.forEach((g, idx) => {
+      if (g.orderCount >= 3 && !aiSuggestions[idx]) {
+        requestAiDetection(idx, g);
+      }
+    });
+  }, [parseResult?.unknownGroups.length]);
 
   // ─── Push single from history ──────────────────────────────────────
 
@@ -595,6 +646,32 @@ export default function ShopifyOrdersDashboard() {
                         </div>
                       </div>
 
+                      {/* AI suggestion */}
+                      {aiSuggestions[idx] && !aiSuggestions[idx].loading && aiSuggestions[idx].confidence >= 70 && aiSuggestions[idx].confidence < 90 && (
+                        <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg p-2">
+                          <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
+                          <div className="flex-1 text-xs">
+                            <span className="font-medium text-foreground">AI thinks this is: {aiSuggestions[idx].marketplace_name}</span>
+                            <Badge variant="secondary" className="ml-2 text-[10px]">{aiSuggestions[idx].confidence}%</Badge>
+                            <p className="text-muted-foreground mt-0.5">{aiSuggestions[idx].reasoning}</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => assignUnknownGroup(idx, aiSuggestions[idx].marketplace_code)}
+                          >
+                            Accept
+                          </Button>
+                        </div>
+                      )}
+                      {aiSuggestions[idx]?.loading && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>AI analysing pattern…</span>
+                        </div>
+                      )}
+
                       {/* Manual assignment */}
                       <div className="flex items-center gap-2">
                         <Select onValueChange={(val) => assignUnknownGroup(idx, val)}>
@@ -647,9 +724,22 @@ export default function ShopifyOrdersDashboard() {
                     <p className="text-sm font-semibold text-foreground flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-primary" /> Revenue recognised ✅
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      These $0.00 invoices have posted your revenue and GST correctly. Account 613 holds the balance until each marketplace pays you.
-                    </p>
+                    {pushStats && (
+                      <div className="grid grid-cols-3 gap-3 text-xs">
+                        <div className="bg-background rounded-lg p-2 text-center">
+                          <p className="text-muted-foreground">Invoices pushed</p>
+                          <p className="text-lg font-bold text-foreground">{pushStats.invoiceCount}</p>
+                        </div>
+                        <div className="bg-background rounded-lg p-2 text-center">
+                          <p className="text-muted-foreground">Total revenue</p>
+                          <p className="text-lg font-bold text-foreground">{formatAUD(pushStats.totalRevenue)}</p>
+                        </div>
+                        <div className="bg-background rounded-lg p-2 text-center">
+                          <p className="text-muted-foreground">Total GST</p>
+                          <p className="text-lg font-bold text-foreground">{formatAUD(pushStats.totalGst)}</p>
+                        </div>
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground space-y-2">
                       <p className="font-medium text-foreground">To complete reconciliation in Xero:</p>
                       <div>

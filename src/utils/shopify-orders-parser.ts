@@ -36,6 +36,12 @@ export interface ShopifyOrderRow {
   noteAttributes: string;
   tags: string;
   detectedMarketplace: string; // registry key
+  /** Line item SKU (normalised: uppercase, no spaces/hyphens) */
+  lineitemSku: string;
+  /** Line item quantity */
+  lineitemQuantity: number;
+  /** Line item price */
+  lineitemPrice: number;
 }
 
 export interface MarketplaceGroup {
@@ -128,6 +134,15 @@ function normaliseDate(raw: string): string {
 }
 
 /**
+ * Normalise a SKU for consistent matching:
+ * trim, uppercase, remove hyphens and spaces.
+ */
+export function normaliseSku(raw: string): string {
+  if (!raw) return '';
+  return raw.trim().toUpperCase().replace(/[-\s]/g, '');
+}
+
+/**
  * Split CSV content into logical rows, correctly handling multi-line quoted fields.
  * Shopify Note Attributes for Bunnings/Mirakl orders can span 7+ physical lines.
  */
@@ -215,21 +230,27 @@ interface ColumnMap {
   currency: number;
   noteAttributes: number;
   tags: number;
+  lineitemSku: number;
+  lineitemQuantity: number;
+  lineitemPrice: number;
 }
 
 const COLUMN_PATTERNS: Record<keyof ColumnMap, RegExp[]> = {
-  name:            [/^name$/i, /^order$/i, /^order\s*name$/i],
-  financialStatus: [/^financial\s*status$/i],
-  paymentMethod:   [/^payment\s*method$/i, /^payment\s*gateway$/i, /^gateway$/i],
-  paidAt:          [/^paid\s*at$/i, /^paid\s*date$/i],
-  subtotal:        [/^subtotal$/i, /^sub\s*total$/i],
-  shipping:        [/^shipping$/i, /^shipping\s*amount$/i],
-  taxes:           [/^taxes$/i, /^tax$/i, /^tax\s*amount$/i],
-  total:           [/^total$/i],
-  discountAmount:  [/^discount\s*amount$/i, /^discounts?$/i, /^discount\s*code$/i],
-  currency:        [/^currency$/i],
-  noteAttributes:  [/^note\s*attributes$/i, /^notes?\s*attributes?$/i, /^note$/i],
-  tags:            [/^tags$/i],
+  name:              [/^name$/i, /^order$/i, /^order\s*name$/i],
+  financialStatus:   [/^financial\s*status$/i],
+  paymentMethod:     [/^payment\s*method$/i, /^payment\s*gateway$/i, /^gateway$/i],
+  paidAt:            [/^paid\s*at$/i, /^paid\s*date$/i],
+  subtotal:          [/^subtotal$/i, /^sub\s*total$/i],
+  shipping:          [/^shipping$/i, /^shipping\s*amount$/i],
+  taxes:             [/^taxes$/i, /^tax$/i, /^tax\s*amount$/i],
+  total:             [/^total$/i],
+  discountAmount:    [/^discount\s*amount$/i, /^discounts?$/i, /^discount\s*code$/i],
+  currency:          [/^currency$/i],
+  noteAttributes:    [/^note\s*attributes$/i, /^notes?\s*attributes?$/i, /^note$/i],
+  tags:              [/^tags$/i],
+  lineitemSku:       [/^lineitem\s*sku$/i, /^line\s*item\s*sku$/i],
+  lineitemQuantity:  [/^lineitem\s*quantity$/i, /^line\s*item\s*quantity$/i],
+  lineitemPrice:     [/^lineitem\s*price$/i, /^line\s*item\s*price$/i],
 };
 
 function matchColumns(headers: string[]): ColumnMap | null {
@@ -248,18 +269,21 @@ function matchColumns(headers: string[]): ColumnMap | null {
     return null;
   }
   return {
-    name:            map.name ?? -1,
-    financialStatus: map.financialStatus!,
-    paymentMethod:   map.paymentMethod!,
-    paidAt:          map.paidAt ?? -1,
-    subtotal:        map.subtotal ?? -1,
-    shipping:        map.shipping ?? -1,
-    taxes:           map.taxes ?? -1,
-    total:           map.total!,
-    discountAmount:  map.discountAmount ?? -1,
-    currency:        map.currency ?? -1,
-    noteAttributes:  map.noteAttributes ?? -1,
-    tags:            map.tags ?? -1,
+    name:             map.name ?? -1,
+    financialStatus:  map.financialStatus!,
+    paymentMethod:    map.paymentMethod!,
+    paidAt:           map.paidAt ?? -1,
+    subtotal:         map.subtotal ?? -1,
+    shipping:         map.shipping ?? -1,
+    taxes:            map.taxes ?? -1,
+    total:            map.total!,
+    discountAmount:   map.discountAmount ?? -1,
+    currency:         map.currency ?? -1,
+    noteAttributes:   map.noteAttributes ?? -1,
+    tags:             map.tags ?? -1,
+    lineitemSku:      map.lineitemSku ?? -1,
+    lineitemQuantity: map.lineitemQuantity ?? -1,
+    lineitemPrice:    map.lineitemPrice ?? -1,
   };
 }
 
@@ -328,6 +352,11 @@ export function parseShopifyOrdersCSV(
       // Detect marketplace using registry
       const detectedMarketplace = detectMarketplaceFromRow(noteAttributes, tags, paymentMethod);
 
+      // Extract line item data for profit engine
+      const rawSku = colMap.lineitemSku >= 0 ? fields[colMap.lineitemSku]?.trim() || '' : '';
+      const lineitemQuantity = colMap.lineitemQuantity >= 0 ? parseAmount(fields[colMap.lineitemQuantity] || '') : 0;
+      const lineitemPrice = colMap.lineitemPrice >= 0 ? parseAmount(fields[colMap.lineitemPrice] || '') : 0;
+
       allOrders.push({
         name: orderName,
         financialStatus,
@@ -342,6 +371,9 @@ export function parseShopifyOrdersCSV(
         noteAttributes,
         tags,
         detectedMarketplace,
+        lineitemSku: normaliseSku(rawSku),
+        lineitemQuantity,
+        lineitemPrice,
       });
     }
 
@@ -349,11 +381,14 @@ export function parseShopifyOrdersCSV(
       return { success: false, error: 'No paid orders found in the CSV.' };
     }
 
-    // ── Group by marketplace_key + currency ──
-    const groupKey = (order: ShopifyOrderRow) => `${order.detectedMarketplace}_${order.currency}`;
+    // ── Group by marketplace_key + currency using JSON.stringify for safety ──
+    // This prevents splitting bugs for keys like "everyday_market" + "AUD"
+    const makeGroupKey = (order: ShopifyOrderRow) =>
+      JSON.stringify({ m: order.detectedMarketplace, c: order.currency });
+
     const groupMap = new Map<string, ShopifyOrderRow[]>();
     for (const order of allOrders) {
-      const key = groupKey(order);
+      const key = makeGroupKey(order);
       if (!groupMap.has(key)) groupMap.set(key, []);
       groupMap.get(key)!.push(order);
     }
@@ -363,14 +398,14 @@ export function parseShopifyOrdersCSV(
     const unknownGroups: MarketplaceGroup[] = [];
 
     for (const [key, orders] of groupMap) {
-      const [mktKey] = key.split('_');
-      // Extract the actual marketplace key (may have underscores)
-      const lastUnderscoreIdx = key.lastIndexOf('_');
-      const actualMktKey = key.substring(0, lastUnderscoreIdx);
-      const currency = key.substring(lastUnderscoreIdx + 1);
+      const { m: actualMktKey, c: currency } = JSON.parse(key);
 
       const entry = getRegistryEntry(actualMktKey);
       const dates = orders.map(o => o.paidAt).filter(Boolean).sort();
+
+      // Unique order count (safety — already deduped above, but belt-and-braces)
+      const uniqueOrderNames = new Set(orders.map(o => o.name).filter(Boolean));
+      const orderCount = uniqueOrderNames.size > 0 ? uniqueOrderNames.size : orders.length;
 
       // Sample data for unknown groups
       const uniqueNotes = [...new Set(orders.map(o => o.noteAttributes).filter(Boolean))].slice(0, 3);
@@ -380,7 +415,7 @@ export function parseShopifyOrdersCSV(
         marketplaceKey: actualMktKey,
         registryEntry: entry,
         orders,
-        orderCount: orders.length,
+        orderCount,
         totalSubtotal: round2(orders.reduce((s, o) => s + o.subtotal, 0)),
         totalShipping: round2(orders.reduce((s, o) => s + o.shipping, 0)),
         totalTaxes: round2(orders.reduce((s, o) => s + o.taxes, 0)),
@@ -390,7 +425,7 @@ export function parseShopifyOrdersCSV(
         periodEnd: dates[dates.length - 1] || '',
         currency,
         skipped: !!entry.skip,
-        skipReason: entry.reason,
+        skipReason: entry.skip_reason || entry.reason,
         status: entry.skip ? 'skipped' : (actualMktKey === 'unknown' ? 'unknown' : 'ready'),
         sampleNoteAttributes: uniqueNotes,
         sampleTags: uniqueTags,
@@ -501,6 +536,7 @@ export function buildSettlementsFromGroups(
         salesAccountCode: entry.default_sales_account,
         shippingAccountCode: entry.default_shipping_account,
         clearingAccountCode: entry.default_clearing_account,
+        feesAccountCode: entry.default_fees_account,
         paymentType: entry.payment_type,
         taxRate,
       },
@@ -521,7 +557,7 @@ export interface XeroLineItem {
 
 export function buildShopifyOrdersInvoiceLines(
   settlement: StandardSettlement,
-  accountCodes?: { sales?: string; shipping?: string; clearing?: string }
+  accountCodes?: { sales?: string; shipping?: string; clearing?: string; fees?: string }
 ): XeroLineItem[] {
   const meta = settlement.metadata || {};
   const salesCode = accountCodes?.sales || meta.salesAccountCode || '201';
@@ -572,10 +608,32 @@ export function buildShopifyOrdersInvoiceLines(
 
 // ─── Fingerprint Check ──────────────────────────────────────────────────────
 
+/**
+ * Detect if a CSV is a Shopify Orders export.
+ * Requires all 10 spec columns AND rejects payout files.
+ */
 export function isShopifyOrdersCSV(headers: string[]): boolean {
   const lower = headers.map(h => h.toLowerCase().trim());
-  const hasPaymentMethod = lower.some(h => /^payment\s*method$/i.test(h));
-  const hasFinancialStatus = lower.some(h => /^financial\s*status$/i.test(h));
-  const hasPaidAt = lower.some(h => /^paid\s*at$/i.test(h));
-  return hasPaymentMethod && hasFinancialStatus && hasPaidAt;
+
+  // REJECT: If payout-specific columns present, this is NOT an orders file
+  const hasPayoutId = lower.some(h => /^payout\s*id$/i.test(h) || /^bank\s*reference$/i.test(h));
+  if (hasPayoutId) return false;
+
+  // REQUIRE: All 10 spec columns
+  const requiredPatterns: RegExp[] = [
+    /^name$/i,
+    /^financial\s*status$/i,
+    /^paid\s*at$/i,
+    /^subtotal$/i,
+    /^shipping$/i,
+    /^taxes?$/i,
+    /^total$/i,
+    /^payment\s*(method|gateway)$/i,
+    /^note\s*attributes?$/i,
+    /^tags$/i,
+  ];
+
+  return requiredPatterns.every(pattern =>
+    lower.some(h => pattern.test(h))
+  );
 }
