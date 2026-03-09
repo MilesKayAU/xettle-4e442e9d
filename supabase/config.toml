@@ -2,3 +2,6 @@ project_id = "cegwclxbqvitkqxikpss"
 
 [functions.ai-file-interpreter]
 verify_jwt = false
+
+[functions.sync-xero-status]
+verify_jwt = false
