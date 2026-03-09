@@ -735,6 +735,9 @@ export default function ShopifyOrdersDashboard() {
                           </div>
                           <div className="text-right">
                             <p className="text-sm font-bold text-foreground">{formatAUD(g.totalAmount)} {g.currency}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              ex GST · {formatAUD(g.totalAmount * 1.1)} incl GST
+                            </p>
                             {isSaved && <Badge variant="secondary" className="text-[10px] mt-1">✓ Saved</Badge>}
                           </div>
                         </div>
