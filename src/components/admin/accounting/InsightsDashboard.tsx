@@ -761,10 +761,10 @@ export default function InsightsDashboard() {
                       <span className="text-sm font-medium text-foreground">{s.label}</span>
                       <span className="text-sm font-bold tabular-nums text-foreground">{formatPct(pct)}</span>
                     </div>
-                    <div className="h-4 rounded-full bg-muted/30 overflow-hidden">
+                    <div className="h-4 rounded-full bg-muted overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-700 ${pct >= 0.7 ? 'bg-destructive' : pct >= 0.5 ? 'bg-primary' : 'bg-primary/60'}`}
-                        style={{ width: `${pct * 100}%` }}
+                        className={`h-full rounded-full transition-all duration-700 ${pct >= 0.8 ? 'bg-destructive' : pct >= 0.6 ? 'bg-chart-4' : 'bg-primary'}`}
+                        style={{ width: `${Math.max(pct * 100, 2)}%` }}
                       />
                     </div>
                     <p className="text-[11px] text-muted-foreground">{formatCurrency(s.totalSales)} sales</p>
