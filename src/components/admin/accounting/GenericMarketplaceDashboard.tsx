@@ -76,6 +76,32 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [pushing, setPushing] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [expandedLines, setExpandedLines] = useState<string | null>(null);
+  const [lineItems, setLineItems] = useState<Record<string, any[]>>({});
+  const [loadingLines, setLoadingLines] = useState<string | null>(null);
+
+  const loadLineItems = useCallback(async (settlementId: string) => {
+    if (lineItems[settlementId]) {
+      setExpandedLines(expandedLines === settlementId ? null : settlementId);
+      return;
+    }
+    setLoadingLines(settlementId);
+    setExpandedLines(settlementId);
+    try {
+      const { data, error } = await supabase
+        .from('settlement_lines')
+        .select('order_id, sku, amount, amount_description, posted_date, transaction_type')
+        .eq('settlement_id', settlementId)
+        .order('posted_date', { ascending: true })
+        .limit(200);
+      if (error) throw error;
+      setLineItems(prev => ({ ...prev, [settlementId]: data || [] }));
+    } catch {
+      toast.error('Failed to load transaction details');
+    } finally {
+      setLoadingLines(null);
+    }
+  }, [lineItems, expandedLines]);
 
   const loadSettlements = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
