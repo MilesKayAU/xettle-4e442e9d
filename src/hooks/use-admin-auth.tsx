@@ -9,23 +9,15 @@ export function useAdminAuth() {
   const [session, setSession] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
 
-  // Check authentication state on mount
   useEffect(() => {
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setIsAuthenticated(!!session);
-        if (session) {
-          localStorage.setItem('adminLoggedIn', 'true');
-        } else {
-          localStorage.removeItem('adminLoggedIn');
-        }
       }
     );
 
-    // Check for existing session
     checkSession();
 
     return () => subscription.unsubscribe();
@@ -33,20 +25,11 @@ export function useAdminAuth() {
 
   async function checkSession() {
     try {
-      console.log('Checking authentication session...');
-      
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('Current Supabase session:', session);
       
       setSession(session);
       setUser(session?.user ?? null);
       setIsAuthenticated(!!session);
-      
-      if (session) {
-        localStorage.setItem('adminLoggedIn', 'true');
-      } else {
-        localStorage.removeItem('adminLoggedIn');
-      }
     } catch (error) {
       console.error("Error checking auth session:", error);
     } finally {
