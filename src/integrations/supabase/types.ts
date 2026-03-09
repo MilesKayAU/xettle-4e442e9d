@@ -80,6 +80,48 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_ad_spend: {
+        Row: {
+          created_at: string
+          currency: string
+          id: string
+          marketplace_code: string
+          notes: string | null
+          period_end: string
+          period_start: string
+          source: string
+          spend_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          id?: string
+          marketplace_code: string
+          notes?: string | null
+          period_end: string
+          period_start: string
+          source?: string
+          spend_amount?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          id?: string
+          marketplace_code?: string
+          notes?: string | null
+          period_end?: string
+          period_start?: string
+          source?: string
+          spend_amount?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       marketplace_connections: {
         Row: {
           connection_status: string
