@@ -646,6 +646,32 @@ export default function ShopifyOrdersDashboard() {
                         </div>
                       </div>
 
+                      {/* AI suggestion */}
+                      {aiSuggestions[idx] && !aiSuggestions[idx].loading && aiSuggestions[idx].confidence >= 70 && aiSuggestions[idx].confidence < 90 && (
+                        <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg p-2">
+                          <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
+                          <div className="flex-1 text-xs">
+                            <span className="font-medium text-foreground">AI thinks this is: {aiSuggestions[idx].marketplace_name}</span>
+                            <Badge variant="secondary" className="ml-2 text-[10px]">{aiSuggestions[idx].confidence}%</Badge>
+                            <p className="text-muted-foreground mt-0.5">{aiSuggestions[idx].reasoning}</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => assignUnknownGroup(idx, aiSuggestions[idx].marketplace_code)}
+                          >
+                            Accept
+                          </Button>
+                        </div>
+                      )}
+                      {aiSuggestions[idx]?.loading && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>AI analysing pattern…</span>
+                        </div>
+                      )}
+
                       {/* Manual assignment */}
                       <div className="flex items-center gap-2">
                         <Select onValueChange={(val) => assignUnknownGroup(idx, val)}>
