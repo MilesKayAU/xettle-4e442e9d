@@ -1045,6 +1045,11 @@ const FILE_GUIDES = [
 function FileGuide({ forceCollapsed }: { forceCollapsed?: boolean }) {
   const [open, setOpen] = useState(false);
 
+  // Auto-collapse when files are uploaded
+  useEffect(() => {
+    if (forceCollapsed) setOpen(false);
+  }, [forceCollapsed]);
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
