@@ -25,6 +25,7 @@ import AutoImportedTab from '@/components/admin/accounting/AutoImportedTab';
 import { CurrentPlanCard, UpgradeNudgeDialog, incrementManualUploadCount, shouldShowUpgradeNudge, getManualUploadCount } from '@/components/admin/accounting/UpgradePlanComponents';
 import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting/SyncComponents';
 import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
+import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@/utils/reconciliation-engine';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_COUNTRY = 'AU';
