@@ -523,14 +523,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     setProcessingAll(true);
     const currentFiles = filesRef.current;
     for (let i = 0; i < currentFiles.length; i++) {
-      if (currentFiles[i].status === 'detected' && currentFiles[i].detection?.isSettlementFile) {
+      const s = currentFiles[i].status;
+      if ((s === 'detected' || s === 'reviewing') && currentFiles[i].detection?.isSettlementFile) {
         await processFile(i);
       }
     }
     setProcessingAll(false);
   }, [processFile]);
 
-  const readyFiles = files.filter(f => f.status === 'detected' && f.detection?.isSettlementFile);
+  // ── Set file status (for review flow) ──
+  const setFileStatus = useCallback((idx: number, status: FileStatus) => {
+    setFiles(prev => {
+      const updated = [...prev];
+      if (idx < updated.length) {
+        updated[idx] = { ...updated[idx], status };
+      }
+      return updated;
+    });
+  }, []);
+
+  const readyFiles = files.filter(f => (f.status === 'detected' || f.status === 'reviewing') && f.detection?.isSettlementFile);
   const confirmedCount = readyFiles.length;
   const savedCount = files.filter(f => f.status === 'saved').length;
   const totalSettlements = readyFiles.reduce((sum, f) => sum + (f.settlements?.length || 0), 0);
