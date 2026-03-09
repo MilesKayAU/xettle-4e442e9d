@@ -56,7 +56,7 @@ export default function InsightsDashboard() {
       const [settlementsRes, adSpendRes] = await Promise.all([
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end')
+          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end')
           .order('period_end', { ascending: false }),
         supabase
           .from('marketplace_ad_spend')
@@ -87,18 +87,22 @@ export default function InsightsDashboard() {
       const results: MarketplaceStats[] = [];
 
       for (const [mp, rows] of Object.entries(grouped)) {
-        const totalSales = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
+        // Use sales INCLUDING GST for consistent cross-marketplace comparison
+        const totalSalesExGst = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
+        const totalGstOnSales = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
+        const totalSales = totalSalesExGst + totalGstOnSales; // Gross sales inc GST
         const totalFees = rows.reduce((sum, r) =>
           sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
         const totalRefunds = rows.reduce((sum, r) => sum + Math.abs(r.refunds || 0), 0);
         const netPayout = rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
-        const returnRatio = totalSales > 0 ? netPayout / totalSales : 0;
-        const feeLoad = totalSales > 0 ? totalFees / totalSales : 0;
-        const avgCommission = totalSales > 0 ? (Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0)) / totalSales) : 0;
+        // Cap ratio at 1.0 — a return > $1 per $1 sold is impossible
+        const returnRatio = totalSales > 0 ? Math.min(netPayout / totalSales, 1) : 0;
+        const feeLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
+        const avgCommission = totalSales > 0 ? Math.min(Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0)) / totalSales, 1) : 0;
         const latestPeriodEnd = rows.length > 0 ? rows[0].period_end : null;
 
         const adSpend = adSpendByMp[mp] || 0;
-        const returnAfterAds = totalSales > 0 ? Math.max((netPayout - adSpend) / totalSales, -1) : null;
+        const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
 
         results.push({
           marketplace: mp,
