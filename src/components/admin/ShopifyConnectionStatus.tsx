@@ -270,6 +270,8 @@ const ShopifyConnectionStatus = () => {
               value={shopDomain}
               onChange={(e) => setShopDomain(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+              autoComplete="off"
+            />
             />
             <Button
               onClick={handleConnect}
