@@ -21,7 +21,7 @@ import {
 import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
-  DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink,
+  DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye,
 } from 'lucide-react';
 import {
   Select,
@@ -41,7 +41,7 @@ import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type FileStatus = 'detecting' | 'detected' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error';
+type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error';
 
 interface DetectedFile {
   file: File;
@@ -523,14 +523,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     setProcessingAll(true);
     const currentFiles = filesRef.current;
     for (let i = 0; i < currentFiles.length; i++) {
-      if (currentFiles[i].status === 'detected' && currentFiles[i].detection?.isSettlementFile) {
+      const s = currentFiles[i].status;
+      if ((s === 'detected' || s === 'reviewing') && currentFiles[i].detection?.isSettlementFile) {
         await processFile(i);
       }
     }
     setProcessingAll(false);
   }, [processFile]);
 
-  const readyFiles = files.filter(f => f.status === 'detected' && f.detection?.isSettlementFile);
+  // ── Set file status (for review flow) ──
+  const setFileStatus = useCallback((idx: number, status: FileStatus) => {
+    setFiles(prev => {
+      const updated = [...prev];
+      if (idx < updated.length) {
+        updated[idx] = { ...updated[idx], status };
+      }
+      return updated;
+    });
+  }, []);
+
+  const readyFiles = files.filter(f => (f.status === 'detected' || f.status === 'reviewing') && f.detection?.isSettlementFile);
   const confirmedCount = readyFiles.length;
   const savedCount = files.filter(f => f.status === 'saved').length;
   const totalSettlements = readyFiles.reduce((sum, f) => sum + (f.settlements?.length || 0), 0);
@@ -613,22 +625,54 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       {/* File results */}
       {hasFiles && (
         <div className="space-y-3">
-          {/* Top bulk action — large prominent button */}
-          {confirmedCount > 0 && (
-            <Button
-              onClick={processAllConfirmed}
-              disabled={processingAll}
-              size="lg"
-              className="w-full gap-2 text-base py-6"
-            >
-              {processingAll ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-5 w-5" />
-              )}
-              Save All {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} for Review
-            </Button>
-          )}
+          {/* Top bulk action — Review All or Save All depending on state */}
+          {(() => {
+            const reviewingFiles = files.filter(f => f.status === 'reviewing' && f.detection?.isSettlementFile);
+            const detectedOnly = files.filter(f => f.status === 'detected' && f.detection?.isSettlementFile);
+            const reviewingSettlements = reviewingFiles.reduce((sum, f) => sum + (f.settlements?.length || 0), 0);
+            
+            if (reviewingFiles.length > 0) {
+              // Some files are in review — offer bulk save
+              return (
+                <Button
+                  onClick={processAllConfirmed}
+                  disabled={processingAll}
+                  size="lg"
+                  className="w-full gap-2 text-base py-6"
+                >
+                  {processingAll ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-5 w-5" />
+                  )}
+                  Confirm & Save {reviewingSettlements > 1 ? `${reviewingSettlements} Settlements` : 'Settlement'}
+                </Button>
+              );
+            }
+            if (detectedOnly.length > 0) {
+              // Files detected but not yet reviewed
+              return (
+                <Button
+                  onClick={() => {
+                    // Open all detected files for review
+                    const currentFiles = filesRef.current;
+                    setFiles(prev => prev.map((f, i) => 
+                      f.status === 'detected' && f.detection?.isSettlementFile 
+                        ? { ...f, status: 'reviewing' as FileStatus }
+                        : f
+                    ));
+                  }}
+                  size="lg"
+                  variant="outline"
+                  className="w-full gap-2 text-base py-6 border-primary/30 text-primary hover:bg-primary/5"
+                >
+                  <Eye className="h-5 w-5" />
+                  Review All {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'}
+                </Button>
+              );
+            }
+            return null;
+          })()}
 
           {files.map((df, idx) => (
             <FileResultCard
@@ -639,46 +683,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               onOverride={overrideMarketplace}
               onAnalyzeAI={analyzeWithAI}
               onProcess={processFile}
+              onSetStatus={setFileStatus}
             />
           ))}
 
-          {/* Bulk action bar */}
-          {confirmedCount > 0 && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-medium text-foreground">
-                      {totalSettlements > 0
-                        ? `${totalSettlements} settlement${totalSettlements !== 1 ? 's' : ''} ready`
-                        : `${confirmedCount} file${confirmedCount !== 1 ? 's' : ''} ready`
-                      }
-                      {savedCount > 0 && (
-                        <span className="text-muted-foreground"> · {savedCount} saved</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      ✓ Ready to save for review
-                    </p>
-                  </div>
-                  <Button
-                    onClick={processAllConfirmed}
-                    disabled={processingAll}
-                    className="gap-2"
-                  >
-                    {processingAll ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    Save {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} for Review
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* All saved — prompt to view in Settlements tab */}
           {savedCount > 0 && confirmedCount === 0 && onViewSettlements && (
             <Card className="border-green-400/50 bg-green-50/30 dark:bg-green-950/10">
               <CardContent className="py-4">
@@ -732,9 +740,10 @@ interface FileResultCardProps {
   onOverride: (idx: number, code: string) => void;
   onAnalyzeAI: (idx: number) => void;
   onProcess: (idx: number) => void;
+  onSetStatus: (idx: number, status: FileStatus) => void;
 }
 
-function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess }: FileResultCardProps) {
+function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess, onSetStatus }: FileResultCardProps) {
   const { file, status, detection, settlements } = df;
   const marketplace = df.overrideMarketplace || detection?.marketplace;
   const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
@@ -754,11 +763,14 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
       }
     : null;
 
+  const isReviewing = status === 'reviewing';
+
   return (
     <Card className={`transition-all ${
       status === 'wrong_file' ? 'border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10' :
       status === 'error' ? 'border-destructive/30 bg-destructive/5' :
       status === 'saved' ? 'border-green-400/50 bg-green-50/30 dark:bg-green-950/10' :
+      isReviewing ? 'border-primary/40 bg-primary/[0.03] ring-1 ring-primary/20' :
       status === 'detected' && previewData ? 'border-primary/30 bg-primary/[0.02]' :
       'border-border'
     }`}>
@@ -777,7 +789,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
               {/* File name + size */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-semibold text-foreground truncate">
-                  {status === 'detected' && detection
+                  {(status === 'detected' || isReviewing) && detection
                     ? detection.marketplaceLabel
                     : status === 'wrong_file' && detection
                       ? detection.marketplaceLabel
@@ -797,7 +809,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
                 </div>
               )}
 
-              {status === 'detected' && detection && (
+              {(status === 'detected' || isReviewing) && detection && (
                 <div className="space-y-3">
                   {/* Confidence + meta */}
                   <div className="flex items-center gap-3 flex-wrap">
@@ -834,8 +846,8 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
                     )}
                   </div>
 
-                  {/* Settlement preview — the wow moment */}
-                  {previewData && (
+                  {/* Summary preview (collapsed view) */}
+                  {!isReviewing && previewData && (
                     <div className="bg-muted/40 rounded-lg p-3 space-y-1.5">
                       <div className="flex items-center gap-1.5 mb-2">
                         <DollarSign className="h-3.5 w-3.5 text-primary" />
@@ -850,16 +862,8 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
                           <span className="font-medium text-foreground">{formatAUD(previewData.totalSales)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">GST on Sales</span>
-                          <span className="font-medium text-foreground">{formatAUD(previewData.totalGstSales)}</span>
-                        </div>
-                        <div className="flex justify-between">
                           <span className="text-muted-foreground">Fees (ex GST)</span>
                           <span className="font-medium text-foreground">{formatAUD(previewData.totalFees)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">GST on Fees</span>
-                          <span className="font-medium text-foreground">{formatAUD(previewData.totalGstFees)}</span>
                         </div>
                       </div>
                       <Separator className="my-1.5" />
@@ -870,13 +874,97 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
                     </div>
                   )}
 
-                  {/* Ready badge */}
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-xs font-medium text-primary">
-                      Ready to save for review
-                    </span>
-                  </div>
+                  {/* EXPANDED REVIEW — individual settlement details */}
+                  {isReviewing && settlements && settlements.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Eye className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold text-foreground">
+                          Review {settlements.length} Settlement{settlements.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      {settlements.map((s, sIdx) => {
+                        const meta = s.metadata || {};
+                        return (
+                          <div key={sIdx} className="bg-muted/50 rounded-lg p-3 space-y-2 border border-border/50">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="text-xs font-semibold text-foreground">
+                                  {formatDateRange(s.period_start, s.period_end)}
+                                </span>
+                              </div>
+                              <Badge variant={s.reconciles ? 'default' : 'destructive'} className="text-[10px]">
+                                {s.reconciles ? '✓ Reconciled' : '⚠ Check needed'}
+                              </Badge>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground font-mono">ID: {s.settlement_id}</p>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Sales (ex GST)</span>
+                                <span className="font-medium text-foreground">{formatAUD(s.sales_ex_gst)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">GST on Sales</span>
+                                <span className="font-medium text-foreground">{formatAUD(s.gst_on_sales)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Fees (ex GST)</span>
+                                <span className="font-medium text-foreground">{formatAUD(s.fees_ex_gst)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">GST on Fees</span>
+                                <span className="font-medium text-foreground">{formatAUD(s.gst_on_fees)}</span>
+                              </div>
+                              {meta.refundsExGst && meta.refundsExGst !== 0 && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Refunds</span>
+                                  <span className="font-medium text-foreground">{formatAUD(meta.refundsExGst)}</span>
+                                </div>
+                              )}
+                              {meta.shippingExGst && meta.shippingExGst !== 0 && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Shipping</span>
+                                  <span className="font-medium text-foreground">{formatAUD(meta.shippingExGst)}</span>
+                                </div>
+                              )}
+                              {meta.subscriptionAmount && meta.subscriptionAmount !== 0 && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Subscription</span>
+                                  <span className="font-medium text-foreground">{formatAUD(meta.subscriptionAmount)}</span>
+                                </div>
+                              )}
+                            </div>
+                            <Separator />
+                            <div className="flex justify-between text-sm">
+                              <span className="font-semibold text-foreground">Net Payout</span>
+                              <span className="font-bold text-primary">{formatAUD(s.net_payout)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Totals summary */}
+                      {previewData && settlements.length > 1 && (
+                        <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
+                          <div className="flex justify-between text-sm">
+                            <span className="font-semibold text-foreground">Total across {settlements.length} settlements</span>
+                            <span className="font-bold text-primary">{formatAUD(previewData.totalNet)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Status badge */}
+                  {!isReviewing && (
+                    <div className="flex items-center gap-1.5">
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        Click "Review" to inspect before saving
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -932,7 +1020,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
               {status === 'saving' && (
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                  <p className="text-xs text-muted-foreground">Creating settlements...</p>
+                  <p className="text-xs text-muted-foreground">Saving settlements...</p>
                 </div>
               )}
 
@@ -957,12 +1045,25 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
           </div>
 
           {/* Actions column */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+            {/* Detected: show Review button */}
             {status === 'detected' && detection?.isSettlementFile && (
-              <Button size="default" className="gap-2 font-semibold" onClick={() => onProcess(idx)}>
-                <CheckCircle2 className="h-4 w-4" />
-                Save for Review
+              <Button size="default" variant="outline" className="gap-2 font-semibold" onClick={() => onSetStatus(idx, 'reviewing')}>
+                <Eye className="h-4 w-4" />
+                Review
               </Button>
+            )}
+            {/* Reviewing: show Save + Collapse */}
+            {isReviewing && (
+              <div className="flex flex-col gap-1.5">
+                <Button size="default" className="gap-2 font-semibold" onClick={() => onProcess(idx)}>
+                  <CheckCircle2 className="h-4 w-4" />
+                  Confirm & Save
+                </Button>
+                <Button size="sm" variant="ghost" className="text-xs" onClick={() => onSetStatus(idx, 'detected')}>
+                  Collapse
+                </Button>
+              </div>
             )}
             {status === 'wrong_file' && (
               <Select onValueChange={(code) => onOverride(idx, code)}>
