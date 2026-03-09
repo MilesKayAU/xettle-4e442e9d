@@ -936,6 +936,124 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
   );
 }
 
+// ─── File Guide ─────────────────────────────────────────────────────────────
+
+const FILE_GUIDES = [
+  {
+    marketplace: 'Amazon AU',
+    icon: '📦',
+    color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+    fileType: 'TSV (Tab-Separated)',
+    fileName: 'Flat File V2 Settlement Report',
+    steps: [
+      'Log in to Seller Central',
+      'Go to Reports → Payments → All Statements',
+      'Click on a settlement period',
+      'Download "Flat File V2" (not XML)',
+    ],
+    link: 'https://sellercentral.amazon.com.au/payments/event/view',
+    wrongFile: 'Don\'t upload Orders reports or Business reports — only Settlement reports.',
+  },
+  {
+    marketplace: 'Shopify Payments',
+    icon: '🛍',
+    color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+    fileType: 'CSV',
+    fileName: 'Payouts Transactions Export',
+    steps: [
+      'Go to Shopify Admin → Settings → Payments',
+      'Click "View payouts"',
+      'Click "Export" → "Transactions"',
+      'Select date range and download CSV',
+    ],
+    wrongFile: 'Don\'t upload Orders export or Products export — only the Payouts transactions CSV.',
+  },
+  {
+    marketplace: 'Bunnings',
+    icon: '🔨',
+    color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    fileType: 'PDF',
+    fileName: 'Summary of Transactions Invoice',
+    steps: [
+      'Log in to Bunnings Marketplace (Mirakl)',
+      'Go to Accounting → Invoices',
+      'Download the "Summary of transactions" PDF',
+      'Each PDF covers one billing cycle (fortnightly)',
+    ],
+    wrongFile: 'Don\'t upload order-level CSVs — only the billing cycle Summary PDF.',
+  },
+  {
+    marketplace: 'Other Marketplaces',
+    icon: '📋',
+    color: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+    fileType: 'CSV / XLSX',
+    fileName: 'Settlement or Payout Report',
+    steps: [
+      'Find your marketplace\'s Payments / Finance section',
+      'Look for "Settlements", "Payouts" or "Remittance"',
+      'Download the CSV or XLSX file',
+      'Xettle will auto-detect or use AI to identify the format',
+    ],
+    wrongFile: 'Upload settlement/payout files, not orders, inventory, or advertising reports.',
+  },
+];
+
+function FileGuide() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground hover:text-foreground h-9">
+          <span className="flex items-center gap-1.5 text-xs">
+            <HelpCircle className="h-3.5 w-3.5" />
+            Where to find your settlement files
+          </span>
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 pb-1">
+          {FILE_GUIDES.map(guide => (
+            <Card key={guide.marketplace} className="border-border">
+              <CardContent className="py-3 px-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${guide.color}`}>
+                    {guide.icon} {guide.marketplace}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">{guide.fileType}</span>
+                </div>
+                <p className="text-xs font-medium text-foreground">{guide.fileName}</p>
+                <ol className="text-[11px] text-muted-foreground space-y-0.5 list-decimal list-inside">
+                  {guide.steps.map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ol>
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-start gap-1">
+                  <AlertTriangle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                  {guide.wrongFile}
+                </p>
+                {guide.link && (
+                  <a
+                    href={guide.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open in Seller Central
+                  </a>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 async function ensureMarketplaceConnection(marketplaceCode: string) {
