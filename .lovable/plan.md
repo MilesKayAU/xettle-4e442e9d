@@ -1,138 +1,98 @@
-# Xettle Build Plan
 
-## Smart File Ingestion — IMPLEMENTED ✅
 
-3-level intelligent file ingestion: fingerprint detection → heuristic mapping → AI fallback.
-Users upload any file, Xettle auto-detects marketplace, warns on wrong files, creates settlements.
+# Settlement Workflow Manager — Implementation Plan
 
-**Files created:** `file-fingerprint-engine.ts`, `generic-csv-parser.ts`, `SmartUploadFlow.tsx`, `ai-file-interpreter/index.ts`
-**DB:** `marketplace_file_fingerprints` table with RLS
+## Build Order (dependency chain)
+
+### 1. Database Migration
+Add two columns to `settlements`:
+```sql
+ALTER TABLE public.settlements
+  ADD COLUMN IF NOT EXISTS xero_invoice_number text,
+  ADD COLUMN IF NOT EXISTS xero_status text;
+```
+
+### 2. Config Registration
+Add to `supabase/config.toml`:
+```toml
+[functions.sync-xero-status]
+verify_jwt = false
+```
+
+### 3. Feature 1 — Settlement Status Badges + Push States
+
+**`settlement-engine.ts`**:
+- Line 273: Change reference from `${label} Settlement ${periodLabel} (${s.settlement_id})` to `Xettle-${s.settlement_id}`. Move the human-readable text into the invoice Description field.
+- Lines 309-316: After successful push, also save `xero_invoice_number: result.invoiceNumber`.
+- Lines 319-321: On push failure, set `status = 'push_failed'` in DB.
+
+**`GenericMarketplaceDashboard.tsx`**:
+- Add `xero_invoice_number`, `xero_status` to `SettlementRow` interface and `loadSettlements` select.
+- Replace `statusBadge()` (lines 60-76):
+  - `saved`/`parsed` → yellow "Ready to push"
+  - `synced`/`pushed_to_xero` with `xero_invoice_number` → green "In Xero (INV-XXXX)"
+  - `synced_external` → grey "Already in Xero"
+  - `push_failed` → red "Push failed"
+- Push button states (lines 504-543):
+  - `saved`: blue `[Push to Xero →]`
+  - `synced`: green disabled `[✅ Pushed — INV-XXXX]`
+  - `push_failed`: amber `[⚠️ Retry Push]` — resets status to `saved`, clears `xero_journal_id`, then calls `syncSettlementToXero()`
+- Show Xero invoice number/status below settlement ID when available: `INV-0892 · Authorised ✅`
+
+### 4. Feature 2 — Duplicate Prevention
+
+**`GenericMarketplaceDashboard.tsx`** in `handlePushToXero`:
+- Before calling `syncSettlementToXero`, if `xero_journal_id` already set, show confirmation dialog.
+- Parse error from `syncSettlementToXero` — if contains `already exists in Xero`, show structured warning with invoice ID and "Void in Xero first" guidance instead of generic toast.
+
+### 5. Feature 3 — Xero Sync Back
+
+**New edge function: `supabase/functions/sync-xero-status/index.ts`**
+- Accepts `{ userId }`, gets Xero token via same pattern as `sync-settlement-to-xero`.
+- Two Xero API queries for backward compatibility:
+  1. `GET /invoices?where=Reference.StartsWith("Xettle-")&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID`
+  2. `GET /invoices?where=Reference.Contains("Settlement")&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID` (fallback for old-format references like `Big W Settlement ... (290994)`)
+- For each invoice: extract `settlement_id` from `Xettle-{id}` or regex `/\(([^)]+)\)$/` for old format.
+- Update `settlements` table: set `xero_invoice_number`, `xero_status`, `pushed_to_xero = true` (status → `synced`), `xero_journal_id`.
+- Return count of updated records.
+
+**`settlement-engine.ts`**: Add `syncXeroStatus(userId)` that invokes the edge function.
+
+**`GenericMarketplaceDashboard.tsx`**: Add "Refresh from Xero" button in bulk actions bar. Call `syncXeroStatus` on mount (once per session via ref) and after every push.
+
+### 6. Feature 4 — Monthly Status Overview Panel
+
+**New component: `MonthlyReconciliationStatus.tsx`**
+- Period selector: `[← February 2026 →]` defaulting to current month.
+- Query settlements with overlap filter: `WHERE period_start <= monthEnd AND period_end >= monthStart`.
+- Cross-reference with `marketplace_connections` to show all connected channels.
+- **Missing detection**: marketplace_connections with zero settlements for the period shown as `⚠️ 2 missing — Kogan, Bunnings` with `"Upload now →"` link that switches to Smart Upload view.
+- Table: Marketplace | Uploaded (count) | Pushed (count) | Xero Status.
+- Footer: "X ready to push · Y already done · Z missing".
+
+**`Dashboard.tsx`**: Mount `MonthlyReconciliationStatus` above `MarketplaceSwitcher` (line 265) when on settlements view. Pass `userMarketplaces`, `onSwitchToUpload`, `onSelectMarketplace` props.
+
+### 7. Feature 5 — Push All Ready Button
+
+**In `MonthlyReconciliationStatus`**:
+- Collects all `saved`/`parsed` settlements for selected period.
+- Confirmation dialog listing each with marketplace + net amount + total.
+- Sequential push via `syncSettlementToXero()` (includes Xero duplicate check).
+- Progress indicator: "Pushing 3 of 9..."
+- Results summary: `✅ X pushed · ⚠️ Y duplicates skipped · ❌ Z failed`.
+- Auto-refresh + call `syncXeroStatus()` after completion.
 
 ---
 
-# Plan: Extract Accounting Module into Independent App
+## Files Changed
 
-## What You Have (Module Inventory)
+| File | Action |
+|------|--------|
+| DB migration | Add `xero_invoice_number`, `xero_status` columns |
+| `supabase/config.toml` | Register `sync-xero-status` function |
+| `src/utils/settlement-engine.ts` | Standardize reference to `Xettle-{id}`, save invoice number, `push_failed` status, add `syncXeroStatus()` |
+| `supabase/functions/sync-xero-status/index.ts` | New edge function — dual query for old+new reference formats |
+| `src/components/admin/accounting/GenericMarketplaceDashboard.tsx` | Rich badges, duplicate warning, retry flow, Xero refresh, Xero status display |
+| `src/components/admin/accounting/MonthlyReconciliationStatus.tsx` | New component — period selector, status table, missing detection with "Upload now →", push-all button |
+| `src/pages/Dashboard.tsx` | Mount status panel above marketplace tabs |
 
-The accounting module is self-contained with these components:
-
-| Layer | Files | Lines |
-|-------|-------|-------|
-| **UI** | `src/components/admin/accounting/AccountingDashboard.tsx` | ~3,490 |
-| **Parser** | `src/utils/settlement-parser.ts` | ~716 |
-| **Xero Invoice Sync** | `supabase/functions/sync-amazon-journal/index.ts` | ~450 |
-| **Xero OAuth** | `supabase/functions/xero-auth/index.ts` | existing |
-| **Xero Connection UI** | `src/components/admin/XeroConnectionStatus.tsx` | existing |
-| **Xero Callback Page** | `src/pages/XeroCallback.tsx` | existing |
-
-**Database tables**: `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
-
-**Secrets needed**: `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `RESEND_API_KEY` (for notifications)
-
-## Recommended Approach
-
-**Create a new Lovable project** and port the accounting module as the primary app. This is the cleanest path because:
-
-1. You get a fresh Supabase instance (clean DB, no legacy tables)
-2. Independent deployment and domain
-3. Own auth system focused on bookkeeper access
-4. No risk of breaking the Miles Kay e-commerce site
-
-## What the New App Would Include
-
-1. **Auth** — Supabase email auth with admin role
-2. **Dashboard** — The AccountingDashboard as the main page (upload, review, history, settings tabs)
-3. **Settlement Parser** — `settlement-parser.ts` copied directly
-4. **Edge Functions** — `sync-amazon-journal` and `xero-auth` deployed to new Supabase
-5. **Xero Integration** — OAuth connection UI + callback page
-6. **Settings** — Account code configuration, GST rate
-7. **Database** — Migrations for `settlements`, `settlement_lines`, `settlement_unmapped`, `xero_tokens`, `app_settings`, `user_roles`, `profiles`
-
-## What I Cannot Do From Here
-
-Lovable cannot programmatically create a separate project or copy files between projects. You would need to:
-
-1. **Create a new Lovable project** (click + New Project)
-2. **Come back here** and I can help you prepare all the code as a single prompt to paste into the new project, or you can reference this project
-3. Alternatively, **remix this project** (Settings → Remix) and then strip out everything except the accounting module
-
-## Recommended Next Step
-
-**Remix this project**, then in the new remixed project, ask me to strip it down to only the accounting module — removing all e-commerce pages (Products, Blog, Contact, Distributors, Where To Buy, etc.), the Alibaba invoice system, logistics, and Amazon product sync. This preserves all the accounting code, edge functions, and database schema intact while giving you an independent app.
-
-The remix approach is fastest because all code, edge functions, and Supabase config carry over. You'd just need to connect a new Supabase project and run the database migrations.
-
----
-
-# Marketplace Dashboard Standard
-
-Every new marketplace dashboard MUST include the following features before shipping. This serves as the architectural checklist for building marketplace parsers and their UI.
-
-## Required Features
-
-### 1. CSV Upload & Parse
-- File marketplace detection (reject wrong-marketplace files with warning)
-- Auto-detect CSV format variations if applicable
-- Parse into `StandardSettlement` via marketplace-specific parser
-
-### 2. Duplicate Detection (on parse)
-- **Exact match**: Check `settlement_id + marketplace` against existing `settlements` table
-- **Fingerprint match**: Same `period_start + period_end + bank_deposit (±$0.01)`
-- Show warning banner in review tab for duplicates
-- Mark duplicate payouts visually (dimmed, "Duplicate" badge)
-- `saveSettlement()` in settlement-engine.ts handles server-side dedup as final guard
-
-### 3. Gap Detection (on parse)
-- Compare earliest parsed payout's `period_start` against latest saved settlement's `period_end`
-- If gap exists, show orange warning banner: "Gap detected — you may be missing payouts"
-
-### 4. Reconciliation Checks (review tab)
-- Run `runUniversalReconciliation()` on each parsed settlement
-- Display checks inline with expandable "Checks" button per payout card
-- Show pass/warn/fail icons with detail text per check
-- Block Xero sync if `canSync === false` (critical failures)
-- Checks include: Balance, GST Consistency, Refund Completeness, Sanity, Historical Deviation, Invoice Accuracy
-
-### 5. Review Tab — Individual Payout Management
-- Dismiss/remove button (X) on each payout card (removes from parsed array, not DB)
-- Persisted state in localStorage across page refreshes
-- Clear All button
-- Save All → Push All to Xero flow
-
-### 6. History Tab — Bulk Operations
-- Select one / Select all checkboxes
-- Bulk delete with confirmation dialog
-- **Xero sync-aware bulk delete**: Count synced items in selection, show breakdown ("3 selected, 1 synced to Xero"), warn that Xero invoices won't be removed
-- Individual delete for ALL statuses including `synced` (with confirmation dialog for synced items)
-- "Xero ✓" badge on synced items when selected
-- Push to Xero button for saved/parsed items
-- Single-item delete for synced items with warning dialog
-
-### 7. Xero Sync
-- Use `syncSettlementToXero()` from settlement-engine.ts
-- Build marketplace-specific invoice lines via `buildXInvoiceLines()` function
-- Run `runUniversalReconciliation()` before sync — skip if `canSync === false`
-- Contact name from `MARKETPLACE_CONTACTS` map in settlement-engine.ts
-
-### 8. Fee Observation Engine
-- `saveSettlement()` auto-fires `extractFeeObservations()` for intelligence tracking
-- No per-dashboard code needed — handled by settlement-engine.ts
-
-## File Structure for New Marketplaces
-
-```
-src/utils/{marketplace}-parser.ts          → CSV parser → StandardSettlement[]
-src/components/admin/accounting/{Name}Dashboard.tsx  → Dashboard UI
-src/utils/settlement-engine.ts             → Shared save/sync/delete (DO NOT DUPLICATE)
-src/utils/universal-reconciliation.ts      → Shared recon checks (DO NOT DUPLICATE)
-src/utils/file-marketplace-detector.ts     → Add detection pattern for new marketplace
-```
-
-## Currently Implemented Marketplaces
-
-| Marketplace | Parser | Dashboard | Dedup | Gap | Recon | Bulk Delete | Xero Sync |
-|---|---|---|---|---|---|---|---|
-| Amazon AU | ✅ settlement-parser.ts | ✅ AccountingDashboard.tsx | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Shopify Payments | ✅ shopify-payments-parser.ts | ✅ ShopifyPaymentsDashboard.tsx | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bunnings | ✅ bunnings-summary-parser.ts | ✅ BunningsDashboard.tsx | ✅ | — | ✅ | ✅ | ✅ |
-| Catch / MyDeal / Kogan / Woolworths | — | ✅ GenericMarketplaceDashboard.tsx (placeholder) | — | — | — | — | — |
