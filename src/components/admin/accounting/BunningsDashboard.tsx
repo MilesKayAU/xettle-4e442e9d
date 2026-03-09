@@ -1032,18 +1032,44 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
           ) : (
             <div className="space-y-3">
               {/* Bulk actions */}
-              {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
-                <div className="flex justify-end">
-                  <Button variant="outline" size="sm" onClick={handleBulkMarkSynced}>
-                    <SkipForward className="h-3.5 w-3.5 mr-1" />
-                    Mark All as Already in Xero
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    onClick={toggleSelectAll}
+                  >
+                    {selected.size === settlements.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                    {selected.size === settlements.length ? 'Deselect All' : 'Select All'}
                   </Button>
+                  {selected.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={handleBulkDelete}
+                      disabled={bulkDeleting}
+                    >
+                      {bulkDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Delete {selected.size} Selected
+                    </Button>
+                  )}
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
+                    <Button variant="outline" size="sm" onClick={handleBulkMarkSynced}>
+                      <SkipForward className="h-3.5 w-3.5 mr-1" />
+                      Mark All as Already in Xero
+                    </Button>
+                  )}
+                </div>
+              </div>
               {settlements.map((s, idx) => {
                 // Gap indicator: check if there's a gap to the previous settlement
                 const prev = settlements[idx + 1];
                 const hasGap = prev && s.period_start > prev.period_end;
+                const isSelected = selected.has(s.id);
                 return (
                   <React.Fragment key={s.id}>
                     {hasGap && (
@@ -1054,20 +1080,28 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                         </p>
                       </div>
                     )}
-                    <Card className="hover:border-primary/20 transition-colors">
+                    <Card className={`hover:border-primary/20 transition-colors ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}>
                       <CardContent className="py-4">
                         <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-medium">
-                                {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => toggleSelect(s.id)}
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {isSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                            </button>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-medium">
+                                  {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
+                                </p>
+                                {statusBadge(s.status)}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Sales: {formatAUD(s.sales_principal)} • Commission: {formatAUD(s.seller_fees)} • Net: {formatAUD(s.bank_deposit)}
                               </p>
-                              {statusBadge(s.status)}
+                              <p className="text-xs text-muted-foreground">ID: {s.settlement_id}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                              Sales: {formatAUD(s.sales_principal)} • Commission: {formatAUD(s.seller_fees)} • Net: {formatAUD(s.bank_deposit)}
-                            </p>
-                            <p className="text-xs text-muted-foreground">ID: {s.settlement_id}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             {(s.status === 'saved' || s.status === 'parsed') && (
@@ -1091,16 +1125,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                                 </Button>
                               </>
                             )}
-                            {s.status !== 'synced' && s.status !== 'synced_external' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => handleDelete(s.id)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleDelete(s.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </div>
                       </CardContent>
