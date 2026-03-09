@@ -837,7 +837,15 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
 
               {(status === 'detected' || isReviewing) && detection && (
                 <div className="space-y-3">
-                  {/* Confidence + meta */}
+                  {/* Shopify Orders special message */}
+                  {marketplace === 'shopify_orders' && !isReviewing && (
+                    <div className="flex items-center gap-2 bg-lime-100/60 dark:bg-lime-900/20 rounded-md px-3 py-2">
+                      <CheckCircle2 className="h-4 w-4 text-lime-600 flex-shrink-0" />
+                      <p className="text-xs text-lime-700 dark:text-lime-400 font-medium">
+                        Shopify Orders export detected — splitting by marketplace automatically
+                      </p>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-muted-foreground">Confidence:</span>
