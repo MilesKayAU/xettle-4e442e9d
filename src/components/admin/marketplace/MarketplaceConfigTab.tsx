@@ -96,7 +96,24 @@ export default function MarketplaceConfigTab() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="space-y-6">
+      {/* Help Banner */}
+      <Alert className="border-primary/20 bg-primary/5">
+        <Info className="h-4 w-4 text-primary" />
+        <AlertDescription className="text-sm">
+          <strong>Marketplace Intelligence Configuration</strong>
+          <p className="mt-2 text-muted-foreground">
+            This page manages marketplace profiles that power Xettle's fee intelligence engine. 
+            Edit settlement cycles, GST models, and payment delays to ensure accurate fee observations. 
+            The system automatically learns from every uploaded settlement and flags anomalies when fees deviate by more than 15% from historical averages.
+          </p>
+          <p className="mt-2 text-muted-foreground">
+            <strong>Fee Alerts</strong> shows cross-user anomaly detections — useful for spotting marketplace-wide rate changes.
+          </p>
+        </AlertDescription>
+      </Alert>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Left: Marketplace list */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-muted-foreground mb-3">Marketplaces</h3>
