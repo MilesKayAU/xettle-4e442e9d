@@ -181,8 +181,8 @@ export default function Dashboard() {
       {/* Top bar */}
       <header className="border-b border-border bg-card">
         <div className="container-custom flex items-center justify-between h-16">
-          <Link to="/" className="text-xl font-bold text-foreground tracking-tight">
-            <span className="text-primary">X</span>ettle
+          <Link to="/" className="text-xl font-bold tracking-tight">
+            <span className="text-primary">Xe</span><span className="text-foreground">ttle</span>
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" asChild>
