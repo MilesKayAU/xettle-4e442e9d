@@ -330,7 +330,7 @@ export default function ShopifyOrdersDashboard() {
         incrementFingerprintMatch(fpMatch.field, fpMatch.pattern);
 
         if (fpResult.confidence >= 90) {
-          assignUnknownGroup(groupIdx, fpResult.marketplace_code);
+          assignUnknownGroup(groupIdx, fpResult.marketplace_code, true);
           toast.success(`Fingerprint detected: ${fpResult.marketplace_name} (instant)`);
         }
         return;
