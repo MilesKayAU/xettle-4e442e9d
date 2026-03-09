@@ -8,12 +8,14 @@ import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/ac
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3 } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-type DashboardView = 'settlements' | 'insights';
+const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
+
+type DashboardView = 'settlements' | 'insights' | 'smart_upload';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -176,6 +178,17 @@ export default function Dashboard() {
               <BarChart3 className="h-4 w-4" />
               Insights
             </button>
+            <button
+              onClick={() => switchView('smart_upload')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeView === 'smart_upload'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              }`}
+            >
+              <Upload className="h-4 w-4" />
+              Smart Upload
+            </button>
           </nav>
         </div>
       </div>
@@ -205,6 +218,18 @@ export default function Dashboard() {
             ) : selectedUserMarketplace ? (
               <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} />
             ) : null}
+          </div>
+        ) : activeView === 'smart_upload' ? (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">Smart Upload</h2>
+              <p className="text-muted-foreground mt-1">
+                Drop any settlement files — Amazon TSV, Shopify CSV, Bunnings PDF, or anything else. Xettle will detect the marketplace and parse automatically.
+              </p>
+            </div>
+            <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+              <SmartUploadFlow onSettlementsSaved={loadMarketplaces} onMarketplacesChanged={loadMarketplaces} />
+            </Suspense>
           </div>
         ) : (
           <InsightsDashboard />
