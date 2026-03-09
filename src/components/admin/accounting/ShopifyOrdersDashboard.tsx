@@ -140,7 +140,7 @@ export default function ShopifyOrdersDashboard({ marketplace }: ShopifyOrdersDas
         );
         setActiveTab('review');
       } else {
-        const errMsg = result.error;
+        const errMsg = (result as { success: false; error: string }).error;
         setParseError(errMsg);
         toast.error(errMsg);
       }
