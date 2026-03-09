@@ -102,6 +102,16 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     phase: 'csv_ready',
     description: 'Shopify Payments payouts — your direct store sales.',
   },
+  {
+    code: 'shopify_orders',
+    name: 'Shopify Orders',
+    icon: '🛒',
+    country: 'AU',
+    countryFlag: '🇦🇺',
+    connectionMethods: ['manual_csv'],
+    phase: 'csv_ready',
+    description: 'Shopify Orders export — creates gateway clearing invoices for PayPal, Afterpay, Stripe, etc.',
+  },
 ];
 
 export interface UserMarketplace {

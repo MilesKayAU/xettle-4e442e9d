@@ -35,6 +35,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { detectFile, extractFileHeaders, MARKETPLACE_LABELS, type FileDetectionResult, type ColumnMapping } from '@/utils/file-fingerprint-engine';
 import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
+import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { saveSettlement, type StandardSettlement } from '@/utils/settlement-engine';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
@@ -84,6 +85,7 @@ function formatDateRange(start: string, end: string): string {
 const MARKETPLACE_COLORS: Record<string, string> = {
   amazon_au: 'bg-amber-500',
   shopify_payments: 'bg-emerald-500',
+  shopify_orders: 'bg-lime-600',
   bunnings: 'bg-red-600',
   kogan: 'bg-blue-600',
   catch: 'bg-purple-600',
@@ -120,6 +122,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       if (marketplace === 'shopify_payments') {
         const text = await file.text();
         const result = parseShopifyPayoutCSV(text);
+        if (!result.success) return [];
+        return result.settlements;
+      }
+
+      if (marketplace === 'shopify_orders') {
+        const text = await file.text();
+        const result = parseShopifyOrdersCSV(text);
         if (!result.success) return [];
         return result.settlements;
       }
@@ -464,6 +473,11 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const text = await df.file.text();
           const result = parseShopifyPayoutCSV(text);
           if (!result.success) throw new Error('error' in result ? result.error : 'Shopify parse failed');
+          settlements = result.settlements;
+        } else if (marketplace === 'shopify_orders') {
+          const text = await df.file.text();
+          const result = parseShopifyOrdersCSV(text);
+          if (!result.success) throw new Error('error' in result ? result.error : 'Shopify Orders parse failed');
           settlements = result.settlements;
         } else {
           const mapping = df.detection.columnMapping || {};
