@@ -76,19 +76,52 @@ function statusBadge(status: string) {
   }
 }
 
+const LS_KEY = 'bunnings_pending_upload';
+
+function saveParsedToStorage(
+  parsed: StandardSettlement,
+  extra: BunningsParseExtra | null,
+  warning: UploadWarning | null,
+  savedId: string | null,
+) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ parsed, extra, warning, savedId }));
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function loadParsedFromStorage(): {
+  parsed: StandardSettlement;
+  extra: BunningsParseExtra | null;
+  warning: UploadWarning | null;
+  savedId: string | null;
+} | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function clearParsedStorage() {
+  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+}
+
 export default function BunningsDashboard({ marketplace }: BunningsDashboardProps) {
-  const [activeTab, setActiveTab] = useState('upload');
+  // Restore persisted parse session on mount
+  const persisted = loadParsedFromStorage();
+
+  const [activeTab, setActiveTab] = useState(persisted?.parsed ? 'review' : 'upload');
 
   // Single file mode
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [parsed, setParsed] = useState<StandardSettlement | null>(null);
-  const [extra, setExtra] = useState<BunningsParseExtra | null>(null);
+  const [parsed, setParsed] = useState<StandardSettlement | null>(persisted?.parsed ?? null);
+  const [extra, setExtra] = useState<BunningsParseExtra | null>(persisted?.extra ?? null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
-  const [savedSettlementId, setSavedSettlementId] = useState<string | null>(null);
-  const [uploadWarning, setUploadWarning] = useState<UploadWarning | null>(null);
+  const [savedSettlementId, setSavedSettlementId] = useState<string | null>(persisted?.savedId ?? null);
+  const [uploadWarning, setUploadWarning] = useState<UploadWarning | null>(persisted?.warning ?? null);
 
   // Bulk mode
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
