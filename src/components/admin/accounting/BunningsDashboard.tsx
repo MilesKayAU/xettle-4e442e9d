@@ -960,18 +960,28 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                             <p className="text-xs text-muted-foreground">ID: {s.settlement_id}</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            {s.status === 'saved' && (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handlePushToXero(s.settlement_id)}
-                                disabled={pushing}
-                              >
-                                {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-                                Push to Xero
-                              </Button>
+                            {(s.status === 'saved' || s.status === 'parsed') && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => handlePushToXero(s.settlement_id)}
+                                  disabled={pushing}
+                                >
+                                  {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                                  Push to Xero
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleMarkAlreadySynced(s.settlement_id)}
+                                >
+                                  <SkipForward className="h-3.5 w-3.5 mr-1" />
+                                  Already in Xero
+                                </Button>
+                              </>
                             )}
-                            {s.status !== 'synced' && (
+                            {s.status !== 'synced' && s.status !== 'synced_external' && (
                               <Button
                                 size="sm"
                                 variant="ghost"
