@@ -872,7 +872,7 @@ export default function AccountingDashboard() {
           );
         }
 
-        const reference2 = `Amazon AU Settlement ${header.settlementId} - Part 2 (${m2.monthLabel})`;
+        const reference2 = `Xettle-${header.settlementId}-P2`;
         const date2 = m2.start;
 
         const { data: data1, error: err1 } = await supabase.functions.invoke('sync-amazon-journal', {
