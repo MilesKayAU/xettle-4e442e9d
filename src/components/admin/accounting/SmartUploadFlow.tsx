@@ -648,6 +648,32 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             </Card>
           )}
 
+          {/* All saved — prompt to view in Settlements tab */}
+          {savedCount > 0 && confirmedCount === 0 && onViewSettlements && (
+            <Card className="border-green-400/50 bg-green-50/30 dark:bg-green-950/10">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {savedCount} file{savedCount !== 1 ? 's' : ''} processed & saved ✓
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        View and manage your settlements in the Settlements tab
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={onViewSettlements} className="gap-2">
+                    <FileText className="h-4 w-4" />
+                    View Settlements
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Clear all */}
           {files.length > 1 && (
             <div className="flex justify-center">
