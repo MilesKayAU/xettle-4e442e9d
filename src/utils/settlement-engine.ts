@@ -52,8 +52,20 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   catch: 'Catch',
   mydeal: 'MyDeal',
   kogan: 'Kogan',
-  woolworths: 'Woolworths',
+  woolworths: 'Everyday Market',
   woolworths_marketplus: 'Woolworths MarketPlus',
+  everyday_market: 'Everyday Market',
+  ebay_au: 'eBay AU',
+  ebay: 'eBay',
+  etsy: 'Etsy',
+  paypal: 'PayPal',
+  manual_orders: 'Manual Orders',
+  theiconic: 'The Iconic',
+  // Composite codes from parsers
+  woolworths_marketplus_bigw: 'Big W',
+  woolworths_marketplus_woolworths: 'Everyday Market',
+  woolworths_marketplus_mydeal: 'MyDeal',
+  woolworths_marketplus_everyday_market: 'Everyday Market',
 };
 
 // ─── Xero Invoice Line Builder ──────────────────────────────────────────────
