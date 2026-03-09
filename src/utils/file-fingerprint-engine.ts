@@ -536,6 +536,7 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
   bunnings: 'Bunnings',
   shopify_payments: 'Shopify Payments',
+  shopify_orders: 'Shopify Orders',
   kogan: 'Kogan',
   bigw: 'Big W',
   catch: 'Catch',
