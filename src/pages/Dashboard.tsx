@@ -93,6 +93,68 @@ export default function Dashboard() {
     if (user) loadMarketplaces();
   }, [user]);
 
+  // ─── Claim demo session (post-signup from landing page) ───────────────────
+  useEffect(() => {
+    if (!user) return;
+    const claimDemo = async () => {
+      try {
+        const raw = sessionStorage.getItem('xettle_demo_settlements');
+        const marketplace = sessionStorage.getItem('xettle_demo_marketplace');
+        if (!raw || !marketplace) return;
+
+        const settlements = JSON.parse(raw);
+        if (!Array.isArray(settlements) || settlements.length === 0) return;
+
+        // Clear immediately to prevent double-claim
+        sessionStorage.removeItem('xettle_demo_settlements');
+        sessionStorage.removeItem('xettle_demo_marketplace');
+
+        // Dynamically import the save function
+        const { saveSettlement } = await import('@/utils/settlement-engine');
+        const { MARKETPLACE_CATALOG } = await import('@/components/admin/accounting/MarketplaceSwitcher');
+
+        // Ensure marketplace connection exists
+        const { data: existing } = await supabase
+          .from('marketplace_connections')
+          .select('id')
+          .eq('marketplace_code', marketplace)
+          .maybeSingle();
+
+        if (!existing) {
+          const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
+          await supabase.from('marketplace_connections').insert({
+            user_id: user.id,
+            marketplace_code: marketplace,
+            marketplace_name: catDef?.name || marketplace,
+            country_code: catDef?.country || 'AU',
+            connection_type: 'auto_detected',
+            connection_status: 'active',
+          } as any);
+        }
+
+        // Save settlements
+        let saved = 0;
+        for (const s of settlements) {
+          const result = await saveSettlement(s);
+          if (result.success) saved++;
+        }
+
+        if (saved > 0) {
+          const { toast } = await import('sonner');
+          toast.success(`🎉 ${saved} settlement${saved > 1 ? 's' : ''} from your demo — ready to push to Xero!`);
+        }
+
+        // Reload marketplaces and switch to the right one
+        await loadMarketplaces();
+        setSelectedMarketplace(marketplace);
+        switchView('settlements');
+      } catch (err) {
+        console.error('Failed to claim demo session:', err);
+      }
+    };
+    claimDemo();
+  }, [user]);
+
   function switchView(view: DashboardView) {
     setActiveView(view);
     localStorage.setItem('xettle_dashboard_view', view);
