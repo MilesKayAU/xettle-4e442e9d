@@ -155,6 +155,51 @@ export default function ShopifyOrdersDashboard() {
     toast.success(`${result.paidCount} paid orders parsed — ${result.groups.length} source${result.groups.length !== 1 ? 's' : ''} detected`);
   };
 
+  // ─── Profit calculation — runs when parseResult changes ───────────
+  useEffect(() => {
+    if (!parseResult) {
+      setProfitResult(null);
+      setDetectedSKUs([]);
+      return;
+    }
+    const allGroups = [...parseResult.groups, ...parseResult.unknownGroups];
+    const skus = extractUniqueSKUs(allGroups);
+    setDetectedSKUs(skus);
+
+    // Load costs from DB and calculate
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || skus.length === 0) return;
+
+        const { data } = await supabase
+          .from('product_costs')
+          .select('sku, cost, label, currency')
+          .eq('user_id', user.id);
+
+        const costMap = new Map<string, ProductCost>();
+        for (const row of (data || [])) {
+          costMap.set(row.sku.toUpperCase().trim(), {
+            sku: row.sku.toUpperCase().trim(),
+            cost: Number(row.cost),
+            currency: row.currency || 'AUD',
+            label: row.label || undefined,
+          });
+        }
+
+        const result = calculateProfit(allGroups, costMap);
+        setProfitResult(result);
+      } catch { /* silent */ }
+    })();
+  }, [parseResult]);
+
+  const handleCostsSaved = (costMap: Map<string, ProductCost>) => {
+    if (!parseResult) return;
+    const allGroups = [...parseResult.groups, ...parseResult.unknownGroups];
+    const result = calculateProfit(allGroups, costMap);
+    setProfitResult(result);
+  };
+
   // ─── Upload & Parse ─────────────────────────────────────────────────
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
