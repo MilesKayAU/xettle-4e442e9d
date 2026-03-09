@@ -99,6 +99,9 @@ export default function ShopifyOrdersDashboard() {
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [shopifyConnected, setShopifyConnected] = useState(false);
+  const [shopifyShopDomain, setShopifyShopDomain] = useState<string | null>(null);
+  const [shopifyStatusLoading, setShopifyStatusLoading] = useState(true);
 
   // Parsed data
   const [parseResult, setParseResult] = useState<ShopifyOrdersParseResult | null>(null);
