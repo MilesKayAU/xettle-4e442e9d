@@ -281,6 +281,42 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_fingerprints: {
+        Row: {
+          confidence: number
+          created_at: string
+          field: string
+          id: string
+          marketplace_code: string
+          match_count: number
+          pattern: string
+          source: string
+          user_id: string | null
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          field: string
+          id?: string
+          marketplace_code: string
+          match_count?: number
+          pattern: string
+          source?: string
+          user_id?: string | null
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          field?: string
+          id?: string
+          marketplace_code?: string
+          match_count?: number
+          pattern?: string
+          source?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       marketplace_shipping_costs: {
         Row: {
           cost_per_order: number
