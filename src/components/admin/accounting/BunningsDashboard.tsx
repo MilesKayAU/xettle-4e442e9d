@@ -481,7 +481,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                         <div className="rounded border border-border bg-muted/40 p-2 space-y-1 mt-2">
                           <p className="font-medium text-foreground">Which files does Bunnings provide?</p>
                           <ul className="space-y-1 text-muted-foreground">
-                            <li><span className="text-green-700 font-medium">✓ Summary of Transactions PDF</span> — <strong>this is the one to upload.</strong> Contains the billing period totals, sales, commission and net payout.</li>
+                            <li><span className="text-primary font-medium">✓ Summary of Transactions PDF</span> — <strong>this is the one to upload.</strong> Contains the billing period totals, sales, commission and net payout.</li>
                             <li><span className="text-muted-foreground">✗ Invoice PDF</span> — a tax invoice for the same period; not needed here.</li>
                             <li><span className="text-muted-foreground">✗ Billing cycle orders CSV</span> — order-level detail; not required for accounting import.</li>
                           </ul>
