@@ -302,7 +302,7 @@ export default function InsightsDashboard() {
         </div>
 
         {/* Summary cards row — 5 cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground">Total Sales</p>
@@ -338,20 +338,26 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">
-                {totalAllAdSpend > 0 ? 'After Advertising' : 'Best Performer'}
-              </p>
-              {totalAllAdSpend > 0 && overallAfterAds !== null ? (
-                <>
-                  <p className={`text-xl font-bold mt-1 ${getRatioColor(overallAfterAds)}`}>${overallAfterAds.toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Per $1 after ads</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xl font-bold text-primary mt-1">{stats[0].label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">${stats[0].returnRatio.toFixed(2)} per $1</p>
-                </>
-              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Top Revenue</p>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">The marketplace generating the highest total sales volume — your volume engine.</TooltipContent>
+              </Tooltip>
+              <p className="text-xl font-bold text-foreground mt-1">{topRevenue.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(topRevenue.totalSales)} sales</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Best Performer</p>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">The marketplace returning the most profit per $1 sold — your efficiency engine.</TooltipContent>
+              </Tooltip>
+              <p className="text-xl font-bold text-primary mt-1">{bestProfit.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">${bestProfit.returnRatio.toFixed(2)} per $1</p>
             </CardContent>
           </Card>
         </div>
