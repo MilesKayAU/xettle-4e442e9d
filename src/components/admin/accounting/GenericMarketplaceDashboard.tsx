@@ -431,7 +431,19 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             View saved settlements, reconcile, and sync to Xero.
           </p>
         </div>
-        <XeroConnectionStatus />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={refreshingXero}
+            onClick={handleRefreshXero}
+          >
+            {refreshingXero ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Refresh from Xero
+          </Button>
+          <XeroConnectionStatus />
+        </div>
       </div>
 
       {/* Upload prompt — directs to Smart Upload */}
