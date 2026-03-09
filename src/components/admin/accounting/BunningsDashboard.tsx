@@ -50,7 +50,8 @@ interface UploadWarning {
 }
 
 interface BatchItem {
-  file: File;
+  file: File | null;
+  fileName: string;
   parsed: StandardSettlement | null;
   extra: BunningsParseExtra | null;
   error: string | null;
@@ -77,6 +78,23 @@ function statusBadge(status: string) {
 }
 
 const LS_KEY = 'bunnings_pending_upload';
+const LS_BULK_KEY = 'bunnings_pending_bulk';
+
+interface PersistedSingle {
+  parsed: StandardSettlement;
+  extra: BunningsParseExtra | null;
+  warning: UploadWarning | null;
+  savedId: string | null;
+}
+
+interface PersistedBulkItem {
+  fileName: string;
+  parsed: StandardSettlement | null;
+  error: string | null;
+  saved: boolean;
+  skipped: boolean;
+  isDuplicate: boolean;
+}
 
 function saveParsedToStorage(
   parsed: StandardSettlement,
@@ -89,14 +107,31 @@ function saveParsedToStorage(
   } catch { /* quota exceeded — ignore */ }
 }
 
-function loadParsedFromStorage(): {
-  parsed: StandardSettlement;
-  extra: BunningsParseExtra | null;
-  warning: UploadWarning | null;
-  savedId: string | null;
-} | null {
+function saveBulkToStorage(items: BatchItem[]) {
+  try {
+    const slim: PersistedBulkItem[] = items.map(b => ({
+      fileName: b.file?.name || b.fileName || 'unknown',
+      parsed: b.parsed,
+      error: b.error,
+      saved: b.saved,
+      skipped: b.skipped,
+      isDuplicate: b.isDuplicate,
+    }));
+    localStorage.setItem(LS_BULK_KEY, JSON.stringify(slim));
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function loadParsedFromStorage(): PersistedSingle | null {
   try {
     const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function loadBulkFromStorage(): PersistedBulkItem[] | null {
+  try {
+    const raw = localStorage.getItem(LS_BULK_KEY);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch { return null; }
@@ -106,11 +141,18 @@ function clearParsedStorage() {
   try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
 }
 
+function clearBulkStorage() {
+  try { localStorage.removeItem(LS_BULK_KEY); } catch { /* ignore */ }
+}
+
 export default function BunningsDashboard({ marketplace }: BunningsDashboardProps) {
   // Restore persisted parse session on mount
   const persisted = loadParsedFromStorage();
+  const persistedBulk = loadBulkFromStorage();
 
-  const [activeTab, setActiveTab] = useState(persisted?.parsed ? 'review' : 'upload');
+  const [activeTab, setActiveTab] = useState(
+    persistedBulk && persistedBulk.length > 0 ? 'review' : persisted?.parsed ? 'review' : 'upload'
+  );
 
   // Single file mode
   const [file, setFile] = useState<File | null>(null);
@@ -123,9 +165,24 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const [savedSettlementId, setSavedSettlementId] = useState<string | null>(persisted?.savedId ?? null);
   const [uploadWarning, setUploadWarning] = useState<UploadWarning | null>(persisted?.warning ?? null);
 
-  // Bulk mode
+  // Bulk mode — restore from localStorage if available
   const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
-  const [bulkBatch, setBulkBatch] = useState<BatchItem[]>([]);
+  const [bulkBatch, setBulkBatch] = useState<BatchItem[]>(() => {
+    if (persistedBulk && persistedBulk.length > 0) {
+      return persistedBulk.map(p => ({
+        file: null,
+        fileName: p.fileName,
+        parsed: p.parsed,
+        extra: null,
+        error: p.error,
+        saved: p.saved,
+        saving: false,
+        skipped: p.skipped,
+        isDuplicate: p.isDuplicate,
+      }));
+    }
+    return [];
+  });
   const [bulkProcessing, setBulkProcessing] = useState(false);
 
   const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
@@ -297,6 +354,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setBulkProcessing(true);
     const items: BatchItem[] = files.map(f => ({
       file: f,
+      fileName: f.name,
       parsed: null,
       extra: null,
       error: null,
@@ -317,7 +375,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
     for (let i = 0; i < items.length; i++) {
       try {
-        const result = await parseBunningsSummaryPdf(items[i].file);
+        const result = await parseBunningsSummaryPdf(items[i].file!);
         if (result.success) {
           items[i].parsed = result.settlement;
           items[i].extra = result.extra;
@@ -332,6 +390,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
       setBulkBatch([...items]);
     }
 
+    // Persist bulk batch to localStorage
+    saveBulkToStorage(items);
     setBulkProcessing(false);
     setActiveTab('review');
   };
@@ -347,8 +407,12 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
       if (!result.success) item.error = result.error || 'Save failed';
       setBulkBatch([...bulkBatch]);
     }
+    saveBulkToStorage(bulkBatch);
     await loadHistory();
     toast.success(`Saved ${toSave.length} settlements.`);
+    // After saving, clear bulk state and switch to history
+    clearBulkStorage();
+    setActiveTab('history');
   };
 
   const handleBulkSkipDuplicates = () => {
@@ -410,11 +474,45 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setSavedSettlementId(null);
     setUploadWarning(null);
     clearParsedStorage();
+    clearBulkStorage();
     if (inputRef.current) inputRef.current.value = '';
     setActiveTab('upload');
   };
 
-  const isBulkMode = !!bulkFiles && bulkFiles.length > 0;
+  const handleMarkAlreadySynced = async (settlementId: string) => {
+    const { error } = await supabase
+      .from('settlements')
+      .update({ status: 'synced_external' })
+      .eq('settlement_id', settlementId);
+    if (error) {
+      toast.error('Failed to update status');
+    } else {
+      toast.success('Marked as Already in Xero');
+      loadHistory();
+    }
+  };
+
+  const handleBulkMarkSynced = async () => {
+    const unsyncedIds = settlements
+      .filter(s => s.status === 'saved' || s.status === 'parsed')
+      .map(s => s.settlement_id);
+    if (unsyncedIds.length === 0) {
+      toast.info('No unsynced settlements to mark');
+      return;
+    }
+    const { error } = await supabase
+      .from('settlements')
+      .update({ status: 'synced_external' })
+      .in('settlement_id', unsyncedIds);
+    if (error) {
+      toast.error('Failed to update statuses');
+    } else {
+      toast.success(`Marked ${unsyncedIds.length} settlements as Already in Xero`);
+      loadHistory();
+    }
+  };
+
+  const isBulkMode = (!!bulkFiles && bulkFiles.length > 0) || bulkBatch.length > 0;
 
   return (
     <div className="space-y-6">
@@ -603,7 +701,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                     <CardContent className="py-3 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-medium truncate">{item.file.name}</p>
+                          <p className="text-sm font-medium truncate">{item.fileName || item.file?.name || 'Unknown file'}</p>
                           {item.isDuplicate && !item.skipped && (
                             <Badge variant="outline" className="text-[10px] border-primary/40 text-foreground">Duplicate</Badge>
                           )}
@@ -823,6 +921,15 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             </Card>
           ) : (
             <div className="space-y-3">
+              {/* Bulk actions */}
+              {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm" onClick={handleBulkMarkSynced}>
+                    <SkipForward className="h-3.5 w-3.5 mr-1" />
+                    Mark All as Already in Xero
+                  </Button>
+                </div>
+              )}
               {settlements.map((s, idx) => {
                 // Gap indicator: check if there's a gap to the previous settlement
                 const prev = settlements[idx + 1];
@@ -853,18 +960,28 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                             <p className="text-xs text-muted-foreground">ID: {s.settlement_id}</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            {s.status === 'saved' && (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handlePushToXero(s.settlement_id)}
-                                disabled={pushing}
-                              >
-                                {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-                                Push to Xero
-                              </Button>
+                            {(s.status === 'saved' || s.status === 'parsed') && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => handlePushToXero(s.settlement_id)}
+                                  disabled={pushing}
+                                >
+                                  {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                                  Push to Xero
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleMarkAlreadySynced(s.settlement_id)}
+                                >
+                                  <SkipForward className="h-3.5 w-3.5 mr-1" />
+                                  Already in Xero
+                                </Button>
+                              </>
                             )}
-                            {s.status !== 'synced' && (
+                            {s.status !== 'synced' && s.status !== 'synced_external' && (
                               <Button
                                 size="sm"
                                 variant="ghost"
