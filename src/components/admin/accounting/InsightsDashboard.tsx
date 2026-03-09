@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet } from 'lucide-react';
+import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet, Truck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -37,6 +37,10 @@ interface MarketplaceStats {
   avgCommission: number;
   adSpend: number;
   returnAfterAds: number | null;
+  shippingCostPerOrder: number;
+  estimatedShippingCost: number;
+  returnAfterShipping: number | null;
+  returnAfterAdsAndShipping: number | null;
   // Fee breakdown
   commissionTotal: number;
   fbaTotal: number;
@@ -50,6 +54,11 @@ interface AdSpendRecord {
   spend_amount: number;
 }
 
+interface ShippingCostRecord {
+  marketplace_code: string;
+  cost_per_order: number;
+}
+
 export default function InsightsDashboard() {
   const [stats, setStats] = useState<MarketplaceStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +69,13 @@ export default function InsightsDashboard() {
   const [adCurrency, setAdCurrency] = useState('AUD');
   const [adNotes, setAdNotes] = useState('');
   const [adSaving, setAdSaving] = useState(false);
+  
+  const [shippingDialogOpen, setShippingDialogOpen] = useState(false);
+  const [shippingDialogMarketplace, setShippingDialogMarketplace] = useState('');
+  const [shippingCostPerOrder, setShippingCostPerOrder] = useState('');
+  const [shippingCurrency, setShippingCurrency] = useState('AUD');
+  const [shippingNotes, setShippingNotes] = useState('');
+  const [shippingSaving, setShippingSaving] = useState(false);
 
   useEffect(() => {
     loadStats();
@@ -67,7 +83,7 @@ export default function InsightsDashboard() {
 
   async function loadStats() {
     try {
-      const [settlementsRes, adSpendRes] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes] = await Promise.all([
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start')
@@ -75,6 +91,9 @@ export default function InsightsDashboard() {
         supabase
           .from('marketplace_ad_spend')
           .select('marketplace_code, spend_amount'),
+        supabase
+          .from('marketplace_shipping_costs')
+          .select('marketplace_code, cost_per_order'),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
@@ -88,6 +107,13 @@ export default function InsightsDashboard() {
       if (adSpendRes.data) {
         for (const row of adSpendRes.data as AdSpendRecord[]) {
           adSpendByMp[row.marketplace_code] = (adSpendByMp[row.marketplace_code] || 0) + Number(row.spend_amount);
+        }
+      }
+
+      const shippingCostByMp: Record<string, number> = {};
+      if (shippingRes.data) {
+        for (const row of shippingRes.data as ShippingCostRecord[]) {
+          shippingCostByMp[row.marketplace_code] = Number(row.cost_per_order);
         }
       }
 
@@ -125,6 +151,18 @@ export default function InsightsDashboard() {
         const adSpend = adSpendByMp[mp] || 0;
         const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
 
+        // Shipping cost estimation
+        const shippingCostPerOrder = shippingCostByMp[mp] || 0;
+        // Rough estimate: assume average order value from sales data
+        const estimatedOrderCount = rows.length > 0 ? rows.length : 1; // Use settlement count as proxy
+        const estimatedShippingCost = shippingCostPerOrder * estimatedOrderCount;
+        const returnAfterShipping = totalSales > 0 && shippingCostPerOrder > 0 
+          ? Math.max(Math.min((netPayout - estimatedShippingCost) / totalSales, 1), -1) 
+          : null;
+        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || shippingCostPerOrder > 0)
+          ? Math.max(Math.min((netPayout - adSpend - estimatedShippingCost) / totalSales, 1), -1)
+          : null;
+
         // Build fee breakdown for waterfall
         const feeBreakdown: FeeBreakdown[] = [];
         if (commissionTotal > 0) feeBreakdown.push({ label: 'Commission', amount: commissionTotal, pctOfSales: totalSales > 0 ? commissionTotal / totalSales : 0, color: 'bg-primary' });
@@ -149,6 +187,10 @@ export default function InsightsDashboard() {
           avgCommission,
           adSpend,
           returnAfterAds,
+          shippingCostPerOrder,
+          estimatedShippingCost,
+          returnAfterShipping,
+          returnAfterAdsAndShipping,
           commissionTotal,
           fbaTotal,
           storageTotal,
@@ -211,6 +253,47 @@ export default function InsightsDashboard() {
       toast({ title: 'Failed to save', description: err.message, variant: 'destructive' });
     } finally {
       setAdSaving(false);
+    }
+  }
+
+  function openShippingDialog(marketplaceCode: string) {
+    setShippingDialogMarketplace(marketplaceCode);
+    const existing = stats.find(s => s.marketplace === marketplaceCode);
+    setShippingCostPerOrder(existing?.shippingCostPerOrder ? String(existing.shippingCostPerOrder) : '');
+    setShippingCurrency('AUD');
+    setShippingNotes('');
+    setShippingDialogOpen(true);
+  }
+
+  async function saveShippingCost() {
+    if (!shippingCostPerOrder || Number(shippingCostPerOrder) < 0) {
+      toast({ title: 'Please enter a valid shipping cost', variant: 'destructive' });
+      return;
+    }
+    setShippingSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('marketplace_shipping_costs')
+        .upsert({
+          user_id: user.id,
+          marketplace_code: shippingDialogMarketplace,
+          cost_per_order: Number(shippingCostPerOrder),
+          currency: shippingCurrency,
+          notes: shippingNotes || null,
+        }, { onConflict: 'user_id,marketplace_code' });
+
+      if (error) throw error;
+
+      toast({ title: 'Shipping cost saved' });
+      setShippingDialogOpen(false);
+      await loadStats();
+    } catch (err: any) {
+      toast({ title: 'Failed to save', description: err.message, variant: 'destructive' });
+    } finally {
+      setShippingSaving(false);
     }
   }
 
@@ -517,6 +600,25 @@ export default function InsightsDashboard() {
                       <p className="text-[11px] text-muted-foreground">Add ad spend to see true return</p>
                       <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-primary" onClick={() => openAdDialog(s.marketplace)}>
                         <Plus className="h-3 w-3 mr-1" /> Add Ad Spend
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* After shipping estimate row */}
+                  {s.shippingCostPerOrder > 0 && s.returnAfterAdsAndShipping !== null ? (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Truck className="h-3 w-3" /> After ads & shipping (est.)
+                      </span>
+                      <span className={`font-semibold tabular-nums ${getRatioColor(s.returnAfterAdsAndShipping)}`}>
+                        ${s.returnAfterAdsAndShipping.toFixed(2)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] text-muted-foreground">Add est. shipping to see full cost</p>
+                      <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-primary" onClick={() => openShippingDialog(s.marketplace)}>
+                        <Plus className="h-3 w-3 mr-1" /> Add Shipping
                       </Button>
                     </div>
                   )}
@@ -997,6 +1099,63 @@ export default function InsightsDashboard() {
               <Button variant="outline" onClick={() => setAdDialogOpen(false)}>Cancel</Button>
               <Button onClick={saveAdSpend} disabled={adSaving}>
                 {adSaving ? 'Saving...' : 'Save Ad Spend'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Shipping Cost Dialog */}
+        <Dialog open={shippingDialogOpen} onOpenChange={setShippingDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Shipping Cost Estimate</DialogTitle>
+              <DialogDescription>
+                Estimate avg cost per order for <strong>{MARKETPLACE_LABELS[shippingDialogMarketplace] || shippingDialogMarketplace}</strong>. This is your estimated shipping cost (to Amazon FBA or direct to customer) — analytics only.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="shipping-cost">Cost Per Order</Label>
+                <Input
+                  id="shipping-cost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={shippingCostPerOrder}
+                  onChange={(e) => setShippingCostPerOrder(e.target.value)}
+                  placeholder="e.g. 10.00 for Bunnings, 2.00 for Amazon FBA"
+                />
+                <p className="text-xs text-muted-foreground">Your estimated shipping cost per order (not tracked in settlements)</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="shipping-currency">Currency</Label>
+                <Select value={shippingCurrency} onValueChange={setShippingCurrency}>
+                  <SelectTrigger id="shipping-currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AUD">AUD</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="shipping-notes">Notes (optional)</Label>
+                <Textarea
+                  id="shipping-notes"
+                  value={shippingNotes}
+                  onChange={(e) => setShippingNotes(e.target.value)}
+                  placeholder="e.g. Direct to customer, avg weight 2kg"
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShippingDialogOpen(false)}>Cancel</Button>
+              <Button onClick={saveShippingCost} disabled={shippingSaving}>
+                {shippingSaving ? 'Saving...' : 'Save Shipping Cost'}
               </Button>
             </DialogFooter>
           </DialogContent>
