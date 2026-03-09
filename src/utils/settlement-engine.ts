@@ -33,6 +33,7 @@ export const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
   bunnings: 'Bunnings Marketplace',
   shopify_payments: 'Shopify Payments',
+  shopify_orders: 'Shopify', // Dynamic per-gateway contact name in metadata
   catch: 'Catch Marketplace',
   mydeal: 'MyDeal Marketplace',
   kogan: 'Kogan Marketplace',
@@ -44,6 +45,7 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   AU: 'Amazon AU',
   bunnings: 'Bunnings',
   shopify_payments: 'Shopify Payments',
+  shopify_orders: 'Shopify Orders',
   catch: 'Catch',
   mydeal: 'MyDeal',
   kogan: 'Kogan',

@@ -167,26 +167,29 @@ const FINGERPRINTS: Fingerprint[] = [
     priority: 80,
   },
 
-  // Shopify Orders (WRONG)
+  // Shopify Orders CSV — gateway clearing invoices (CORRECT file for this parser)
   {
-    marketplace: 'shopify_payments',
-    marketplaceLabel: 'Shopify',
-    isSettlementFile: false,
-    requiredColumns: ['financial status'],
-    anyOfColumns: ['fulfillment status', 'lineitem name', 'billing name'],
-    wrongFileMessage: 'This is a Shopify Orders export, not a Payouts report. Orders exports don\'t contain fee breakdowns or payout information.',
-    correctReportPath: 'Shopify Admin → Settings → Payments → View payouts → Export',
-    priority: 80,
+    marketplace: 'shopify_orders',
+    marketplaceLabel: 'Shopify Orders',
+    isSettlementFile: true,
+    requiredColumns: ['payment method', 'financial status', 'paid at'],
+    anyOfColumns: ['subtotal', 'total', 'shipping'],
+    columnMapping: {
+      gross_sales: 'Subtotal',
+      net_payout: 'Total',
+    },
+    priority: 90,
   },
 
-  // Shopify Orders variant 2 (WRONG)
+  // Shopify Orders (WRONG for payout — but now routed to shopify_orders parser)
+  // Keep lower priority variant for files missing 'paid at'
   {
     marketplace: 'shopify_payments',
     marketplaceLabel: 'Shopify',
     isSettlementFile: false,
     requiredColumns: ['name', 'email'],
     anyOfColumns: ['financial status', 'fulfillment status', 'lineitem quantity'],
-    wrongFileMessage: 'This is a Shopify Orders export, not a Payouts report.',
+    wrongFileMessage: 'This is a Shopify Orders export, not a Payouts report. However, you can use it to create gateway clearing invoices — upload it to Smart Upload.',
     correctReportPath: 'Shopify Admin → Settings → Payments → View payouts → Export',
     priority: 70,
   },
