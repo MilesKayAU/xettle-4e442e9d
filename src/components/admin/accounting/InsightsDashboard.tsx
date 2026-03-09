@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -70,7 +70,6 @@ export default function InsightsDashboard() {
         return;
       }
 
-      // Aggregate ad spend by marketplace
       const adSpendByMp: Record<string, number> = {};
       if (adSpendRes.data) {
         for (const row of adSpendRes.data as AdSpendRecord[]) {
@@ -208,9 +207,11 @@ export default function InsightsDashboard() {
   const bestRatio = Math.max(...stats.map(s => s.returnRatio));
   const totalAllSales = stats.reduce((sum, s) => sum + s.totalSales, 0);
   const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout, 0);
+  const totalAllFees = stats.reduce((sum, s) => sum + s.totalFees, 0);
   const totalAllAdSpend = stats.reduce((sum, s) => sum + s.adSpend, 0);
   const overallRatio = totalAllSales > 0 ? totalAllNet / totalAllSales : 0;
   const overallAfterAds = totalAllSales > 0 ? Math.max((totalAllNet - totalAllAdSpend) / totalAllSales, -1) : null;
+  const netPctOfSales = totalAllSales > 0 ? (totalAllNet / totalAllSales * 100).toFixed(0) : '0';
 
   function formatPct(value: number): string {
     return `${(value * 100).toFixed(1)}%`;
@@ -244,7 +245,18 @@ export default function InsightsDashboard() {
     if (s.adSpend <= 0 || s.returnAfterAds === null) return null;
     const drop = s.returnRatio - s.returnAfterAds;
     if (drop <= 0) return null;
-    return `Advertising reduced return by ${formatPct(drop)}`;
+    return `Advertising reduced return from $${s.returnRatio.toFixed(2)} → $${s.returnAfterAds.toFixed(2)}`;
+  }
+
+  // Generate the main insight sentence
+  function getHeroInsight(): string {
+    if (stats.length === 1) {
+      return `${stats[0].label} returns $${stats[0].returnRatio.toFixed(2)} for every $1 sold after marketplace fees.`;
+    }
+    const best = stats[0];
+    const worst = stats[stats.length - 1];
+    const diffPct = ((best.returnRatio - worst.returnRatio) / worst.returnRatio * 100).toFixed(0);
+    return `${best.label} returns $${best.returnRatio.toFixed(2)} per $1 sold — ${diffPct}% higher than ${worst.label}.`;
   }
 
   // Stacked bar segments for $1 breakdown
@@ -272,8 +284,13 @@ export default function InsightsDashboard() {
           </p>
         </div>
 
-        {/* Summary cards row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Hero insight sentence */}
+        <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+          <p className="text-sm text-foreground font-medium">{getHeroInsight()}</p>
+        </div>
+
+        {/* Summary cards row — 5 cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground">Total Sales</p>
@@ -283,16 +300,28 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Net Received</p>
-              <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totalAllNet)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">After all deductions</p>
+              <p className="text-xs text-muted-foreground">Total Marketplace Fees</p>
+              <p className="text-xl font-bold text-destructive mt-1">{formatCurrency(totalAllFees)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatPct(totalAllSales > 0 ? totalAllFees / totalAllSales : 0)} of sales</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Overall Return</p>
+              <p className="text-xs text-muted-foreground">Net Received</p>
+              <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totalAllNet)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{netPctOfSales}% of total sales</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Marketplace Payout</p>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">Cash returned from marketplace after fees. Excludes COGS, shipping & advertising.</TooltipContent>
+              </Tooltip>
               <p className={`text-xl font-bold mt-1 ${getRatioColor(overallRatio)}`}>${overallRatio.toFixed(2)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Per $1 sold across all</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Per $1 sold (after fees)</p>
             </CardContent>
           </Card>
           <Card>
@@ -315,27 +344,28 @@ export default function InsightsDashboard() {
           </Card>
         </div>
 
-        {/* Return per $1 sold — main chart */}
+        {/* $1 Sale Breakdown — main chart */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-primary" />
-                <CardTitle className="text-base">Return per $1 Sold</CardTitle>
+                <Wallet className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">$1 Sale Breakdown</CardTitle>
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent side="left" className="max-w-xs text-xs">
-                  <p className="font-medium mb-1">Marketplace Return Ratio</p>
-                  <p><strong>Marketplace return</strong> = Net Settlement ÷ Gross Sales</p>
+                  <p className="font-medium mb-1">Marketplace Payout</p>
+                  <p><strong>Marketplace payout</strong> = Net Settlement ÷ Gross Sales</p>
                   <p className="mt-1"><strong>After advertising</strong> = (Net Settlement − Ad Spend) ÷ Gross Sales</p>
+                  <p className="mt-1 text-muted-foreground">Excludes COGS, shipping costs & tax.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
             <CardDescription className="text-xs">
-              How much you keep after marketplace deductions — higher is better
+              For every $1 you sell, here's what you keep after marketplace fees
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -352,39 +382,65 @@ export default function InsightsDashboard() {
                         <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
                       )}
                     </div>
-                    <span className={`text-lg font-bold tabular-nums ${getRatioColor(s.returnRatio)}`}>
-                      ${s.returnRatio.toFixed(2)}
-                    </span>
+                    <div className="text-right">
+                      <span className={`text-lg font-bold tabular-nums ${getRatioColor(s.returnRatio)}`}>
+                        ${s.returnRatio.toFixed(2)}
+                      </span>
+                      <span className="text-xs text-muted-foreground ml-1">you keep</span>
+                    </div>
                   </div>
 
-                  {/* Marketplace return bar */}
-                  <div className="h-3 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-700 ease-out"
-                      style={{ width: `${getBarWidth(s.returnRatio)}%`, opacity: s.returnRatio === bestRatio ? 1 : 0.55 }}
-                    />
+                  {/* Stacked $1 breakdown bar */}
+                  <div className="h-5 rounded-full overflow-hidden flex">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-full bg-primary transition-all duration-700 ease-out" style={{ width: `${segments.net}%` }} />
+                      </TooltipTrigger>
+                      <TooltipContent className="text-xs">${(segments.net / 100).toFixed(2)} you keep</TooltipContent>
+                    </Tooltip>
+                    {segments.ads > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="h-full bg-accent transition-all duration-500" style={{ width: `${segments.ads}%` }} />
+                        </TooltipTrigger>
+                        <TooltipContent className="text-xs">${(segments.ads / 100).toFixed(2)} advertising</TooltipContent>
+                      </Tooltip>
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-full bg-muted-foreground/25 transition-all duration-500" style={{ width: `${segments.fees}%` }} />
+                      </TooltipTrigger>
+                      <TooltipContent className="text-xs">${(segments.fees / 100).toFixed(2)} marketplace fees</TooltipContent>
+                    </Tooltip>
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex gap-3 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+                      ${(segments.net / 100).toFixed(2)} you keep
+                    </span>
+                    {segments.ads > 0 && (
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-accent inline-block" />
+                        ${(segments.ads / 100).toFixed(2)} ads
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/25 inline-block" />
+                      ${(segments.fees / 100).toFixed(2)} fees
+                    </span>
                   </div>
 
                   {/* After advertising row */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Megaphone className="h-3 w-3" /> After advertising
-                    </span>
-                    {s.adSpend > 0 && s.returnAfterAds !== null ? (
-                      <span className={`text-sm font-semibold tabular-nums ${getRatioColor(s.returnAfterAds)}`}>
+                  {s.adSpend > 0 && s.returnAfterAds !== null ? (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Megaphone className="h-3 w-3" /> After advertising
+                      </span>
+                      <span className={`font-semibold tabular-nums ${getRatioColor(s.returnAfterAds)}`}>
                         ${s.returnAfterAds.toFixed(2)}
                       </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </div>
-
-                  {s.adSpend > 0 && s.returnAfterAds !== null ? (
-                    <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-primary/40 transition-all duration-700 ease-out"
-                        style={{ width: `${getBarWidth(s.returnAfterAds)}%` }}
-                      />
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -392,38 +448,6 @@ export default function InsightsDashboard() {
                       <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-primary" onClick={() => openAdDialog(s.marketplace)}>
                         <Plus className="h-3 w-3 mr-1" /> Add Ad Spend
                       </Button>
-                    </div>
-                  )}
-
-                  {/* $1 Sale Breakdown stacked bar */}
-                  {s.adSpend > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-[11px] text-muted-foreground font-medium">$1 Sale Breakdown</p>
-                      <div className="h-4 rounded-full overflow-hidden flex">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="h-full bg-primary transition-all duration-500" style={{ width: `${segments.net}%` }} />
-                          </TooltipTrigger>
-                          <TooltipContent className="text-xs">Net kept: {segments.net.toFixed(1)}%</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="h-full bg-accent transition-all duration-500" style={{ width: `${segments.ads}%` }} />
-                          </TooltipTrigger>
-                          <TooltipContent className="text-xs">Advertising: {segments.ads.toFixed(1)}%</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="h-full bg-muted-foreground/30 transition-all duration-500" style={{ width: `${segments.fees}%` }} />
-                          </TooltipTrigger>
-                          <TooltipContent className="text-xs">Marketplace fees: {segments.fees.toFixed(1)}%</TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <div className="flex gap-3 text-[10px] text-muted-foreground">
-                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary inline-block" /> Net kept</span>
-                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-accent inline-block" /> Ads</span>
-                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/30 inline-block" /> Fees</span>
-                      </div>
                     </div>
                   )}
 
@@ -473,7 +497,7 @@ export default function InsightsDashboard() {
               <CardTitle className="text-base">Fee Intelligence</CardTitle>
             </div>
             <CardDescription className="text-xs">
-              Fee load, commission rates, advertising impact and refund impact per marketplace
+              Marketplace fees, commission rates, advertising impact and refund impact
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -483,17 +507,27 @@ export default function InsightsDashboard() {
                   <tr>
                     <th className="text-left px-3 py-2.5 font-medium text-foreground">Marketplace</th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Sales</th>
-                    <th className="text-right px-3 py-2.5 font-medium text-foreground">Fee Load</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-foreground">
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">Marketplace Fees</TooltipTrigger>
+                        <TooltipContent className="text-xs">Total marketplace fees as a percentage of sales</TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Avg Commission</th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Refunds</th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">
                       <Tooltip>
                         <TooltipTrigger className="cursor-help underline decoration-dotted">Ad Spend</TooltipTrigger>
-                        <TooltipContent className="text-xs">Total advertising spend (analytics only — not synced to Xero)</TooltipContent>
+                        <TooltipContent className="text-xs">Total advertising spend (analytics only — not synced to accounting)</TooltipContent>
                       </Tooltip>
                     </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Net</th>
-                    <th className="text-right px-3 py-2.5 font-medium text-foreground">Return</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-foreground">
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">Payout</TooltipTrigger>
+                        <TooltipContent className="text-xs">Net Settlement ÷ Gross Sales (after marketplace fees)</TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">
                       <Tooltip>
                         <TooltipTrigger className="cursor-help underline decoration-dotted">After Ads</TooltipTrigger>
@@ -514,7 +548,7 @@ export default function InsightsDashboard() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{formatCurrency(s.totalSales)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.feeLoad)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.feeLoad)} of sales</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.avgCommission)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalRefunds)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
@@ -551,11 +585,13 @@ export default function InsightsDashboard() {
                     </span>
                   </div>
 
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-500"
-                      style={{ width: `${getBarWidth(s.returnRatio)}%` }}
-                    />
+                  {/* Stacked bar in card */}
+                  <div className="h-3 rounded-full overflow-hidden flex">
+                    <div className="h-full bg-primary transition-all duration-500" style={{ width: `${getStackedSegments(s).net}%` }} />
+                    {s.adSpend > 0 && (
+                      <div className="h-full bg-accent transition-all duration-500" style={{ width: `${getStackedSegments(s).ads}%` }} />
+                    )}
+                    <div className="h-full bg-muted-foreground/25 transition-all duration-500" style={{ width: `${getStackedSegments(s).fees}%` }} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-y-1.5 text-xs">
@@ -565,14 +601,14 @@ export default function InsightsDashboard() {
                     <span className="text-right tabular-nums text-foreground">{formatCurrency(s.totalSales)}</span>
 
                     <div className="flex items-center gap-1 text-muted-foreground">
-                      <Receipt className="h-3 w-3" /> Avg commission
+                      <Receipt className="h-3 w-3" /> Marketplace fees
                     </div>
-                    <span className="text-right tabular-nums text-foreground">{formatPct(s.avgCommission)}</span>
+                    <span className="text-right tabular-nums text-foreground">{formatPct(s.feeLoad)} of sales</span>
 
                     <div className="flex items-center gap-1 text-muted-foreground">
-                      <TrendingUp className="h-3 w-3" /> Fee load
+                      <TrendingUp className="h-3 w-3" /> Avg commission
                     </div>
-                    <span className="text-right tabular-nums text-foreground">{formatPct(s.feeLoad)}</span>
+                    <span className="text-right tabular-nums text-foreground">{formatPct(s.avgCommission)}</span>
 
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <Megaphone className="h-3 w-3" /> Ad spend
