@@ -443,6 +443,12 @@ export function parseShopifyOrdersCSV(
       const uniqueNotes = [...new Set(orders.map(o => o.noteAttributes).filter(Boolean))].slice(0, 3);
       const uniqueTags = [...new Set(orders.map(o => o.tags).filter(Boolean))].slice(0, 3);
 
+      // Per-group financial status breakdown
+      const groupStatusBreakdown: MarketplaceGroupStatusBreakdown = {
+        paid: orders.filter(o => o.financialStatus === 'paid').length,
+        partially_refunded: orders.filter(o => o.financialStatus === 'partially_refunded').length,
+      };
+
       const group: MarketplaceGroup = {
         marketplaceKey: actualMktKey,
         registryEntry: entry,
@@ -461,6 +467,7 @@ export function parseShopifyOrdersCSV(
         status: entry.skip ? 'skipped' : (actualMktKey === 'unknown' ? 'unknown' : 'ready'),
         sampleNoteAttributes: uniqueNotes,
         sampleTags: uniqueTags,
+        statusBreakdown: groupStatusBreakdown,
       };
 
       if (entry.skip) {
