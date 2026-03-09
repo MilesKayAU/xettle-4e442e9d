@@ -125,6 +125,21 @@ export default function ShopifyOrdersDashboard() {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
+  // Show onboarding when no history and no file uploaded yet
+  useEffect(() => {
+    if (!historyLoading && history.length === 0 && !file && !parseResult) {
+      setShowOnboarding(true);
+    }
+  }, [historyLoading, history.length, file, parseResult]);
+
+  const handleOnboardingComplete = (result: ShopifyOrdersParseResult) => {
+    setShowOnboarding(false);
+    setParseResult(result);
+    setSettlements(result.settlements);
+    setActiveTab('review');
+    toast.success(`${result.paidCount} paid orders parsed — ${result.groups.length} source${result.groups.length !== 1 ? 's' : ''} detected`);
+  };
+
   // ─── Upload & Parse ─────────────────────────────────────────────────
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -448,6 +463,16 @@ export default function ShopifyOrdersDashboard() {
   };
 
   const allSaved = settlements.length > 0 && settlements.every(s => savedIds.has(s.settlement_id));
+
+  // Show onboarding flow for first-time users
+  if (showOnboarding && !historyLoading) {
+    return (
+      <ShopifyOnboarding
+        onComplete={handleOnboardingComplete}
+        onMarketplacesChanged={loadHistory}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
