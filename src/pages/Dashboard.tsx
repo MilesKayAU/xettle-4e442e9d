@@ -157,6 +157,17 @@ export default function Dashboard() {
         <div className="container-custom">
           <nav className="flex gap-1 -mb-px">
             <button
+              onClick={() => switchView('smart_upload')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeView === 'smart_upload'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              }`}
+            >
+              <Upload className="h-4 w-4" />
+              Smart Upload
+            </button>
+            <button
               onClick={() => switchView('settlements')}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeView === 'settlements'
@@ -177,17 +188,6 @@ export default function Dashboard() {
             >
               <BarChart3 className="h-4 w-4" />
               Insights
-            </button>
-            <button
-              onClick={() => switchView('smart_upload')}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeView === 'smart_upload'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-              }`}
-            >
-              <Upload className="h-4 w-4" />
-              Smart Upload
             </button>
           </nav>
         </div>
