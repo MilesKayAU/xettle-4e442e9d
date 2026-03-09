@@ -175,11 +175,23 @@ export default function ShopifyOrdersDashboard() {
     if (!group) return;
 
     if (marketplaceKey === 'skip') {
-      // Move to skipped
       const newUnknown = parseResult.unknownGroups.filter((_, i) => i !== groupIdx);
       const newSkipped = [...parseResult.skippedGroups, { ...group, skipped: true, status: 'skipped' as const, skipReason: 'Manually skipped' }];
       setParseResult({ ...parseResult, unknownGroups: newUnknown, skippedGroups: newSkipped });
       return;
+    }
+
+    // Save fingerprint from manual assignment (user_confirmed = highest trust)
+    const sampleNote = (group.sampleNoteAttributes || [])[0] || '';
+    const sampleTag = (group.sampleTags || [])[0] || '';
+    const samplePm = group.orders[0]?.paymentMethod || '';
+    // Pick the most distinctive field value to save as fingerprint
+    if (sampleNote) {
+      saveFingerprint({ marketplace_code: marketplaceKey, field: 'note_attributes', pattern: sampleNote, confidence: 1.0, source: 'user_confirmed' });
+    } else if (sampleTag) {
+      saveFingerprint({ marketplace_code: marketplaceKey, field: 'tags', pattern: sampleTag, confidence: 1.0, source: 'user_confirmed' });
+    } else if (samplePm) {
+      saveFingerprint({ marketplace_code: marketplaceKey, field: 'payment_method', pattern: samplePm, confidence: 1.0, source: 'user_confirmed' });
     }
 
     const entry = getRegistryEntry(marketplaceKey);
@@ -192,8 +204,6 @@ export default function ShopifyOrdersDashboard() {
 
     const newUnknown = parseResult.unknownGroups.filter((_, i) => i !== groupIdx);
     const newReady = [...parseResult.groups, updatedGroup];
-
-    // Rebuild settlements
     const newSettlements = buildSettlementsFromGroups(newReady);
 
     setParseResult({ ...parseResult, groups: newReady, unknownGroups: newUnknown, settlements: newSettlements });
