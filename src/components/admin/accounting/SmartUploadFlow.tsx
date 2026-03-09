@@ -594,8 +594,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         </CardContent>
       </Card>
 
-      {/* Where to find your files — collapsible guide */}
-      <FileGuide />
+      {/* Where to find your files — collapsible guide, auto-collapses when files uploaded */}
+      <FileGuide forceCollapsed={hasFiles} />
 
       {/* File results */}
       {hasFiles && (
@@ -1042,8 +1042,8 @@ const FILE_GUIDES = [
   },
 ];
 
-function FileGuide() {
-  const [open, setOpen] = useState(true);
+function FileGuide({ forceCollapsed }: { forceCollapsed?: boolean }) {
+  const [open, setOpen] = useState(false);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
