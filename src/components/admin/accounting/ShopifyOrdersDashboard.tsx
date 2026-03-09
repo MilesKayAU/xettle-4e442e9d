@@ -265,13 +265,37 @@ export default function ShopifyOrdersDashboard() {
     loadHistory();
   };
 
+// ─── AI Detection Cache (session-level, survives re-renders) ────────
+  // Key: hash of note_attributes + tags + payment_method → cached result
+  const aiCacheRef = useRef<Map<string, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>(new Map());
+
+  const buildCacheKey = (group: MarketplaceGroup): string => {
+    const attrs = JSON.stringify(group.sampleNoteAttributes || []);
+    const tags = JSON.stringify(group.sampleTags || []);
+    const pm = group.orders[0]?.paymentMethod || '';
+    return `${attrs}|${tags}|${pm}`;
+  };
+
   // ─── AI Marketplace Detection for Unknown Groups ──────────────────
   const requestAiDetection = async (groupIdx: number, group: MarketplaceGroup) => {
     if (group.orderCount < 3) return;
+
+    // Check cache first
+    const cacheKey = buildCacheKey(group);
+    const cached = aiCacheRef.current.get(cacheKey);
+    if (cached) {
+      setAiSuggestions(prev => ({ ...prev, [groupIdx]: cached }));
+      if (cached.confidence >= 90 && cached.marketplace_code) {
+        assignUnknownGroup(groupIdx, cached.marketplace_code);
+      }
+      return;
+    }
+
     setAiSuggestions(prev => ({ ...prev, [groupIdx]: { marketplace_name: '', marketplace_code: '', confidence: 0, reasoning: '', loading: true } }));
 
     try {
-      const { data, error } = await supabase.functions.invoke('ai-file-interpreter', {
+      // 5-second timeout to prevent UI stalls
+      const invokePromise = supabase.functions.invoke('ai-file-interpreter', {
         body: {
           action: 'detect_marketplace',
           note_attributes_samples: group.sampleNoteAttributes || [],
@@ -280,6 +304,11 @@ export default function ShopifyOrdersDashboard() {
           row_count: group.orderCount,
         },
       });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI detection timed out')), 5000)
+      );
+
+      const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
 
       if (error) throw error;
 
@@ -291,6 +320,8 @@ export default function ShopifyOrdersDashboard() {
         loading: false,
       };
 
+      // Store in cache
+      aiCacheRef.current.set(cacheKey, suggestion);
       setAiSuggestions(prev => ({ ...prev, [groupIdx]: suggestion }));
 
       // Auto-assign if confidence >= 90
@@ -298,8 +329,13 @@ export default function ShopifyOrdersDashboard() {
         assignUnknownGroup(groupIdx, suggestion.marketplace_code);
         toast.success(`AI auto-detected: ${suggestion.marketplace_name} (${suggestion.confidence}% confidence)`);
       }
-    } catch {
-      setAiSuggestions(prev => ({ ...prev, [groupIdx]: { marketplace_name: '', marketplace_code: '', confidence: 0, reasoning: 'AI detection failed', loading: false } }));
+    } catch (err) {
+      const reason = err instanceof Error && err.message === 'AI detection timed out'
+        ? 'AI detection timed out — choose manually'
+        : 'AI detection failed';
+      const failResult = { marketplace_name: '', marketplace_code: '', confidence: 0, reasoning: reason, loading: false };
+      aiCacheRef.current.set(cacheKey, failResult);
+      setAiSuggestions(prev => ({ ...prev, [groupIdx]: failResult }));
     }
   };
 
