@@ -407,8 +407,12 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
       if (!result.success) item.error = result.error || 'Save failed';
       setBulkBatch([...bulkBatch]);
     }
+    saveBulkToStorage(bulkBatch);
     await loadHistory();
     toast.success(`Saved ${toSave.length} settlements.`);
+    // After saving, clear bulk state and switch to history
+    clearBulkStorage();
+    setActiveTab('history');
   };
 
   const handleBulkSkipDuplicates = () => {
