@@ -196,19 +196,19 @@ export default function PublicDemoUpload() {
 
   if (state.step === 'idle') {
     return (
-      <div className="w-full max-w-2xl mx-auto">
-        <Card
-          className={`border-2 border-dashed transition-all cursor-pointer ${
+      <div className="w-full max-w-3xl mx-auto">
+        <div
+          className={`border-[3px] border-dashed rounded-2xl transition-all cursor-pointer ${
             isDragging
-              ? 'border-primary bg-primary/10 scale-[1.01]'
-              : 'border-primary/30 hover:border-primary/60 bg-primary/5'
+              ? 'border-primary bg-primary/15 scale-[1.01] shadow-lg shadow-primary/20'
+              : 'border-primary/40 hover:border-primary hover:bg-primary/10 bg-primary/5'
           }`}
           onDrop={handleDrop}
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
           onClick={() => inputRef.current?.click()}
         >
-          <CardContent className="py-10 text-center">
+          <div className="py-14 md:py-16 px-6 text-center">
             <input
               ref={inputRef}
               type="file"
@@ -216,26 +216,30 @@ export default function PublicDemoUpload() {
               onChange={handleFileSelect}
               className="hidden"
             />
-            <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Upload className="h-7 w-7 text-primary" />
+            <div className="h-16 w-16 rounded-2xl bg-primary/15 flex items-center justify-center mx-auto mb-5">
+              <Upload className="h-8 w-8 text-primary" />
             </div>
-            <p className="text-lg font-semibold text-foreground mb-1">
+            <p className="text-xl md:text-2xl font-bold text-foreground mb-2">
               Drop your settlement file here
             </p>
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="text-base text-muted-foreground mb-5">
               Amazon TSV · Shopify CSV · Bunnings PDF · Any marketplace
             </p>
+            <Button size="lg" variant="outline" className="mb-5 pointer-events-none border-primary/30 text-primary font-semibold">
+              <Upload className="h-4 w-4 mr-2" />
+              Choose file or drag & drop
+            </Button>
             <div className="flex flex-wrap justify-center gap-2 mb-4">
               {['CSV', 'TSV', 'XLSX', 'PDF'].map(f => (
-                <Badge key={f} variant="outline" className="text-[10px] px-2 py-0.5">{f}</Badge>
+                <Badge key={f} variant="outline" className="text-xs px-2.5 py-0.5">{f}</Badge>
               ))}
             </div>
             <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/70">
-              <Shield className="h-3 w-3" />
+              <Shield className="h-3.5 w-3.5" />
               Max 5MB · Analysed in your browser · Never stored
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
