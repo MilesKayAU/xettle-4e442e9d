@@ -151,7 +151,21 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
-    const detectedFiles: DetectedFile[] = newFiles.map(f => ({
+    // Dedup 1: skip files already in the current list (by name + size)
+    const currentFiles = filesRef.current;
+    const uniqueFiles = newFiles.filter(f => {
+      const isDupe = currentFiles.some(
+        existing => existing.file.name === f.name && existing.file.size === f.size
+      );
+      if (isDupe) {
+        toast.warning(`"${f.name}" is already in the upload list — skipped.`, { duration: 4000 });
+      }
+      return !isDupe;
+    });
+
+    if (uniqueFiles.length === 0) return;
+
+    const detectedFiles: DetectedFile[] = uniqueFiles.map(f => ({
       file: f,
       status: 'detecting' as FileStatus,
       detection: null,
