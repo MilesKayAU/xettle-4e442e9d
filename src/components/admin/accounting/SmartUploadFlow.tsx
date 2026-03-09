@@ -422,6 +422,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         marketplace: data?.marketplace_guess || 'unknown',
         marketplaceLabel: MARKETPLACE_LABELS[data?.marketplace_guess] || data?.marketplace_guess || 'Unknown',
         confidence: data?.confidence || 60,
+        confidenceReason: data?.confidence_reason || undefined,
         isSettlementFile: true,
         columnMapping: mapping,
         detectionLevel: 3,
