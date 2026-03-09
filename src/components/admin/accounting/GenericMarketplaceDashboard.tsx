@@ -60,19 +60,21 @@ interface SettlementRow {
   bank_verified_by: string | null;
 }
 
-function statusBadge(status: string | null) {
+function statusBadge(s: SettlementRow) {
+  const status = s.status;
   switch (status) {
     case 'synced':
-      return <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Synced to Xero ✓</Badge>;
     case 'pushed_to_xero':
-      return <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Posted to Xero ✓</Badge>;
+      return s.xero_invoice_number
+        ? <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">In Xero ({s.xero_invoice_number}) ✓</Badge>
+        : <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Pushed to Xero ✓</Badge>;
     case 'synced_external':
       return <Badge variant="outline" className="border-muted-foreground/40 text-[10px]">Already in Xero</Badge>;
+    case 'push_failed':
+      return <Badge variant="destructive" className="text-[10px]">Push failed</Badge>;
     case 'saved':
     case 'parsed':
-      return <Badge variant="secondary" className="text-[10px]">Saved</Badge>;
-    case 'error':
-      return <Badge variant="destructive" className="text-[10px]">Error</Badge>;
+      return <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">Ready to push</Badge>;
     default:
       return <Badge variant="outline" className="text-[10px]">{status || 'Saved'}</Badge>;
   }
