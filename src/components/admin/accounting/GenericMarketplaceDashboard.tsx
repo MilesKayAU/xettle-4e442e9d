@@ -486,6 +486,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                             </div>
                             <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
                               ID: {s.settlement_id}
+                              {s.xero_invoice_number && s.xero_status && (
+                                <span className="ml-2 text-primary">{s.xero_invoice_number} · {s.xero_status}</span>
+                              )}
                             </p>
                             <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
                               <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
@@ -508,6 +511,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
+                          {/* Push to Xero — Ready state */}
                           {isSyncable && (
                             <>
                               <TooltipProvider>
@@ -517,6 +521,13 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                       size="sm"
                                       variant={verifyingId === s.id || s.bank_verified ? 'default' : 'outline'}
                                       onClick={() => {
+                                        // Duplicate prevention: warn if already has xero_journal_id
+                                        if (s.xero_journal_id) {
+                                          const confirmed = window.confirm(
+                                            `This settlement already has a Xero invoice (${s.xero_invoice_number || s.xero_journal_id}). Push again?`
+                                          );
+                                          if (!confirmed) return;
+                                        }
                                         if (verifyingId === s.id) {
                                           setVerifyingId(null);
                                           setBankAmountInput('');
@@ -548,6 +559,33 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                 Already in Xero
                               </Button>
                             </>
+                          )}
+                          {/* Retry — Push failed state */}
+                          {isPushFailed && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                              disabled={pushing === s.id}
+                              onClick={async () => {
+                                // Reset status and retry
+                                await supabase
+                                  .from('settlements')
+                                  .update({ status: 'saved', xero_journal_id: null } as any)
+                                  .eq('id', s.id);
+                                loadSettlements();
+                                toast.info('Status reset — you can now retry pushing to Xero');
+                              }}
+                            >
+                              {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5 mr-1" />}
+                              ⚠️ Retry Push
+                            </Button>
+                          )}
+                          {/* Synced state — show green badge */}
+                          {isSynced && (
+                            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                              ✅ {s.xero_invoice_number || 'Pushed'}
+                            </Badge>
                           )}
                           <Button
                             variant="ghost"
