@@ -651,6 +651,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               onOverride={overrideMarketplace}
               onAnalyzeAI={analyzeWithAI}
               onProcess={processFile}
+              onSetStatus={setFileStatus}
             />
           ))}
 
