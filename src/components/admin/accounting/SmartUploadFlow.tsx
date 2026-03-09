@@ -157,17 +157,30 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
-    // Dedup 1: skip files already in the current list (by name + size)
+    // Dedup 1: skip files already in the current list (by name + size) — but allow re-upload if previous attempt was an error
     const currentFiles = filesRef.current;
+    const replaceableIndices: number[] = [];
     const uniqueFiles = newFiles.filter(f => {
-      const isDupe = currentFiles.some(
+      const existingIdx = currentFiles.findIndex(
         existing => existing.file.name === f.name && existing.file.size === f.size
       );
-      if (isDupe) {
+      if (existingIdx >= 0) {
+        const existing = currentFiles[existingIdx];
+        // Allow re-upload if previous was error (e.g. stale duplicate check)
+        if (existing.status === 'error') {
+          replaceableIndices.push(existingIdx);
+          return true;
+        }
         toast.warning(`"${f.name}" is already in the upload list — skipped.`, { duration: 4000 });
+        return false;
       }
-      return !isDupe;
+      return true;
     });
+
+    // Remove stale error entries that are being re-uploaded
+    if (replaceableIndices.length > 0) {
+      setFiles(prev => prev.filter((_, i) => !replaceableIndices.includes(i)));
+    }
 
     if (uniqueFiles.length === 0) return;
 
