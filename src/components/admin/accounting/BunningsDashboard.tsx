@@ -527,14 +527,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 <div className="mt-2 flex items-center gap-2">
                   {bulkProcessing
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                    : <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
+                    : <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
                   <p className="text-xs text-muted-foreground">
                     {bulkProcessing ? `Parsing ${bulkFiles.length} files…` : `${bulkFiles.length} files ready for review`}
                   </p>
                 </div>
               ) : file && (
                 <div className="flex items-center justify-between mt-2">
-                  <p className={`text-xs font-medium ${parseError ? 'text-destructive' : 'text-green-700'}`}>
+                  <p className={`text-xs font-medium ${parseError ? 'text-destructive' : 'text-primary'}`}>
                     {parseError ? `✗ ${parseError}` : `✓ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`}
                   </p>
                   <Button variant="ghost" size="sm" className="text-xs h-6" onClick={clearUpload}>
