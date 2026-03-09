@@ -1,43 +1,32 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
-  CheckSquare, Square, CheckCircle2, AlertTriangle, Eye, ChevronDown, ShieldCheck, ShieldAlert,
+  CheckSquare, Square, Eye, ShieldCheck, ShieldAlert,
   Download, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher';
-import {
-  syncSettlementToXero,
-  syncXeroStatus,
-  deleteSettlement,
-  rollbackSettlementFromXero,
-  formatSettlementDate,
-  formatAUD,
-  buildSimpleInvoiceLines,
-  type StandardSettlement,
-} from '@/utils/settlement-engine';
-import { runUniversalReconciliation, type UniversalReconciliationResult } from '@/utils/universal-reconciliation';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { formatSettlementDate, formatAUD } from '@/utils/settlement-engine';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
+
+// ── Shared architecture hooks + components ──────────────────────────────────
+import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
+import { useBulkSelect } from '@/hooks/use-bulk-select';
+import { useXeroSync } from '@/hooks/use-xero-sync';
+import { useReconciliation } from '@/hooks/use-reconciliation';
+import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
+import SettlementStatusBadge from './shared/SettlementStatusBadge';
+import ReconChecksInline from './shared/ReconChecksInline';
+import BulkDeleteDialog from './shared/BulkDeleteDialog';
+import GapDetector, { hasSettlementGap } from './shared/GapDetector';
 
 interface GenericMarketplaceDashboardProps {
   marketplace: UserMarketplace;
