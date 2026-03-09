@@ -766,7 +766,10 @@ export default function ShopifyOrdersDashboard() {
                                 {g.currency !== 'AUD' && <Badge variant="outline" className="ml-2 text-[10px]">{g.currency}</Badge>}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {g.orderCount} order{g.orderCount !== 1 ? 's' : ''} · {formatSettlementDate(g.periodStart)} – {formatSettlementDate(g.periodEnd)}
+                                {g.statusBreakdown && g.statusBreakdown.partially_refunded > 0
+                                  ? `${g.statusBreakdown.paid} paid + ${g.statusBreakdown.partially_refunded} partially refunded = ${g.orderCount} orders`
+                                  : `${g.orderCount} order${g.orderCount !== 1 ? 's' : ''}`
+                                } · {formatSettlementDate(g.periodStart)} – {formatSettlementDate(g.periodEnd)}
                               </p>
                             </div>
                           </div>
