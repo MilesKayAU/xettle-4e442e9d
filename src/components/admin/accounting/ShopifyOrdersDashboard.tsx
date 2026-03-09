@@ -125,10 +125,13 @@ export default function ShopifyOrdersDashboard() {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
-  // Show onboarding when no history and no file uploaded yet
+  // Show onboarding ONLY on first visit with no data
+  // Once history loads or user uploads, onboarding never returns (unless manually re-triggered)
   useEffect(() => {
     if (!historyLoading && history.length === 0 && !file && !parseResult) {
       setShowOnboarding(true);
+    } else if (history.length > 0) {
+      setShowOnboarding(false);
     }
   }, [historyLoading, history.length, file, parseResult]);
 
