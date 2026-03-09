@@ -63,7 +63,7 @@ interface BatchItem {
 function statusBadge(status: string) {
   switch (status) {
     case 'synced':
-      return <Badge className="bg-green-100 text-green-800 border-green-200">Synced to Xero</Badge>;
+      return <Badge className="bg-primary/10 text-primary border-primary/20">Synced to Xero</Badge>;
     case 'saved':
     case 'parsed':
       return <Badge variant="secondary">Saved</Badge>;
