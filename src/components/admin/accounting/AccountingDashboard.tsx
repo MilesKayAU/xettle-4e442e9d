@@ -310,9 +310,22 @@ export default function AccountingDashboard() {
   const lastSettlement = settlements.length > 0 ? settlements[0] : null;
   const nextExpectedStart = lastSettlement ? lastSettlement.period_end : null;
 
-  const handleSettlementUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSettlementUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    // ── Cross-marketplace detection ──
+    if (files.length === 1) {
+      const { detectFileMarketplace, MARKETPLACE_LABELS } = await import('@/utils/file-marketplace-detector');
+      const detected = await detectFileMarketplace(files[0]);
+      if (detected && detected !== 'amazon_au') {
+        toast.warning(
+          `This looks like a ${MARKETPLACE_LABELS[detected]} file. Switch to the ${MARKETPLACE_LABELS[detected]} tab to upload it.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+    }
     
     if (files.length === 1) {
       // Single file mode — existing behaviour
