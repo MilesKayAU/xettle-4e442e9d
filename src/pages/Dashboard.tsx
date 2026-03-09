@@ -213,8 +213,6 @@ export default function Dashboard() {
                 <AccountingDashboard />
               ) : isBunnings && selectedUserMarketplace ? (
                 <BunningsDashboard marketplace={selectedUserMarketplace} />
-              ) : isShopifyPayments && selectedUserMarketplace ? (
-                <ShopifyPaymentsDashboard marketplace={selectedUserMarketplace} />
               ) : selectedUserMarketplace ? (
                 <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} />
               ) : null}
