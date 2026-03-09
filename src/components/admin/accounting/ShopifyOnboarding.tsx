@@ -436,6 +436,39 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
         ))}
       </div>
 
+      {/* SKU cost prompt */}
+      {result && !showSkuManager && (() => {
+        const allGroups = [...result.groups, ...result.unknownGroups];
+        const skus = extractUniqueSKUs(allGroups);
+        if (skus.length === 0) return null;
+        return (
+          <Card className="border-dashed border-primary/30">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">We found {skus.length} unique SKUs</p>
+                    <p className="text-xs text-muted-foreground">Add product costs to see profit per marketplace</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="text-xs" onClick={() => setShowSkuManager(true)}>Add costs now</Button>
+                  <Button size="sm" variant="ghost" className="text-xs text-muted-foreground">Skip for now</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {showSkuManager && result && (() => {
+        const allGroups = [...result.groups, ...result.unknownGroups];
+        const skus = extractUniqueSKUs(allGroups);
+        if (skus.length === 0) return null;
+        return <SkuCostManager skus={skus} compact />;
+      })()}
+
       {/* Actions */}
       <div className="flex gap-3 justify-center">
         <Button onClick={() => { setPushed(true); handleFinish(); }} className="gap-2">
