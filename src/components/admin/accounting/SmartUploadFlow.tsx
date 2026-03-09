@@ -610,6 +610,37 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               }
             }
           }
+          // ── Save settlement_lines for Shopify Orders ──
+          if (user && marketplace === 'shopify_orders') {
+            try {
+              const text = await df.file.text();
+              const soResult = parseShopifyOrdersCSV(text);
+              if (soResult.success) {
+                const mktKey = s.metadata?.marketplaceKey;
+                const group = [...soResult.groups, ...soResult.unknownGroups].find(
+                  g => g.marketplaceKey === mktKey && g.currency === (s.metadata?.currency || 'AUD')
+                );
+                if (group && group.orders.length > 0) {
+                  const lineRows = group.orders.map(order => ({
+                    user_id: user.id,
+                    settlement_id: s.settlement_id,
+                    order_id: order.name,
+                    sku: order.lineitemSku || null,
+                    amount: order.total,
+                    amount_type: 'order_total',
+                    amount_description: `${order.lineitemSku || 'N/A'} × ${order.lineitemQuantity}`,
+                    transaction_type: 'Order',
+                    posted_date: order.paidAt ? order.paidAt.split('T')[0] : null,
+                    marketplace_name: s.metadata?.displayName || mktKey,
+                    accounting_category: 'sales',
+                  }));
+                  for (let i = 0; i < lineRows.length; i += 500) {
+                    await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
+                  }
+                }
+              }
+            } catch { /* silent */ }
+          }
           // ── Save settlement_lines for Shopify Payments ──
           if (user && marketplace === 'shopify_payments') {
             try {
