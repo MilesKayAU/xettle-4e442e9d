@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS idx_settlement_dedup ON settlements (settlement_id, marketplace, user_id);
