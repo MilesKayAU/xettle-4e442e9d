@@ -406,6 +406,7 @@ export function detectFromHeaders(headers: string[]): FileDetectionResult | null
       marketplace: 'unknown',
       marketplaceLabel: 'Unknown Marketplace',
       confidence: heuristic.confidence,
+      confidenceReason: `Matched heuristic fields: ${heuristic.matchedFields.join(', ')}`,
       isSettlementFile: true,
       columnMapping: heuristic.mapping,
       detectionLevel: 2,

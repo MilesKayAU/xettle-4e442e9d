@@ -134,7 +134,7 @@ Row count: ${row_count || 0}`;
                   description: "Brief explanation of why this marketplace was detected",
                 },
               },
-              required: ["marketplace_name", "marketplace_code", "confidence", "detection_field", "pattern", "reasoning"],
+              required: ["marketplace_name", "marketplace_code", "confidence", "confidence_reason", "detection_field", "pattern", "reasoning"],
               additionalProperties: false,
             },
           },
