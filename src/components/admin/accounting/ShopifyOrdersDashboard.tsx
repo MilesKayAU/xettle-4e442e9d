@@ -576,6 +576,19 @@ export default function ShopifyOrdersDashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Re-run setup button */}
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => { clearUpload(); setShowOnboarding(true); }}
+            >
+              <ShoppingCart className="h-3.5 w-3.5 mr-1" />
+              Re-run Shopify setup
+            </Button>
+          </div>
         </TabsContent>
 
         {/* ─── Review Tab ─────────────────────────────────────────── */}
