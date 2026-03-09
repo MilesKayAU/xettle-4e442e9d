@@ -51,6 +51,8 @@ interface SettlementRow {
   reimbursements: number | null;
   other_fees: number | null;
   xero_journal_id: string | null;
+  xero_invoice_number: string | null;
+  xero_status: string | null;
   sales_shipping: number | null;
   bank_verified: boolean | null;
   bank_verified_amount: number | null;
