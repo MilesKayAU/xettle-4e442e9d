@@ -117,9 +117,18 @@ export default function InsightsDashboard() {
         }
       }
 
+      // Normalize composite marketplace codes to base codes for aggregation
+      // e.g. 'woolworths_marketplus_bigw' → 'bigw', 'shopify_orders_kogan' → 'kogan'
+      function normalizeMarketplace(mp: string): string {
+        if (mp.startsWith('woolworths_marketplus_')) return mp.replace('woolworths_marketplus_', '');
+        if (mp.startsWith('shopify_orders_')) return mp.replace('shopify_orders_', '');
+        return mp;
+      }
+
       const grouped: Record<string, typeof data> = {};
       for (const row of data) {
-        const mp = row.marketplace || 'amazon_au';
+        const rawMp = row.marketplace || 'amazon_au';
+        const mp = normalizeMarketplace(rawMp);
         if (!grouped[mp]) grouped[mp] = [];
         grouped[mp].push(row);
       }
