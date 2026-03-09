@@ -210,7 +210,7 @@ export default function Dashboard() {
               {isAmazonAU ? (
                 <AccountingDashboard />
               ) : selectedUserMarketplace ? (
-                <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} />
+                <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => switchView('smart_upload')} />
               ) : null}
             </div>
           </ErrorBoundary>
