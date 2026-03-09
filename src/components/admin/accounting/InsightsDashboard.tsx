@@ -431,7 +431,7 @@ export default function InsightsDashboard() {
                       </span>
                     )}
                     <span className="flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-muted-foreground/25 inline-block" />
+                      <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" />
                       ${(segments.fees / 100).toFixed(2)} fees
                     </span>
                   </div>
