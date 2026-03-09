@@ -191,12 +191,24 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     }));
     setFiles(prev => [...prev, ...detectedFiles]);
 
+    // Track which marketplaces we've already auto-created tabs for in this batch
+    const createdTabs = new Set<string>();
+
     const results = await Promise.allSettled(
       uniqueFiles.map(async (file, idx) => {
         const result = await detectFile(file);
         let settlements: StandardSettlement[] = [];
         if (result && result.isSettlementFile) {
           settlements = await preParseFile(file, result);
+
+          // Create the marketplace tab immediately on detection (before save)
+          // so the user sees it appear right away even if saving takes a while
+          const mktCode = result.marketplace;
+          if (mktCode && mktCode !== 'amazon_au' && !createdTabs.has(mktCode)) {
+            createdTabs.add(mktCode);
+            await ensureMarketplaceConnection(mktCode);
+            onMarketplacesChanged?.();
+          }
         }
 
         // Dedup 2: check if any parsed settlement already exists in DB
