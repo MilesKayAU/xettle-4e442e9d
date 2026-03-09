@@ -311,18 +311,31 @@ export async function syncSettlementToXero(
     if (fnErr) return { success: false, error: fnErr.message };
     if (!result?.success) return { success: false, error: result?.error || 'Xero push failed' };
 
-    // Update settlement status
+    // Update settlement status with invoice number
     await supabase
       .from('settlements')
       .update({
         status: 'synced',
         xero_journal_id: result.invoiceId,
+        xero_invoice_number: result.invoiceNumber || null,
+        xero_status: 'AUTHORISED',
       } as any)
       .eq('settlement_id', settlementId)
       .eq('user_id', user.id);
 
     return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
   } catch (err: any) {
+    // Mark push_failed in DB
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from('settlements')
+          .update({ status: 'push_failed' } as any)
+          .eq('settlement_id', settlementId)
+          .eq('user_id', user.id);
+      }
+    } catch { /* ignore */ }
     return { success: false, error: err.message || 'Unknown error' };
   }
 }
