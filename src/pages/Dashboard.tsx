@@ -141,9 +141,12 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="container-custom py-8">
+      <div className="container-custom py-8 space-y-6">
+        {/* Marketplace Return Ratio — cross-marketplace insight */}
+        <MarketplaceReturnRatio />
+
         {/* Marketplace Switcher */}
-        <div className="mb-6">
+        <div>
           {!marketplacesLoading && (
             <MarketplaceSwitcher
               selectedMarketplace={selectedMarketplace}
