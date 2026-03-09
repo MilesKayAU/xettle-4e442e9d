@@ -367,18 +367,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       });
       toast.error(`Failed to process ${df.file.name}: ${err.message}`);
     }
-  }, [files, onSettlementsSaved]);
+  }, [onSettlementsSaved]);
 
   // ── Process all confirmed files ──
   const processAllConfirmed = useCallback(async () => {
     setProcessingAll(true);
-    for (let i = 0; i < files.length; i++) {
-      if (files[i].status === 'detected' && files[i].detection?.isSettlementFile) {
+    const currentFiles = filesRef.current;
+    for (let i = 0; i < currentFiles.length; i++) {
+      if (currentFiles[i].status === 'detected' && currentFiles[i].detection?.isSettlementFile) {
         await processFile(i);
       }
     }
     setProcessingAll(false);
-  }, [files, processFile]);
+  }, [processFile]);
 
   const confirmedCount = files.filter(f => f.status === 'detected' && f.detection?.isSettlementFile).length;
   const savedCount = files.filter(f => f.status === 'saved').length;
