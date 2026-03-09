@@ -2,11 +2,18 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
+import { toast } from '@/hooks/use-toast';
 
 interface MarketplaceStats {
   marketplace: string;
@@ -20,11 +27,25 @@ interface MarketplaceStats {
   settlementCount: number;
   latestPeriodEnd: string | null;
   avgCommission: number;
+  adSpend: number;
+  returnAfterAds: number | null;
+}
+
+interface AdSpendRecord {
+  marketplace_code: string;
+  spend_amount: number;
 }
 
 export default function InsightsDashboard() {
   const [stats, setStats] = useState<MarketplaceStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adDialogOpen, setAdDialogOpen] = useState(false);
+  const [adDialogMarketplace, setAdDialogMarketplace] = useState('');
+  const [adMonth, setAdMonth] = useState('');
+  const [adAmount, setAdAmount] = useState('');
+  const [adCurrency, setAdCurrency] = useState('AUD');
+  const [adNotes, setAdNotes] = useState('');
+  const [adSaving, setAdSaving] = useState(false);
 
   useEffect(() => {
     loadStats();
@@ -32,15 +53,29 @@ export default function InsightsDashboard() {
 
   async function loadStats() {
     try {
-      const { data, error } = await supabase
-        .from('settlements')
-        .select('marketplace, sales_principal, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end')
-        .order('period_end', { ascending: false });
+      const [settlementsRes, adSpendRes] = await Promise.all([
+        supabase
+          .from('settlements')
+          .select('marketplace, sales_principal, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end')
+          .order('period_end', { ascending: false }),
+        supabase
+          .from('marketplace_ad_spend')
+          .select('marketplace_code, spend_amount'),
+      ]);
 
-      if (error) throw error;
+      if (settlementsRes.error) throw settlementsRes.error;
+      const data = settlementsRes.data;
       if (!data || data.length === 0) {
         setStats([]);
         return;
+      }
+
+      // Aggregate ad spend by marketplace
+      const adSpendByMp: Record<string, number> = {};
+      if (adSpendRes.data) {
+        for (const row of adSpendRes.data as AdSpendRecord[]) {
+          adSpendByMp[row.marketplace_code] = (adSpendByMp[row.marketplace_code] || 0) + Number(row.spend_amount);
+        }
       }
 
       const grouped: Record<string, typeof data> = {};
@@ -61,8 +96,10 @@ export default function InsightsDashboard() {
         const returnRatio = totalSales > 0 ? netPayout / totalSales : 0;
         const feeLoad = totalSales > 0 ? totalFees / totalSales : 0;
         const avgCommission = totalSales > 0 ? (Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0)) / totalSales) : 0;
-
         const latestPeriodEnd = rows.length > 0 ? rows[0].period_end : null;
+
+        const adSpend = adSpendByMp[mp] || 0;
+        const returnAfterAds = totalSales > 0 ? Math.max((netPayout - adSpend) / totalSales, -1) : null;
 
         results.push({
           marketplace: mp,
@@ -76,6 +113,8 @@ export default function InsightsDashboard() {
           settlementCount: rows.length,
           latestPeriodEnd,
           avgCommission,
+          adSpend,
+          returnAfterAds,
         });
       }
 
@@ -85,6 +124,54 @@ export default function InsightsDashboard() {
       // silent
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openAdDialog(marketplaceCode: string) {
+    setAdDialogMarketplace(marketplaceCode);
+    setAdMonth('');
+    setAdAmount('');
+    setAdCurrency('AUD');
+    setAdNotes('');
+    setAdDialogOpen(true);
+  }
+
+  async function saveAdSpend() {
+    if (!adMonth || !adAmount || Number(adAmount) <= 0) {
+      toast({ title: 'Please enter a valid month and amount', variant: 'destructive' });
+      return;
+    }
+    setAdSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const periodStart = `${adMonth}-01`;
+      const d = new Date(periodStart);
+      const periodEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+
+      const { error } = await supabase
+        .from('marketplace_ad_spend')
+        .upsert({
+          user_id: user.id,
+          marketplace_code: adDialogMarketplace,
+          period_start: periodStart,
+          period_end: periodEnd,
+          spend_amount: Number(adAmount),
+          currency: adCurrency,
+          source: 'manual',
+          notes: adNotes || null,
+        }, { onConflict: 'user_id,marketplace_code,period_start' });
+
+      if (error) throw error;
+
+      toast({ title: 'Ad spend saved' });
+      setAdDialogOpen(false);
+      await loadStats();
+    } catch (err: any) {
+      toast({ title: 'Failed to save', description: err.message, variant: 'destructive' });
+    } finally {
+      setAdSaving(false);
     }
   }
 
@@ -121,7 +208,9 @@ export default function InsightsDashboard() {
   const bestRatio = Math.max(...stats.map(s => s.returnRatio));
   const totalAllSales = stats.reduce((sum, s) => sum + s.totalSales, 0);
   const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout, 0);
+  const totalAllAdSpend = stats.reduce((sum, s) => sum + s.adSpend, 0);
   const overallRatio = totalAllSales > 0 ? totalAllNet / totalAllSales : 0;
+  const overallAfterAds = totalAllSales > 0 ? Math.max((totalAllNet - totalAllAdSpend) / totalAllSales, -1) : null;
 
   function formatPct(value: number): string {
     return `${(value * 100).toFixed(1)}%`;
@@ -149,6 +238,22 @@ export default function InsightsDashboard() {
 
   function getBarWidth(ratio: number): number {
     return Math.max(20, ratio * 100);
+  }
+
+  function getAdImpactText(s: MarketplaceStats): string | null {
+    if (s.adSpend <= 0 || s.returnAfterAds === null) return null;
+    const drop = s.returnRatio - s.returnAfterAds;
+    if (drop <= 0) return null;
+    return `Advertising reduced return by ${formatPct(drop)}`;
+  }
+
+  // Stacked bar segments for $1 breakdown
+  function getStackedSegments(s: MarketplaceStats) {
+    if (s.totalSales <= 0) return { net: 0, ads: 0, fees: 0 };
+    const feePct = s.feeLoad;
+    const adsPct = s.adSpend / s.totalSales;
+    const netPct = Math.max(0, 1 - feePct - adsPct);
+    return { net: netPct * 100, ads: adsPct * 100, fees: feePct * 100 };
   }
 
   return (
@@ -192,9 +297,20 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Best Performer</p>
-              <p className="text-xl font-bold text-primary mt-1">{stats[0].label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">${stats[0].returnRatio.toFixed(2)} per $1</p>
+              <p className="text-xs text-muted-foreground">
+                {totalAllAdSpend > 0 ? 'After Advertising' : 'Best Performer'}
+              </p>
+              {totalAllAdSpend > 0 && overallAfterAds !== null ? (
+                <>
+                  <p className={`text-xl font-bold mt-1 ${getRatioColor(overallAfterAds)}`}>${overallAfterAds.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Per $1 after ads</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xl font-bold text-primary mt-1">{stats[0].label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">${stats[0].returnRatio.toFixed(2)} per $1</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -213,7 +329,8 @@ export default function InsightsDashboard() {
                 </TooltipTrigger>
                 <TooltipContent side="left" className="max-w-xs text-xs">
                   <p className="font-medium mb-1">Marketplace Return Ratio</p>
-                  <p>Net Settlement ÷ Gross Sales. Includes marketplace fees & refunds. Excludes COGS, shipping & ads.</p>
+                  <p><strong>Marketplace return</strong> = Net Settlement ÷ Gross Sales</p>
+                  <p className="mt-1"><strong>After advertising</strong> = (Net Settlement − Ad Spend) ÷ Gross Sales</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -221,28 +338,102 @@ export default function InsightsDashboard() {
               How much you keep after marketplace deductions — higher is better
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {stats.map((s) => (
-              <div key={s.marketplace} className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">{s.label}</span>
-                    {s.returnRatio === bestRatio && stats.length > 1 && (
-                      <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
+          <CardContent className="space-y-5">
+            {stats.map((s) => {
+              const segments = getStackedSegments(s);
+              const impactText = getAdImpactText(s);
+
+              return (
+                <div key={s.marketplace} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">{s.label}</span>
+                      {s.returnRatio === bestRatio && stats.length > 1 && (
+                        <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
+                      )}
+                    </div>
+                    <span className={`text-lg font-bold tabular-nums ${getRatioColor(s.returnRatio)}`}>
+                      ${s.returnRatio.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Marketplace return bar */}
+                  <div className="h-3 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-700 ease-out"
+                      style={{ width: `${getBarWidth(s.returnRatio)}%`, opacity: s.returnRatio === bestRatio ? 1 : 0.55 }}
+                    />
+                  </div>
+
+                  {/* After advertising row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Megaphone className="h-3 w-3" /> After advertising
+                    </span>
+                    {s.adSpend > 0 && s.returnAfterAds !== null ? (
+                      <span className={`text-sm font-semibold tabular-nums ${getRatioColor(s.returnAfterAds)}`}>
+                        ${s.returnAfterAds.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </div>
-                  <span className={`text-lg font-bold tabular-nums ${getRatioColor(s.returnRatio)}`}>
-                    ${s.returnRatio.toFixed(2)}
-                  </span>
+
+                  {s.adSpend > 0 && s.returnAfterAds !== null ? (
+                    <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary/40 transition-all duration-700 ease-out"
+                        style={{ width: `${getBarWidth(s.returnAfterAds)}%` }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] text-muted-foreground">Add ad spend to see true return</p>
+                      <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-primary" onClick={() => openAdDialog(s.marketplace)}>
+                        <Plus className="h-3 w-3 mr-1" /> Add Ad Spend
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* $1 Sale Breakdown stacked bar */}
+                  {s.adSpend > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-muted-foreground font-medium">$1 Sale Breakdown</p>
+                      <div className="h-4 rounded-full overflow-hidden flex">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="h-full bg-primary transition-all duration-500" style={{ width: `${segments.net}%` }} />
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs">Net kept: {segments.net.toFixed(1)}%</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="h-full bg-accent transition-all duration-500" style={{ width: `${segments.ads}%` }} />
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs">Advertising: {segments.ads.toFixed(1)}%</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="h-full bg-muted-foreground/30 transition-all duration-500" style={{ width: `${segments.fees}%` }} />
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs">Marketplace fees: {segments.fees.toFixed(1)}%</TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex gap-3 text-[10px] text-muted-foreground">
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary inline-block" /> Net kept</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-accent inline-block" /> Ads</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/30 inline-block" /> Fees</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Impact insight text */}
+                  {impactText && (
+                    <p className="text-[11px] text-muted-foreground italic">{impactText}</p>
+                  )}
                 </div>
-                <div className="h-3 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-700 ease-out"
-                    style={{ width: `${getBarWidth(s.returnRatio)}%`, opacity: s.returnRatio === bestRatio ? 1 : 0.55 }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* Comparison insight */}
             {stats.length > 1 && (
@@ -254,6 +445,21 @@ export default function InsightsDashboard() {
                   <strong className="text-foreground">${stats[stats.length - 1].returnRatio.toFixed(2)}</strong> —{' '}
                   a <strong className="text-foreground">{formatPct(stats[0].returnRatio - stats[stats.length - 1].returnRatio)}</strong> gap.
                 </p>
+                {/* Cross-marketplace ad comparison */}
+                {stats.filter(s => s.adSpend > 0).length > 1 && (() => {
+                  const withAds = stats.filter(s => s.returnAfterAds !== null && s.adSpend > 0);
+                  const bestAfterAds = withAds.reduce((best, s) => (s.returnAfterAds! > best.returnAfterAds! ? s : best), withAds[0]);
+                  const worstAfterAds = withAds.reduce((worst, s) => (s.returnAfterAds! < worst.returnAfterAds! ? s : worst), withAds[0]);
+                  if (bestAfterAds.marketplace === worstAfterAds.marketplace) return null;
+                  const diff = bestAfterAds.returnAfterAds! - worstAfterAds.returnAfterAds!;
+                  return (
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      After advertising, <strong className="text-foreground">{bestAfterAds.label}</strong> returns{' '}
+                      <strong className="text-foreground">${diff.toFixed(2)}</strong> more per $1 than{' '}
+                      <strong className="text-foreground">{worstAfterAds.label}</strong>.
+                    </p>
+                  );
+                })()}
               </div>
             )}
           </CardContent>
@@ -267,11 +473,11 @@ export default function InsightsDashboard() {
               <CardTitle className="text-base">Fee Intelligence</CardTitle>
             </div>
             <CardDescription className="text-xs">
-              Fee load, commission rates and refund impact per marketplace
+              Fee load, commission rates, advertising impact and refund impact per marketplace
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border border-border overflow-hidden">
+            <div className="rounded-md border border-border overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
@@ -280,8 +486,20 @@ export default function InsightsDashboard() {
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Fee Load</th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Avg Commission</th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Refunds</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-foreground">
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">Ad Spend</TooltipTrigger>
+                        <TooltipContent className="text-xs">Total advertising spend (analytics only — not synced to Xero)</TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Net</th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Return</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-foreground">
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">After Ads</TooltipTrigger>
+                        <TooltipContent className="text-xs">(Net Settlement − Ad Spend) ÷ Gross Sales</TooltipContent>
+                      </Tooltip>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -299,8 +517,18 @@ export default function InsightsDashboard() {
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.feeLoad)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.avgCommission)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalRefunds)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.adSpend > 0 ? formatCurrency(s.adSpend) : (
+                          <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5 text-primary" onClick={() => openAdDialog(s.marketplace)}>
+                            <Plus className="h-3 w-3 mr-0.5" /> Add
+                          </Button>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-right tabular-nums font-medium text-foreground">{formatCurrency(s.netPayout)}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${getRatioColor(s.returnRatio)}`}>{formatPct(s.returnRatio)}</td>
+                      <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${s.returnAfterAds !== null && s.adSpend > 0 ? getRatioColor(s.returnAfterAds) : 'text-muted-foreground'}`}>
+                        {s.adSpend > 0 && s.returnAfterAds !== null ? formatPct(s.returnAfterAds) : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -347,6 +575,28 @@ export default function InsightsDashboard() {
                     <span className="text-right tabular-nums text-foreground">{formatPct(s.feeLoad)}</span>
 
                     <div className="flex items-center gap-1 text-muted-foreground">
+                      <Megaphone className="h-3 w-3" /> Ad spend
+                    </div>
+                    <span className="text-right tabular-nums text-foreground">
+                      {s.adSpend > 0 ? formatCurrency(s.adSpend) : (
+                        <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1 text-primary" onClick={() => openAdDialog(s.marketplace)}>
+                          <Plus className="h-3 w-3 mr-0.5" /> Add
+                        </Button>
+                      )}
+                    </span>
+
+                    {s.adSpend > 0 && s.returnAfterAds !== null && (
+                      <>
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                          <Megaphone className="h-3 w-3" /> After ads
+                        </div>
+                        <span className={`text-right tabular-nums font-semibold ${getRatioColor(s.returnAfterAds)}`}>
+                          {formatPct(s.returnAfterAds)}
+                        </span>
+                      </>
+                    )}
+
+                    <div className="flex items-center gap-1 text-muted-foreground">
                       <Store className="h-3 w-3" /> Settlements
                     </div>
                     <span className="text-right tabular-nums text-foreground">{s.settlementCount}</span>
@@ -356,11 +606,84 @@ export default function InsightsDashboard() {
                     </div>
                     <span className="text-right text-foreground">{formatDate(s.latestPeriodEnd)}</span>
                   </div>
+
+                  {/* Insight text */}
+                  {(() => {
+                    const impact = getAdImpactText(s);
+                    if (!impact) return null;
+                    return <p className="text-[11px] text-muted-foreground italic border-t border-border pt-2">{impact}</p>;
+                  })()}
                 </CardContent>
               </Card>
             ))}
           </div>
         </div>
+
+        {/* Add Ad Spend Dialog */}
+        <Dialog open={adDialogOpen} onOpenChange={setAdDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Advertising Spend</DialogTitle>
+              <DialogDescription>
+                Record monthly ad spend for <strong>{MARKETPLACE_LABELS[adDialogMarketplace] || adDialogMarketplace}</strong>. This is analytics only — not synced to your accounting software.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="ad-month">Month</Label>
+                <Input
+                  id="ad-month"
+                  type="month"
+                  value={adMonth}
+                  onChange={(e) => setAdMonth(e.target.value)}
+                  placeholder="2026-03"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ad-amount">Spend Amount</Label>
+                <Input
+                  id="ad-amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={adAmount}
+                  onChange={(e) => setAdAmount(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ad-currency">Currency</Label>
+                <Select value={adCurrency} onValueChange={setAdCurrency}>
+                  <SelectTrigger id="ad-currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AUD">AUD</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ad-notes">Notes (optional)</Label>
+                <Textarea
+                  id="ad-notes"
+                  value={adNotes}
+                  onChange={(e) => setAdNotes(e.target.value)}
+                  placeholder="e.g. Sponsored Products campaign"
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAdDialogOpen(false)}>Cancel</Button>
+              <Button onClick={saveAdSpend} disabled={adSaving}>
+                {adSaving ? 'Saving...' : 'Save Ad Spend'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );
