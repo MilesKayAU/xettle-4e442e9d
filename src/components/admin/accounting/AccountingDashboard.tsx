@@ -271,8 +271,8 @@ export default function AccountingDashboard() {
     checkTier();
   }, []);
 
-  const loadSettlements = useCallback(async () => {
-    setLoadingSettlements(true);
+  const loadSettlements = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoadingSettlements(true);
     try {
       const { data, error } = await supabase
         .from('settlements')
@@ -288,7 +288,7 @@ export default function AccountingDashboard() {
     }
   }, [selectedMarketplace]);
 
-  useEffect(() => { loadSettlements(); }, [loadSettlements]);
+  useEffect(() => { loadSettlements(true); }, [loadSettlements]);
 
   // Realtime subscription: auto-refresh settlements list when rows change (insert/delete/update)
   useEffect(() => {
