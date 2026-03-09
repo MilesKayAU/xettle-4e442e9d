@@ -502,6 +502,11 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const result = parseShopifyOrdersCSV(text);
           if (!result.success) throw new Error('error' in result ? result.error : 'Shopify Orders parse failed');
           settlements = result.settlements;
+        } else if (marketplace === 'woolworths_marketplus') {
+          const text = await df.file.text();
+          const result = parseWoolworthsMarketPlusCSV(text);
+          if (!result.success) throw new Error('error' in result ? result.error : 'Woolworths MarketPlus parse failed');
+          settlements = result.settlements;
         } else {
           const mapping = df.detection.columnMapping || {};
           const name = df.file.name.toLowerCase();
