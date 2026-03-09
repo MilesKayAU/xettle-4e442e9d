@@ -84,6 +84,7 @@ function statusBadge(status: string) {
 }
 
 export default function ShopifyOrdersDashboard() {
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
