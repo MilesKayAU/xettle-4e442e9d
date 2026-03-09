@@ -159,7 +159,7 @@ export async function parseBunningsSummaryPdf(
     return {
       success: true,
       settlement,
-      extra: { shopName, shopId, ordersInclGst, commissionInclGst, rawText },
+      extra: { shopName, shopId, ordersInclGst, commissionInclGst: negCommissionInclGst, rawText },
     };
   } catch (err: any) {
     return {
