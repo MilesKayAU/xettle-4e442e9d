@@ -829,7 +829,7 @@ export default function AccountingDashboard() {
           UnitAmount: round2(-rolloverAmount),
           Quantity: 1,
         });
-        const reference1 = `Amazon AU Settlement ${header.settlementId} - Part 1 (${m1.monthLabel})`;
+        const reference1 = `Xettle-${header.settlementId}-P1`;
         const date1 = m1.end;
 
         // Invoice 2: DR 612 (clear rollover) + Month-2 actual lines
@@ -872,7 +872,7 @@ export default function AccountingDashboard() {
           );
         }
 
-        const reference2 = `Amazon AU Settlement ${header.settlementId} - Part 2 (${m2.monthLabel})`;
+        const reference2 = `Xettle-${header.settlementId}-P2`;
         const date2 = m2.start;
 
         const { data: data1, error: err1 } = await supabase.functions.invoke('sync-amazon-journal', {
@@ -918,7 +918,7 @@ export default function AccountingDashboard() {
       } else {
         // SINGLE MONTH: Post one invoice with marketplace-aware TaxType
         const lineItems = buildInvoiceLineItems(parsedLines, period, header.settlementId, undefined, parsed.summary.bankDeposit);
-        const reference = `Amazon AU Settlement ${header.settlementId}`;
+        const reference = `Xettle-${header.settlementId}`;
 
         const { data, error } = await supabase.functions.invoke('sync-amazon-journal', {
           body: { userId: user.id, reference, date: header.periodEnd, dueDate: header.periodEnd, lineItems, country: selectedMarketplace },
