@@ -271,10 +271,11 @@ export async function syncSettlementToXero(
     const s = settlement as any;
     const contactName = options?.contactName || MARKETPLACE_CONTACTS[marketplace] || `${marketplace} Marketplace`;
     
-    // Build reference
+    // Build reference — new format: Xettle-{settlement_id}
+    const reference = options?.reference || `Xettle-${s.settlement_id}`;
     const periodLabel = `${formatSettlementDate(s.period_start)} – ${formatSettlementDate(s.period_end)}`;
     const label = MARKETPLACE_LABELS[marketplace] || marketplace;
-    const reference = options?.reference || `${label} Settlement ${periodLabel} (${s.settlement_id})`;
+    const description = `${label} Settlement ${periodLabel}`;
 
     // Build line items (use provided or default 2-line)
     const lineItems = options?.lineItems || [
