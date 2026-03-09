@@ -15,6 +15,13 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
+interface FeeBreakdown {
+  label: string;
+  amount: number;
+  pctOfSales: number;
+  color: string;
+}
+
 interface MarketplaceStats {
   marketplace: string;
   label: string;
@@ -29,6 +36,12 @@ interface MarketplaceStats {
   avgCommission: number;
   adSpend: number;
   returnAfterAds: number | null;
+  // Fee breakdown
+  commissionTotal: number;
+  fbaTotal: number;
+  storageTotal: number;
+  otherFeesTotal: number;
+  feeBreakdown: FeeBreakdown[];
 }
 
 interface AdSpendRecord {
