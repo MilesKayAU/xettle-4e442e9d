@@ -3179,6 +3179,7 @@ function SettlementReview({
   onPushToXero,
   pushing,
   pushed,
+  historicalSettlements,
 }: {
   parsed: ParsedSettlement;
   onSave: () => void;
@@ -3187,10 +3188,31 @@ function SettlementReview({
   onPushToXero: () => void;
   pushing: boolean;
   pushed: boolean;
+  historicalSettlements?: Array<{ sales_principal: number; sales_shipping: number; seller_fees: number; fba_fees: number; storage_fees: number }>;
 }) {
   const { header, summary, unmapped, lines, splitMonth } = parsed;
   const [showLineItems, setShowLineItems] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
+  // Run reconciliation checks
+  const reconResult = useMemo(() => {
+    let historicalStats: { avgFeeRate: number; avgReturnRatio: number; count: number } | undefined;
+    if (historicalSettlements && historicalSettlements.length >= 2) {
+      const rates = historicalSettlements.map(s => {
+        const sales = Math.abs((s.sales_principal || 0) + (s.sales_shipping || 0));
+        const fees = Math.abs((s.seller_fees || 0) + (s.fba_fees || 0) + (s.storage_fees || 0));
+        return sales > 0 ? fees / sales : 0;
+      }).filter(r => r > 0);
+      if (rates.length >= 2) {
+        historicalStats = {
+          avgFeeRate: rates.reduce((a, b) => a + b, 0) / rates.length,
+          avgReturnRatio: 0,
+          count: rates.length,
+        };
+      }
+    }
+    return runReconciliation(parsed, historicalStats);
+  }, [parsed, historicalSettlements]);
 
   // Compute rollover amount for display (mirrors handlePushToXero logic)
   const computedRolloverAmount = useMemo(() => {
