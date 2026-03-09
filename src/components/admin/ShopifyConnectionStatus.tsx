@@ -23,6 +23,25 @@ const ShopifyConnectionStatus = () => {
   const [manualToken, setManualToken] = useState('');
   const [manualDomain, setManualDomain] = useState('');
   const [savingToken, setSavingToken] = useState(false);
+  // Pre-populate shop domain from app_settings (not from user email)
+  useEffect(() => {
+    const loadSavedDomain = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', session.user.id)
+        .eq('key', 'shopify_shop_domain')
+        .maybeSingle();
+      if (data?.value) {
+        setShopDomain(data.value);
+        setManualDomain(data.value);
+      }
+    };
+    loadSavedDomain();
+  }, []);
+
   const fetchStatus = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -251,6 +270,7 @@ const ShopifyConnectionStatus = () => {
               value={shopDomain}
               onChange={(e) => setShopDomain(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+              autoComplete="off"
             />
             <Button
               onClick={handleConnect}
@@ -289,6 +309,7 @@ const ShopifyConnectionStatus = () => {
                   placeholder="yourstore.myshopify.com"
                   value={manualDomain}
                   onChange={(e) => setManualDomain(e.target.value)}
+                  autoComplete="off"
                 />
                 <Button
                   onClick={handleManualSave}
