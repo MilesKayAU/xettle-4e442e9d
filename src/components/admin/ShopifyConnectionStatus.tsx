@@ -164,7 +164,7 @@ const ShopifyConnectionStatus = () => {
         shop_domain: domain,
         access_token: token,
         scope: 'custom_app',
-      }, { onConflict: 'user_id' } as any);
+      }, { onConflict: 'user_id,shop_domain' } as any);
 
       if (error) throw error;
 
