@@ -111,7 +111,6 @@ export default function Dashboard() {
 
   const isAmazonAU = selectedMarketplace === 'amazon_au';
   const isBunnings = selectedMarketplace === 'bunnings';
-  const isShopifyPayments = selectedMarketplace === 'shopify_payments';
   const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
 
   return (
