@@ -121,22 +121,24 @@ export async function parseBunningsSummaryPdf(
       return { success: false, error: 'Could not parse Commission amounts.', rawText };
     }
 
+    // Ensure commission values are negative (they are deductions)
+    const negCommissionExGst = commissionExGst > 0 ? -commissionExGst : commissionExGst;
+    const negCommissionGst = commissionGst > 0 ? -commissionGst : commissionGst;
+    const negCommissionInclGst = commissionInclGst > 0 ? -commissionInclGst : commissionInclGst;
+
     // Total / net payout — look for "Total" row that has a single AUD amount at the end
-    // The Total row in the Bunnings PDF looks like: "Total    AUD 775.29"
-    // We try to find the last AUD amount on the Total line specifically
     let netPayout: number;
     const totalLineMatch = rawText.match(/\bTotal\b[^\n]*?(AUD\s*-?[\d,.]+)\s*(?:\n|$)/im);
     if (totalLineMatch) {
-      netPayout = extractAmount(totalLineMatch[1]) ?? (ordersInclGst + commissionInclGst);
+      netPayout = extractAmount(totalLineMatch[1]) ?? (ordersInclGst + negCommissionInclGst);
     } else {
-      netPayout = ordersInclGst + commissionInclGst;
+      netPayout = ordersInclGst + negCommissionInclGst;
     }
 
     const invoiceNumber = invoiceNumberOverride || extractInvoiceFromFilename(file.name);
 
-    // Reconciliation: ordersIncl + commissionIncl (negative) should ≈ netPayout
-    // commissionInclGst is already negative from the PDF (e.g. -110.70)
-    const calculated = Math.round((ordersInclGst + commissionInclGst) * 100) / 100;
+    // Reconciliation: ordersIncl + commission (negative) should ≈ netPayout
+    const calculated = Math.round((ordersInclGst + negCommissionInclGst) * 100) / 100;
     const reconciles = Math.abs(calculated - netPayout) <= 0.10;
 
     const settlement: StandardSettlement = {
@@ -146,8 +148,8 @@ export async function parseBunningsSummaryPdf(
       period_end: periodEnd,
       sales_ex_gst: ordersExGst,
       gst_on_sales: ordersGst,
-      fees_ex_gst: commissionExGst,
-      gst_on_fees: Math.abs(commissionGst),
+      fees_ex_gst: negCommissionExGst,
+      gst_on_fees: Math.abs(negCommissionGst),
       net_payout: netPayout,
       source: 'manual',
       reconciles,
