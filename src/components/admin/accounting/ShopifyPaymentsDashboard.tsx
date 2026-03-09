@@ -154,8 +154,9 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
         }
         setActiveTab('review');
       } else {
-        setParseError(result.error);
-        toast.error(result.error);
+        const errMsg = result.error;
+        setParseError(errMsg);
+        toast.error(errMsg);
       }
     } catch (err: any) {
       setParseError(err.message || 'Unknown error');
