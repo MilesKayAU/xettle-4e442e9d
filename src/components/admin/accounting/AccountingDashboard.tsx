@@ -1415,6 +1415,7 @@ export default function AccountingDashboard() {
                   setAmazonFetchStatus(status);
                 }} />
                 <XeroConnectionStatus />
+                <ShopifyConnectionStatus />
                 <AutomationSettingsPanel userTier={userTier} />
                 <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />
                 <SyncHistoryCard />
