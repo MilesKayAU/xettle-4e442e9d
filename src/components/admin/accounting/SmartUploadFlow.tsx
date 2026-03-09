@@ -593,6 +593,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         </CardContent>
       </Card>
 
+      {/* Where to find your files — collapsible guide */}
+      <FileGuide />
+
       {/* File results */}
       {hasFiles && (
         <div className="space-y-3">
