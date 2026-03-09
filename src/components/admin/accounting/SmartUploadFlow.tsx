@@ -247,8 +247,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   // ── Parse & save a single file ──
   const processFile = useCallback(async (idx: number) => {
-    const df = files[idx];
-    if (!df.detection || !df.detection.isSettlementFile) return;
+    const df = filesRef.current[idx];
+    if (!df?.detection || !df.detection.isSettlementFile) return;
 
     const marketplace = df.overrideMarketplace || df.detection.marketplace;
 
