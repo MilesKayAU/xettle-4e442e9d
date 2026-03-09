@@ -789,11 +789,60 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                       <span className="text-muted-foreground">GST Collected</span>
                       <span className="font-medium text-right">{formatAUD(parsed.gst_on_sales)}</span>
 
+                      {parsed.metadata?.shippingExGst !== undefined && parsed.metadata.shippingExGst !== 0 && (
+                        <>
+                          <span className="text-muted-foreground">Shipping Revenue (excl. GST)</span>
+                          <span className="font-medium text-right">{formatAUD(parsed.metadata.shippingExGst)}</span>
+                        </>
+                      )}
+
                       <span className="text-muted-foreground">Commission (excl. GST)</span>
                       <span className="font-medium text-right text-destructive">{formatAUD(parsed.fees_ex_gst)}</span>
 
                       <span className="text-muted-foreground">GST on Commission</span>
                       <span className="font-medium text-right text-destructive">-{formatAUD(parsed.gst_on_fees)}</span>
+
+                      {parsed.metadata?.refundsExGst !== undefined && parsed.metadata.refundsExGst !== 0 && (
+                        <>
+                          <span className="text-muted-foreground">Refunds (excl. GST)</span>
+                          <span className="font-medium text-right text-amber-600">{formatAUD(parsed.metadata.refundsExGst)}</span>
+                        </>
+                      )}
+
+                      {parsed.metadata?.refundCommissionExGst !== undefined && parsed.metadata.refundCommissionExGst !== 0 && (
+                        <>
+                          <span className="text-muted-foreground">Refund on Commission</span>
+                          <span className="font-medium text-right text-green-600">+{formatAUD(parsed.metadata.refundCommissionExGst)}</span>
+                        </>
+                      )}
+
+                      {parsed.metadata?.subscriptionAmount !== undefined && parsed.metadata.subscriptionAmount !== 0 && (
+                        <>
+                          <span className="text-muted-foreground">Subscription Fee</span>
+                          <span className="font-medium text-right text-destructive">{formatAUD(parsed.metadata.subscriptionAmount)}</span>
+                        </>
+                      )}
+
+                      {parsed.metadata?.manualCreditInclGst !== undefined && parsed.metadata.manualCreditInclGst !== 0 && (
+                        <>
+                          <span className="text-muted-foreground">Manual Credit</span>
+                          <span className="font-medium text-right text-green-600">+{formatAUD(parsed.metadata.manualCreditInclGst)}</span>
+                        </>
+                      )}
+
+                      {parsed.metadata?.manualDebitInclGst !== undefined && parsed.metadata.manualDebitInclGst !== 0 && (
+                        <>
+                          <span className="text-muted-foreground">Manual Debit</span>
+                          <span className="font-medium text-right text-destructive">{formatAUD(parsed.metadata.manualDebitInclGst)}</span>
+                        </>
+                      )}
+
+                      {parsed.metadata?.otherChargesInclGst !== undefined && parsed.metadata.otherChargesInclGst !== 0 && (
+                        <>
+                          <span className="text-muted-foreground">Other Charges</span>
+                          <span className="font-medium text-right text-destructive">{formatAUD(parsed.metadata.otherChargesInclGst)}</span>
+                        </>
+                      )}
                     </div>
 
                     <div className="border-t border-border pt-3">
@@ -803,6 +852,21 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                       </div>
                     </div>
 
+                    {/* Line Items Parsed */}
+                    {extra?.lineItems && extra.lineItems.length > 0 && (
+                      <div className="rounded-md border border-border bg-muted/20 p-3 text-xs space-y-1.5">
+                        <p className="font-medium text-foreground">{extra.lineItems.length} line items extracted</p>
+                        <div className="space-y-1">
+                          {extra.lineItems.map((item, i) => (
+                            <div key={i} className="flex items-center justify-between gap-4">
+                              <span className="text-muted-foreground">{item.label}</span>
+                              <span className="font-mono tabular-nums">{formatAUD(item.inclGst)} <span className="text-muted-foreground">(ex {formatAUD(item.exGst)})</span></span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Reconciliation check */}
                     <div className={`rounded-md border p-3 text-xs space-y-1.5 ${parsed.reconciles ? 'border-primary/20 bg-primary/5' : 'border-destructive/30 bg-destructive/5'}`}>
                       <p className="font-medium text-foreground">Reconciliation Check</p>
@@ -811,11 +875,23 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                         <span className="text-right tabular-nums">{formatAUD(parsed.sales_ex_gst + parsed.gst_on_sales)}</span>
                         <span className="text-muted-foreground">Marketplace fees (inc GST)</span>
                         <span className="text-right tabular-nums text-destructive">-{formatAUD(Math.abs(parsed.fees_ex_gst) + parsed.gst_on_fees)}</span>
+                        {parsed.metadata?.refundsInclGst !== undefined && parsed.metadata.refundsInclGst !== 0 && (
+                          <>
+                            <span className="text-muted-foreground">Refunds (inc GST)</span>
+                            <span className="text-right tabular-nums text-amber-600">{formatAUD(parsed.metadata.refundsInclGst)}</span>
+                          </>
+                        )}
+                        {parsed.metadata?.refundCommissionInclGst !== undefined && parsed.metadata.refundCommissionInclGst !== 0 && (
+                          <>
+                            <span className="text-muted-foreground">Refund on commission (inc GST)</span>
+                            <span className="text-right tabular-nums text-green-600">+{formatAUD(parsed.metadata.refundCommissionInclGst)}</span>
+                          </>
+                        )}
                       </div>
                       <div className="border-t border-border pt-1.5 grid grid-cols-2 gap-x-6">
-                        <span className="text-muted-foreground">Expected payout</span>
-                        <span className="text-right tabular-nums font-medium">{formatAUD((parsed.sales_ex_gst + parsed.gst_on_sales) - (Math.abs(parsed.fees_ex_gst) + parsed.gst_on_fees))}</span>
-                        <span className="text-muted-foreground">Settlement file</span>
+                        <span className="text-muted-foreground">Calculated total</span>
+                        <span className="text-right tabular-nums font-medium">{formatAUD(parsed.metadata?.calculatedTotal ?? (parsed.sales_ex_gst + parsed.gst_on_sales + parsed.fees_ex_gst - parsed.gst_on_fees))}</span>
+                        <span className="text-muted-foreground">Settlement payout</span>
                         <span className="text-right tabular-nums font-medium">{formatAUD(parsed.net_payout)}</span>
                       </div>
                       <p className={`font-medium ${parsed.reconciles ? 'text-primary' : 'text-destructive'}`}>

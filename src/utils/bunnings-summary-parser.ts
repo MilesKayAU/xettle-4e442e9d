@@ -13,12 +13,23 @@ import type { StandardSettlement } from './settlement-engine';
 // Configure worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
+// ─── Parsed line item from the summary table ────────────────────────
+
+export interface BunningsLineItem {
+  label: string;           // e.g. "Payable orders", "Refund on orders"
+  exGst: number;
+  gst: number;
+  inclGst: number;
+}
+
 export interface BunningsParseExtra {
   shopName: string;
   shopId: string;
   ordersInclGst: number;
   commissionInclGst: number;
   rawText: string;
+  /** Full breakdown of every row parsed from the summary table */
+  lineItems: BunningsLineItem[];
 }
 
 export type BunningsParseResult =
@@ -74,6 +85,39 @@ function extractInvoiceFromFilename(filename: string): string {
 }
 
 /**
+ * Interpret 1–4 AUD amounts into { exGst, gst, inclGst }
+ */
+function interpretAmounts(amounts: number[]): { exGst: number; gst: number; inclGst: number } {
+  if (amounts.length >= 3) {
+    return { exGst: amounts[0], gst: amounts[1], inclGst: amounts[2] };
+  } else if (amounts.length === 2) {
+    const exGst = amounts[0];
+    const inclGst = amounts[1];
+    return { exGst, gst: Math.round((inclGst - exGst) * 100) / 100, inclGst };
+  } else if (amounts.length === 1) {
+    const inclGst = amounts[0];
+    const exGst = Math.round(inclGst / 1.1 * 100) / 100;
+    return { exGst, gst: Math.round((inclGst - exGst) * 100) / 100, inclGst };
+  }
+  return { exGst: 0, gst: 0, inclGst: 0 };
+}
+
+// ─── Known Mirakl billing row patterns ──────────────────────────────
+// Each pattern: [regex, label, sign] — sign: 1 = positive, -1 = negative (fees/refunds)
+const ROW_PATTERNS: Array<{ regex: RegExp; label: string; category: 'sales' | 'commission' | 'refund' | 'refund_commission' | 'shipping' | 'subscription' | 'manual_credit' | 'manual_debit' | 'other' }> = [
+  { regex: /Payable\s+orders?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Payable orders', category: 'sales' },
+  { regex: /Commission\s+on\s+orders?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Commission on orders', category: 'commission' },
+  { regex: /Refund(?:s?)\s+on\s+orders?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Refund on orders', category: 'refund' },
+  { regex: /Refund(?:s?)\s+on\s+commission\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Refund on commission', category: 'refund_commission' },
+  { regex: /(?:Payable\s+)?shipping\s+charges?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Shipping charges', category: 'shipping' },
+  { regex: /Subscription\s+amount\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Subscription amount', category: 'subscription' },
+  { regex: /Manual\s+credit\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Manual credit', category: 'manual_credit' },
+  { regex: /Manual\s+debit\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Manual debit', category: 'manual_debit' },
+  { regex: /(?:Other|Miscellaneous)\s+(?:charges?|fees?|credits?)\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Other charges', category: 'other' },
+  { regex: /(?:Late\s+)?delivery\s+(?:charges?|penalties?)\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i, label: 'Delivery charges', category: 'other' },
+];
+
+/**
  * Parse Bunnings Summary of Transactions PDF → StandardSettlement
  */
 export async function parseBunningsSummaryPdf(
@@ -101,122 +145,165 @@ export async function parseBunningsSummaryPdf(
     const shopIdMatch = rawText.match(/\((\d{4,})\)/);
     const shopId = shopIdMatch ? shopIdMatch[1] : '';
 
-    // ─── Extract financial figures (flexible: handles 1–4 AUD values per row) ───
+    // ─── Extract ALL line items from the summary table ──────────────
 
-    // Find the Payable orders row — grab everything up to the next row label or newline
-    const ordersMatch = rawText.match(/Payable\s+orders?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i);
-    if (!ordersMatch) {
+    const lineItems: BunningsLineItem[] = [];
+    const categoryTotals: Record<string, { exGst: number; gst: number; inclGst: number }> = {};
+
+    for (const pattern of ROW_PATTERNS) {
+      const match = rawText.match(pattern.regex);
+      if (!match) continue;
+
+      const amounts = extractAllAudAmounts(match[1]);
+      if (amounts.length === 0) continue;
+
+      const parsed = interpretAmounts(amounts);
+
+      lineItems.push({
+        label: pattern.label,
+        exGst: parsed.exGst,
+        gst: parsed.gst,
+        inclGst: parsed.inclGst,
+      });
+
+      if (!categoryTotals[pattern.category]) {
+        categoryTotals[pattern.category] = { exGst: 0, gst: 0, inclGst: 0 };
+      }
+      categoryTotals[pattern.category].exGst += parsed.exGst;
+      categoryTotals[pattern.category].gst += parsed.gst;
+      categoryTotals[pattern.category].inclGst += parsed.inclGst;
+    }
+
+    // ─── Require at least Payable orders ────────────────────────────
+    if (!categoryTotals.sales) {
       return { success: false, error: 'Could not find "Payable orders" row in the summary table.', rawText };
     }
-    const orderAmounts = extractAllAudAmounts(ordersMatch[1]);
-    if (orderAmounts.length === 0) {
-      return { success: false, error: 'Could not parse Payable orders amounts.', rawText };
-    }
 
-    // Interpret based on how many values we got:
-    // 1 value  → ex GST only (no tax breakdown)
-    // 2 values → ex GST, incl GST (or incl, total — treat last as incl)
-    // 3 values → ex GST, GST, incl GST
-    // 4 values → ex GST, GST, incl GST, total (Mirakl 5-col format)
-    let ordersExGst: number;
-    let ordersGst: number;
-    let ordersInclGst: number;
+    const sales = categoryTotals.sales;
+    const commission = categoryTotals.commission || { exGst: 0, gst: 0, inclGst: 0 };
+    const refunds = categoryTotals.refund || { exGst: 0, gst: 0, inclGst: 0 };
+    const refundCommission = categoryTotals.refund_commission || { exGst: 0, gst: 0, inclGst: 0 };
+    const shipping = categoryTotals.shipping || { exGst: 0, gst: 0, inclGst: 0 };
+    const subscription = categoryTotals.subscription || { exGst: 0, gst: 0, inclGst: 0 };
+    const manualCredit = categoryTotals.manual_credit || { exGst: 0, gst: 0, inclGst: 0 };
+    const manualDebit = categoryTotals.manual_debit || { exGst: 0, gst: 0, inclGst: 0 };
+    const otherCharges = categoryTotals.other || { exGst: 0, gst: 0, inclGst: 0 };
 
-    if (orderAmounts.length >= 3) {
-      ordersExGst = orderAmounts[0];
-      ordersGst = orderAmounts[1];
-      ordersInclGst = orderAmounts[2];
-    } else if (orderAmounts.length === 2) {
-      // Two values: assume ex-GST and incl-GST
-      ordersExGst = orderAmounts[0];
-      ordersInclGst = orderAmounts[1];
-      ordersGst = Math.round((ordersInclGst - ordersExGst) * 100) / 100;
-    } else {
-      // Single value — could be ex-GST or incl-GST
-      // If tax columns were blank, this is likely incl-GST (Bunnings often shows incl only)
-      ordersInclGst = orderAmounts[0];
-      ordersExGst = Math.round(ordersInclGst / 1.1 * 100) / 100;
-      ordersGst = Math.round((ordersInclGst - ordersExGst) * 100) / 100;
-    }
+    // Ensure negative signs on deductions
+    const ensureNeg = (n: number) => n > 0 ? -n : n;
 
-    // Commission row
-    const commMatch = rawText.match(/Commission\s+on\s+orders?\s*\(?[^)]*\)?\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i);
-    if (!commMatch) {
-      return { success: false, error: 'Could not find "Commission on orders" row in the summary table.', rawText };
-    }
-    const commAmounts = extractAllAudAmounts(commMatch[1]);
-    if (commAmounts.length === 0) {
-      return { success: false, error: 'Could not parse Commission amounts.', rawText };
-    }
+    const negCommExGst = ensureNeg(commission.exGst);
+    const negCommGst = ensureNeg(commission.gst);
+    const negCommInclGst = ensureNeg(commission.inclGst);
 
-    let commissionExGst: number;
-    let commissionGst: number;
-    let commissionInclGst: number;
+    // Refunds on orders are negative (money returned to buyer)
+    const negRefundExGst = ensureNeg(refunds.exGst);
+    const negRefundGst = ensureNeg(refunds.gst);
+    const negRefundInclGst = ensureNeg(refunds.inclGst);
 
-    if (commAmounts.length >= 3) {
-      commissionExGst = commAmounts[0];
-      commissionGst = commAmounts[1];
-      commissionInclGst = commAmounts[2];
-    } else if (commAmounts.length === 2) {
-      commissionExGst = commAmounts[0];
-      commissionInclGst = commAmounts[1];
-      commissionGst = Math.round((commissionInclGst - commissionExGst) * 100) / 100;
-    } else {
-      commissionInclGst = commAmounts[0];
-      commissionExGst = Math.round(commissionInclGst / 1.1 * 100) / 100;
-      commissionGst = Math.round((commissionInclGst - commissionExGst) * 100) / 100;
-    }
+    // Refund on commission is positive (commission clawed back to seller)
+    const refundCommExGst = Math.abs(refundCommission.exGst);
+    const refundCommGst = Math.abs(refundCommission.gst);
+    const refundCommInclGst = Math.abs(refundCommission.inclGst);
 
-    // Ensure commission values are negative (they are deductions)
-    const negCommissionExGst = commissionExGst > 0 ? -commissionExGst : commissionExGst;
-    const negCommissionGst = commissionGst > 0 ? -commissionGst : commissionGst;
-    const negCommissionInclGst = commissionInclGst > 0 ? -commissionInclGst : commissionInclGst;
+    // Subscription always negative
+    const negSubAmount = subscription.inclGst > 0 ? -subscription.inclGst : subscription.inclGst;
 
-    // ─── Subscription amount (optional — some periods include it) ───
-    let subscriptionAmount = 0;
-    const subMatch = rawText.match(/Subscription\s+amount\s*((?:AUD\s*-?[\d,.]+[\s]*)+)/i);
-    if (subMatch) {
-      const subAmounts = extractAllAudAmounts(subMatch[1]);
-      // Last amount is typically incl-GST / total
-      subscriptionAmount = subAmounts.length > 0 ? subAmounts[subAmounts.length - 1] : 0;
-      // Ensure negative
-      if (subscriptionAmount > 0) subscriptionAmount = -subscriptionAmount;
-    }
+    // Manual credit positive, manual debit negative
+    const manualNet = manualCredit.inclGst + ensureNeg(manualDebit.inclGst);
 
-    // Total / net payout
+    // ─── Net fees (commission minus refund on commission) ───────────
+    const netFeesExGst = negCommExGst + refundCommExGst;
+    const netFeesGst = Math.abs(negCommGst) - refundCommGst; // Absolute GST on fees
+
+    // ─── Total / net payout ────────────────────────────────────────
     let netPayout: number;
     const totalLineMatch = rawText.match(/\bTotal\b[^\n]*?(AUD\s*-?[\d,.]+)\s*(?:\n|$)/im);
     if (totalLineMatch) {
-      netPayout = extractAmount(totalLineMatch[1]) ?? (ordersInclGst + negCommissionInclGst + subscriptionAmount);
+      netPayout = extractAmount(totalLineMatch[1]) ?? 0;
     } else {
-      netPayout = ordersInclGst + negCommissionInclGst + subscriptionAmount;
+      // Calculate from components
+      netPayout = Math.round((
+        sales.inclGst +
+        negCommInclGst +
+        negRefundInclGst +
+        refundCommInclGst +
+        shipping.inclGst +
+        negSubAmount +
+        manualNet +
+        otherCharges.inclGst
+      ) * 100) / 100;
     }
 
     const invoiceNumber = invoiceNumberOverride || extractInvoiceFromFilename(file.name);
 
-    // Reconciliation
-    const calculated = Math.round((ordersInclGst + negCommissionInclGst + subscriptionAmount) * 100) / 100;
-    const reconciles = Math.abs(calculated - netPayout) <= 0.10;
+    // Reconciliation: sum all line items and compare to net payout
+    const calculatedTotal = Math.round((
+      sales.inclGst +
+      negCommInclGst +
+      negRefundInclGst +
+      refundCommInclGst +
+      shipping.inclGst +
+      negSubAmount +
+      manualNet +
+      otherCharges.inclGst
+    ) * 100) / 100;
+    const reconciles = Math.abs(calculatedTotal - netPayout) <= 0.10;
+
+    // ─── Build metadata with full breakdown for analytics ──────────
+    const metadata: Record<string, any> = {
+      shopName,
+      shopId,
+      // Refunds
+      refundsExGst: negRefundExGst,
+      refundsGst: negRefundGst,
+      refundsInclGst: negRefundInclGst,
+      // Refund on commission (seller gets back)
+      refundCommissionExGst: refundCommExGst,
+      refundCommissionGst: refundCommGst,
+      refundCommissionInclGst: refundCommInclGst,
+      // Shipping
+      shippingExGst: shipping.exGst,
+      shippingGst: shipping.gst,
+      shippingInclGst: shipping.inclGst,
+      // Subscription
+      subscriptionAmount: negSubAmount !== 0 ? negSubAmount : undefined,
+      // Manual adjustments
+      manualCreditInclGst: manualCredit.inclGst !== 0 ? manualCredit.inclGst : undefined,
+      manualDebitInclGst: manualDebit.inclGst !== 0 ? ensureNeg(manualDebit.inclGst) : undefined,
+      // Other
+      otherChargesInclGst: otherCharges.inclGst !== 0 ? otherCharges.inclGst : undefined,
+      // Reconciliation detail
+      calculatedTotal,
+      lineItemCount: lineItems.length,
+    };
 
     const settlement: StandardSettlement = {
       marketplace: 'bunnings',
       settlement_id: invoiceNumber,
       period_start: periodStart,
       period_end: periodEnd,
-      sales_ex_gst: ordersExGst,
-      gst_on_sales: ordersGst,
-      fees_ex_gst: negCommissionExGst,
-      gst_on_fees: Math.abs(negCommissionGst),
+      sales_ex_gst: sales.exGst,
+      gst_on_sales: sales.gst,
+      fees_ex_gst: netFeesExGst,
+      gst_on_fees: Math.abs(netFeesGst),
       net_payout: netPayout,
       source: 'manual',
       reconciles,
-      metadata: { shopName, shopId, subscriptionAmount: subscriptionAmount !== 0 ? subscriptionAmount : undefined },
+      metadata,
     };
 
     return {
       success: true,
       settlement,
-      extra: { shopName, shopId, ordersInclGst, commissionInclGst: negCommissionInclGst, rawText },
+      extra: {
+        shopName,
+        shopId,
+        ordersInclGst: sales.inclGst,
+        commissionInclGst: negCommInclGst,
+        rawText,
+        lineItems,
+      },
     };
   } catch (err: any) {
     return {
