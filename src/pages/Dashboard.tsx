@@ -4,6 +4,7 @@ import AccountingDashboard from '@/components/admin/accounting/AccountingDashboa
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import BunningsDashboard from '@/components/admin/accounting/BunningsDashboard';
 import MarketplaceSwitcher, { MARKETPLACE_CATALOG, type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
+import MarketplaceReturnRatio from '@/components/admin/accounting/MarketplaceReturnRatio';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles } from 'lucide-react';
