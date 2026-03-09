@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
-  History, Loader2, Send, Eye, Trash2, Info, HelpCircle, ChevronDown
+  History, Loader2, Send, Eye, Trash2, Info, HelpCircle, ChevronDown, FolderUp, SkipForward
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import bunningsBillingImg from '@/assets/bunnings-billing-cycles.png';
@@ -44,6 +44,22 @@ interface SettlementRecord {
   marketplace: string;
 }
 
+interface UploadWarning {
+  type: 'duplicate' | 'gap';
+  message: string;
+}
+
+interface BatchItem {
+  file: File;
+  parsed: StandardSettlement | null;
+  extra: BunningsParseExtra | null;
+  error: string | null;
+  saved: boolean;
+  saving: boolean;
+  skipped: boolean;
+  isDuplicate: boolean;
+}
+
 function statusBadge(status: string) {
   switch (status) {
     case 'synced':
@@ -51,6 +67,8 @@ function statusBadge(status: string) {
     case 'saved':
     case 'parsed':
       return <Badge variant="secondary">Saved</Badge>;
+    case 'synced_external':
+      return <Badge variant="outline" className="border-muted-foreground/40">Already in Xero</Badge>;
     case 'error':
       return <Badge variant="destructive">Error</Badge>;
     default:
@@ -60,6 +78,8 @@ function statusBadge(status: string) {
 
 export default function BunningsDashboard({ marketplace }: BunningsDashboardProps) {
   const [activeTab, setActiveTab] = useState('upload');
+
+  // Single file mode
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parsed, setParsed] = useState<StandardSettlement | null>(null);
@@ -68,6 +88,13 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [savedSettlementId, setSavedSettlementId] = useState<string | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<UploadWarning | null>(null);
+
+  // Bulk mode
+  const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
+  const [bulkBatch, setBulkBatch] = useState<BatchItem[]>([]);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+
   const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -94,20 +121,88 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     loadHistory();
   }, [loadHistory]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
+  // ─── Duplicate / gap checks ─────────────────────────────────────────────────
 
+  function checkDuplicateAndGap(
+    incoming: StandardSettlement,
+    existing: SettlementRecord[]
+  ): UploadWarning | null {
+    // Exact ID match
+    const exactMatch = existing.find(s => s.settlement_id === incoming.settlement_id);
+    if (exactMatch) {
+      return {
+        type: 'duplicate',
+        message: `Settlement ${incoming.settlement_id} is already saved (${formatSettlementDate(exactMatch.period_start)} – ${formatSettlementDate(exactMatch.period_end)}). Saving will overwrite it.`,
+      };
+    }
+
+    // Fingerprint match: same dates + similar deposit
+    const fingerprint = existing.find(s =>
+      s.period_start === incoming.period_start &&
+      s.period_end === incoming.period_end &&
+      Math.abs((s.bank_deposit || 0) - incoming.net_payout) < 1.00
+    );
+    if (fingerprint) {
+      return {
+        type: 'duplicate',
+        message: `A settlement covering ${formatSettlementDate(incoming.period_start)} – ${formatSettlementDate(incoming.period_end)} with a similar payout already exists (${fingerprint.settlement_id}). This appears to be a duplicate.`,
+      };
+    }
+
+    // Gap detection: newest existing settlement end should match this start
+    if (existing.length > 0) {
+      const newest = [...existing].sort((a, b) => b.period_end.localeCompare(a.period_end))[0];
+      if (incoming.period_start > newest.period_end) {
+        return {
+          type: 'gap',
+          message: `Expected next settlement to start ${formatSettlementDate(newest.period_end)}, but this one starts ${formatSettlementDate(incoming.period_start)}. You may have a missing settlement.`,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  // ─── Single file upload ────────────────────────────────────────────────────
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // BULK mode: multiple files selected
+    if (files.length > 1) {
+      const arr = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+      // Sort chronologically by filename date pattern (e.g. BUN-2301-2026-02-15 → 2026-02-15)
+      arr.sort((a, b) => {
+        const dateA = a.name.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || a.name;
+        const dateB = b.name.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || b.name;
+        return dateA.localeCompare(dateB);
+      });
+      setBulkFiles(arr);
+      setFile(null);
+      setParsed(null);
+      setUploadWarning(null);
+      setSavedSettlementId(null);
+      setBulkBatch([]);
+      await processBulkFiles(arr);
+      return;
+    }
+
+    // SINGLE mode
+    const f = files[0];
     if (!f.name.toLowerCase().endsWith('.pdf')) {
       toast.error('Please upload a PDF file (Summary of Transactions).');
       return;
     }
 
+    setBulkFiles(null);
+    setBulkBatch([]);
     setFile(f);
     setParsed(null);
     setExtra(null);
     setParseError(null);
     setSavedSettlementId(null);
+    setUploadWarning(null);
     setParsing(true);
 
     try {
@@ -115,7 +210,15 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
       if (result.success) {
         setParsed(result.settlement);
         setExtra(result.extra);
-        toast.success('Settlement parsed successfully!');
+        const warning = checkDuplicateAndGap(result.settlement, settlements);
+        setUploadWarning(warning);
+        if (warning?.type === 'duplicate') {
+          toast.warning('Duplicate detected — review before saving.');
+        } else if (warning?.type === 'gap') {
+          toast.warning('Gap detected — you may have a missing settlement.');
+        } else {
+          toast.success('Parsed successfully!');
+        }
         setActiveTab('review');
       } else {
         const errMsg = (result as any).error || 'Unknown error';
@@ -129,6 +232,73 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
       setParsing(false);
     }
   };
+
+  // ─── Bulk processing ───────────────────────────────────────────────────────
+
+  const processBulkFiles = async (files: File[]) => {
+    setBulkProcessing(true);
+    const items: BatchItem[] = files.map(f => ({
+      file: f,
+      parsed: null,
+      extra: null,
+      error: null,
+      saved: false,
+      saving: false,
+      skipped: false,
+      isDuplicate: false,
+    }));
+    setBulkBatch([...items]);
+
+    // Parse all
+    const current = await supabase
+      .from('settlements')
+      .select('*')
+      .eq('marketplace', 'bunnings')
+      .order('period_end', { ascending: false });
+    const existing = (current.data || []) as SettlementRecord[];
+
+    for (let i = 0; i < items.length; i++) {
+      try {
+        const result = await parseBunningsSummaryPdf(items[i].file);
+        if (result.success) {
+          items[i].parsed = result.settlement;
+          items[i].extra = result.extra;
+          const dupe = existing.find(s => s.settlement_id === result.settlement.settlement_id);
+          if (dupe) items[i].isDuplicate = true;
+        } else {
+          items[i].error = (result as any).error || 'Parse failed';
+        }
+      } catch (err: any) {
+        items[i].error = err.message || 'Parse error';
+      }
+      setBulkBatch([...items]);
+    }
+
+    setBulkProcessing(false);
+    setActiveTab('review');
+  };
+
+  const handleBulkSaveAll = async () => {
+    const toSave = bulkBatch.filter(b => b.parsed && !b.saved && !b.skipped && !b.isDuplicate);
+    for (const item of toSave) {
+      item.saving = true;
+      setBulkBatch([...bulkBatch]);
+      const result = await saveSettlement(item.parsed!);
+      item.saving = false;
+      item.saved = result.success;
+      if (!result.success) item.error = result.error || 'Save failed';
+      setBulkBatch([...bulkBatch]);
+    }
+    await loadHistory();
+    toast.success(`Saved ${toSave.length} settlements.`);
+  };
+
+  const handleBulkSkipDuplicates = () => {
+    const updated = bulkBatch.map(b => ({ ...b, skipped: b.skipped || b.isDuplicate }));
+    setBulkBatch(updated);
+  };
+
+  // ─── Save single ───────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     if (!parsed) return;
@@ -147,7 +317,6 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const handlePushToXero = async (settlementId?: string) => {
     const targetId = settlementId || savedSettlementId || parsed?.settlement_id;
     if (!targetId) return;
-
     setPushing(true);
     const result = await syncSettlementToXero(targetId, 'bunnings');
     if (result.success) {
@@ -171,12 +340,18 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
   const clearUpload = () => {
     setFile(null);
+    setBulkFiles(null);
+    setBulkBatch([]);
     setParsed(null);
     setExtra(null);
     setParseError(null);
     setSavedSettlementId(null);
+    setUploadWarning(null);
     if (inputRef.current) inputRef.current.value = '';
+    setActiveTab('upload');
   };
+
+  const isBulkMode = !!bulkFiles && bulkFiles.length > 0;
 
   return (
     <div className="space-y-6">
@@ -206,9 +381,12 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             <Upload className="h-3.5 w-3.5" />
             Upload
           </TabsTrigger>
-          <TabsTrigger value="review" className="flex items-center gap-1.5" disabled={!parsed && !savedSettlementId}>
+          <TabsTrigger value="review" className="flex items-center gap-1.5" disabled={!parsed && bulkBatch.length === 0 && !savedSettlementId}>
             <Eye className="h-3.5 w-3.5" />
             Review
+            {isBulkMode && bulkBatch.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-[10px] h-4 px-1">{bulkBatch.length}</Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="history" className="flex items-center gap-1.5">
             <History className="h-3.5 w-3.5" />
@@ -218,6 +396,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
         {/* ─── UPLOAD TAB ─── */}
         <TabsContent value="upload" className="space-y-4 mt-4">
+          {/* Help card */}
           <Card className="border-2 border-primary/20 bg-primary/5">
             <CardContent className="py-4">
               <div className="flex items-start gap-3">
@@ -227,6 +406,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                   <p className="text-xs text-muted-foreground mt-1">
                     This is the fortnightly Summary of Transactions from your Bunnings Mirakl seller portal. 
                     We'll extract the totals and create a matching Xero invoice automatically.
+                    <strong className="text-foreground"> Select multiple PDFs at once</strong> to import in bulk.
                   </p>
 
                   <Collapsible>
@@ -243,24 +423,24 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                         <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground">
                           <li>Log in to your <strong>Bunnings Mirakl seller portal</strong></li>
                           <li>Navigate to <strong>Billing and documents → Billing cycles</strong></li>
-                          <li>Find the settlement period you want to import (see screenshot below)</li>
+                          <li>Find the settlement period you want to import</li>
                           <li>Click the <strong>three dots (⋮)</strong> on the right side of the row</li>
-                          <li>Select <strong>"Download Summary of Transactions"</strong> — this downloads a PDF</li>
-                          <li>Upload that PDF here</li>
+                          <li>Select <strong>"Summary of transactions"</strong> to download the PDF</li>
+                          <li>Upload that PDF here (select multiple to bulk import)</li>
                         </ol>
                         <div className="mt-3 rounded border border-border overflow-hidden">
                           <img
                             src={bunningsBillingImg}
-                            alt="Bunnings Mirakl portal — Billing cycles page showing where to download the Summary of Transactions PDF"
+                            alt="Bunnings Mirakl portal — Billing cycles showing the Summary of transactions download option"
                             className="w-full"
                           />
                           <p className="text-[10px] text-muted-foreground px-2 py-1.5 bg-muted/50">
-                            Bunnings Mirakl portal → Billing and documents → click ⋮ → "Download Summary of Transactions"
+                            Bunnings Mirakl portal → Billing cycles → click ⋮ → "Summary of transactions"
                           </p>
                         </div>
                         <p className="text-muted-foreground mt-2">
-                          <strong>⚠️ Not the right file:</strong> The "Accounting documents" tab or individual invoice PDFs won't work. 
-                          You need the <strong>Summary of Transactions</strong> PDF specifically.
+                          <strong>⚠️ Not the right file:</strong> The "Accounting documents" tab or "Order file" won't work.
+                          You need <strong>Summary of transactions</strong> specifically.
                         </p>
                       </div>
                     </CollapsibleContent>
@@ -270,13 +450,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             </CardContent>
           </Card>
 
-          <Card className={`border-2 transition-colors ${file && !parseError ? 'border-green-400/50 bg-green-50/20' : 'border-dashed border-muted-foreground/25 hover:border-primary/40'}`}>
+          {/* File input */}
+          <Card className={`border-2 transition-colors ${file && !parseError ? 'border-primary/40 bg-primary/5' : 'border-dashed border-muted-foreground/25 hover:border-primary/40'}`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4 text-primary" />
+                {isBulkMode ? <FolderUp className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
                 Summary of Transactions
                 {parsing && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
-                {parsed && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />}
+                {parsed && !isBulkMode && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />}
                 {parseError && <XCircle className="h-4 w-4 text-destructive ml-auto" />}
               </CardTitle>
               <CardDescription className="text-xs">
@@ -288,8 +469,9 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 ref={inputRef}
                 type="file"
                 accept=".pdf"
+                multiple
                 onChange={handleFileChange}
-                disabled={parsing}
+                disabled={parsing || bulkProcessing}
                 className="block w-full text-sm text-muted-foreground
                   file:mr-4 file:py-2 file:px-4
                   file:rounded-md file:border-0
@@ -297,7 +479,16 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                   file:bg-primary file:text-primary-foreground
                   hover:file:opacity-90 file:cursor-pointer"
               />
-              {file && (
+              {isBulkMode ? (
+                <div className="mt-2 flex items-center gap-2">
+                  {bulkProcessing
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    : <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
+                  <p className="text-xs text-muted-foreground">
+                    {bulkProcessing ? `Parsing ${bulkFiles.length} files…` : `${bulkFiles.length} files ready for review`}
+                  </p>
+                </div>
+              ) : file && (
                 <div className="flex items-center justify-between mt-2">
                   <p className={`text-xs font-medium ${parseError ? 'text-destructive' : 'text-green-700'}`}>
                     {parseError ? `✗ ${parseError}` : `✓ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`}
@@ -313,8 +504,97 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
         {/* ─── REVIEW TAB ─── */}
         <TabsContent value="review" className="space-y-4 mt-4">
-          {parsed ? (
+
+          {/* BULK review */}
+          {isBulkMode && bulkBatch.length > 0 ? (
             <>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {bulkBatch.filter(b => b.saved).length} of {bulkBatch.length} saved
+                </p>
+                <div className="flex gap-2">
+                  {bulkBatch.some(b => b.isDuplicate && !b.skipped) && (
+                    <Button variant="outline" size="sm" onClick={handleBulkSkipDuplicates}>
+                      <SkipForward className="h-3.5 w-3.5 mr-1" />
+                      Skip Duplicates
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={handleBulkSaveAll}
+                    disabled={bulkBatch.every(b => b.saved || b.skipped || b.error || !b.parsed)}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                    Save All
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {bulkBatch.map((item, idx) => (
+                  <Card key={idx} className={`border ${item.isDuplicate && !item.skipped ? 'border-amber-300 bg-amber-50/30' : item.error ? 'border-destructive/30' : item.saved ? 'border-green-300 bg-green-50/20' : 'border-border'}`}>
+                    <CardContent className="py-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium truncate">{item.file.name}</p>
+                          {item.isDuplicate && !item.skipped && (
+                            <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700">Duplicate</Badge>
+                          )}
+                          {item.skipped && (
+                            <Badge variant="outline" className="text-[10px]">Skipped</Badge>
+                          )}
+                          {item.saved && (
+                            <Badge className="text-[10px] bg-green-100 text-green-800 border-green-200">Saved</Badge>
+                          )}
+                          {item.error && (
+                            <Badge variant="destructive" className="text-[10px]">Error</Badge>
+                          )}
+                        </div>
+                        {item.parsed && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {formatSettlementDate(item.parsed.period_start)} – {formatSettlementDate(item.parsed.period_end)} •{' '}
+                            Net: {formatAUD(item.parsed.net_payout)}
+                          </p>
+                        )}
+                        {item.error && (
+                          <p className="text-xs text-destructive mt-0.5">{item.error}</p>
+                        )}
+                        {item.isDuplicate && !item.skipped && (
+                          <p className="text-xs text-amber-700 mt-0.5">Already saved — skip or overwrite</p>
+                        )}
+                      </div>
+                      <div>
+                        {item.saving ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        ) : item.saved ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : item.error || item.skipped ? (
+                          <XCircle className="h-4 w-4 text-muted-foreground" />
+                        ) : null}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <Button variant="outline" onClick={clearUpload} className="w-full">
+                Upload Another Batch
+              </Button>
+            </>
+          ) : parsed ? (
+
+            /* SINGLE review */
+            <>
+              {/* Upload warning */}
+              {uploadWarning && (
+                <Card className={`border ${uploadWarning.type === 'duplicate' ? 'border-amber-400 bg-amber-50/30' : 'border-primary/30 bg-primary/5'}`}>
+                  <CardContent className="py-3 flex items-start gap-2">
+                    <AlertTriangle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${uploadWarning.type === 'duplicate' ? 'text-amber-600' : 'text-primary'}`} />
+                    <p className="text-xs">{uploadWarning.message}</p>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
@@ -340,17 +620,17 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                     <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                       <span className="text-muted-foreground">Gross Sales (excl. GST)</span>
                       <span className="font-medium text-right">{formatAUD(parsed.sales_ex_gst)}</span>
-                      
+
                       <span className="text-muted-foreground">GST Collected</span>
                       <span className="font-medium text-right">{formatAUD(parsed.gst_on_sales)}</span>
-                      
+
                       <span className="text-muted-foreground">Commission (excl. GST)</span>
                       <span className="font-medium text-right text-destructive">{formatAUD(parsed.fees_ex_gst)}</span>
-                      
+
                       <span className="text-muted-foreground">GST on Commission</span>
                       <span className="font-medium text-right text-destructive">-{formatAUD(parsed.gst_on_fees)}</span>
                     </div>
-                    
+
                     <div className="border-t border-border pt-3">
                       <div className="grid grid-cols-2 gap-x-8 text-sm">
                         <span className="font-semibold">Net Settlement</span>
@@ -367,7 +647,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 </CardContent>
               </Card>
 
-              {/* Xero Invoice Preview */}
+              {/* Xero Preview */}
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Xero Invoice Preview</CardTitle>
@@ -456,49 +736,64 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             </Card>
           ) : (
             <div className="space-y-3">
-              {settlements.map((s) => (
-                <Card key={s.id} className="hover:border-primary/20 transition-colors">
-                  <CardContent className="py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium">
-                            {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
-                          </p>
-                          {statusBadge(s.status)}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Sales: {formatAUD(s.sales_principal)} • Commission: {formatAUD(s.seller_fees)} • Net: {formatAUD(s.bank_deposit)}
+              {settlements.map((s, idx) => {
+                // Gap indicator: check if there's a gap to the previous settlement
+                const prev = settlements[idx + 1];
+                const hasGap = prev && s.period_start > prev.period_end;
+                return (
+                  <React.Fragment key={s.id}>
+                    {hasGap && (
+                      <div className="flex items-center gap-2 py-1 px-3">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                        <p className="text-xs text-amber-600">
+                          Gap: missing settlement between {formatSettlementDate(prev.period_end)} and {formatSettlementDate(s.period_start)}
                         </p>
-                        <p className="text-xs text-muted-foreground">ID: {s.settlement_id}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {s.status === 'saved' && (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => handlePushToXero(s.settlement_id)}
-                            disabled={pushing}
-                          >
-                            {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-                            Push to Xero
-                          </Button>
-                        )}
-                        {s.status !== 'synced' && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(s.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    )}
+                    <Card className="hover:border-primary/20 transition-colors">
+                      <CardContent className="py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium">
+                                {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
+                              </p>
+                              {statusBadge(s.status)}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Sales: {formatAUD(s.sales_principal)} • Commission: {formatAUD(s.seller_fees)} • Net: {formatAUD(s.bank_deposit)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">ID: {s.settlement_id}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {s.status === 'saved' && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handlePushToXero(s.settlement_id)}
+                                disabled={pushing}
+                              >
+                                {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                                Push to Xero
+                              </Button>
+                            )}
+                            {s.status !== 'synced' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => handleDelete(s.id)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </React.Fragment>
+                );
+              })}
             </div>
           )}
         </TabsContent>
