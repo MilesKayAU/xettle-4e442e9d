@@ -1026,7 +1026,7 @@ const FILE_GUIDES = [
 ];
 
 function FileGuide() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
