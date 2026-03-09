@@ -512,6 +512,10 @@ export type Database = {
       settlements: {
         Row: {
           bank_deposit: number | null
+          bank_verified: boolean | null
+          bank_verified_amount: number | null
+          bank_verified_at: string | null
+          bank_verified_by: string | null
           created_at: string
           deposit_date: string | null
           fba_fees: number | null
@@ -546,6 +550,10 @@ export type Database = {
         }
         Insert: {
           bank_deposit?: number | null
+          bank_verified?: boolean | null
+          bank_verified_amount?: number | null
+          bank_verified_at?: string | null
+          bank_verified_by?: string | null
           created_at?: string
           deposit_date?: string | null
           fba_fees?: number | null
@@ -580,6 +588,10 @@ export type Database = {
         }
         Update: {
           bank_deposit?: number | null
+          bank_verified?: boolean | null
+          bank_verified_amount?: number | null
+          bank_verified_at?: string | null
+          bank_verified_by?: string | null
           created_at?: string
           deposit_date?: string | null
           fba_fees?: number | null
