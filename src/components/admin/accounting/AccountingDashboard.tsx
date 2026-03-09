@@ -288,7 +288,7 @@ export default function AccountingDashboard() {
     }
   }, [selectedMarketplace]);
 
-  useEffect(() => { loadSettlements(); }, [loadSettlements]);
+  useEffect(() => { loadSettlements(true); }, [loadSettlements]);
 
   // Realtime subscription: auto-refresh settlements list when rows change (insert/delete/update)
   useEffect(() => {
