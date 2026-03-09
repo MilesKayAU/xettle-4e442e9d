@@ -97,20 +97,20 @@ export default function Landing() {
       {/* Hero */}
       <section className="pt-32 pb-20 px-4">
         <div className="container-custom text-center max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6">
-            <Store className="h-4 w-4" />
-            Marketplace settlement uploads · Paid auto-sync
+          <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-bold mb-6 tracking-wide">
+            <Zap className="h-4 w-4" />
+            ⚡ THE XETTLE CHALLENGE
           </div>
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6">
             Drop any settlement file.
             <br />
-            <span className="text-primary">Sync to Xero immediately.</span>
+            <span className="text-primary">It's in Xero in seconds.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            No account needed — try our challenge! Drop a file and watch Xettle recognise it, parse the settlement, and build your Xero invoice in seconds.
+            Drop any marketplace file. We'll recognise it, parse it, and show you your Xero invoice before you finish your coffee.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
-            Works with files other tools can't handle — including Bunnings/Mirakl PDFs.
+            No account needed · Works with files other tools can't handle — including Bunnings/Mirakl PDFs.
           </p>
 
           {/* Public Demo Upload */}
