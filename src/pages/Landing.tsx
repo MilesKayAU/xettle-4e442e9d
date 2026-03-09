@@ -1,19 +1,31 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Shield, Zap, DollarSign, FileSpreadsheet, RefreshCw, Users, CheckCircle, Upload, Bot, Crown, Rocket, Store } from 'lucide-react';
+import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Rocket, Store, BarChart3 } from 'lucide-react';
 
 const features = [
   {
     icon: FileSpreadsheet,
     title: 'Settlement Parsing',
-    description: 'Upload marketplace settlement files and automatically categorise every transaction into proper accounting buckets.',
+    description: 'Upload marketplace settlement files and automatically categorise every transaction into Xero-ready accounting entries — sales, marketplace fees, refunds, taxes, and shipping.',
     free: true,
   },
   {
     icon: RefreshCw,
     title: 'One-Click Xero Sync',
     description: 'Push parsed settlements directly to Xero as invoices with correct account codes and GST handling.',
+    free: true,
+  },
+  {
+    icon: Zap,
+    title: 'Smart Settlement Checks',
+    description: 'Before syncing to Xero, Xettle automatically verifies the settlement totals match the payout. Detect parsing errors, validate marketplace totals, and prevent incorrect invoices.',
+    free: true,
+  },
+  {
+    icon: BarChart3,
+    title: 'Marketplace Return Insights',
+    description: 'Every settlement also shows what you actually kept. Return per $1 sold, marketplace fee impact, compare marketplaces, and advertising impact.',
     free: true,
   },
   {
@@ -26,12 +38,6 @@ const features = [
     icon: Shield,
     title: 'Your Data, Your Account',
     description: 'Each user connects their own Xero org. Your tokens are encrypted and isolated — nobody else can access your books.',
-    free: true,
-  },
-  {
-    icon: Zap,
-    title: 'Smart Reconciliation',
-    description: 'Automatic reconciliation checks ensure your parsed data matches the bank deposit before syncing to Xero.',
     free: true,
   },
   {
@@ -99,8 +105,8 @@ export default function Landing() {
             <br />
             Amazon today. Bunnings and more marketplaces soon.
           </p>
-          <p className="text-sm text-muted-foreground/70 mb-8 font-medium">
-            <span className="text-primary font-semibold">X</span>ero + Se<span className="text-primary font-semibold">ttle</span> = <span className="text-primary font-semibold">Xettle</span>
+          <p className="text-sm text-muted-foreground/80 mb-8">
+            See exactly what each marketplace paid you — automatically.
           </p>
 
           {/* Marketplace strip */}
@@ -123,7 +129,7 @@ export default function Landing() {
             ))}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
             <Button size="lg" className="text-lg px-8 py-6" asChild>
               <Link to="/auth?tab=signup">
                 Start Free <ArrowRight className="ml-2 h-5 w-5" />
@@ -133,6 +139,10 @@ export default function Landing() {
               <a href="#pricing">See Plans</a>
             </Button>
           </div>
+
+          <p className="text-xs text-muted-foreground/60 max-w-lg mx-auto">
+            Every settlement you upload also shows what each marketplace really returned after fees.
+          </p>
         </div>
       </section>
 
@@ -160,7 +170,8 @@ export default function Landing() {
                   'Full parsing & categorisation',
                   'Push to Xero with one click',
                   'GST handling for AU sellers',
-                  'Smart reconciliation checks',
+                  'Smart settlement checks',
+                  'Settlement return insights',
                   'Unlimited settlements',
                 ].map(item => (
                   <li key={item} className="flex items-start gap-2">
@@ -290,6 +301,9 @@ export default function Landing() {
                 </div>
               ))}
             </div>
+            <p className="text-xs text-muted-foreground/70 text-center mt-6 italic">
+              Example insight: Amazon AU returned $0.44 per $1 sold after marketplace fees.
+            </p>
           </div>
         </div>
       </section>
@@ -320,10 +334,10 @@ export default function Landing() {
       <section className="py-20 px-4">
         <div className="container-custom max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
-            Marketplace settlements — Xettled.
+            Marketplace settlements → Xero. <span className="text-primary">Xettled.</span>
           </h2>
           <p className="text-lg text-muted-foreground mb-10">
-            Start with free manual uploads. Upgrade to Pro when you're ready to automate.
+            Upload settlements, reconcile automatically, and understand what each marketplace really paid you.
           </p>
           <Button size="lg" className="text-lg px-10 py-6" asChild>
             <Link to="/auth?tab=signup">
