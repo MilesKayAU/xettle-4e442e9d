@@ -582,13 +582,13 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-medium truncate">{item.file.name}</p>
                           {item.isDuplicate && !item.skipped && (
-                            <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700">Duplicate</Badge>
+                            <Badge variant="outline" className="text-[10px] border-primary/40 text-foreground">Duplicate</Badge>
                           )}
                           {item.skipped && (
                             <Badge variant="outline" className="text-[10px]">Skipped</Badge>
                           )}
                           {item.saved && (
-                            <Badge className="text-[10px] bg-green-100 text-green-800 border-green-200">Saved</Badge>
+                            <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20">Saved</Badge>
                           )}
                           {item.error && (
                             <Badge variant="destructive" className="text-[10px]">Error</Badge>
@@ -604,14 +604,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                           <p className="text-xs text-destructive mt-0.5">{item.error}</p>
                         )}
                         {item.isDuplicate && !item.skipped && (
-                          <p className="text-xs text-amber-700 mt-0.5">Already saved — skip or overwrite</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Already saved — skip or overwrite</p>
                         )}
                       </div>
                       <div>
                         {item.saving ? (
                           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                         ) : item.saved ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
                         ) : item.error || item.skipped ? (
                           <XCircle className="h-4 w-4 text-muted-foreground" />
                         ) : null}
@@ -631,9 +631,9 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
             <>
               {/* Upload warning */}
               {uploadWarning && (
-                <Card className={`border ${uploadWarning.type === 'duplicate' ? 'border-amber-400 bg-amber-50/30' : 'border-primary/30 bg-primary/5'}`}>
+                <Card className={`border ${uploadWarning.type === 'duplicate' ? 'border-primary/40 bg-primary/5' : 'border-primary/30 bg-primary/5'}`}>
                   <CardContent className="py-3 flex items-start gap-2">
-                    <AlertTriangle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${uploadWarning.type === 'duplicate' ? 'text-amber-600' : 'text-primary'}`} />
+                    <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
                     <p className="text-xs">{uploadWarning.message}</p>
                   </CardContent>
                 </Card>
@@ -645,7 +645,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                     <CardTitle className="text-base">Settlement Summary</CardTitle>
                     <div className="flex items-center gap-2">
                       {parsed.reconciles ? (
-                        <Badge className="bg-green-100 text-green-800 border-green-200">
+                        <Badge className="bg-primary/10 text-primary border-primary/20">
                           <CheckCircle2 className="h-3 w-3 mr-1" /> Reconciled
                         </Badge>
                       ) : (
@@ -788,8 +788,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                   <React.Fragment key={s.id}>
                     {hasGap && (
                       <div className="flex items-center gap-2 py-1 px-3">
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                        <p className="text-xs text-amber-600">
+                        <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
                           Gap: missing settlement between {formatSettlementDate(prev.period_end)} and {formatSettlementDate(s.period_start)}
                         </p>
                       </div>
