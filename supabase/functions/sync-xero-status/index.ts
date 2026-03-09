@@ -66,12 +66,14 @@ async function queryXeroInvoices(token: XeroToken, whereClause: string): Promise
 }
 
 function extractSettlementId(reference: string): string | null {
-  // New format: Xettle-{settlement_id}
+  // New format: Xettle-{settlement_id} or Xettle-{settlement_id}-P1/P2
   if (reference.startsWith('Xettle-')) {
-    return reference.slice(7);
+    const rest = reference.slice(7);
+    // Strip split-month suffix (-P1, -P2)
+    return rest.replace(/-P[12]$/, '');
   }
-  // Old format: ... (settlement_id)
-  const match = reference.match(/\(([^)]+)\)$/);
+  // Old format: ... (settlement_id) or ... Part 1/2
+  const match = reference.match(/\(([^)]+)\)/);
   return match ? match[1] : null;
 }
 
