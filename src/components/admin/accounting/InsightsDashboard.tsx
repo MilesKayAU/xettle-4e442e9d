@@ -33,6 +33,7 @@ interface MarketplaceStats {
   feeLoad: number;
   settlementCount: number;
   latestPeriodEnd: string | null;
+  earliestPeriodStart: string | null;
   avgCommission: number;
   adSpend: number;
   returnAfterAds: number | null;
@@ -69,7 +70,7 @@ export default function InsightsDashboard() {
       const [settlementsRes, adSpendRes] = await Promise.all([
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end')
+          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start')
           .order('period_end', { ascending: false }),
         supabase
           .from('marketplace_ad_spend')
@@ -114,6 +115,9 @@ export default function InsightsDashboard() {
         const commissionTotal = Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
         const avgCommission = totalSales > 0 ? Math.min(commissionTotal / totalSales, 1) : 0;
         const latestPeriodEnd = rows.length > 0 ? rows[0].period_end : null;
+        const earliestPeriodStart = rows.length > 0 
+          ? rows.reduce((earliest, r) => !earliest || (r.period_start && r.period_start < earliest) ? r.period_start : earliest, rows[0].period_start)
+          : null;
         const fbaTotal = Math.abs(rows.reduce((sum, r) => sum + (r.fba_fees || 0), 0));
         const storageTotal = Math.abs(rows.reduce((sum, r) => sum + (r.storage_fees || 0), 0));
         const otherFeesTotal = Math.abs(rows.reduce((sum, r) => sum + (r.other_fees || 0), 0));
@@ -141,6 +145,7 @@ export default function InsightsDashboard() {
           feeLoad,
           settlementCount: rows.length,
           latestPeriodEnd,
+          earliestPeriodStart,
           avgCommission,
           adSpend,
           returnAfterAds,
@@ -264,6 +269,15 @@ export default function InsightsDashboard() {
   function formatDate(dateStr: string | null): string {
     if (!dateStr) return '—';
     return new Date(dateStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function getMonthsSpan(startDate: string | null, endDate: string | null): string {
+    if (!startDate || !endDate) return '';
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const months = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+    if (months <= 1) return '1 month';
+    return `${months} months`;
   }
 
   function getRatioColor(ratio: number): string {
@@ -425,11 +439,18 @@ export default function InsightsDashboard() {
               return (
                 <div key={s.marketplace} className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{s.label}</span>
-                      {s.returnRatio === bestRatio && stats.length > 1 && (
-                        <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
-                      )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">{s.label}</span>
+                        {s.returnRatio === bestRatio && stats.length > 1 && (
+                          <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                        <span>{s.settlementCount} settlements analysed</span>
+                        <span>•</span>
+                        <span>Data range: {formatDate(s.earliestPeriodStart)} – {formatDate(s.latestPeriodEnd)} ({getMonthsSpan(s.earliestPeriodStart, s.latestPeriodEnd)})</span>
+                      </div>
                     </div>
                     <div className="text-right">
                       <span className={`text-lg font-bold tabular-nums ${getRatioColor(s.returnRatio)}`}>
