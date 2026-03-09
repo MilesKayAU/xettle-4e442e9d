@@ -21,7 +21,7 @@ import {
 import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
-  DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink,
+  DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye,
 } from 'lucide-react';
 import {
   Select,
