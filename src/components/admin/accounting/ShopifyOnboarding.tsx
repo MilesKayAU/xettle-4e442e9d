@@ -59,7 +59,7 @@ const SUPPORTED_MARKETPLACES = [
 // Marketplace keys for the unknown-group dropdown
 const ASSIGNABLE_MARKETPLACES = Object.entries(MARKETPLACE_REGISTRY)
   .filter(([k, v]) => k !== 'unknown' && !v.skip)
-  .map(([k, v]) => ({ key: k, label: v.label || k }))
+  .map(([k, v]) => ({ key: k, label: v.display_name || k }))
   .sort((a, b) => a.label.localeCompare(b.label));
 
 export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }: ShopifyOnboardingProps) {
@@ -166,7 +166,7 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
         await supabase.from('marketplace_connections').insert({
           user_id: user.id,
           marketplace_code: code,
-          marketplace_name: g.registryEntry.label || g.marketplaceKey,
+          marketplace_name: g.registryEntry.display_name || g.marketplaceKey,
           country_code: 'AU',
           connection_type: 'auto_detected',
           connection_status: 'active',
