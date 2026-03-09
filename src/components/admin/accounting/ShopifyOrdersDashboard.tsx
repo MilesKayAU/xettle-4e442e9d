@@ -259,10 +259,59 @@ export default function ShopifyOrdersDashboard() {
     }
 
     setPushing(false);
+    setPushStats({ invoiceCount: pushed, totalRevenue, totalGst });
     toast.success(`Pushed ${pushed} of ${toPush.length} clearing invoices to Xero`);
     setShowBookkeeperInfo(true);
     loadHistory();
   };
+
+  // ─── AI Marketplace Detection for Unknown Groups ──────────────────
+  const requestAiDetection = async (groupIdx: number, group: MarketplaceGroup) => {
+    if (group.orderCount < 3) return;
+    setAiSuggestions(prev => ({ ...prev, [groupIdx]: { marketplace_name: '', marketplace_code: '', confidence: 0, reasoning: '', loading: true } }));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-file-interpreter', {
+        body: {
+          action: 'detect_marketplace',
+          note_attributes_samples: group.sampleNoteAttributes || [],
+          tags_samples: group.sampleTags || [],
+          payment_method: group.orders[0]?.paymentMethod || '',
+          row_count: group.orderCount,
+        },
+      });
+
+      if (error) throw error;
+
+      const suggestion = {
+        marketplace_name: data.marketplace_name || '',
+        marketplace_code: data.marketplace_code || '',
+        confidence: data.confidence || 0,
+        reasoning: data.reasoning || '',
+        loading: false,
+      };
+
+      setAiSuggestions(prev => ({ ...prev, [groupIdx]: suggestion }));
+
+      // Auto-assign if confidence >= 90
+      if (suggestion.confidence >= 90 && suggestion.marketplace_code) {
+        assignUnknownGroup(groupIdx, suggestion.marketplace_code);
+        toast.success(`AI auto-detected: ${suggestion.marketplace_name} (${suggestion.confidence}% confidence)`);
+      }
+    } catch {
+      setAiSuggestions(prev => ({ ...prev, [groupIdx]: { marketplace_name: '', marketplace_code: '', confidence: 0, reasoning: 'AI detection failed', loading: false } }));
+    }
+  };
+
+  // Trigger AI detection for unknown groups with 3+ orders on parse
+  useEffect(() => {
+    if (!parseResult) return;
+    parseResult.unknownGroups.forEach((g, idx) => {
+      if (g.orderCount >= 3 && !aiSuggestions[idx]) {
+        requestAiDetection(idx, g);
+      }
+    });
+  }, [parseResult?.unknownGroups.length]);
 
   // ─── Push single from history ──────────────────────────────────────
 
