@@ -616,6 +616,94 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                           )}
                         </div>
                       )}
+
+                      {/* ── Bank Verification Panel ── */}
+                      {verifyingId === s.id && isSyncable && (() => {
+                        const enteredAmount = parseFloat(bankAmountInput);
+                        const isValidInput = !isNaN(enteredAmount) && bankAmountInput.trim() !== '';
+                        const diff = isValidInput ? Math.abs(enteredAmount - net) : 0;
+                        const isMatch = isValidInput && diff <= 0.05;
+                        const isMismatch = isValidInput && diff > 0.05;
+
+                        return (
+                          <div className="mt-3 pt-3 border-t border-border space-y-3">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 text-primary" />
+                              <span className="text-sm font-semibold text-foreground">Verify bank deposit</span>
+                            </div>
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              <p>Reference: <span className="font-mono font-medium text-foreground">{s.settlement_id}</span></p>
+                              {s.period_end && <p>Period: {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}</p>}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <label className="text-xs text-muted-foreground mb-1 block">Enter the amount that hit your bank account:</label>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">$</span>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    value={bankAmountInput}
+                                    onChange={(e) => setBankAmountInput(e.target.value)}
+                                    className="h-8 w-36 text-sm"
+                                  />
+                                  <span className="text-xs text-muted-foreground">AUD</span>
+                                </div>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                <p>Xettle calculated:</p>
+                                <p className="font-semibold text-foreground">{formatAUD(net)}</p>
+                              </div>
+                            </div>
+
+                            {isMatch && (
+                              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/20 rounded-md px-3 py-2">
+                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                <span className="text-xs font-medium text-green-700 dark:text-green-400">Amounts match — safe to push</span>
+                              </div>
+                            )}
+                            {isMismatch && (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-2">
+                                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                    Difference of {formatAUD(diff)} detected
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 pl-1">
+                                  <Checkbox
+                                    id={`verify-${s.id}`}
+                                    checked={bankVerifyConfirmed}
+                                    onCheckedChange={(checked) => setBankVerifyConfirmed(!!checked)}
+                                  />
+                                  <label htmlFor={`verify-${s.id}`} className="text-xs text-muted-foreground cursor-pointer">
+                                    I understand the difference and want to push anyway
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                disabled={pushing === s.id || (isValidInput && isMismatch && !bankVerifyConfirmed)}
+                                onClick={() => handlePushToXero(s, isValidInput ? enteredAmount : undefined)}
+                              >
+                                {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                                {isMatch ? 'Push to Xero ✓' : isValidInput ? 'Push to Xero' : 'Skip verification & Push'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => { setVerifyingId(null); setBankAmountInput(''); setBankVerifyConfirmed(false); }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
                 </React.Fragment>
