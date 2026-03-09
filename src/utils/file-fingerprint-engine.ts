@@ -25,6 +25,7 @@ export interface FileDetectionResult {
   marketplace: string;           // 'amazon_au', 'shopify_payments', 'bunnings', 'kogan', etc.
   marketplaceLabel: string;      // Human-readable name
   confidence: number;            // 0-100
+  confidenceReason?: string;     // Human-readable explanation of confidence score
   isSettlementFile: boolean;     // false = wrong file type
   wrongFileMessage?: string;     // "This is a Shopify Orders export..."
   correctReportPath?: string;    // "Shopify Admin → Finances → Payouts → Export"
@@ -268,6 +269,7 @@ export function detectByFingerprint(headers: string[]): FileDetectionResult | nu
     marketplace: fp.marketplace,
     marketplaceLabel: fp.marketplaceLabel,
     confidence: Math.min(bestMatch.score, 100),
+    confidenceReason: `Matched known column signature: ${fp.requiredColumns.join(', ')}${fp.anyOfColumns ? ` + one of [${fp.anyOfColumns.join(', ')}]` : ''}`,
     isSettlementFile: fp.isSettlementFile,
     wrongFileMessage: fp.wrongFileMessage,
     correctReportPath: fp.correctReportPath,
@@ -404,6 +406,7 @@ export function detectFromHeaders(headers: string[]): FileDetectionResult | null
       marketplace: 'unknown',
       marketplaceLabel: 'Unknown Marketplace',
       confidence: heuristic.confidence,
+      confidenceReason: `Matched heuristic fields: ${heuristic.matchedFields.join(', ')}`,
       isSettlementFile: true,
       columnMapping: heuristic.mapping,
       detectionLevel: 2,

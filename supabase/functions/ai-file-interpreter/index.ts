@@ -116,6 +116,10 @@ Row count: ${row_count || 0}`;
                   type: "number",
                   description: "Confidence level 0-100 in the detection",
                 },
+                confidence_reason: {
+                  type: "string",
+                  description: "Human-readable explanation referencing specific column names or values that justify the confidence score",
+                },
                 detection_field: {
                   type: "string",
                   enum: ["note_attributes", "tags", "payment_method", "combined", "unknown"],
@@ -130,7 +134,7 @@ Row count: ${row_count || 0}`;
                   description: "Brief explanation of why this marketplace was detected",
                 },
               },
-              required: ["marketplace_name", "marketplace_code", "confidence", "detection_field", "pattern", "reasoning"],
+              required: ["marketplace_name", "marketplace_code", "confidence", "confidence_reason", "detection_field", "pattern", "reasoning"],
               additionalProperties: false,
             },
           },
@@ -260,6 +264,10 @@ Sample rows (first 3, PII stripped): ${JSON.stringify(sampleRows?.slice(0, 3) ||
                   type: "number",
                   description: "Confidence level 0-100 in the detection",
                 },
+                confidence_reason: {
+                  type: "string",
+                  description: "Human-readable explanation referencing specific column names or values that justify the confidence score",
+                },
                 file_type_detected: {
                   type: "string",
                   enum: ["settlement", "orders", "inventory", "advertising", "customers", "unknown"],
@@ -291,7 +299,7 @@ Sample rows (first 3, PII stripped): ${JSON.stringify(sampleRows?.slice(0, 3) ||
                     "If wrong file type, provide step-by-step path to download the correct settlement/payout report from the marketplace",
                 },
               },
-              required: ["is_settlement_file", "marketplace_guess", "confidence", "file_type_detected"],
+              required: ["is_settlement_file", "marketplace_guess", "confidence", "confidence_reason", "file_type_detected"],
               additionalProperties: false,
             },
           },

@@ -2,11 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
-  CheckSquare, Square, CheckCircle2, AlertTriangle, Eye, ChevronDown
+  CheckSquare, Square, CheckCircle2, AlertTriangle, Eye, ChevronDown, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,6 +50,10 @@ interface SettlementRow {
   other_fees: number | null;
   xero_journal_id: string | null;
   sales_shipping: number | null;
+  bank_verified: boolean | null;
+  bank_verified_amount: number | null;
+  bank_verified_at: string | null;
+  bank_verified_by: string | null;
 }
 
 function statusBadge(status: string | null) {
@@ -79,6 +86,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [expandedLines, setExpandedLines] = useState<string | null>(null);
   const [lineItems, setLineItems] = useState<Record<string, any[]>>({});
   const [loadingLines, setLoadingLines] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [bankAmountInput, setBankAmountInput] = useState('');
+  const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
 
   const loadLineItems = useCallback(async (settlementId: string) => {
     if (lineItems[settlementId]) {
@@ -111,7 +121,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       const woolworthsCode = `woolworths_marketplus_${code}`;
       const { data, error } = await supabase
         .from('settlements')
-        .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, refunds, reimbursements, other_fees, xero_journal_id, sales_shipping')
+        .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, refunds, reimbursements, other_fees, xero_journal_id, sales_shipping, bank_verified, bank_verified_amount, bank_verified_at, bank_verified_by')
         .or(`marketplace.eq.${code},marketplace.eq.${shopifyOrdersCode},marketplace.eq.${woolworthsCode}`)
         .order('period_end', { ascending: false });
       if (error) throw error;
@@ -175,7 +185,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     loadSettlements();
   }, [selected, loadSettlements]);
 
-  const handlePushToXero = useCallback(async (settlement: SettlementRow) => {
+  const handlePushToXero = useCallback(async (settlement: SettlementRow, bankAmount?: number) => {
     setPushing(settlement.id);
     try {
       // Build a StandardSettlement from the DB record for reconciliation check
@@ -212,7 +222,20 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       const lineItems = buildSimpleInvoiceLines(stdSettlement);
       const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace, { lineItems });
       if (result.success) {
+        // Save bank verification data
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && bankAmount !== undefined) {
+          await supabase.from('settlements').update({
+            bank_verified: true,
+            bank_verified_amount: bankAmount,
+            bank_verified_at: new Date().toISOString(),
+            bank_verified_by: user.id,
+          } as any).eq('id', settlement.id);
+        }
         toast.success('Invoice created in Xero!');
+        setVerifyingId(null);
+        setBankAmountInput('');
+        setBankVerifyConfirmed(false);
         loadSettlements();
       } else {
         toast.error(result.error || 'Failed to push to Xero');
@@ -462,20 +485,52 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
                               <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
                             </div>
+                            {/* Bank verification status */}
+                            {s.bank_verified ? (
+                              <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                                <ShieldCheck className="h-3 w-3" />
+                                Bank verified {formatAUD(s.bank_verified_amount || 0)} — {s.bank_verified_at ? new Date(s.bank_verified_at).toLocaleDateString('en-AU') : ''}
+                              </p>
+                            ) : isSyncable ? (
+                              <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
+                                <ShieldAlert className="h-3 w-3" />
+                                Bank not verified
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {isSyncable && (
                             <>
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handlePushToXero(s)}
-                                disabled={pushing === s.id}
-                              >
-                                {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-                                Push to Xero
-                              </Button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant={verifyingId === s.id || s.bank_verified ? 'default' : 'outline'}
+                                      onClick={() => {
+                                        if (verifyingId === s.id) {
+                                          setVerifyingId(null);
+                                          setBankAmountInput('');
+                                          setBankVerifyConfirmed(false);
+                                        } else {
+                                          setVerifyingId(s.id);
+                                          setBankAmountInput('');
+                                          setBankVerifyConfirmed(false);
+                                        }
+                                      }}
+                                    >
+                                      <Send className="h-3.5 w-3.5 mr-1" />
+                                      Push to Xero
+                                    </Button>
+                                  </TooltipTrigger>
+                                  {!s.bank_verified && verifyingId !== s.id && (
+                                    <TooltipContent>
+                                      <p className="text-xs">Bank amount not verified — we recommend checking your bank statement before pushing</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -561,6 +616,94 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                           )}
                         </div>
                       )}
+
+                      {/* ── Bank Verification Panel ── */}
+                      {verifyingId === s.id && isSyncable && (() => {
+                        const enteredAmount = parseFloat(bankAmountInput);
+                        const isValidInput = !isNaN(enteredAmount) && bankAmountInput.trim() !== '';
+                        const diff = isValidInput ? Math.abs(enteredAmount - net) : 0;
+                        const isMatch = isValidInput && diff <= 0.05;
+                        const isMismatch = isValidInput && diff > 0.05;
+
+                        return (
+                          <div className="mt-3 pt-3 border-t border-border space-y-3">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 text-primary" />
+                              <span className="text-sm font-semibold text-foreground">Verify bank deposit</span>
+                            </div>
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              <p>Reference: <span className="font-mono font-medium text-foreground">{s.settlement_id}</span></p>
+                              {s.period_end && <p>Period: {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}</p>}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <label className="text-xs text-muted-foreground mb-1 block">Enter the amount that hit your bank account:</label>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">$</span>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    value={bankAmountInput}
+                                    onChange={(e) => setBankAmountInput(e.target.value)}
+                                    className="h-8 w-36 text-sm"
+                                  />
+                                  <span className="text-xs text-muted-foreground">AUD</span>
+                                </div>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                <p>Xettle calculated:</p>
+                                <p className="font-semibold text-foreground">{formatAUD(net)}</p>
+                              </div>
+                            </div>
+
+                            {isMatch && (
+                              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/20 rounded-md px-3 py-2">
+                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                <span className="text-xs font-medium text-green-700 dark:text-green-400">Amounts match — safe to push</span>
+                              </div>
+                            )}
+                            {isMismatch && (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-2">
+                                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                    Difference of {formatAUD(diff)} detected
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 pl-1">
+                                  <Checkbox
+                                    id={`verify-${s.id}`}
+                                    checked={bankVerifyConfirmed}
+                                    onCheckedChange={(checked) => setBankVerifyConfirmed(!!checked)}
+                                  />
+                                  <label htmlFor={`verify-${s.id}`} className="text-xs text-muted-foreground cursor-pointer">
+                                    I understand the difference and want to push anyway
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                disabled={pushing === s.id || (isValidInput && isMismatch && !bankVerifyConfirmed)}
+                                onClick={() => handlePushToXero(s, isValidInput ? enteredAmount : undefined)}
+                              >
+                                {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                                {isMatch ? 'Push to Xero ✓' : isValidInput ? 'Push to Xero' : 'Skip verification & Push'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => { setVerifyingId(null); setBankAmountInput(''); setBankVerifyConfirmed(false); }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
                 </React.Fragment>

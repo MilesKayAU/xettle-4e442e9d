@@ -422,6 +422,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         marketplace: data?.marketplace_guess || 'unknown',
         marketplaceLabel: MARKETPLACE_LABELS[data?.marketplace_guess] || data?.marketplace_guess || 'Unknown',
         confidence: data?.confidence || 60,
+        confidenceReason: data?.confidence_reason || undefined,
         isSettlementFile: true,
         columnMapping: mapping,
         detectionLevel: 3,
@@ -954,6 +955,11 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                       </Badge>
                     )}
                   </div>
+                  {detection.confidenceReason && (
+                    <p className="text-[11px] italic text-muted-foreground mt-1">
+                      Why we think this: {detection.confidenceReason}
+                    </p>
+                  )}
 
                   {/* Summary preview (collapsed view) */}
                   {!isReviewing && previewData && (
