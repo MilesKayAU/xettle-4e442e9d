@@ -108,6 +108,7 @@ export default function Dashboard() {
 
   if (!isAuthenticated) return null;
 
+  const isAmazonAU = selectedMarketplace === 'amazon_au';
   const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
 
   return (
