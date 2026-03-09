@@ -307,7 +307,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               <Loader2 className="h-4 w-4 animate-spin" /> Loading settlements…
             </CardContent>
           </Card>
-        ) : settlements.length === 0 ? (
+        ) : settlements.length === 0 && !hasLoadedOnce ? (
+          /* Tab just created — uploads are still being processed */
           <Card className="border-border">
             <CardContent className="py-8 text-center">
               <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-3" />
@@ -317,10 +318,19 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               <p className="text-xs text-muted-foreground mt-1">
                 Settlements are being parsed and saved — they'll appear here automatically.
               </p>
+            </CardContent>
+          </Card>
+        ) : settlements.length === 0 ? (
+          /* Loaded but genuinely empty */
+          <Card className="border-border">
+            <CardContent className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No settlements saved yet.
+              </p>
               {onSwitchToUpload && (
-                <Button variant="link" size="sm" onClick={onSwitchToUpload} className="mt-3 gap-1">
+                <Button variant="link" size="sm" onClick={onSwitchToUpload} className="mt-2 gap-1">
                   <Upload className="h-3.5 w-3.5" />
-                  Upload more files via Smart Upload
+                  Upload files via Smart Upload
                 </Button>
               )}
             </CardContent>
