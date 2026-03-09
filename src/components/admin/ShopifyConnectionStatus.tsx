@@ -303,7 +303,7 @@ const ShopifyConnectionStatus = () => {
                       Saving...
                     </>
                   ) : (
-                    'Save token'
+                    'Save connection'
                   )}
                 </Button>
               </CollapsibleContent>
