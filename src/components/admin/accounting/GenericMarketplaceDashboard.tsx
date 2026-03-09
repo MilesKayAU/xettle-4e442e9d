@@ -19,12 +19,23 @@ import {
   syncSettlementToXero,
   syncXeroStatus,
   deleteSettlement,
+  rollbackSettlementFromXero,
   formatSettlementDate,
   formatAUD,
   buildSimpleInvoiceLines,
   type StandardSettlement,
 } from '@/utils/settlement-engine';
-import { runUniversalReconciliation } from '@/utils/universal-reconciliation';
+import { runUniversalReconciliation, type UniversalReconciliationResult } from '@/utils/universal-reconciliation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 
