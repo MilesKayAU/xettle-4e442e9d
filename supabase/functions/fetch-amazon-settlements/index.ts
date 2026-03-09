@@ -406,7 +406,8 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
       const { data: existingData } = await supabaseAdmin
         .from('settlements')
         .select('settlement_id, period_start, period_end, bank_deposit')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('marketplace', 'amazon_au');
       const existingIds = new Set((existingData || []).map((s: any) => s.settlement_id));
       const existingFingerprints = new Set(
         (existingData || []).map((s: any) => `${s.period_start}|${s.period_end}|${round2(s.bank_deposit)}`)
@@ -455,7 +456,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
           const { error: settError } = await supabaseAdmin.from('settlements').insert({
             user_id: userId,
             settlement_id: header.settlementId,
-            marketplace: 'AU',
+            marketplace: 'amazon_au',
             period_start: header.periodStart,
             period_end: header.periodEnd,
             deposit_date: header.depositDate,

@@ -28,7 +28,7 @@ import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSet
 import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@/utils/reconciliation-engine';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
-const SELECTED_COUNTRY = 'AU';
+const SELECTED_MARKETPLACE = 'amazon_au';
 
 interface SettlementRecord {
   id: string;
@@ -97,7 +97,7 @@ async function removeExistingSettlementForUser(userId: string, settlementId: str
 
 export default function AccountingDashboard() {
   const [selectedPlatform, setSelectedPlatform] = useState('amazon');
-  const selectedCountry = SELECTED_COUNTRY;
+  const selectedMarketplace = SELECTED_MARKETPLACE;
   const [activeTab, setActiveTab] = useState('upload');
   const [settlementFile, setSettlementFile] = useState<File | null>(null);
   const [transactionFile, setTransactionFile] = useState<File | null>(null);
@@ -277,7 +277,7 @@ export default function AccountingDashboard() {
       const { data, error } = await supabase
         .from('settlements')
         .select('*')
-        .eq('marketplace', selectedCountry)
+        .eq('marketplace', selectedMarketplace)
         .order('period_end', { ascending: false });
       if (error) throw error;
       setSettlements((data || []) as SettlementRecord[]);
@@ -286,7 +286,7 @@ export default function AccountingDashboard() {
     } finally {
       setLoadingSettlements(false);
     }
-  }, [selectedCountry]);
+  }, [selectedMarketplace]);
 
   useEffect(() => { loadSettlements(); }, [loadSettlements]);
 
@@ -446,7 +446,7 @@ export default function AccountingDashboard() {
 
       const isOverwrite = !!(existingData && existingData.length > 0);
       if (isOverwrite) {
-        await removeExistingSettlementForUser(user.id, header.settlementId, selectedCountry);
+        await removeExistingSettlementForUser(user.id, header.settlementId, selectedMarketplace);
         toast.warning(`Settlement ${header.settlementId} already saved. Overwriting with freshly parsed data.`);
       }
 
@@ -474,7 +474,7 @@ export default function AccountingDashboard() {
       const { error: settError } = await supabase.from('settlements').insert({
         user_id: user.id,
         settlement_id: header.settlementId,
-        marketplace: selectedCountry,
+        marketplace: selectedMarketplace,
         period_start: header.periodStart,
         period_end: header.periodEnd,
         deposit_date: header.depositDate,
@@ -504,7 +504,7 @@ export default function AccountingDashboard() {
       import('@/utils/fee-observation-engine').then(({ extractAmazonFeeObservations }) => {
         extractAmazonFeeObservations({
           settlement_id: header.settlementId,
-          marketplace: selectedCountry,
+          marketplace: selectedMarketplace,
           period_start: header.periodStart,
           period_end: header.periodEnd,
           sales_principal: summary.salesPrincipal,
@@ -567,7 +567,7 @@ export default function AccountingDashboard() {
     } finally {
       setSaving(false);
     }
-  }, [parsed, selectedCountry, loadSettlements]);
+  }, [parsed, selectedMarketplace, loadSettlements]);
 
   // ─── Build invoice line items for Xero, marketplace-aware TaxType ─────────
   const buildInvoiceLineItems = useCallback((
@@ -876,7 +876,7 @@ export default function AccountingDashboard() {
         const date2 = m2.start;
 
         const { data: data1, error: err1 } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, reference: reference1, date: date1, dueDate: date1, lineItems: lines1, country: selectedCountry },
+          body: { userId: user.id, reference: reference1, date: date1, dueDate: date1, lineItems: lines1, country: selectedMarketplace },
         });
         if (err1) throw err1;
         if (!data1?.success) throw new Error(data1?.error || 'Invoice 1 failed');
@@ -892,7 +892,7 @@ export default function AccountingDashboard() {
           .eq('settlement_id', header.settlementId);
 
         const { data: data2, error: err2 } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, reference: reference2, date: date2, dueDate: date2, lineItems: invoiceLines2, country: selectedCountry },
+          body: { userId: user.id, reference: reference2, date: date2, dueDate: date2, lineItems: invoiceLines2, country: selectedMarketplace },
         });
         if (err2 || !data2?.success) {
           // Invoice 2 failed but Invoice 1 exists in Xero — offer targeted rollback
@@ -921,7 +921,7 @@ export default function AccountingDashboard() {
         const reference = `Amazon AU Settlement ${header.settlementId}`;
 
         const { data, error } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, reference, date: header.periodEnd, dueDate: header.periodEnd, lineItems, country: selectedCountry },
+          body: { userId: user.id, reference, date: header.periodEnd, dueDate: header.periodEnd, lineItems, country: selectedMarketplace },
         });
         if (error) throw error;
         if (!data?.success) throw new Error(data?.error || 'Unknown error from Xero sync');
@@ -941,7 +941,7 @@ export default function AccountingDashboard() {
     } finally {
       setPushing(false);
     }
-  }, [parsed, selectedCountry, loadSettlements, buildInvoiceLineItems]);
+  }, [parsed, selectedMarketplace, loadSettlements, buildInvoiceLineItems]);
 
   // ─── Review from History ─────────────────────────────────────────────
   const handleReviewFromHistory = useCallback(async (settlementTextId: string, settlementUuid: string) => {
@@ -1272,7 +1272,7 @@ export default function AccountingDashboard() {
                   <BulkUploadProcessor
                     files={bulkFiles}
                     gstRate={settingsGstRate}
-                    selectedCountry={selectedCountry}
+                    selectedCountry={selectedMarketplace}
                     existingSettlements={settlements}
                     onComplete={() => {
                       setBulkProcessing(false);
@@ -1313,7 +1313,7 @@ export default function AccountingDashboard() {
               {parsedBatch.length > 0 && (
                 <BatchSettlementReview
                   batch={parsedBatch}
-                  selectedCountry={selectedCountry}
+                  selectedCountry={selectedMarketplace}
                   onBatchUpdate={(updated) => setParsedBatch(updated)}
                   onAllSaved={() => {
                     loadSettlements();

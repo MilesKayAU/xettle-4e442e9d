@@ -82,6 +82,16 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     phase: 'csv_ready',
     description: 'MyDeal by Woolworths — manual CSV upload.',
   },
+  {
+    code: 'shopify_payments',
+    name: 'Shopify Payments',
+    icon: '💳',
+    country: 'AU',
+    countryFlag: '🇦🇺',
+    connectionMethods: ['manual_csv'],
+    phase: 'coming_soon',
+    description: 'Shopify Payments payouts — your direct store sales.',
+  },
 ];
 
 export interface UserMarketplace {
