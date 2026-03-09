@@ -527,7 +527,9 @@ export default function ShopifyOrdersDashboard() {
   const allSaved = settlements.length > 0 && settlements.every(s => savedIds.has(s.settlement_id));
 
   // Show onboarding flow for first-time users
-  if (showOnboarding && !historyLoading) {
+  // NOTE: Don't gate on !historyLoading — that unmounts onboarding mid-processing
+  // when autoCreateConnections triggers loadHistory (historyLoading flip = remount)
+  if (showOnboarding) {
     return (
       <ShopifyOnboarding
         onComplete={handleOnboardingComplete}
