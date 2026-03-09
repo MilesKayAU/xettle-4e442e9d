@@ -180,7 +180,7 @@ export default function ShopifyPaymentsDashboard({ marketplace }: ShopifyPayment
           toast.warning(`Payout parsed but reconciliation failed — diff: ${formatAUD(result.settlement.metadata?.reconciliationDiff || 0)}`);
         }
         setActiveTab('review');
-      } else {
+      } else if (!result.success) {
         const errMsg = result.error;
         setParseError(errMsg);
         toast.error(errMsg);
