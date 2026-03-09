@@ -269,6 +269,7 @@ export function detectByFingerprint(headers: string[]): FileDetectionResult | nu
     marketplace: fp.marketplace,
     marketplaceLabel: fp.marketplaceLabel,
     confidence: Math.min(bestMatch.score, 100),
+    confidenceReason: `Matched known column signature: ${fp.requiredColumns.join(', ')}${fp.anyOfColumns ? ` + one of [${fp.anyOfColumns.join(', ')}]` : ''}`,
     isSettlementFile: fp.isSettlementFile,
     wrongFileMessage: fp.wrongFileMessage,
     correctReportPath: fp.correctReportPath,
