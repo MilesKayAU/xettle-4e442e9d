@@ -116,7 +116,7 @@ function parseAmount(raw: string): number {
   return isNaN(val) ? 0 : val;
 }
 
-// ─── Column Matching ────────────────────────────────────────────────────────
+// ─── Column Matching — Transaction-Level ────────────────────────────────────
 
 interface ColumnMap {
   transactionDate: number;
@@ -180,6 +180,91 @@ function matchColumns(headers: string[]): ColumnMap | null {
   };
 }
 
+// ─── Column Matching — Payout-Level ─────────────────────────────────────────
+
+interface PayoutLevelColumnMap {
+  payoutDate: number;
+  status: number;
+  charges: number;
+  refunds: number;
+  adjustments: number;
+  fees: number;
+  total: number;
+  currency: number;
+  bankReference: number;
+  reservedFunds: number;
+  advances: number;
+  retriedAmount: number;
+  marketplaceSalesTax: number;
+}
+
+const PAYOUT_LEVEL_PATTERNS: Record<keyof PayoutLevelColumnMap, RegExp[]> = {
+  payoutDate:         [/^payout\s*date$/i],
+  status:             [/^status$/i],
+  charges:            [/^charges$/i, /^gross\s*sales$/i],
+  refunds:            [/^refunds$/i],
+  adjustments:        [/^adjustments$/i],
+  fees:               [/^fees$/i],
+  total:              [/^total$/i, /^net\s*payout$/i],
+  currency:           [/^currency$/i],
+  bankReference:      [/^bank\s*reference$/i, /^bank\s*ref$/i],
+  reservedFunds:      [/^reserved\s*funds$/i],
+  advances:           [/^advances$/i],
+  retriedAmount:      [/^retried\s*amount$/i],
+  marketplaceSalesTax:[/^marketplace\s*sales\s*tax$/i],
+};
+
+function matchPayoutLevelColumns(headers: string[]): PayoutLevelColumnMap | null {
+  const lower = headers.map(h => h.toLowerCase().trim());
+  const map: Partial<PayoutLevelColumnMap> = {};
+
+  for (const [key, patterns] of Object.entries(PAYOUT_LEVEL_PATTERNS)) {
+    for (const pattern of patterns) {
+      const idx = lower.findIndex(h => pattern.test(h));
+      if (idx !== -1 && !(key in map)) {
+        map[key as keyof PayoutLevelColumnMap] = idx;
+        break;
+      }
+    }
+  }
+
+  // Require minimum: charges, total (or fees)
+  if (map.charges === undefined || map.total === undefined) {
+    return null;
+  }
+
+  return {
+    payoutDate:          map.payoutDate ?? -1,
+    status:              map.status ?? -1,
+    charges:             map.charges!,
+    refunds:             map.refunds ?? -1,
+    adjustments:         map.adjustments ?? -1,
+    fees:                map.fees ?? -1,
+    total:               map.total!,
+    currency:            map.currency ?? -1,
+    bankReference:       map.bankReference ?? -1,
+    reservedFunds:       map.reservedFunds ?? -1,
+    advances:            map.advances ?? -1,
+    retriedAmount:       map.retriedAmount ?? -1,
+    marketplaceSalesTax: map.marketplaceSalesTax ?? -1,
+  };
+}
+
+/** Detect CSV format: 'payout_level' (one row per payout) or 'transaction_level' */
+function detectFormat(headers: string[]): 'payout_level' | 'transaction_level' {
+  const lower = headers.map(h => h.toLowerCase().trim());
+  // Payout-level has "Charges" and "Total" columns without "Payout ID"
+  const hasCharges = lower.some(h => /^charges$/i.test(h));
+  const hasTotal = lower.some(h => /^total$/i.test(h));
+  const hasBankRef = lower.some(h => /bank\s*reference/i.test(h));
+  const hasPayoutId = lower.some(h => /payout\s*id/i.test(h));
+
+  if ((hasCharges && hasTotal) || hasBankRef) {
+    if (!hasPayoutId) return 'payout_level';
+  }
+  return 'transaction_level';
+}
+
 // ─── CSV Row Parser ─────────────────────────────────────────────────────────
 
 function parseCSVRow(line: string): string[] {
@@ -210,9 +295,9 @@ function parseCSVRow(line: string): string[] {
 // ─── Main Parser ────────────────────────────────────────────────────────────
 
 /**
- * Parse a Shopify Payments transaction-level CSV.
- * Groups rows by Payout ID → returns one StandardSettlement per payout.
- * Supports hundreds of payouts in a single file (bulk upload).
+ * Parse a Shopify Payments CSV — auto-detects format:
+ *   1. Payout-level (payouts_export): one row per payout with Charges/Refunds/Fees/Total
+ *   2. Transaction-level (payment_transactions_export): one row per transaction, grouped by Payout ID
  */
 export function parseShopifyPayoutCSV(csvContent: string): ShopifyParseResult {
   try {
@@ -222,164 +307,272 @@ export function parseShopifyPayoutCSV(csvContent: string): ShopifyParseResult {
     }
 
     const headers = parseCSVRow(lines[0]);
-    const colMap = matchColumns(headers);
-    if (!colMap) {
-      return {
-        success: false,
-        error: `Could not identify required columns. Found: ${headers.join(', ')}. Need: Payout ID, Amount, Net.`,
-      };
+    const format = detectFormat(headers);
+
+    if (format === 'payout_level') {
+      return parsePayoutLevelCSV(headers, lines);
+    } else {
+      return parseTransactionLevelCSV(headers, lines);
     }
-
-    // Parse all rows
-    const rows: ShopifyTransactionRow[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const fields = parseCSVRow(lines[i]);
-      if (fields.length < 3) continue;
-
-      const payoutId = colMap.payoutId >= 0 ? fields[colMap.payoutId]?.trim() : '';
-      if (!payoutId) continue; // skip rows without a payout ID
-
-      rows.push({
-        transactionDate: colMap.transactionDate >= 0 ? fields[colMap.transactionDate]?.trim() || '' : '',
-        type:            colMap.type >= 0 ? fields[colMap.type]?.trim().toLowerCase() || '' : '',
-        order:           colMap.order >= 0 ? fields[colMap.order]?.trim() || '' : '',
-        payoutStatus:    colMap.payoutStatus >= 0 ? fields[colMap.payoutStatus]?.trim() || '' : '',
-        payoutDate:      colMap.payoutDate >= 0 ? fields[colMap.payoutDate]?.trim() || '' : '',
-        payoutId,
-        amount:          colMap.amount >= 0 ? parseAmount(fields[colMap.amount] || '') : 0,
-        fee:             colMap.fee >= 0 ? parseAmount(fields[colMap.fee] || '') : 0,
-        net:             colMap.net >= 0 ? parseAmount(fields[colMap.net] || '') : 0,
-        currency:        colMap.currency >= 0 ? fields[colMap.currency]?.trim().toUpperCase() || 'AUD' : 'AUD',
-        gst:             colMap.gst >= 0 ? parseAmount(fields[colMap.gst] || '') : 0,
-      });
-    }
-
-    if (rows.length === 0) {
-      return { success: false, error: 'No valid transaction rows found in CSV.' };
-    }
-
-    // ── Group by Payout ID ──
-    const groups = new Map<string, ShopifyPayoutGroup>();
-    for (const row of rows) {
-      let group = groups.get(row.payoutId);
-      if (!group) {
-        group = {
-          payoutId: row.payoutId,
-          payoutDate: row.payoutDate,
-          transactionDates: [],
-          charges: 0,
-          refunds: 0,
-          fees: 0,
-          gstTotal: 0,
-          netTotal: 0,
-          adjustments: 0,
-          rowCount: 0,
-          currency: row.currency || 'AUD',
-        };
-        groups.set(row.payoutId, group);
-      }
-
-      group.rowCount++;
-      if (row.transactionDate) {
-        group.transactionDates.push(normaliseDate(row.transactionDate));
-      }
-
-      // Aggregate by transaction type
-      const type = row.type;
-      if (type === 'charge' || type === 'sale' || type === '') {
-        group.charges += row.amount;       // positive
-      } else if (type === 'refund' || type === 'return') {
-        group.refunds += row.amount;       // Shopify may report as negative or positive
-      } else if (type === 'adjustment' || type === 'chargeback' || type === 'reserve') {
-        group.adjustments += row.amount;
-      } else {
-        // Unknown type — treat as adjustment
-        group.adjustments += row.amount;
-      }
-
-      group.fees += row.fee;              // fees per transaction (negative or positive)
-      group.netTotal += row.net;
-      group.gstTotal += row.gst;
-    }
-
-    // ── Convert each group to StandardSettlement ──
-    const settlements: StandardSettlement[] = [];
-
-    for (const group of groups.values()) {
-      // Determine period from transaction dates
-      const sortedDates = group.transactionDates.filter(d => d).sort();
-      const periodStart = sortedDates[0] || normaliseDate(group.payoutDate) || new Date().toISOString().substring(0, 10);
-      const periodEnd = sortedDates[sortedDates.length - 1] || periodStart;
-
-      // Normalise signs: charges positive, refunds negative, fees negative
-      const grossSales = Math.abs(group.charges);
-      const refunds = group.refunds > 0 ? -group.refunds : group.refunds; // ensure negative
-      const fees = group.fees > 0 ? -group.fees : group.fees;             // ensure negative
-      const adjustments = group.adjustments;
-      const bankDeposit = round2(group.netTotal);
-
-      // GST calculations (Australian GST = 10%, 1/11th of inclusive amount)
-      const GST_DIVISOR = 11;
-
-      // Use actual GST column if available, otherwise derive
-      const hasGstColumn = group.gstTotal !== 0;
-      const gstOnSales = hasGstColumn
-        ? round2(Math.abs(group.gstTotal))
-        : round2(grossSales / GST_DIVISOR);
-      const salesExGst = round2(grossSales - gstOnSales);
-
-      const feesInclGst = fees; // negative
-      const feesExGst = round2(feesInclGst - (feesInclGst / GST_DIVISOR));
-      const gstOnFees = round2(Math.abs(feesInclGst / GST_DIVISOR));
-
-      // Reconciliation: gross + refunds + fees + adjustments ≈ bankDeposit
-      const calculatedNet = round2(grossSales + refunds + fees + adjustments);
-      const reconciles = Math.abs(calculatedNet - bankDeposit) <= 0.05;
-
-      settlements.push({
-        marketplace: 'shopify_payments',
-        settlement_id: group.payoutId,
-        period_start: periodStart,
-        period_end: periodEnd,
-        sales_ex_gst: salesExGst,
-        gst_on_sales: gstOnSales,
-        fees_ex_gst: feesExGst,
-        gst_on_fees: gstOnFees,
-        net_payout: bankDeposit,
-        source: 'csv_upload',
-        reconciles,
-        metadata: {
-          grossSalesInclGst: grossSales,
-          refundsInclGst: refunds,
-          refundsExGst: round2(refunds - (refunds / GST_DIVISOR)),
-          chargesInclGst: fees,
-          adjustments,
-          calculatedNet,
-          reconciliationDiff: round2(calculatedNet - bankDeposit),
-          payoutDate: normaliseDate(group.payoutDate),
-          transactionCount: group.rowCount,
-          currency: group.currency,
-        },
-      });
-    }
-
-    // Sort by payout date descending
-    settlements.sort((a, b) => (b.metadata?.payoutDate || '').localeCompare(a.metadata?.payoutDate || ''));
-
-    return {
-      success: true,
-      settlements,
-      extra: {
-        rowCount: rows.length,
-        currency: rows[0]?.currency || 'AUD',
-        rawHeaders: headers,
-        adjustments: 0,
-        payoutCount: settlements.length,
-      },
-    };
   } catch (err: any) {
     return { success: false, error: `CSV parsing failed: ${err.message || 'Unknown error'}` };
   }
+}
+
+// ─── Payout-Level Parser ────────────────────────────────────────────────────
+
+function parsePayoutLevelCSV(headers: string[], lines: string[]): ShopifyParseResult {
+  const colMap = matchPayoutLevelColumns(headers);
+  if (!colMap) {
+    return {
+      success: false,
+      error: `Could not identify required columns. Found: ${headers.join(', ')}. Need: Charges, Total.`,
+    };
+  }
+
+  const settlements: StandardSettlement[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCSVRow(lines[i]);
+    if (fields.length < 3) continue;
+
+    const payoutDate = colMap.payoutDate >= 0 ? normaliseDate(fields[colMap.payoutDate]?.trim() || '') : '';
+    if (!payoutDate) continue;
+
+    const charges     = colMap.charges >= 0 ? parseAmount(fields[colMap.charges] || '') : 0;
+    const refundsRaw  = colMap.refunds >= 0 ? parseAmount(fields[colMap.refunds] || '') : 0;
+    const adjustments = colMap.adjustments >= 0 ? parseAmount(fields[colMap.adjustments] || '') : 0;
+    const feesRaw     = colMap.fees >= 0 ? parseAmount(fields[colMap.fees] || '') : 0;
+    const total       = parseAmount(fields[colMap.total] || '');
+    const currency    = colMap.currency >= 0 ? fields[colMap.currency]?.trim().toUpperCase() || 'AUD' : 'AUD';
+    const bankRef     = colMap.bankReference >= 0 ? fields[colMap.bankReference]?.trim() || '' : '';
+    const reservedFunds = colMap.reservedFunds >= 0 ? parseAmount(fields[colMap.reservedFunds] || '') : 0;
+    const advances    = colMap.advances >= 0 ? parseAmount(fields[colMap.advances] || '') : 0;
+    const retriedAmt  = colMap.retriedAmount >= 0 ? parseAmount(fields[colMap.retriedAmount] || '') : 0;
+
+    // Use Bank Reference as settlement_id (unique per payout), fallback to date
+    const settlementId = bankRef || `shopify-payout-${payoutDate}`;
+
+    // Normalise signs
+    const grossSales = Math.abs(charges);
+    const refunds = refundsRaw > 0 ? -refundsRaw : refundsRaw;  // ensure negative
+    const fees = feesRaw > 0 ? -feesRaw : feesRaw;              // ensure negative
+    const bankDeposit = round2(total);
+
+    // All other amounts that affect the total
+    const otherAdjustments = round2(adjustments + reservedFunds + advances + retriedAmt);
+
+    // GST (AU 10% = 1/11th of inclusive)
+    const GST_DIVISOR = 11;
+    const gstOnSales = round2(grossSales / GST_DIVISOR);
+    const salesExGst = round2(grossSales - gstOnSales);
+    const feesExGst = round2(fees - (fees / GST_DIVISOR));
+    const gstOnFees = round2(Math.abs(fees / GST_DIVISOR));
+
+    // Reconciliation: charges + refunds + adjustments + fees = total
+    const calculatedNet = round2(grossSales + refunds + fees + otherAdjustments);
+    const reconciles = Math.abs(calculatedNet - bankDeposit) <= 0.05;
+
+    // For payout-level, period_start = period_end = payout date
+    settlements.push({
+      marketplace: 'shopify_payments',
+      settlement_id: settlementId,
+      period_start: payoutDate,
+      period_end: payoutDate,
+      sales_ex_gst: salesExGst,
+      gst_on_sales: gstOnSales,
+      fees_ex_gst: feesExGst,
+      gst_on_fees: gstOnFees,
+      net_payout: bankDeposit,
+      source: 'csv_upload',
+      reconciles,
+      metadata: {
+        grossSalesInclGst: grossSales,
+        refundsInclGst: refunds,
+        refundsExGst: round2(refunds - (refunds / GST_DIVISOR)),
+        chargesInclGst: fees,
+        adjustments: otherAdjustments,
+        calculatedNet,
+        reconciliationDiff: round2(calculatedNet - bankDeposit),
+        payoutDate,
+        bankReference: bankRef,
+        transactionCount: 1,
+        currency,
+        csvFormat: 'payout_level',
+      },
+    });
+  }
+
+  if (settlements.length === 0) {
+    return { success: false, error: 'No valid payout rows found in CSV.' };
+  }
+
+  // Sort by payout date descending
+  settlements.sort((a, b) => (b.period_end || '').localeCompare(a.period_end || ''));
+
+  return {
+    success: true,
+    settlements,
+    extra: {
+      rowCount: settlements.length,
+      currency: settlements[0]?.metadata?.currency || 'AUD',
+      rawHeaders: headers,
+      adjustments: 0,
+      payoutCount: settlements.length,
+    },
+  };
+}
+
+// ─── Transaction-Level Parser ───────────────────────────────────────────────
+
+function parseTransactionLevelCSV(headers: string[], lines: string[]): ShopifyParseResult {
+  const colMap = matchColumns(headers);
+  if (!colMap) {
+    return {
+      success: false,
+      error: `Could not identify required columns. Found: ${headers.join(', ')}. Need: Payout ID, Amount, Net.`,
+    };
+  }
+
+  // Parse all rows
+  const rows: ShopifyTransactionRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const fields = parseCSVRow(lines[i]);
+    if (fields.length < 3) continue;
+
+    const payoutId = colMap.payoutId >= 0 ? fields[colMap.payoutId]?.trim() : '';
+    if (!payoutId) continue;
+
+    rows.push({
+      transactionDate: colMap.transactionDate >= 0 ? fields[colMap.transactionDate]?.trim() || '' : '',
+      type:            colMap.type >= 0 ? fields[colMap.type]?.trim().toLowerCase() || '' : '',
+      order:           colMap.order >= 0 ? fields[colMap.order]?.trim() || '' : '',
+      payoutStatus:    colMap.payoutStatus >= 0 ? fields[colMap.payoutStatus]?.trim() || '' : '',
+      payoutDate:      colMap.payoutDate >= 0 ? fields[colMap.payoutDate]?.trim() || '' : '',
+      payoutId,
+      amount:          colMap.amount >= 0 ? parseAmount(fields[colMap.amount] || '') : 0,
+      fee:             colMap.fee >= 0 ? parseAmount(fields[colMap.fee] || '') : 0,
+      net:             colMap.net >= 0 ? parseAmount(fields[colMap.net] || '') : 0,
+      currency:        colMap.currency >= 0 ? fields[colMap.currency]?.trim().toUpperCase() || 'AUD' : 'AUD',
+      gst:             colMap.gst >= 0 ? parseAmount(fields[colMap.gst] || '') : 0,
+    });
+  }
+
+  if (rows.length === 0) {
+    return { success: false, error: 'No valid transaction rows found in CSV.' };
+  }
+
+  // ── Group by Payout ID ──
+  const groups = new Map<string, ShopifyPayoutGroup>();
+  for (const row of rows) {
+    let group = groups.get(row.payoutId);
+    if (!group) {
+      group = {
+        payoutId: row.payoutId,
+        payoutDate: row.payoutDate,
+        transactionDates: [],
+        charges: 0,
+        refunds: 0,
+        fees: 0,
+        gstTotal: 0,
+        netTotal: 0,
+        adjustments: 0,
+        rowCount: 0,
+        currency: row.currency || 'AUD',
+      };
+      groups.set(row.payoutId, group);
+    }
+
+    group.rowCount++;
+    if (row.transactionDate) {
+      group.transactionDates.push(normaliseDate(row.transactionDate));
+    }
+
+    const type = row.type;
+    if (type === 'charge' || type === 'sale' || type === '') {
+      group.charges += row.amount;
+    } else if (type === 'refund' || type === 'return') {
+      group.refunds += row.amount;
+    } else if (type === 'adjustment' || type === 'chargeback' || type === 'reserve') {
+      group.adjustments += row.amount;
+    } else {
+      group.adjustments += row.amount;
+    }
+
+    group.fees += row.fee;
+    group.netTotal += row.net;
+    group.gstTotal += row.gst;
+  }
+
+  // ── Convert each group to StandardSettlement ──
+  const settlements: StandardSettlement[] = [];
+
+  for (const group of groups.values()) {
+    const sortedDates = group.transactionDates.filter(d => d).sort();
+    const periodStart = sortedDates[0] || normaliseDate(group.payoutDate) || new Date().toISOString().substring(0, 10);
+    const periodEnd = sortedDates[sortedDates.length - 1] || periodStart;
+
+    const grossSales = Math.abs(group.charges);
+    const refunds = group.refunds > 0 ? -group.refunds : group.refunds;
+    const fees = group.fees > 0 ? -group.fees : group.fees;
+    const adjustments = group.adjustments;
+    const bankDeposit = round2(group.netTotal);
+
+    const GST_DIVISOR = 11;
+    const hasGstColumn = group.gstTotal !== 0;
+    const gstOnSales = hasGstColumn
+      ? round2(Math.abs(group.gstTotal))
+      : round2(grossSales / GST_DIVISOR);
+    const salesExGst = round2(grossSales - gstOnSales);
+
+    const feesInclGst = fees;
+    const feesExGst = round2(feesInclGst - (feesInclGst / GST_DIVISOR));
+    const gstOnFees = round2(Math.abs(feesInclGst / GST_DIVISOR));
+
+    const calculatedNet = round2(grossSales + refunds + fees + adjustments);
+    const reconciles = Math.abs(calculatedNet - bankDeposit) <= 0.05;
+
+    settlements.push({
+      marketplace: 'shopify_payments',
+      settlement_id: group.payoutId,
+      period_start: periodStart,
+      period_end: periodEnd,
+      sales_ex_gst: salesExGst,
+      gst_on_sales: gstOnSales,
+      fees_ex_gst: feesExGst,
+      gst_on_fees: gstOnFees,
+      net_payout: bankDeposit,
+      source: 'csv_upload',
+      reconciles,
+      metadata: {
+        grossSalesInclGst: grossSales,
+        refundsInclGst: refunds,
+        refundsExGst: round2(refunds - (refunds / GST_DIVISOR)),
+        chargesInclGst: fees,
+        adjustments,
+        calculatedNet,
+        reconciliationDiff: round2(calculatedNet - bankDeposit),
+        payoutDate: normaliseDate(group.payoutDate),
+        transactionCount: group.rowCount,
+        currency: group.currency,
+        csvFormat: 'transaction_level',
+      },
+    });
+  }
+
+  settlements.sort((a, b) => (b.metadata?.payoutDate || '').localeCompare(a.metadata?.payoutDate || ''));
+
+  return {
+    success: true,
+    settlements,
+    extra: {
+      rowCount: rows.length,
+      currency: rows[0]?.currency || 'AUD',
+      rawHeaders: headers,
+      adjustments: 0,
+      payoutCount: settlements.length,
+    },
+  };
 }
 
 // ─── Xero Invoice Line Builder ──────────────────────────────────────────────
