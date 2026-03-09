@@ -477,7 +477,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               <span className="text-sm font-semibold text-foreground">
                                 {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
                               </span>
-                              {statusBadge(s.status)}
+                              {statusBadge(s)}
                               {s.marketplace.startsWith('shopify_orders_') && (
                                 <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
                               )}
