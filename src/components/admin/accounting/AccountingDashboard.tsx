@@ -1354,6 +1354,7 @@ export default function AccountingDashboard() {
                     onPushToXero={handlePushToXero}
                     pushing={pushing}
                     pushed={pushed}
+                    historicalSettlements={settlements}
                   />
                 </div>
               )}
