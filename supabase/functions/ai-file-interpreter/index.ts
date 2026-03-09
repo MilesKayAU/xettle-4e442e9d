@@ -116,6 +116,10 @@ Row count: ${row_count || 0}`;
                   type: "number",
                   description: "Confidence level 0-100 in the detection",
                 },
+                confidence_reason: {
+                  type: "string",
+                  description: "Human-readable explanation referencing specific column names or values that justify the confidence score",
+                },
                 detection_field: {
                   type: "string",
                   enum: ["note_attributes", "tags", "payment_method", "combined", "unknown"],
