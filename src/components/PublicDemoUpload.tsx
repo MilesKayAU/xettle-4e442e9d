@@ -5,7 +5,7 @@
  * Parsed data stored in sessionStorage for post-signup transfer.
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import {
   Upload, CheckCircle2, AlertTriangle, Loader2,
   FileSpreadsheet, FileText, ArrowRight, Shield, XCircle,
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { detectFile, MARKETPLACE_LABELS, type FileDetectionResult } from '@/utils/file-fingerprint-engine';
 import { type StandardSettlement } from '@/utils/settlement-engine';
 
