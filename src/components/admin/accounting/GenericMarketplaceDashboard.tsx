@@ -495,8 +495,68 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               <Trash2 className="h-3.5 w-3.5" />
                             )}
                           </Button>
+                          {/* Transaction drill-down button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                            onClick={() => loadLineItems(s.settlement_id)}
+                          >
+                            {loadingLines === s.settlement_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
                         </div>
                       </div>
+
+                      {/* ── Transaction drill-down ── */}
+                      {expandedLines === s.settlement_id && (
+                        <div className="mt-3 pt-3 border-t border-border">
+                          {lineItems[s.settlement_id] && lineItems[s.settlement_id].length > 0 ? (
+                            <>
+                              <p className="text-[10px] text-muted-foreground mb-2 font-medium">
+                                {lineItems[s.settlement_id].length} transaction{lineItems[s.settlement_id].length !== 1 ? 's' : ''} — source: {s.marketplace.startsWith('shopify_orders_') ? 'Shopify Orders CSV' : 'Direct settlement'}
+                              </p>
+                              <div className="overflow-auto max-h-60 rounded-lg border border-border">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="text-[10px]">Date</TableHead>
+                                      <TableHead className="text-[10px]">Order</TableHead>
+                                      <TableHead className="text-[10px]">SKU / Detail</TableHead>
+                                      <TableHead className="text-[10px] text-right">Amount</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {lineItems[s.settlement_id].map((line: any, lIdx: number) => (
+                                      <TableRow key={lIdx}>
+                                        <TableCell className="text-[10px] text-muted-foreground py-1">{line.posted_date || '—'}</TableCell>
+                                        <TableCell className="text-[10px] font-mono py-1">{line.order_id || '—'}</TableCell>
+                                        <TableCell className="text-[10px] text-muted-foreground py-1">{line.amount_description || line.sku || '—'}</TableCell>
+                                        <TableCell className="text-[10px] text-right font-medium py-1">{formatAUD(line.amount || 0)}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-1.5">
+                                Total: <span className="font-semibold text-foreground">{formatAUD(lineItems[s.settlement_id].reduce((sum: number, l: any) => sum + (l.amount || 0), 0))}</span>
+                                {' · '}ex GST: <span className="font-medium">{formatAUD(sales)}</span>
+                              </p>
+                            </>
+                          ) : lineItems[s.settlement_id] ? (
+                            <p className="text-xs text-muted-foreground py-2 text-center">
+                              No transaction detail available for this settlement.
+                            </p>
+                          ) : (
+                            <div className="flex items-center gap-2 py-3 justify-center text-xs text-muted-foreground">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading transactions…
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </React.Fragment>
