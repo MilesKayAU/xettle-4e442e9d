@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/collapsible';
 import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
-  Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet,
+  Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink,
 } from 'lucide-react';
 import {
@@ -56,6 +56,7 @@ interface DetectedFile {
 interface SmartUploadFlowProps {
   onSettlementsSaved?: () => void;
   onMarketplacesChanged?: () => void;
+  onViewSettlements?: () => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -96,7 +97,7 @@ const MARKETPLACE_COLORS: Record<string, string> = {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChanged }: SmartUploadFlowProps) {
+export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChanged, onViewSettlements }: SmartUploadFlowProps) {
   const [files, setFiles] = useState<DetectedFile[]>([]);
   const [processingAll, setProcessingAll] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -641,6 +642,32 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                       <CheckCircle2 className="h-4 w-4" />
                     )}
                     Create {totalSettlements > 1 ? `${totalSettlements} Settlements` : 'Settlement'} & Prepare for Xero
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* All saved — prompt to view in Settlements tab */}
+          {savedCount > 0 && confirmedCount === 0 && onViewSettlements && (
+            <Card className="border-green-400/50 bg-green-50/30 dark:bg-green-950/10">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {savedCount} file{savedCount !== 1 ? 's' : ''} processed & saved ✓
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        View and manage your settlements in the Settlements tab
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={onViewSettlements} className="gap-2">
+                    <FileText className="h-4 w-4" />
+                    View Settlements
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
               </CardContent>

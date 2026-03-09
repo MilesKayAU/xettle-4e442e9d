@@ -3,7 +3,6 @@ import { useAdminAuth } from '@/hooks/use-admin-auth';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import BunningsDashboard from '@/components/admin/accounting/BunningsDashboard';
-import ShopifyPaymentsDashboard from '@/components/admin/accounting/ShopifyPaymentsDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -112,7 +111,6 @@ export default function Dashboard() {
 
   const isAmazonAU = selectedMarketplace === 'amazon_au';
   const isBunnings = selectedMarketplace === 'bunnings';
-  const isShopifyPayments = selectedMarketplace === 'shopify_payments';
   const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
 
   return (
@@ -215,8 +213,6 @@ export default function Dashboard() {
                 <AccountingDashboard />
               ) : isBunnings && selectedUserMarketplace ? (
                 <BunningsDashboard marketplace={selectedUserMarketplace} />
-              ) : isShopifyPayments && selectedUserMarketplace ? (
-                <ShopifyPaymentsDashboard marketplace={selectedUserMarketplace} />
               ) : selectedUserMarketplace ? (
                 <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} />
               ) : null}
@@ -232,7 +228,11 @@ export default function Dashboard() {
                 </p>
               </div>
               <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                <SmartUploadFlow onSettlementsSaved={loadMarketplaces} onMarketplacesChanged={loadMarketplaces} />
+                <SmartUploadFlow
+                  onSettlementsSaved={loadMarketplaces}
+                  onMarketplacesChanged={loadMarketplaces}
+                  onViewSettlements={() => switchView('settlements')}
+                />
               </Suspense>
             </div>
           </ErrorBoundary>
