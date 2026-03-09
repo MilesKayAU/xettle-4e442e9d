@@ -28,6 +28,11 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
       const text = await slice.text();
       const lower = text.toLowerCase();
 
+      // Woolworths MarketPlus — has 'order source' AND 'bank payment ref'
+      if (lower.includes('order source') && lower.includes('bank payment ref')) {
+        return 'woolworths_marketplus';
+      }
+
       // Shopify Orders CSV (gateway clearing) — must check before Shopify Payments
       if (lower.includes('payment method') && lower.includes('financial status') && lower.includes('paid at')) {
         return 'shopify_orders';
