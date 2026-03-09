@@ -358,8 +358,8 @@ export default function Landing() {
                   <BarChart3 className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">Fee-by-fee breakdown</h3>
-                  <p className="text-muted-foreground text-sm">See exactly where your revenue goes — commission, fulfilment, shipping, refunds, and other fees for each marketplace.</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Marketplace fee breakdown</h3>
+                  <p className="text-muted-foreground text-sm">See exactly what the marketplace charged — commission, FBA fulfilment, refunds, and other platform fees. Then add your own shipping estimate to calculate true landed profit.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
