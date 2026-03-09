@@ -157,9 +157,13 @@ export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLin
  * Build Xero invoice reference string
  */
 export function buildInvoiceReference(settlement: StandardSettlement): string {
+  return `Xettle-${settlement.settlement_id}`;
+}
+
+export function buildInvoiceDescription(settlement: StandardSettlement): string {
   const label = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
   const periodLabel = `${formatSettlementDate(settlement.period_start)} – ${formatSettlementDate(settlement.period_end)}`;
-  return `${label} Settlement ${periodLabel} (${settlement.settlement_id})`;
+  return `${label} Settlement ${periodLabel}`;
 }
 
 // ─── Save to Database ───────────────────────────────────────────────────────
