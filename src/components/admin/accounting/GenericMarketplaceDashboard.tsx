@@ -69,6 +69,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
   const [settlements, setSettlements] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -84,6 +85,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         .order('period_end', { ascending: false });
       if (error) throw error;
       setSettlements((data || []) as SettlementRow[]);
+      setHasLoadedOnce(true);
     } catch {
       // silent
     } finally {
