@@ -15,6 +15,13 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
+interface FeeBreakdown {
+  label: string;
+  amount: number;
+  pctOfSales: number;
+  color: string;
+}
+
 interface MarketplaceStats {
   marketplace: string;
   label: string;
@@ -29,6 +36,12 @@ interface MarketplaceStats {
   avgCommission: number;
   adSpend: number;
   returnAfterAds: number | null;
+  // Fee breakdown
+  commissionTotal: number;
+  fbaTotal: number;
+  storageTotal: number;
+  otherFeesTotal: number;
+  feeBreakdown: FeeBreakdown[];
 }
 
 interface AdSpendRecord {
@@ -98,11 +111,24 @@ export default function InsightsDashboard() {
         // Cap ratio at 1.0 — a return > $1 per $1 sold is impossible
         const returnRatio = totalSales > 0 ? Math.min(netPayout / totalSales, 1) : 0;
         const feeLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
-        const avgCommission = totalSales > 0 ? Math.min(Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0)) / totalSales, 1) : 0;
+        const commissionTotal = Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
+        const avgCommission = totalSales > 0 ? Math.min(commissionTotal / totalSales, 1) : 0;
         const latestPeriodEnd = rows.length > 0 ? rows[0].period_end : null;
+        const fbaTotal = Math.abs(rows.reduce((sum, r) => sum + (r.fba_fees || 0), 0));
+        const storageTotal = Math.abs(rows.reduce((sum, r) => sum + (r.storage_fees || 0), 0));
+        const otherFeesTotal = Math.abs(rows.reduce((sum, r) => sum + (r.other_fees || 0), 0));
 
         const adSpend = adSpendByMp[mp] || 0;
         const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
+
+        // Build fee breakdown for waterfall
+        const feeBreakdown: FeeBreakdown[] = [];
+        if (commissionTotal > 0) feeBreakdown.push({ label: 'Commission', amount: commissionTotal, pctOfSales: totalSales > 0 ? commissionTotal / totalSales : 0, color: 'bg-primary' });
+        if (fbaTotal > 0) feeBreakdown.push({ label: 'FBA Fulfilment', amount: fbaTotal, pctOfSales: totalSales > 0 ? fbaTotal / totalSales : 0, color: 'bg-destructive' });
+        if (storageTotal > 0) feeBreakdown.push({ label: 'Storage', amount: storageTotal, pctOfSales: totalSales > 0 ? storageTotal / totalSales : 0, color: 'bg-muted-foreground' });
+        if (totalRefunds > 0) feeBreakdown.push({ label: 'Refunds', amount: totalRefunds, pctOfSales: totalSales > 0 ? totalRefunds / totalSales : 0, color: 'bg-muted-foreground/60' });
+        if (otherFeesTotal > 0) feeBreakdown.push({ label: 'Other fees', amount: otherFeesTotal, pctOfSales: totalSales > 0 ? otherFeesTotal / totalSales : 0, color: 'bg-muted-foreground/40' });
+        feeBreakdown.sort((a, b) => b.amount - a.amount);
 
         results.push({
           marketplace: mp,
@@ -118,6 +144,11 @@ export default function InsightsDashboard() {
           avgCommission,
           adSpend,
           returnAfterAds,
+          commissionTotal,
+          fbaTotal,
+          storageTotal,
+          otherFeesTotal,
+          feeBreakdown,
         });
       }
 
@@ -588,6 +619,217 @@ export default function InsightsDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Profit Leak Breakdown — where the $1 actually goes */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">Profit Leak Breakdown</CardTitle>
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-xs text-xs">
+                  Shows exactly where your revenue goes — broken down by fee type per marketplace.
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <CardDescription className="text-xs">
+              Where your revenue actually goes — fee by fee
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {stats.map((s) => {
+              if (s.feeBreakdown.length === 0) return null;
+              const keepPct = s.totalSales > 0 ? Math.max(0, s.netPayout / s.totalSales) : 0;
+              return (
+                <div key={s.marketplace} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-foreground">{s.label}</h4>
+                    <span className="text-xs text-muted-foreground">{s.settlementCount} settlements</span>
+                  </div>
+                  
+                  {/* Waterfall rows */}
+                  <div className="space-y-2">
+                    {/* You keep */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-28 shrink-0 text-right">You keep</span>
+                      <div className="flex-1 h-5 bg-muted/20 rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${keepPct * 100}%` }} />
+                      </div>
+                      <span className="text-xs font-bold tabular-nums text-foreground w-14 text-right">{formatPct(keepPct)}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(s.netPayout)}</span>
+                    </div>
+                    
+                    {/* Fee breakdown rows */}
+                    {s.feeBreakdown.map((fee) => (
+                      <div key={fee.label} className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground w-28 shrink-0 text-right">{fee.label}</span>
+                        <div className="flex-1 h-5 bg-muted/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-destructive/70 rounded-full transition-all duration-500" style={{ width: `${fee.pctOfSales * 100}%` }} />
+                        </div>
+                        <span className="text-xs font-semibold tabular-nums text-foreground w-14 text-right">{formatPct(fee.pctOfSales)}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(fee.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Total fees summary */}
+                  <div className="flex items-center justify-between text-xs border-t border-border pt-2">
+                    <span className="text-muted-foreground font-medium">Total fees + refunds</span>
+                    <span className="font-bold text-foreground tabular-nums">{formatPct(s.feeLoad + (s.totalSales > 0 ? s.totalRefunds / s.totalSales : 0))} of sales</span>
+                  </div>
+
+                  {/* Biggest cost driver callout */}
+                  {s.feeBreakdown.length > 0 && (
+                    <div className="rounded-md bg-muted/30 border border-border px-3 py-2">
+                      <p className="text-xs text-muted-foreground">
+                        <strong className="text-foreground">Biggest cost:</strong> {s.feeBreakdown[0].label} at {formatPct(s.feeBreakdown[0].pctOfSales)} of sales ({formatCurrency(s.feeBreakdown[0].amount)})
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Cross-marketplace fee comparison table */}
+            {stats.length > 1 && (() => {
+              const allFeeLabels = Array.from(new Set(stats.flatMap(s => s.feeBreakdown.map(f => f.label))));
+              return (
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-semibold text-foreground mb-3">Fee Comparison</h4>
+                  <div className="rounded-md border border-border overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-foreground">Fee Source</th>
+                          {stats.map(s => (
+                            <th key={s.marketplace} className="text-right px-3 py-2 font-medium text-foreground">{s.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allFeeLabels.map((label, idx) => (
+                          <tr key={label} className={idx > 0 ? 'border-t border-border' : ''}>
+                            <td className="px-3 py-2 text-muted-foreground">{label}</td>
+                            {stats.map(s => {
+                              const fee = s.feeBreakdown.find(f => f.label === label);
+                              return (
+                                <td key={s.marketplace} className="px-3 py-2 text-right tabular-nums text-foreground">
+                                  {fee ? formatPct(fee.pctOfSales) : '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                        <tr className="border-t-2 border-border font-bold">
+                          <td className="px-3 py-2 text-foreground">Total fees</td>
+                          {stats.map(s => (
+                            <td key={s.marketplace} className="px-3 py-2 text-right tabular-nums text-foreground">{formatPct(s.feeLoad)}</td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+
+        {/* Revenue Concentration Risk */}
+        {stats.length > 1 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">Revenue Concentration</CardTitle>
+              </div>
+              <CardDescription className="text-xs">
+                How dependent is your business on a single marketplace?
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {stats.map(s => {
+                const pct = totalAllSales > 0 ? s.totalSales / totalAllSales : 0;
+                return (
+                  <div key={s.marketplace} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">{s.label}</span>
+                      <span className="text-sm font-bold tabular-nums text-foreground">{formatPct(pct)}</span>
+                    </div>
+                    <div className="h-4 rounded-full bg-muted/30 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${pct >= 0.7 ? 'bg-destructive' : pct >= 0.5 ? 'bg-primary' : 'bg-primary/60'}`}
+                        style={{ width: `${pct * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{formatCurrency(s.totalSales)} sales</p>
+                  </div>
+                );
+              })}
+              {/* Risk insight */}
+              {(() => {
+                const topPct = totalAllSales > 0 ? topRevenue.totalSales / totalAllSales : 0;
+                if (topPct >= 0.8) {
+                  return (
+                    <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3">
+                      <p className="text-xs text-foreground">
+                        <strong>⚠️ High concentration risk:</strong> {topRevenue.label} generates {formatPct(topPct)} of your revenue. 
+                        Consider growing other channels to reduce dependency.
+                      </p>
+                    </div>
+                  );
+                }
+                if (topPct >= 0.6) {
+                  return (
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+                      <p className="text-xs text-foreground">
+                        <strong>Moderate concentration:</strong> {topRevenue.label} accounts for {formatPct(topPct)} of revenue. 
+                        Your channel mix is reasonable but still weighted toward one platform.
+                      </p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+                    <p className="text-xs text-foreground">
+                      <strong>Healthy diversification:</strong> No single marketplace dominates your revenue. Good balance.
+                    </p>
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Biggest Cost Driver card */}
+        {(() => {
+          const allBreakdowns = stats.flatMap(s => s.feeBreakdown.map(f => ({ ...f, marketplace: s.label, marketplaceCode: s.marketplace })));
+          if (allBreakdowns.length === 0) return null;
+          const biggest = allBreakdowns.reduce((max, f) => f.amount > max.amount ? f : max, allBreakdowns[0]);
+          return (
+            <Card className="border-destructive/20">
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-start gap-4">
+                  <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
+                    <TrendingUp className="h-6 w-6 text-destructive" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">Biggest Cost Driver</p>
+                    <p className="text-lg font-bold text-foreground mt-0.5">{biggest.marketplace} — {biggest.label}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {formatPct(biggest.pctOfSales)} of sales · {formatCurrency(biggest.amount)} total
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* Marketplace overview cards */}
         <div>
