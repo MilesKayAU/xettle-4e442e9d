@@ -224,8 +224,31 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     // SINGLE mode
     const f = files[0];
     if (!f.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Please upload a PDF file (Summary of Transactions).');
+      // Non-PDF — check if it's an Amazon file uploaded to wrong tab
+      const { detectFileMarketplace, MARKETPLACE_LABELS } = await import('@/utils/file-marketplace-detector');
+      const detected = await detectFileMarketplace(f);
+      if (detected === 'amazon_au') {
+        toast.warning(
+          `This looks like an ${MARKETPLACE_LABELS[detected]} settlement (TSV/CSV). Switch to the Amazon AU tab to upload it.`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.error('Please upload a PDF file (Summary of Transactions).');
+      }
       return;
+    }
+
+    // PDF uploaded — quick check it's not mislabelled
+    {
+      const { detectFileMarketplace, MARKETPLACE_LABELS } = await import('@/utils/file-marketplace-detector');
+      const detected = await detectFileMarketplace(f);
+      if (detected === 'amazon_au') {
+        toast.warning(
+          `This PDF looks like an Amazon file. Switch to the Amazon AU tab to upload it.`,
+          { duration: 6000 }
+        );
+        return;
+      }
     }
 
     setBulkFiles(null);
