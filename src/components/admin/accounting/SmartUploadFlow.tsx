@@ -928,7 +928,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
                   <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                    {df.savedCount} settlement{df.savedCount !== 1 ? 's' : ''} created & ready for Xero
+                    {df.savedCount} settlement{df.savedCount !== 1 ? 's' : ''} saved — review in Settlements tab
                   </p>
                 </div>
               )}
@@ -946,8 +946,8 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess 
           {/* Actions column */}
           <div className="flex items-center gap-1 flex-shrink-0">
             {status === 'detected' && detection?.isSettlementFile && (
-              <Button size="sm" className="text-xs h-8 gap-1" onClick={() => onProcess(idx)}>
-                <CheckCircle2 className="h-3.5 w-3.5" />
+              <Button size="default" className="gap-2 font-semibold" onClick={() => onProcess(idx)}>
+                <CheckCircle2 className="h-4 w-4" />
                 Save for Review
               </Button>
             )}
