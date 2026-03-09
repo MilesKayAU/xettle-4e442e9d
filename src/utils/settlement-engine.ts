@@ -21,7 +21,7 @@ export interface StandardSettlement {
   fees_ex_gst: number;       // Marketplace fees excluding GST (negative)
   gst_on_fees: number;       // GST on fees (positive absolute value)
   net_payout: number;        // Amount deposited to bank
-  source: 'manual' | 'api';  // How this settlement was ingested
+  source: 'csv_upload' | 'api' | 'manual';  // How this settlement was ingested
   reconciles: boolean;       // Whether calculated total ≈ net_payout
   // Optional marketplace-specific metadata
   metadata?: Record<string, any>;
