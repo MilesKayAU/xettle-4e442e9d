@@ -21,8 +21,13 @@ export default function Landing() {
       {/* Nav */}
       <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
         <div className="container-custom flex items-center justify-between h-16">
-          <Link to="/" className="text-xl font-bold text-foreground tracking-tight">
-            <span className="text-primary">X</span>ettle
+          <Link to="/" className="flex items-center gap-2">
+            <span className="text-xl font-bold text-foreground tracking-tight">
+              <span className="text-primary">X</span>ettle
+            </span>
+            <span className="hidden sm:inline text-xs text-muted-foreground border-l border-border pl-2">
+              Amazon, Shopify & marketplace settlements → Xero
+            </span>
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" asChild>
