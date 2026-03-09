@@ -269,6 +269,45 @@ const ShopifyConnectionStatus = () => {
                 </>
               )}
             </Button>
+
+            <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full text-muted-foreground text-xs gap-1">
+                  <Key className="h-3 w-3" />
+                  Using a Shopify Custom App? Enter your access token directly
+                  <ChevronDown className={`h-3 w-3 transition-transform ${manualOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2">
+                <Input
+                  placeholder="Admin API access token (shpat_...)"
+                  value={manualToken}
+                  onChange={(e) => setManualToken(e.target.value)}
+                  type="password"
+                />
+                <Input
+                  placeholder="yourstore.myshopify.com"
+                  value={manualDomain}
+                  onChange={(e) => setManualDomain(e.target.value)}
+                />
+                <Button
+                  onClick={handleManualSave}
+                  disabled={savingToken || !manualToken.trim() || !manualDomain.trim()}
+                  variant="secondary"
+                  className="w-full"
+                  size="sm"
+                >
+                  {savingToken ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save token'
+                  )}
+                </Button>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         ) : (
           <div className="flex gap-2">
