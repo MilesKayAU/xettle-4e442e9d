@@ -996,6 +996,47 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           </div>
         )}
       </div>
+
+      {/* Xero-aware bulk delete confirmation dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selected.size} settlement{selected.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const syncedCount = settlements.filter(s => selected.has(s.id) && (s.status === 'synced' || s.status === 'pushed_to_xero' || s.xero_journal_id)).length;
+                return syncedCount > 0
+                  ? `⚠️ ${syncedCount} of ${selected.size} selected settlement${selected.size !== 1 ? 's are' : ' is'} already in Xero. Deleting them here will NOT void them in Xero — you'll need to void those invoices manually.`
+                  : `This will permanently delete ${selected.size} settlement${selected.size !== 1 ? 's' : ''} and their transaction lines.`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setBulkDeleteDialogOpen(false);
+                // Force-run the delete (dialog already confirmed)
+                (async () => {
+                  setBulkDeleting(true);
+                  let deleted = 0;
+                  for (const id of selected) {
+                    const result = await deleteSettlement(id);
+                    if (result.success) deleted++;
+                  }
+                  setSelected(new Set());
+                  setBulkDeleting(false);
+                  toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
+                  loadSettlements();
+                })();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete {selected.size} Settlement{selected.size !== 1 ? 's' : ''}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
