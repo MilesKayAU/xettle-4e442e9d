@@ -6,8 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Upload, FileText, CheckCircle2, XCircle, AlertTriangle,
   History, Loader2, Send, Eye, Trash2, Info,
-  CheckSquare, Square
+  CheckSquare, Square, X
 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { parseShopifyPayoutCSV, buildShopifyInvoiceLines } from '@/utils/shopify-payments-parser';
