@@ -25,6 +25,7 @@ export interface FileDetectionResult {
   marketplace: string;           // 'amazon_au', 'shopify_payments', 'bunnings', 'kogan', etc.
   marketplaceLabel: string;      // Human-readable name
   confidence: number;            // 0-100
+  confidenceReason?: string;     // Human-readable explanation of confidence score
   isSettlementFile: boolean;     // false = wrong file type
   wrongFileMessage?: string;     // "This is a Shopify Orders export..."
   correctReportPath?: string;    // "Shopify Admin → Finances → Payouts → Export"
