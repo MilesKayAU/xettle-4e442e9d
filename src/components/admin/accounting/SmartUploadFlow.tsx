@@ -22,7 +22,9 @@ import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye, LayoutDashboard,
+  MapPin,
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
 import UnknownEntityDialog from './UnknownEntityDialog';
 import {
