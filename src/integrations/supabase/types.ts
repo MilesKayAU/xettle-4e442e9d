@@ -1013,6 +1013,48 @@ export type Database = {
         }
         Relationships: []
       }
+      shopify_orders: {
+        Row: {
+          created_at_shopify: string | null
+          financial_status: string | null
+          gateway: string | null
+          id: string
+          order_name: string | null
+          shopify_order_id: number
+          source_name: string | null
+          synced_at: string | null
+          tags: string | null
+          total_price: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at_shopify?: string | null
+          financial_status?: string | null
+          gateway?: string | null
+          id?: string
+          order_name?: string | null
+          shopify_order_id: number
+          source_name?: string | null
+          synced_at?: string | null
+          tags?: string | null
+          total_price?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at_shopify?: string | null
+          financial_status?: string | null
+          gateway?: string | null
+          id?: string
+          order_name?: string | null
+          shopify_order_id?: number
+          source_name?: string | null
+          synced_at?: string | null
+          tags?: string | null
+          total_price?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       shopify_sub_channels: {
         Row: {
           created_at: string | null
