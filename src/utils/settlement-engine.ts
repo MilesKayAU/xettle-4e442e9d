@@ -580,7 +580,7 @@ export async function deleteSettlement(id: string): Promise<{ success: boolean; 
 
 // ─── Xero Sync Back ─────────────────────────────────────────────────────────
 
-export async function syncXeroStatus(): Promise<{ success: boolean; updated?: number; error?: string }> {
+export async function syncXeroStatus(): Promise<{ success: boolean; updated?: number; fuzzy_matched?: number; error?: string }> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated' };
@@ -591,7 +591,7 @@ export async function syncXeroStatus(): Promise<{ success: boolean; updated?: nu
 
     if (error) return { success: false, error: error.message };
     if (!data?.success) return { success: false, error: data?.error || 'Sync failed' };
-    return { success: true, updated: data.updated || 0 };
+    return { success: true, updated: data.updated || 0, fuzzy_matched: data.fuzzy_matched || 0 };
   } catch (err: any) {
     return { success: false, error: err.message || 'Unknown error' };
   }
