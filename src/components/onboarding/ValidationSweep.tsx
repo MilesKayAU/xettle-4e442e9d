@@ -115,31 +115,33 @@ export default function ValidationSweep({
 
   const loadData = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('marketplace_validation')
-        .select('*')
-        .order('marketplace_code')
-        .order('period_start', { ascending: false });
+      const [valRes, boundaryRes, userRes] = await Promise.all([
+        supabase
+          .from('marketplace_validation')
+          .select('*')
+          .order('marketplace_code')
+          .order('period_start', { ascending: false }),
+        supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'accounting_boundary_date')
+          .maybeSingle(),
+        supabase.auth.getUser(),
+      ]);
 
-      if (error) throw error;
-      setRows((data || []) as ValidationRow[]);
+      if (valRes.error) throw valRes.error;
+      setRows((valRes.data || []) as ValidationRow[]);
+      
+      if (boundaryRes.data?.value) {
+        setBoundaryDate(boundaryRes.data.value);
+      } else if (userRes.data?.user?.created_at) {
+        setBoundaryDate(userRes.data.user.created_at.substring(0, 10));
+      }
     } catch (err) {
       console.error('Failed to load validation data:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  // Load boundary date
-  useEffect(() => {
-    supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'accounting_boundary_date')
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.value) setBoundaryDate(data.value);
-      });
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -240,32 +242,38 @@ export default function ValidationSweep({
   };
 
   // Counts
+  // Filter out already_recorded rows from actionable views
+  const actionableRows = useMemo(() => {
+    return rows.filter(r => r.overall_status !== 'already_recorded');
+  }, [rows]);
+
   const counts = useMemo(() => {
     const c = { complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
-    rows.forEach(r => {
+    actionableRows.forEach(r => {
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') c.complete++;
       else if (r.overall_status === 'ready_to_push') c.ready_to_push++;
+      else if (r.overall_status === 'pushed_to_xero') c.complete++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') c.settlement_needed++;
       else if (r.overall_status === 'gap_detected') c.gap_detected++;
     });
     return c;
-  }, [rows]);
+  }, [actionableRows]);
 
   const filteredRows = useMemo(() => {
-    if (filter === 'all') return rows;
-    if (filter === 'complete') return rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched');
-    if (filter === 'ready_to_push') return rows.filter(r => r.overall_status === 'ready_to_push');
-    if (filter === 'settlement_needed') return rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-    if (filter === 'gap_detected') return rows.filter(r => r.overall_status === 'gap_detected');
-    return rows;
-  }, [rows, filter]);
+    if (filter === 'all') return actionableRows;
+    if (filter === 'complete') return actionableRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
+    if (filter === 'ready_to_push') return actionableRows.filter(r => r.overall_status === 'ready_to_push');
+    if (filter === 'settlement_needed') return actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+    if (filter === 'gap_detected') return actionableRows.filter(r => r.overall_status === 'gap_detected');
+    return actionableRows;
+  }, [actionableRows, filter]);
 
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at)
     : null;
 
-  const readyToPushRows = rows.filter(r => r.overall_status === 'ready_to_push');
-  const uploadNeededRows = rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+  const readyToPushRows = actionableRows.filter(r => r.overall_status === 'ready_to_push');
+  const uploadNeededRows = actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
 
   // ─── Sweep Animation ──────────────────────────────────────────────
   if (sweeping) {
@@ -328,7 +336,7 @@ export default function ValidationSweep({
     );
   }
 
-  const allComplete = rows.every(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched');
+  const allComplete = actionableRows.length > 0 && actionableRows.every(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
 
   return (
     <div className="space-y-6">
