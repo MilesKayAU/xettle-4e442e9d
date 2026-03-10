@@ -581,7 +581,8 @@ function formatEventLabel(event: SystemEvent): string {
       const diff = event.details?.difference;
       return `Reconciliation gap${diff ? `: ${formatAUD(diff)}` : ''} ${mp}`;
     }
-    case 'settlement_detected': return `Settlement detected: ${mp} ${period}`;
+    case 'shopify_payout_synced': return `Shopify payout synced: ${period}`;
+    case 'scheduled_sync': return 'Auto-sync completed';
     default: return event.event_type.replace(/_/g, ' ');
   }
 }
