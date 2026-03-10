@@ -362,6 +362,9 @@ export async function syncSettlementToXero(
       },
     ];
 
+    // Calculate net amount for negative settlement detection (ACCPAY vs ACCREC)
+    const netAmount = (s.bank_deposit || 0);
+
     const { data: result, error: fnErr } = await supabase.functions.invoke('sync-settlement-to-xero', {
       body: {
         userId: user.id,
@@ -372,6 +375,7 @@ export async function syncSettlementToXero(
         dueDate: s.period_end,
         lineItems,
         contactName,
+        netAmount,
       },
     });
 
