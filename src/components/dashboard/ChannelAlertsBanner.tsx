@@ -34,6 +34,22 @@ function isNumericChannelId(name: string): boolean {
   return /^\d{6,}$/.test(name.trim());
 }
 
+const KNOWN_CONNECTOR_APPS: Record<string, string> = {
+  'cedcommerce': 'Orders managed via CedCommerce — check which marketplace in your CedCommerce dashboard',
+  'codisto': 'Orders managed via Codisto/Linnworks',
+  'm2e pro': 'Orders managed via M2E Pro (eBay/Amazon connector)',
+  'shopify markets': 'International orders via Shopify Markets',
+};
+
+function getConnectorNote(candidateTags: string[]): string | null {
+  if (!candidateTags.length) return null;
+  const joined = candidateTags.join(' ').toLowerCase();
+  for (const [key, note] of Object.entries(KNOWN_CONNECTOR_APPS)) {
+    if (joined.includes(key)) return note;
+  }
+  return null;
+}
+
 /** Get the best display name for an alert */
 function getDisplayName(alert: ChannelAlert): string {
   if (alert.detected_label) return alert.detected_label;
@@ -324,6 +340,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           const isUnknown = alert.detection_method === 'unknown' || (!alert.detected_label && isNumericChannelId(alert.source_name));
           const isTagDetected = alert.detection_method === 'tag';
           const candidateTags = alert.candidate_tags || [];
+          const connectorNote = getConnectorNote(candidateTags);
           const isNaming = namingAlertId === alert.id;
 
           return (
@@ -365,18 +382,29 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
                       </div>
                     )}
 
-                    {/* Shopify admin link for numeric IDs */}
-                    {isNumericChannelId(alert.source_name) && shopHandle && (
-                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                        Not sure what this is?{' '}
-                        <a
-                          href={`https://admin.shopify.com/store/${shopHandle}/settings/sales_channels`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary underline inline-flex items-center gap-0.5"
-                        >
-                          Check your Sales Channels settings <ExternalLink className="h-3 w-3" />
-                        </a>
+                    {/* Smart help for unknown numeric channel IDs */}
+                    {isNumericChannelId(alert.source_name) && shopHandle && isUnknown && (
+                      <div className="mt-2 text-xs text-muted-foreground space-y-1 border-t border-amber-200/50 pt-2">
+                        <p className="font-medium">❓ We couldn't identify this channel automatically.</p>
+                        {connectorNote ? (
+                          <p className="italic">{connectorNote}</p>
+                        ) : (
+                          <p>To find out what it is, check your installed Shopify apps (marketplace connectors like CedCommerce, Codisto, M2E Pro create orders with numeric channel IDs), or open one of these orders in Shopify to check its tags.</p>
+                        )}
+                        <div className="flex gap-3 mt-1">
+                          <a href={`https://admin.shopify.com/store/${shopHandle}/apps`} target="_blank" rel="noopener noreferrer" className="text-primary underline inline-flex items-center gap-0.5">
+                            Search your Shopify apps <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <a href={`https://admin.shopify.com/store/${shopHandle}/orders`} target="_blank" rel="noopener noreferrer" className="text-primary underline inline-flex items-center gap-0.5">
+                            View orders in Shopify <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    {/* Tag-detected confirmation for numeric IDs */}
+                    {isNumericChannelId(alert.source_name) && isTagDetected && (
+                      <p className="text-xs text-green-600 mt-1">
+                        ✓ Identified as {alert.detected_label} based on order tags
                       </p>
                     )}
                   </div>
