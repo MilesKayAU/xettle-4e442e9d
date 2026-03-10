@@ -1561,9 +1561,10 @@ interface FileResultCardProps {
   onAnalyzeAI: (idx: number) => void;
   onProcess: (idx: number) => void;
   onSetStatus: (idx: number, status: FileStatus) => void;
+  onFirstContact: (idx: number) => void;
 }
 
-function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess, onSetStatus }: FileResultCardProps) {
+function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess, onSetStatus, onFirstContact }: FileResultCardProps) {
   const { file, status, detection, settlements } = df;
   const marketplace = df.overrideMarketplace || detection?.marketplace;
   const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
