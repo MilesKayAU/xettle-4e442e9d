@@ -752,7 +752,7 @@ export default function InsightsDashboard() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{formatCurrency(s.totalSales)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.feeLoad)} of sales</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalFees)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.avgCommission)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalRefunds)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
