@@ -18,6 +18,7 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
+import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -144,7 +145,7 @@ export default function Dashboard() {
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
-
+  const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/auth');
@@ -372,18 +373,19 @@ export default function Dashboard() {
         <div className="container-custom">
           <nav className="flex gap-1 py-2">
             {([
-              { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard, step: '' },
-              { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload, step: '' },
-              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, step: '' },
-              { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3, step: '' },
+              { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
+              { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
+              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText },
+              { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
+              const showDot = tab.key === 'dashboard' && pendingChannelAlerts > 0;
               return (
                 <button
                   key={tab.key}
                   onClick={() => switchView(tab.key)}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  className={`relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                     isActive
                       ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -391,6 +393,11 @@ export default function Dashboard() {
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
+                  {showDot && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
+                      {pendingChannelAlerts}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -443,6 +450,7 @@ export default function Dashboard() {
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
               <ActionCentre
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);

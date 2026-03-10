@@ -137,6 +137,42 @@ export type Database = {
         }
         Relationships: []
       }
+      channel_alerts: {
+        Row: {
+          actioned_at: string | null
+          created_at: string | null
+          first_seen_at: string | null
+          id: string
+          order_count: number | null
+          source_name: string
+          status: string
+          total_revenue: number | null
+          user_id: string
+        }
+        Insert: {
+          actioned_at?: string | null
+          created_at?: string | null
+          first_seen_at?: string | null
+          id?: string
+          order_count?: number | null
+          source_name: string
+          status?: string
+          total_revenue?: number | null
+          user_id: string
+        }
+        Update: {
+          actioned_at?: string | null
+          created_at?: string | null
+          first_seen_at?: string | null
+          id?: string
+          order_count?: number | null
+          source_name?: string
+          status?: string
+          total_revenue?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       entity_library: {
         Row: {
           accounting_impact: string

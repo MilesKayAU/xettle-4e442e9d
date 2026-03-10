@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import ShopifyConnectionStatus from '@/components/admin/ShopifyConnectionStatus';
+import ChannelManagement from '@/components/shopify/ChannelManagement';
 import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
 import OnboardingChecklist from '@/components/admin/accounting/OnboardingChecklist';
 import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
@@ -1267,6 +1268,7 @@ export default function AccountingDashboard() {
                 }} />
                 <XeroConnectionStatus />
                 <ShopifyConnectionStatus />
+                <ChannelManagement />
                 <AutomationSettingsPanel userTier={userTier} />
                 <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />
                 <SyncHistoryCard />

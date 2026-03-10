@@ -94,6 +94,16 @@ Deno.serve(async (req) => {
   results.shopify = await callFunction("fetch-shopify-payouts", { "x-action": "sync" });
   if (results.shopify?.error) stepErrors.push('shopify');
 
+  // 2.5. Scan Shopify channels for sub-channel detection
+  console.log("[scheduled-sync] Step 2.5: Shopify channel scan...");
+  const shopifyUserIds = [...new Set((shopifyTokens || []).map(t => t.user_id))];
+  results.channel_scan = { users: shopifyUserIds.length, results: [] };
+  for (const uid of shopifyUserIds) {
+    const scanResult = await callFunction("scan-shopify-channels", {}, { userId: uid });
+    (results.channel_scan.results as any[]).push({ user_id: uid, ...scanResult });
+    if (scanResult?.error) stepErrors.push('channel_scan');
+  }
+
   // 3. Run validation sweep
   console.log("[scheduled-sync] Step 3: Validation sweep...");
   results.validation = await callFunction("run-validation-sweep");
