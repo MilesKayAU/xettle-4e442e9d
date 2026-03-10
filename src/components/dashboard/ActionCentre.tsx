@@ -103,6 +103,7 @@ export default function ActionCentre({
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -342,14 +343,18 @@ export default function ActionCentre({
                   {refreshingUploads ? 'Checking...' : `${uploadNeededManual.length} marketplace settlement${uploadNeededManual.length > 1 ? 's' : ''} missing`}
                 </p>
                 <ul className="space-y-1">
-                  {uploadNeededManual.slice(0, 3).map(r => (
+                  {(expandedCards['upload'] ? uploadNeededManual : uploadNeededManual.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-amber-500">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
                     </li>
                   ))}
                   {uploadNeededManual.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {uploadNeededManual.length - 3} more</li>
+                    <li>
+                      <button onClick={() => setExpandedCards(prev => ({ ...prev, upload: !prev.upload }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {expandedCards['upload'] ? '− Show less' : `+ ${uploadNeededManual.length - 3} more`}
+                      </button>
+                    </li>
                   )}
                 </ul>
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
@@ -373,7 +378,7 @@ export default function ActionCentre({
                   {readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''} validated
                 </p>
                 <ul className="space-y-1">
-                  {readyToPush.slice(0, 3).map(r => (
+                  {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-blue-500">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
@@ -381,7 +386,11 @@ export default function ActionCentre({
                     </li>
                   ))}
                   {readyToPush.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {readyToPush.length - 3} more</li>
+                    <li>
+                      <button onClick={() => setExpandedCards(prev => ({ ...prev, ready: !prev.ready }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {expandedCards['ready'] ? '− Show less' : `+ ${readyToPush.length - 3} more`}
+                      </button>
+                    </li>
                   )}
                 </ul>
                 <Button size="sm" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
@@ -403,14 +412,18 @@ export default function ActionCentre({
                   {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} pending bank match
                 </p>
                 <ul className="space-y-1">
-                  {awaitingBank.slice(0, 3).map(r => (
+                  {(expandedCards['bank'] ? awaitingBank : awaitingBank.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-blue-500">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {r.settlement_net ? formatAUD(r.settlement_net) : ''}
                     </li>
                   ))}
                   {awaitingBank.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {awaitingBank.length - 3} more</li>
+                    <li>
+                      <button onClick={() => setExpandedCards(prev => ({ ...prev, bank: !prev.bank }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {expandedCards['bank'] ? '− Show less' : `+ ${awaitingBank.length - 3} more`}
+                      </button>
+                    </li>
                   )}
                 </ul>
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
@@ -432,14 +445,18 @@ export default function ActionCentre({
                   {complete.length} settlement{complete.length > 1 ? 's' : ''} synced
                 </p>
                 <ul className="space-y-1">
-                  {complete.slice(0, 3).map(r => (
+                  {(expandedCards['complete'] ? complete : complete.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
                     </li>
                   ))}
                   {complete.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {complete.length - 3} more</li>
+                    <li>
+                      <button onClick={() => setExpandedCards(prev => ({ ...prev, complete: !prev.complete }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {expandedCards['complete'] ? '− Show less' : `+ ${complete.length - 3} more`}
+                      </button>
+                    </li>
                   )}
                 </ul>
               </CardContent>
