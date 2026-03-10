@@ -39,6 +39,9 @@ const ShopifyCallback = () => {
         setStatus('success');
         setMessage('Shopify connected successfully ✅');
 
+        // Trigger validation sweep after Shopify connection
+        triggerValidationSweep();
+
         setTimeout(() => navigate('/dashboard'), 2000);
       } catch (err: any) {
         console.error('Shopify callback error:', err);
