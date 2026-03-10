@@ -99,6 +99,24 @@ Deno.serve(async (req) => {
 
     const alertedSet = new Set((existingAlerts || []).map((a: any) => a.source_name));
 
+    // Clean up any pending alerts for sources now in the ignore list
+    const { data: allPendingAlerts } = await adminClient
+      .from("channel_alerts")
+      .select("id, source_name")
+      .eq("user_id", userId)
+      .eq("status", "pending");
+
+    if (allPendingAlerts) {
+      for (const alert of allPendingAlerts) {
+        const src = (alert.source_name || "").toLowerCase().trim();
+        if (IGNORED_SOURCES.has(src)) {
+          await adminClient.from("channel_alerts")
+            .update({ status: "auto_ignored" })
+            .eq("id", alert.id);
+        }
+      }
+    }
+
     // Create alerts for new channels not already known or alerted
     let newAlerts = 0;
     for (const [src, data] of Object.entries(sourceNameCounts)) {
