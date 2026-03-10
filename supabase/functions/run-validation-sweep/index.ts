@@ -200,19 +200,22 @@ async function sweepUser(adminSupabase: any, userId: string) {
     for (const s of (settlements || [])) {
       if (s.marketplace === mc) periodKeys.add(`${s.period_start} → ${s.period_end}`)
     }
-    // Also create period keys from order lines that match this marketplace
-    const mcLower = mc.replace('_', ' ').toLowerCase()
-    const mcPrefix = mc.split('_')[0].toLowerCase()
-    const orderMonths = new Set<string>()
-    for (const line of allOrderLines) {
-      if (!line.posted_date || !line.marketplace_name) continue
-      const mLower = line.marketplace_name.toLowerCase()
-      if (mLower.includes(mcLower) || mLower.includes(mcPrefix)) {
-        orderMonths.add(monthKey(line.posted_date))
+    // Only create synthetic monthly periods if NO real settlement periods exist for this marketplace
+    // This prevents phantom "full month" rows when actual settlements are fortnightly/weekly
+    if (periodKeys.size === 0) {
+      const mcLower = mc.replace('_', ' ').toLowerCase()
+      const mcPrefix = mc.split('_')[0].toLowerCase()
+      const orderMonths = new Set<string>()
+      for (const line of allOrderLines) {
+        if (!line.posted_date || !line.marketplace_name) continue
+        const mLower = line.marketplace_name.toLowerCase()
+        if (mLower.includes(mcLower) || mLower.includes(mcPrefix)) {
+          orderMonths.add(monthKey(line.posted_date))
+        }
       }
-    }
-    for (const mk of orderMonths) {
-      periodKeys.add(monthLabel(mk))
+      for (const mk of orderMonths) {
+        periodKeys.add(monthLabel(mk))
+      }
     }
     if (periodKeys.size === 0) {
       const now = new Date()
