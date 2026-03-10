@@ -615,7 +615,9 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                   Run Accounting Audit
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Check Xero invoices &amp; bank deposits
+                  {lastAuditTime
+                    ? `Last audited ${Math.round((Date.now() - new Date(lastAuditTime).getTime()) / 60000)} min ago`
+                    : 'Check Xero invoices & bank deposits'}
                 </p>
               </div>
               <Button
