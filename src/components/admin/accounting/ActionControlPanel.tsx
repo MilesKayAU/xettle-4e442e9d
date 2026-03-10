@@ -90,7 +90,7 @@ export default function ActionControlPanel({ userMarketplaces, onSwitchToUpload,
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Action Centre</h3>
+      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">What needs your attention</h3>
 
       {allClear ? (
         <Card className="bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 rounded-xl shadow-sm">
@@ -111,7 +111,7 @@ export default function ActionControlPanel({ userMarketplaces, onSwitchToUpload,
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {/* Upload Needed */}
           {missingCodes.length > 0 && (
-            <Card className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 rounded-xl shadow-sm">
+            <Card className="bg-amber-100 dark:bg-amber-950/30 border-amber-400 dark:border-amber-700 rounded-xl shadow-sm ring-1 ring-amber-300 dark:ring-amber-800">
               <CardContent className="py-5 px-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">

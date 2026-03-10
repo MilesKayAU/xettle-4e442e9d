@@ -8,6 +8,7 @@ import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyRe
 import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
 import SettlementsSummaryStrip from '@/components/admin/accounting/SettlementsSummaryStrip';
 import ActionControlPanel from '@/components/admin/accounting/ActionControlPanel';
+import NextExpectedSettlements from '@/components/admin/accounting/NextExpectedSettlements';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
@@ -16,13 +17,13 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
 
-type DashboardView = 'smart_upload' | 'settlements' | 'insights';
+type DashboardView = 'dashboard' | 'smart_upload' | 'settlements' | 'insights';
 type SettlementsSubTab = 'all' | 'overview';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
@@ -31,7 +32,7 @@ export default function Dashboard() {
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeView, setActiveView] = useState<DashboardView>(() => {
-    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'smart_upload';
+    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
   });
   const [settlementsSubTab, setSettlementsSubTab] = useState<SettlementsSubTab>(() => {
     return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'all';
@@ -261,9 +262,10 @@ export default function Dashboard() {
         <div className="container-custom">
           <nav className="flex gap-1 py-2">
             {([
-              { key: 'smart_upload' as DashboardView, label: 'Smart Upload', icon: Upload, step: '①' },
-              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, step: '②' },
-              { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3, step: '③' },
+              { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard, step: '' },
+              { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload, step: '' },
+              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, step: '' },
+              { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3, step: '' },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
@@ -277,7 +279,6 @@ export default function Dashboard() {
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                   }`}
                 >
-                  <span className="text-xs opacity-60">{tab.step}</span>
                   <Icon className="h-4 w-4" />
                   {tab.label}
                 </button>
@@ -327,6 +328,50 @@ export default function Dashboard() {
       )}
 
       <div className="container-custom py-8">
+        {/* ─── Dashboard (Action Centre Homepage) ────────────────────── */}
+        {activeView === 'dashboard' && (
+          <ErrorBoundary>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
+                <p className="text-muted-foreground mt-1">
+                  Your settlement status at a glance.
+                </p>
+              </div>
+
+              {/* Financial Summary Strip */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <SettlementsSummaryStrip userMarketplaceCount={userMarketplaces.length} />
+              )}
+
+              {/* Action Control Panel */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <ActionControlPanel
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                />
+              )}
+
+              {/* Next Expected Settlements */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <NextExpectedSettlements userMarketplaces={userMarketplaces} />
+              )}
+
+              {/* Monthly Reconciliation Status */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <MonthlyReconciliationStatus
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                  onSelectMarketplace={(code) => {
+                    setSelectedMarketplace(code);
+                    switchView('settlements');
+                  }}
+                />
+              )}
+            </div>
+          </ErrorBoundary>
+        )}
+
         {/* ─── Smart Upload ──────────────────────────────────────────── */}
         {activeView === 'smart_upload' && (
           <ErrorBoundary>
@@ -352,18 +397,6 @@ export default function Dashboard() {
         {activeView === 'settlements' && settlementsSubTab === 'all' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              {/* Financial Summary Strip */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <SettlementsSummaryStrip userMarketplaceCount={userMarketplaces.length} />
-              )}
-
-              {/* Action Control Panel */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <ActionControlPanel
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                />
-              )}
 
               {/* Monthly Reconciliation Status */}
               {!marketplacesLoading && userMarketplaces.length > 0 && (
