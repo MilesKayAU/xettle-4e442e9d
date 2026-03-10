@@ -45,17 +45,19 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+    if (userError || !user) {
+      console.error("[fetch-shopify-orders] Auth failed:", userError?.message);
+      return new Response(JSON.stringify({ error: "Unauthorized", detail: userError?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const { userId, shopDomain, dateFrom, dateTo, limit } = await req.json();
-    const resolvedUserId = userId || claimsData.claims.sub;
+    const resolvedUserId = userId || user.id;
     const effectiveLimit = Math.min(limit || 250, 250);
 
     // ─── Enforce accounting boundary ────────────────────────────────
