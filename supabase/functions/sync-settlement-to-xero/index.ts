@@ -42,6 +42,7 @@ interface InvoiceRequest {
   lineItems?: InvoiceLineItem[];
   country?: string;
   contactName?: string;
+  netAmount?: number;
   // Rollback fields
   invoiceIds?: string[];
   settlementId?: string;
