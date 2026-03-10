@@ -150,7 +150,8 @@ export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLin
     });
   }
 
-  return lines;
+  // Zero-amount guard: filter out any line with UnitAmount === 0
+  return lines.filter(line => Math.round(line.UnitAmount * 100) !== 0);
 }
 
 /**
