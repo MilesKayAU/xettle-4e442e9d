@@ -1,13 +1,13 @@
 /**
  * ChannelAlertsBanner — Shows pending channel alerts on the Dashboard.
- * Queries channel_alerts where status = 'pending' and shows actionable banners.
- * If shopify_orders is empty, shows a one-time "Sync now" prompt.
+ * Uses intelligent tag-based detection: detected_label, candidate_tags, detection_method.
  */
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Tag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
@@ -20,36 +20,25 @@ interface ChannelAlert {
   total_revenue: number;
   status: string;
   first_seen_at: string;
+  detection_method?: string;
+  detected_label?: string;
+  candidate_tags?: string[];
 }
 
 interface ChannelAlertsBannerProps {
   onAlertCountChange?: (count: number) => void;
 }
 
-// Known marketplace source_name → display info
-const KNOWN_MARKETPLACES: Record<string, { label: string; code: string }> = {
-  mydeal: { label: 'MyDeal', code: 'mydeal' },
-  bunnings: { label: 'Bunnings', code: 'bunnings' },
-  catch: { label: 'Catch', code: 'catch' },
-  ebay: { label: 'eBay AU', code: 'ebay_au' },
-  amazon: { label: 'Amazon AU', code: 'amazon_au' },
-  bigw: { label: 'Big W', code: 'bigw' },
-  kogan: { label: 'Kogan', code: 'kogan' },
-  everyday_market: { label: 'Everyday Market', code: 'everyday_market' },
-};
-
 /** Check if a source_name is a numeric Shopify channel ID */
 function isNumericChannelId(name: string): boolean {
   return /^\d{6,}$/.test(name.trim());
 }
 
-/** Format a source_name for display */
-function formatSourceName(name: string): string {
-  const lower = name.toLowerCase().trim();
-  const known = KNOWN_MARKETPLACES[lower];
-  if (known) return known.label;
-  if (isNumericChannelId(name)) return `Unknown channel (ID: ${name})`;
-  return name.charAt(0).toUpperCase() + name.slice(1);
+/** Get the best display name for an alert */
+function getDisplayName(alert: ChannelAlert): string {
+  if (alert.detected_label) return alert.detected_label;
+  if (isNumericChannelId(alert.source_name)) return `Unknown channel (ID: ${alert.source_name})`;
+  return alert.source_name.charAt(0).toUpperCase() + alert.source_name.slice(1);
 }
 
 export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlertsBannerProps) {
@@ -61,6 +50,9 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [syncDismissed, setSyncDismissed] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [shopDomain, setShopDomain] = useState<string | null>(null);
+  // For inline user-naming of unknown channels
+  const [namingAlertId, setNamingAlertId] = useState<string | null>(null);
+  const [customName, setCustomName] = useState('');
 
   const loadAlerts = async () => {
     try {
@@ -71,11 +63,15 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         .order('order_count', { ascending: false });
 
       if (error) throw error;
-      const alertsData = (data || []) as unknown as ChannelAlert[];
+      const alertsData = ((data || []) as any[]).map((a: any) => ({
+        ...a,
+        candidate_tags: typeof a.candidate_tags === 'string'
+          ? JSON.parse(a.candidate_tags)
+          : a.candidate_tags || [],
+      })) as ChannelAlert[];
       setAlerts(alertsData);
       onAlertCountChange?.(alertsData.length);
 
-      // If no alerts, check if shopify_orders is empty (needs initial sync)
       if (alertsData.length === 0) {
         const { data: tokens } = await supabase
           .from('shopify_tokens')
@@ -93,7 +89,6 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           }
         }
       } else {
-        // Get shop domain for links
         const { data: tokens } = await supabase
           .from('shopify_tokens')
           .select('shop_domain')
@@ -137,7 +132,6 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         body: { shopDomain: tokenRow.shop_domain },
       });
 
-      console.log('[ChannelAlertsBanner] fetch-shopify-orders response:', { data, error });
       if (error) throw error;
       if (data?.error) throw new Error(data.error + (data.detail ? `: ${data.detail}` : ''));
 
@@ -198,12 +192,12 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
     setAlerts(prev => prev.filter(a => a.id !== alert.id));
     onAlertCountChange?.(alerts.length - 1);
-    toast.info(`"${formatSourceName(alert.source_name)}" ignored — you can re-enable in Settings.`);
+    toast.info(`"${getDisplayName(alert)}" ignored — you can re-enable in Settings.`);
   };
 
   const handleSetup = (alert: ChannelAlert) => {
-    const lower = alert.source_name.toLowerCase().trim();
-    const known = KNOWN_MARKETPLACES[lower];
+    const displayName = getDisplayName(alert);
+    const hasDetectedLabel = !!alert.detected_label;
 
     setSetupChannel({
       source_name: alert.source_name,
@@ -211,10 +205,26 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       total_revenue: alert.total_revenue,
       sample_order_names: [],
       is_new: true,
-      // Pass pre-fill hints for the setup modal
-      ...(known ? { suggested_label: known.label, suggested_code: known.code } : {}),
+      ...(hasDetectedLabel ? { suggested_label: alert.detected_label } : {}),
       ...(isNumericChannelId(alert.source_name) ? { is_numeric_id: true } : {}),
+      candidate_tags: alert.candidate_tags || [],
     });
+  };
+
+  /** User names an unknown channel inline */
+  const handleNameChannel = async (alert: ChannelAlert) => {
+    if (!customName.trim()) return;
+    await supabase
+      .from('channel_alerts' as any)
+      .update({ detected_label: customName.trim() } as any)
+      .eq('id', alert.id);
+
+    setAlerts(prev => prev.map(a =>
+      a.id === alert.id ? { ...a, detected_label: customName.trim() } : a
+    ));
+    setNamingAlertId(null);
+    setCustomName('');
+    toast.success(`Channel identified as "${customName.trim()}". Click "Set up tracking" to continue.`);
   };
 
   const handleSetupComplete = async () => {
@@ -235,7 +245,6 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(amount);
 
-  // Extract shop handle for Shopify admin links
   const shopHandle = shopDomain?.replace('.myshopify.com', '') || '';
 
   // Show "needs initial sync" prompt
@@ -298,51 +307,100 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           </div>
         )}
         {alerts.map(alert => {
-          const displayName = formatSourceName(alert.source_name);
-          const isNumeric = isNumericChannelId(alert.source_name);
+          const displayName = getDisplayName(alert);
+          const isUnknown = alert.detection_method === 'unknown' || (!alert.detected_label && isNumericChannelId(alert.source_name));
+          const isTagDetected = alert.detection_method === 'tag';
+          const candidateTags = alert.candidate_tags || [];
+          const isNaming = namingAlertId === alert.id;
 
           return (
             <Card key={alert.id} className="border-amber-500/30 bg-amber-500/5">
-              <CardContent className="flex items-center gap-3 p-4">
-                <Search className="h-5 w-5 text-amber-600 shrink-0" />
-                <div className="flex-1 text-sm">
-                  <p className="font-medium text-foreground">
-                    🔍 New sales channel detected in Shopify:{' '}
-                    <span className="font-semibold">{displayName}</span>
-                  </p>
-                  <p className="text-muted-foreground mt-0.5">
-                    {alert.order_count} order{alert.order_count !== 1 ? 's' : ''} totalling{' '}
-                    {formatCurrency(alert.total_revenue)}.
-                    {isNumeric ? (
-                      <>
-                        {' '}This may be BigW, Everyday Market, or another marketplace connected via Shopify.
-                      </>
-                    ) : (
-                      <> Set up tracking to see this in your settlements and reports.</>
-                    )}
-                  </p>
-                  {isNumeric && shopHandle && (
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      Not sure what this is?{' '}
-                      <a
-                        href={`https://admin.shopify.com/store/${shopHandle}/settings/sales_channels`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline inline-flex items-center gap-0.5"
-                      >
-                        Check your Sales Channels settings <ExternalLink className="h-3 w-3" />
-                      </a>
+              <CardContent className="flex flex-col gap-2 p-4">
+                <div className="flex items-center gap-3">
+                  <Search className="h-5 w-5 text-amber-600 shrink-0" />
+                  <div className="flex-1 text-sm">
+                    <p className="font-medium text-foreground">
+                      🔍 New sales channel detected:{' '}
+                      <span className="font-semibold">{displayName}</span>
+                      {isTagDetected && (
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">(detected from order tags)</span>
+                      )}
                     </p>
-                  )}
+                    <p className="text-muted-foreground mt-0.5">
+                      {alert.order_count} order{alert.order_count !== 1 ? 's' : ''} totalling{' '}
+                      {formatCurrency(alert.total_revenue)}.
+                      {isUnknown ? (
+                        <> Can you identify this marketplace?</>
+                      ) : (
+                        <> Set up tracking to see this in your settlements and reports.</>
+                      )}
+                    </p>
+
+                    {/* Show candidate tags for unknown channels */}
+                    {isUnknown && candidateTags.length > 0 && (
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="text-xs text-muted-foreground">Tags found:</span>
+                        {candidateTags.slice(0, 6).map(tag => (
+                          <span key={tag} className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">
+                            {tag}
+                          </span>
+                        ))}
+                        {candidateTags.length > 6 && (
+                          <span className="text-xs text-muted-foreground">+{candidateTags.length - 6} more</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Shopify admin link for numeric IDs */}
+                    {isNumericChannelId(alert.source_name) && shopHandle && (
+                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                        Not sure what this is?{' '}
+                        <a
+                          href={`https://admin.shopify.com/store/${shopHandle}/settings/sales_channels`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline inline-flex items-center gap-0.5"
+                        >
+                          Check your Sales Channels settings <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isUnknown && !isNaming && (
+                      <Button size="sm" variant="outline" onClick={() => { setNamingAlertId(alert.id); setCustomName(''); }} className="gap-1 text-xs">
+                        Name it
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
+                      <X className="h-3.5 w-3.5" /> Ignore
+                    </Button>
+                    <Button size="sm" onClick={() => handleSetup(alert)} className="gap-1">
+                      Set up tracking <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
-                    <X className="h-3.5 w-3.5" /> Ignore
-                  </Button>
-                  <Button size="sm" onClick={() => handleSetup(alert)} className="gap-1">
-                    Set up tracking <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+
+                {/* Inline naming input for unknown channels */}
+                {isNaming && (
+                  <div className="flex items-center gap-2 ml-8">
+                    <Input
+                      value={customName}
+                      onChange={e => setCustomName(e.target.value)}
+                      placeholder="e.g. Kogan, Big W, Pinduoduo"
+                      className="h-8 text-sm max-w-xs"
+                      onKeyDown={e => e.key === 'Enter' && handleNameChannel(alert)}
+                      autoFocus
+                    />
+                    <Button size="sm" variant="default" onClick={() => handleNameChannel(alert)} disabled={!customName.trim()} className="h-8 text-xs">
+                      Save
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setNamingAlertId(null)} className="h-8 text-xs">
+                      Cancel
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           );

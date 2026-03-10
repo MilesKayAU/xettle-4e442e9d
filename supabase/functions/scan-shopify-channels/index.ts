@@ -13,6 +13,100 @@ const IGNORED_SOURCES = new Set([
   "checkout", "subscription_contract_checkout_one",
 ]);
 
+// Tags that are NOT marketplace names — logistics, app, or status tags
+const NON_MARKETPLACE_TAGS = new Set([
+  "cedcommerce mcf connector", "cedcommerce", "mcf connector",
+  "fulfilled", "unfulfilled", "partially_fulfilled",
+  "shipping", "shipped", "delivered", "in_transit",
+  "wholesale", "subscription", "draft", "pos", "test",
+  "refund", "refunded", "cancelled", "archived",
+  "manual", "exchange", "return", "priority",
+]);
+
+/** Check if a tag is purely numeric or too short to be a marketplace name */
+function isNonMarketplaceTag(tag: string): boolean {
+  const t = tag.toLowerCase().trim();
+  if (!t || t.length < 2) return true;
+  if (/^\d+$/.test(t)) return true; // purely numeric
+  if (NON_MARKETPLACE_TAGS.has(t)) return true;
+  return false;
+}
+
+/** Check if a source_name is numeric (Shopify channel ID) or in ignore list */
+function needsTagScan(src: string): boolean {
+  const lower = src.toLowerCase().trim();
+  if (IGNORED_SOURCES.has(lower)) return false; // shouldn't reach here but guard
+  if (/^\d{4,}$/.test(lower)) return true; // numeric channel ID
+  return false;
+}
+
+interface SourceData {
+  count: number;
+  revenue: number;
+  tags: string[];
+}
+
+interface TagAnalysis {
+  detectedLabel: string | null;
+  detectionMethod: "tag" | "source_name" | "unknown";
+  candidateTags: string[];
+  confidence: number;
+}
+
+/** Analyse tags for a set of orders sharing a source_name */
+function analyseTagsForSource(allTags: string[], orderCount: number): TagAnalysis {
+  // Extract and clean individual tags
+  const tagCounts: Record<string, number> = {};
+  for (const rawTags of allTags) {
+    if (!rawTags) continue;
+    const parts = rawTags.split(",").map((t: string) => t.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (isNonMarketplaceTag(part)) continue;
+      const key = part.toLowerCase();
+      tagCounts[key] = (tagCounts[key] || 0) + 1;
+    }
+  }
+
+  const candidates = Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1]);
+
+  const candidateLabels = candidates.map(([tag]) => tag);
+
+  if (candidates.length === 0) {
+    return { detectedLabel: null, detectionMethod: "unknown", candidateTags: [], confidence: 0 };
+  }
+
+  const [topTag, topCount] = candidates[0];
+  const ratio = topCount / orderCount;
+
+  if (ratio >= 0.5) {
+    // Majority tag — use it as the label
+    // Capitalise properly: find original casing from first occurrence
+    let originalCase = topTag.charAt(0).toUpperCase() + topTag.slice(1);
+    for (const rawTags of allTags) {
+      if (!rawTags) continue;
+      const parts = rawTags.split(",").map((t: string) => t.trim());
+      const match = parts.find((p: string) => p.toLowerCase() === topTag);
+      if (match) { originalCase = match; break; }
+    }
+
+    return {
+      detectedLabel: originalCase,
+      detectionMethod: "tag",
+      candidateTags: candidateLabels,
+      confidence: Math.round(ratio * 100),
+    };
+  }
+
+  // No majority — unknown with candidates listed
+  return {
+    detectedLabel: null,
+    detectionMethod: "unknown",
+    candidateTags: candidateLabels,
+    confidence: Math.round(ratio * 100),
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -33,10 +127,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── Query local shopify_orders table — zero API calls ───────
-    const { data: channelRows, error: queryError } = await adminClient
+    // ─── Fetch all orders with source_name, tags, total_price ───
+    const { data: orderRows, error: queryError } = await adminClient
       .from("shopify_orders")
-      .select("source_name")
+      .select("source_name, total_price, tags")
       .eq("user_id", userId)
       .not("source_name", "is", null);
 
@@ -47,33 +141,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    // If no orders in local table, report it — don't attempt API calls
-    if (!channelRows || channelRows.length === 0) {
+    if (!orderRows || orderRows.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, new_channels: 0, scanned_sources: [], needs_initial_sync: true, message: "shopify_orders table is empty for this user. A manual Shopify sync is needed first." }),
+        JSON.stringify({ success: true, new_channels: 0, scanned_sources: [], needs_initial_sync: true }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Aggregate locally (supabase JS client doesn't support GROUP BY)
-    const sourceNameCounts: Record<string, { count: number; revenue: number }> = {};
+    // ─── Aggregate by source_name ───
+    const sourceData: Record<string, SourceData> = {};
 
-    // We need revenue too, so fetch with total_price
-    const { data: orderRows } = await adminClient
-      .from("shopify_orders")
-      .select("source_name, total_price")
-      .eq("user_id", userId)
-      .not("source_name", "is", null);
-
-    for (const row of orderRows || []) {
+    for (const row of orderRows) {
       const src = (row.source_name || "").toLowerCase().trim();
       if (!src || IGNORED_SOURCES.has(src)) continue;
-      if (!sourceNameCounts[src]) sourceNameCounts[src] = { count: 0, revenue: 0 };
-      sourceNameCounts[src].count++;
-      sourceNameCounts[src].revenue += parseFloat(row.total_price || "0") || 0;
+      if (!sourceData[src]) sourceData[src] = { count: 0, revenue: 0, tags: [] };
+      sourceData[src].count++;
+      sourceData[src].revenue += parseFloat(row.total_price || "0") || 0;
+      if (row.tags) sourceData[src].tags.push(row.tags);
     }
 
-    const sourceNames = Object.keys(sourceNameCounts);
+    const sourceNames = Object.keys(sourceData);
     if (sourceNames.length === 0) {
       return new Response(
         JSON.stringify({ success: true, new_channels: 0, scanned_sources: [] }),
@@ -81,7 +168,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check which are already known (in shopify_sub_channels)
+    // ─── Check existing sub_channels and alerts ───
     const { data: knownChannels } = await adminClient
       .from("shopify_sub_channels")
       .select("source_name, ignored")
@@ -90,7 +177,6 @@ Deno.serve(async (req) => {
 
     const knownSet = new Set((knownChannels || []).map((c: any) => c.source_name));
 
-    // Check existing channel_alerts
     const { data: existingAlerts } = await adminClient
       .from("channel_alerts")
       .select("source_name, status")
@@ -99,7 +185,7 @@ Deno.serve(async (req) => {
 
     const alertedSet = new Set((existingAlerts || []).map((a: any) => a.source_name));
 
-    // Clean up any pending alerts for sources now in the ignore list
+    // ─── Auto-ignore stale pending alerts for IGNORED_SOURCES ───
     const { data: allPendingAlerts } = await adminClient
       .from("channel_alerts")
       .select("id, source_name")
@@ -117,35 +203,64 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Create alerts for new channels not already known or alerted
+    // ─── Create / update alerts with intelligent detection ───
     let newAlerts = 0;
-    for (const [src, data] of Object.entries(sourceNameCounts)) {
-      if (knownSet.has(src) || alertedSet.has(src)) continue;
+    const detectionResults: Record<string, TagAnalysis> = {};
 
-      await adminClient.from("channel_alerts").upsert({
+    for (const [src, data] of Object.entries(sourceData)) {
+      // Determine detection method
+      let analysis: TagAnalysis;
+
+      if (needsTagScan(src)) {
+        // Numeric channel ID — must use tag scanning
+        analysis = analyseTagsForSource(data.tags, data.count);
+      } else {
+        // Named source — use it directly, but still scan tags for enrichment
+        const tagAnalysis = analyseTagsForSource(data.tags, data.count);
+        analysis = {
+          detectedLabel: src.charAt(0).toUpperCase() + src.slice(1),
+          detectionMethod: "source_name",
+          candidateTags: tagAnalysis.candidateTags,
+          confidence: 100,
+        };
+      }
+
+      detectionResults[src] = analysis;
+
+      if (knownSet.has(src)) continue; // already set up
+
+      const alertPayload = {
         user_id: userId,
         source_name: src,
         order_count: data.count,
         total_revenue: Math.round(data.revenue * 100) / 100,
         status: "pending",
-      }, { onConflict: "user_id,source_name" });
+        detection_method: analysis.detectionMethod,
+        detected_label: analysis.detectedLabel,
+        candidate_tags: JSON.stringify(analysis.candidateTags),
+      };
 
-      newAlerts++;
-    }
-
-    // Update counts for existing pending alerts
-    for (const [src, data] of Object.entries(sourceNameCounts)) {
       if (alertedSet.has(src)) {
+        // Update existing pending alert with latest detection
         const existing = (existingAlerts || []).find((a: any) => a.source_name === src);
         if (existing && existing.status === "pending") {
           await adminClient.from("channel_alerts")
             .update({
               order_count: data.count,
               total_revenue: Math.round(data.revenue * 100) / 100,
+              detection_method: analysis.detectionMethod,
+              detected_label: analysis.detectedLabel,
+              candidate_tags: JSON.stringify(analysis.candidateTags),
             })
             .eq("user_id", userId)
             .eq("source_name", src);
         }
+      } else {
+        await adminClient.from("channel_alerts").upsert(
+          alertPayload,
+          { onConflict: "user_id,source_name" }
+        );
+        newAlerts++;
       }
     }
 
@@ -154,7 +269,8 @@ Deno.serve(async (req) => {
         success: true,
         new_channels: newAlerts,
         scanned_sources: sourceNames,
-        total_orders_scanned: Object.values(sourceNameCounts).reduce((s, d) => s + d.count, 0),
+        total_orders_scanned: Object.values(sourceData).reduce((s, d) => s + d.count, 0),
+        detection_results: detectionResults,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
