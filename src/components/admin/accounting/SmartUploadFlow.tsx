@@ -105,6 +105,21 @@ const MARKETPLACE_COLORS: Record<string, string> = {
   theiconic: 'bg-pink-600',
 };
 
+const MARKETPLACE_SOURCE_HINTS: Record<string, string> = {
+  amazon_au: 'Seller Central → Reports → Payments → All Statements → Download Flat File V2',
+  shopify_payments: 'Shopify Admin → Finances → Payouts → Export CSV',
+  bigw: 'Provided by Big W via email or marketplace portal',
+  everyday_market: 'Provided by Everyday Market via email or marketplace portal',
+  mydeal: 'Provided by MyDeal via email or marketplace portal',
+  bunnings: 'Bunnings Marketplace portal → Sales Summary PDF',
+  kogan: 'Provided by Kogan via email or marketplace portal',
+  catch: 'Provided by Catch via email or marketplace portal',
+  ebay_au: 'eBay Seller Hub → Payments → Reports → Download CSV',
+  woolworths_marketplus: 'Woolworths MarketPlus portal → Reports → Download CSV',
+  theiconic: 'Provided by THE ICONIC via email or marketplace portal',
+  etsy: 'Etsy Shop Manager → Finances → Payment account → Download CSV',
+};
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChanged, onViewSettlements, missingSettlements, onReturnToDashboard }: SmartUploadFlowProps) {
