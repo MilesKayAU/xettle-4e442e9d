@@ -314,17 +314,42 @@ async function findUnmatchedOrders(
 
     const { data: lines } = await supabase
       .from('settlement_lines')
-      .select('order_id')
+      .select('order_id, amount_description')
       .eq('user_id', user.id)
       .eq('settlement_id', settlementId);
 
-    const matchedOrderIds = new Set(
-      (lines || []).map(l => l.order_id).filter(Boolean)
-    );
+    // Build a set of all identifiers found in settlement lines
+    const matchedIds = new Set<string>();
+    for (const line of lines || []) {
+      if (line.order_id) {
+        matchedIds.add(line.order_id.toLowerCase());
+        // Also add without # prefix
+        matchedIds.add(line.order_id.replace(/^#/, '').toLowerCase());
+      }
+      // Check description for order references
+      if (line.amount_description) {
+        const desc = line.amount_description.toLowerCase();
+        matchedIds.add(desc);
+      }
+    }
 
     return orders
-      .filter(o => !matchedOrderIds.has(o.id) && !matchedOrderIds.has(o.order_number || ''))
-      .map(o => o.order_number || o.name || o.id);
+      .filter(o => {
+        const id = (o.id || '').toLowerCase();
+        const name = (o.name || '').toLowerCase();
+        const nameNoHash = name.replace(/^#/, '');
+        const orderNum = (o.order_number || '').toLowerCase();
+        // Check if any identifier appears in the matched set or in any description
+        return (
+          !matchedIds.has(id) &&
+          !matchedIds.has(name) &&
+          !matchedIds.has(nameNoHash) &&
+          !matchedIds.has(orderNum) &&
+          // Also check if order number appears within any description text
+          ![...matchedIds].some(mid => mid.includes(nameNoHash) || mid.includes(orderNum))
+        );
+      })
+      .map(o => o.name || o.order_number || o.id);
   } catch {
     return [];
   }
