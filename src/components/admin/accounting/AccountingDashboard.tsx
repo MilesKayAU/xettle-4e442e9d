@@ -2040,20 +2040,6 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     return `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoiceId}`;
   };
 
-  const handleDeleteOne = async (settlement: SettlementRecord) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      await supabase.from('settlement_lines').delete().eq('settlement_id', settlement.settlement_id).eq('user_id', user.id);
-      await supabase.from('settlement_unmapped').delete().eq('settlement_id', settlement.settlement_id).eq('user_id', user.id);
-      const { error } = await supabase.from('settlements').delete().eq('id', settlement.id).eq('user_id', user.id);
-      if (error) throw error;
-      toast.success(`Deleted settlement ${settlement.settlement_id}`);
-      onDeleted();
-    } catch (err: any) {
-      toast.error(`Delete failed: ${err.message}`);
-    }
-  };
   const handleMarkSyncedOne = async (settlement: SettlementRecord) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
