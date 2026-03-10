@@ -184,7 +184,7 @@ export function calculateMarketplaceProfit(
   settlementLines: SettlementLineForProfit[],
   productCosts: ProductCost[]
 ): MarketplaceProfit {
-  const { MARKETPLACE_LABELS } = require('./settlement-engine');
+  // MARKETPLACE_LABELS imported at top level
   const marketplaceName = MARKETPLACE_LABELS[marketplaceCode] || marketplaceCode;
 
   // Build cost lookup
