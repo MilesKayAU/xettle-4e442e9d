@@ -204,6 +204,7 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
+    console.error("[fetch-shopify-orders] FATAL:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error", detail: String(err) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

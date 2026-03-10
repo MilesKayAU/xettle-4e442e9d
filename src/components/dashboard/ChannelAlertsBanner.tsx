@@ -105,7 +105,9 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         body: { shopDomain: tokenRow.shop_domain },
       });
 
+      console.log('[ChannelAlertsBanner] fetch-shopify-orders response:', { data, error });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error + (data.detail ? `: ${data.detail}` : ''));
 
       toast.success(`Synced ${data?.count || 0} orders. Scanning for channels...`);
       setNeedsInitialSync(false);
