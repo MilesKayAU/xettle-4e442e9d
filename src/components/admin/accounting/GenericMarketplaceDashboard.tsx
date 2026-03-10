@@ -226,9 +226,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       <div className="space-y-3">
         <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
           <Scale className="h-4 w-4 text-primary" />
-          {hasShopify ? 'Reconciliation Health' : 'File Reconciliation'}
+          {hasShopify && !isCsvOnly ? 'Reconciliation Health' : 'File Reconciliation'}
         </h4>
-        {hasShopify && currentUserId ? (
+        {hasShopify && !isCsvOnly && currentUserId ? (
           <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
         ) : settlements.length > 0 ? (
           <FileReconciliationStatus settlements={settlements} />
