@@ -1,5 +1,6 @@
 /** Parser version — bump manually when parser logic changes */
-export const PARSER_VERSION = 'v1.7.0';
+export const PARSER_VERSION = 'v1.7.1';
+import { parseDateOrEmpty } from './date-parser';
 /**
  * Amazon Settlement Report (TSV) Parser
  * Parses the primary settlement data source and categorizes transactions
