@@ -294,9 +294,9 @@ export default function ActionCentre({
   };
 
   const formatMonthLabel = (key: string): string => {
-    const [y, m] = key.split('-');
-    const d = new Date(parseInt(y), parseInt(m) - 1, 1);
-    return d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+    const [, m] = key.split('-').map(Number);
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[(m || 1) - 1]} ${key.substring(0, 4)}`;
   };
 
   // Greeting
