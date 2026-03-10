@@ -416,7 +416,7 @@ export async function syncSettlementToXero(
     const description = `${label} Settlement ${periodLabel}`;
 
     // Build line items (use provided or default 2-line)
-    const lineItems = options?.lineItems || [
+    let lineItems = options?.lineItems || [
       {
         Description: 'Marketplace Sales',
         AccountCode: '200',
@@ -432,6 +432,22 @@ export async function syncSettlementToXero(
         Quantity: 1,
       },
     ];
+
+    // Zero-amount guard: filter out lines with UnitAmount === 0
+    lineItems = lineItems.filter((li: XeroLineItem) => Math.round(li.UnitAmount * 100) !== 0);
+
+    // If all lines are zero, skip the push and log event
+    if (lineItems.length === 0) {
+      await supabase.from('system_events').insert({
+        user_id: user.id,
+        event_type: 'push_skipped_zero_amount',
+        marketplace_code: marketplace,
+        settlement_id: settlementId,
+        severity: 'warning',
+        details: { reason: 'All line items had zero amounts after filtering' },
+      } as any);
+      return { success: false, error: 'All line items are zero — nothing to push to Xero' };
+    }
 
     // Calculate net amount for negative settlement detection (ACCPAY vs ACCREC)
     const netAmount = (s.bank_deposit || 0);
