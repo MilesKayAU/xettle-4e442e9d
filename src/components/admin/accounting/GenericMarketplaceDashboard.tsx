@@ -96,6 +96,19 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [bankAmountInput, setBankAmountInput] = useState('');
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
+  const [hasShopify, setHasShopify] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkShopify() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setCurrentUserId(user.id);
+      const { data } = await supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1);
+      setHasShopify(!!(data && data.length > 0));
+    }
+    checkShopify();
+  }, []);
 
 
   const marketplaceName = def?.name || marketplace.marketplace_name;
