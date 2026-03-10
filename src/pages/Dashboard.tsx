@@ -350,6 +350,11 @@ export default function Dashboard() {
         {activeView === 'settlements' && settlementsSubTab === 'all' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              {/* Financial Summary Strip */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <SettlementsSummaryStrip userMarketplaceCount={userMarketplaces.length} />
+              )}
+
               {/* Monthly Reconciliation Status */}
               {!marketplacesLoading && userMarketplaces.length > 0 && (
                 <MonthlyReconciliationStatus
