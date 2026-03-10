@@ -129,9 +129,45 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [isDragging, setIsDragging] = useState(false);
   const [unknownEntities, setUnknownEntities] = useState<UnknownEntity[]>([]);
   const [showEntityDialog, setShowEntityDialog] = useState(false);
+  const [shopifySyncing, setShopifySyncing] = useState(false);
+  const [hasShopifyConnection, setHasShopifyConnection] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
+
+  // Check if Shopify is connected
+  useState(() => {
+    supabase.from('shopify_tokens').select('id').limit(1)
+      .then(({ data }) => setHasShopifyConnection(!!(data && data.length > 0)));
+  });
+
+  const handleShopifySync = useCallback(async () => {
+    setShopifySyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-shopify-payouts', {});
+      if (error) throw error;
+      if (data?.error) {
+        if (data.message) {
+          toast(data.message);
+        } else {
+          throw new Error(data.error);
+        }
+        return;
+      }
+      const synced = data?.synced || 0;
+      const skipped = data?.skipped || 0;
+      if (synced > 0) {
+        toast.success(`Synced ${synced} Shopify payout${synced > 1 ? 's' : ''} via API`);
+        onSettlementsSaved?.();
+      } else {
+        toast.info(`All Shopify payouts already imported (${skipped} checked)`);
+      }
+    } catch (err: any) {
+      toast.error(`Shopify sync failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setShopifySyncing(false);
+    }
+  }, [onSettlementsSaved]);
 
   // ── Pre-parse: immediately parse detected files to show preview ──
   const preParseFile = useCallback(async (file: File, detection: FileDetectionResult): Promise<StandardSettlement[]> => {
