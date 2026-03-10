@@ -80,6 +80,63 @@ export type Database = {
         }
         Relationships: []
       }
+      bug_reports: {
+        Row: {
+          ai_classification: string | null
+          ai_complexity: string | null
+          ai_lovable_prompt: string | null
+          ai_summary: string | null
+          console_errors: Json | null
+          created_at: string
+          description: string
+          id: string
+          notify_submitter: boolean
+          owner_notes: string | null
+          page_url: string | null
+          resolved_at: string | null
+          screenshot_base64: string | null
+          severity: string
+          status: string
+          submitted_by: string
+        }
+        Insert: {
+          ai_classification?: string | null
+          ai_complexity?: string | null
+          ai_lovable_prompt?: string | null
+          ai_summary?: string | null
+          console_errors?: Json | null
+          created_at?: string
+          description: string
+          id?: string
+          notify_submitter?: boolean
+          owner_notes?: string | null
+          page_url?: string | null
+          resolved_at?: string | null
+          screenshot_base64?: string | null
+          severity?: string
+          status?: string
+          submitted_by: string
+        }
+        Update: {
+          ai_classification?: string | null
+          ai_complexity?: string | null
+          ai_lovable_prompt?: string | null
+          ai_summary?: string | null
+          console_errors?: Json | null
+          created_at?: string
+          description?: string
+          id?: string
+          notify_submitter?: boolean
+          owner_notes?: string | null
+          page_url?: string | null
+          resolved_at?: string | null
+          screenshot_base64?: string | null
+          severity?: string
+          status?: string
+          submitted_by?: string
+        }
+        Relationships: []
+      }
       entity_library: {
         Row: {
           accounting_impact: string
