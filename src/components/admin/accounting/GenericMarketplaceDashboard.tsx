@@ -384,19 +384,30 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               {s.marketplace.startsWith('shopify_orders_') && (
                                 <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
                               )}
+                              <span className="font-semibold text-primary text-sm">{formatAUD(net)}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleCardCollapse(s.id); }}
+                                className="text-muted-foreground hover:text-foreground ml-auto"
+                              >
+                                {isCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                              </button>
                             </div>
-                            <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                              ID: {s.settlement_id}
-                              {s.xero_invoice_number && s.xero_status && (
-                                <span className="ml-2 text-primary">{s.xero_invoice_number} · {s.xero_status}</span>
-                              )}
-                            </p>
-                            <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
-                              <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
-                              <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
-                              {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
-                              <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
-                            </div>
+                            {!isCollapsed && (
+                              <>
+                                <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                                  ID: {s.settlement_id}
+                                  {s.xero_invoice_number && s.xero_status && (
+                                    <span className="ml-2 text-primary">{s.xero_invoice_number} · {s.xero_status}</span>
+                                  )}
+                                </p>
+                                <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
+                                  <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
+                                  <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
+                                  {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
+                                  <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
+                                </div>
+                              </>
+                            )}
                             {/* Bank verification status */}
                             {s.bank_verified ? (
                               <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
