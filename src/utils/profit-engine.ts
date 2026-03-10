@@ -133,3 +133,233 @@ export function calculateProfit(
     uncostedSKUs: Array.from(uncostedSKUSet).sort(),
   };
 }
+
+// ─── Settlement-based Profit Calculation ────────────────────────────────────
+
+export interface SettlementForProfit {
+  settlement_id: string;
+  marketplace: string;
+  gross_amount: number;       // sales_principal + gst_on_income (or just sales incl)
+  fees_amount: number;        // seller_fees (negative)
+  period_start: string;
+  period_end: string;
+}
+
+export interface SettlementLineForProfit {
+  settlement_id: string;
+  sku: string | null;
+  amount: number;             // line revenue
+  order_id: string | null;
+  transaction_type: string | null;
+  quantity?: number;
+}
+
+export interface MarketplaceProfit {
+  marketplace_code: string;
+  marketplace_name: string;
+  period_label: string;
+  gross_revenue: number;
+  total_cogs: number;
+  marketplace_fees: number;
+  gross_profit: number;
+  margin_percent: number;
+  orders_count: number;
+  units_sold: number;
+  uncosted_sku_count: number;
+  uncosted_revenue: number;
+}
+
+function normalizeSku(sku: string): string {
+  return sku.toUpperCase().trim().replace(/-/g, '');
+}
+
+/**
+ * Calculate profit for a single marketplace settlement using line-level SKU data.
+ */
+export function calculateMarketplaceProfit(
+  marketplaceCode: string,
+  periodLabel: string,
+  settlement: SettlementForProfit,
+  settlementLines: SettlementLineForProfit[],
+  productCosts: ProductCost[]
+): MarketplaceProfit {
+  const { MARKETPLACE_LABELS } = require('./settlement-engine');
+  const marketplaceName = MARKETPLACE_LABELS[marketplaceCode] || marketplaceCode;
+
+  // Build cost lookup
+  const costMap = new Map<string, number>();
+  for (const pc of productCosts) {
+    costMap.set(normalizeSku(pc.sku), pc.cost);
+  }
+
+  const gross_revenue = Math.abs(settlement.gross_amount);
+  const marketplace_fees = Math.abs(settlement.fees_amount);
+
+  let total_cogs = 0;
+  let units_sold = 0;
+  let orders_count = 0;
+  const uncostedSkus = new Set<string>();
+  let uncosted_revenue = 0;
+  const orderIds = new Set<string>();
+
+  // Filter to revenue lines only (sales, not fees/refunds)
+  const revenueLines = settlementLines.filter(
+    l => l.settlement_id === settlement.settlement_id &&
+         (l.transaction_type === 'Order' || l.transaction_type === 'ItemPrice' ||
+          l.transaction_type === 'ProductCharges' || l.transaction_type === null ||
+          (l.amount && l.amount > 0))
+  );
+
+  for (const line of revenueLines) {
+    const qty = line.quantity || 1;
+    units_sold += qty;
+
+    if (line.order_id) orderIds.add(line.order_id);
+
+    if (line.sku) {
+      const normalised = normalizeSku(line.sku);
+      const cost = costMap.get(normalised);
+      if (cost !== undefined) {
+        total_cogs += cost * qty;
+      } else {
+        uncostedSkus.add(normalised);
+        uncosted_revenue += Math.abs(line.amount || 0);
+      }
+    } else {
+      // No SKU on this line — count revenue as uncosted
+      uncosted_revenue += Math.abs(line.amount || 0);
+    }
+  }
+
+  orders_count = orderIds.size || revenueLines.length;
+
+  const gross_profit = gross_revenue - total_cogs - marketplace_fees;
+  const margin_percent = gross_revenue > 0 ? (gross_profit / gross_revenue) * 100 : 0;
+
+  return {
+    marketplace_code: marketplaceCode,
+    marketplace_name: marketplaceName,
+    period_label: periodLabel,
+    gross_revenue: round(gross_revenue),
+    total_cogs: round(total_cogs),
+    marketplace_fees: round(marketplace_fees),
+    gross_profit: round(gross_profit),
+    margin_percent: round(margin_percent),
+    orders_count,
+    units_sold,
+    uncosted_sku_count: uncostedSkus.size,
+    uncosted_revenue: round(uncosted_revenue),
+  };
+}
+
+// ─── SKU Cross-Marketplace Comparison ──────────────────────────────────────
+
+export interface SkuMarketplaceEntry {
+  marketplace_code: string;
+  marketplace_name: string;
+  revenue_per_unit: number;
+  cogs: number;
+  fee_per_unit: number;
+  profit_per_unit: number;
+  margin_percent: number;
+  units_sold: number;
+}
+
+export interface SkuMarketplaceComparison {
+  sku: string;
+  product_name: string;
+  marketplaces: SkuMarketplaceEntry[];
+  best_marketplace: string;
+  worst_marketplace: string;
+}
+
+/**
+ * Compare a single SKU's profitability across all marketplaces.
+ */
+export function compareSkuAcrossMarketplaces(
+  sku: string,
+  allSettlements: SettlementForProfit[],
+  allLines: SettlementLineForProfit[],
+  productCosts: ProductCost[]
+): SkuMarketplaceComparison {
+  const { MARKETPLACE_LABELS } = require('./settlement-engine');
+  const normalised = normalizeSku(sku);
+
+  // Find cost
+  const costEntry = productCosts.find(pc => normalizeSku(pc.sku) === normalised);
+  const unitCost = costEntry?.cost || 0;
+  const productName = costEntry?.label || sku;
+
+  // Group lines by marketplace
+  const mpMap = new Map<string, { revenue: number; fees: number; units: number; grossSales: number }>();
+
+  // Find all lines matching this SKU
+  const skuLines = allLines.filter(l => l.sku && normalizeSku(l.sku) === normalised);
+
+  for (const line of skuLines) {
+    // Find which settlement this line belongs to
+    const settlement = allSettlements.find(s => s.settlement_id === line.settlement_id);
+    if (!settlement) continue;
+
+    const mp = settlement.marketplace;
+    if (!mpMap.has(mp)) mpMap.set(mp, { revenue: 0, fees: 0, units: 0, grossSales: 0 });
+
+    const entry = mpMap.get(mp)!;
+    const qty = line.quantity || 1;
+    entry.revenue += Math.abs(line.amount || 0);
+    entry.units += qty;
+  }
+
+  // Calculate fee rate per marketplace from settlements
+  const feeRates = new Map<string, number>();
+  const mpSettlements = new Map<string, SettlementForProfit[]>();
+  for (const s of allSettlements) {
+    if (!mpSettlements.has(s.marketplace)) mpSettlements.set(s.marketplace, []);
+    mpSettlements.get(s.marketplace)!.push(s);
+  }
+  for (const [mp, settlements] of mpSettlements) {
+    const totalGross = settlements.reduce((sum, s) => sum + Math.abs(s.gross_amount), 0);
+    const totalFees = settlements.reduce((sum, s) => sum + Math.abs(s.fees_amount), 0);
+    feeRates.set(mp, totalGross > 0 ? totalFees / totalGross : 0);
+  }
+
+  const marketplaces: SkuMarketplaceEntry[] = [];
+
+  for (const [mp, data] of mpMap) {
+    if (data.units === 0) continue;
+
+    const revenue_per_unit = round(data.revenue / data.units);
+    const feeRate = feeRates.get(mp) || 0;
+    const fee_per_unit = round(revenue_per_unit * feeRate);
+    const profit_per_unit = round(revenue_per_unit - unitCost - fee_per_unit);
+    const margin_percent = revenue_per_unit > 0
+      ? round((profit_per_unit / revenue_per_unit) * 100)
+      : 0;
+
+    marketplaces.push({
+      marketplace_code: mp,
+      marketplace_name: MARKETPLACE_LABELS[mp] || mp,
+      revenue_per_unit,
+      cogs: unitCost,
+      fee_per_unit,
+      profit_per_unit,
+      margin_percent,
+      units_sold: data.units,
+    });
+  }
+
+  // Sort by margin descending
+  marketplaces.sort((a, b) => b.margin_percent - a.margin_percent);
+
+  return {
+    sku,
+    product_name: productName,
+    marketplaces,
+    best_marketplace: marketplaces.length > 0 ? marketplaces[0].marketplace_code : '',
+    worst_marketplace: marketplaces.length > 0 ? marketplaces[marketplaces.length - 1].marketplace_code : '',
+  };
+}
+
+function round(n: number): number {
+  return Math.round(n * 100) / 100;
+}
