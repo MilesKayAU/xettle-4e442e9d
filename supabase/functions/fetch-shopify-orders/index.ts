@@ -135,17 +135,22 @@ Deno.serve(async (req) => {
 
     do {
       const url = buildUrl(nextCursor);
+      console.log(`[fetch-shopify-orders] Fetching page ${page}:`, url.substring(0, 120));
       const res = await fetch(url, {
         headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
       });
 
+      console.log(`[fetch-shopify-orders] Shopify response: status=${res.status}`);
+
       if (res.status === 401) {
+        console.error("[fetch-shopify-orders] Shopify 401 — token invalid");
         return new Response(
           JSON.stringify({ error: "Shopify token invalid or expired" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       if (res.status === 429) {
+        console.error("[fetch-shopify-orders] Shopify 429 — rate limited");
         return new Response(
           JSON.stringify({ error: "Shopify rate limit exceeded. Try again shortly." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -153,6 +158,7 @@ Deno.serve(async (req) => {
       }
       if (!res.ok) {
         const body = await res.text();
+        console.error("[fetch-shopify-orders] Shopify error:", res.status, body);
         return new Response(
           JSON.stringify({ error: `Shopify API error ${res.status}`, detail: body }),
           { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
