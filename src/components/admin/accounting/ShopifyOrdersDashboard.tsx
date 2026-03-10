@@ -686,6 +686,30 @@ export default function ShopifyOrdersDashboard() {
       readyGroups.sort((a, b) => b.orderCount - a.orderCount);
       const builtSettlements = buildSettlementsFromGroups(readyGroups);
 
+      // Auto-create marketplace_connections for discovered groups
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: existing } = await supabase
+            .from('marketplace_connections')
+            .select('marketplace_code');
+          const existingCodes = new Set((existing || []).map((e: any) => e.marketplace_code));
+
+          for (const g of readyGroups) {
+            const code = `shopify_orders_${g.marketplaceKey}`;
+            if (existingCodes.has(code)) continue;
+            await supabase.from('marketplace_connections').insert({
+              user_id: user.id,
+              marketplace_code: code,
+              marketplace_name: g.registryEntry?.display_name || g.marketplaceKey,
+              country_code: 'AU',
+              connection_type: 'auto_detected',
+              connection_status: 'active',
+            } as any);
+          }
+        }
+      } catch { /* non-fatal */ }
+
       // Build parse result
       const allDates = rows.map(o => o.paidAt).filter(Boolean).sort();
       const apiParseResult: ShopifyOrdersParseResult = {
@@ -708,9 +732,10 @@ export default function ShopifyOrdersDashboard() {
       setSettlements(builtSettlements);
       setActiveTab('review');
 
+      const totalMpCount = readyGroups.length + skippedGroups.length;
       toast.success(
-        `Fetched ${rows.length} paid orders from Shopify — ${readyGroups.length} source${readyGroups.length !== 1 ? 's' : ''} detected` +
-        (unknownGroups.length > 0 ? `, ${unknownGroups.reduce((s, g) => s + g.orderCount, 0)} unknown` : '')
+        `Fetched ${rows.length} paid orders across ${totalMpCount} marketplace${totalMpCount !== 1 ? 's' : ''}` +
+        (unknownGroups.length > 0 ? ` — ${unknownGroups.reduce((s, g) => s + g.orderCount, 0)} unknown` : '')
       );
 
       // Run entity detection for unknown tags

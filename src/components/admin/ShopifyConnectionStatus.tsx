@@ -4,13 +4,25 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag, ChevronDown, Key } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag, ChevronDown, Key, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { convertApiOrdersToRows, type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
 
 interface ShopifyStatus {
   connected: boolean;
   shops: Array<{ shop_domain: string; scope: string; installed_at: string }>;
+}
+
+interface DiscoveredMarketplace {
+  code: string;
+  displayName: string;
+  orderCount: number;
+  checked: boolean;
 }
 
 const ShopifyConnectionStatus = () => {
@@ -23,7 +35,14 @@ const ShopifyConnectionStatus = () => {
   const [manualToken, setManualToken] = useState('');
   const [manualDomain, setManualDomain] = useState('');
   const [savingToken, setSavingToken] = useState(false);
-  // Pre-populate shop domain from app_settings (not from user email)
+
+  // Discovery modal state
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveredMarketplaces, setDiscoveredMarketplaces] = useState<DiscoveredMarketplace[]>([]);
+  const [creatingTabs, setCreatingTabs] = useState(false);
+
+  // Pre-populate shop domain from app_settings
   useEffect(() => {
     const loadSavedDomain = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -73,6 +92,121 @@ const ShopifyConnectionStatus = () => {
   useEffect(() => {
     fetchStatus();
   }, []);
+
+  // ─── Discovery: fetch orders & detect marketplaces ────────────────
+
+  const runDiscovery = async (domain: string) => {
+    setDiscovering(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-shopify-orders', {
+        body: {
+          shopDomain: domain,
+          dateFrom: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          limit: 250,
+        },
+      });
+
+      if (error || !data?.success) {
+        toast.error('Could not fetch orders for discovery. You can still use CSV uploads.');
+        setDiscovering(false);
+        return;
+      }
+
+      const apiOrders: ShopifyApiOrder[] = data.orders || [];
+      if (apiOrders.length === 0) {
+        toast.info('No orders found in the last 90 days.');
+        setDiscovering(false);
+        return;
+      }
+
+      const { rows } = convertApiOrdersToRows(apiOrders);
+
+      // Group by detected marketplace
+      const countMap = new Map<string, number>();
+      for (const row of rows) {
+        const mp = row.detectedMarketplace || 'unknown';
+        countMap.set(mp, (countMap.get(mp) || 0) + 1);
+      }
+
+      // Build display list (exclude unknown, include everything else)
+      const discovered: DiscoveredMarketplace[] = [];
+      for (const [code, count] of countMap) {
+        if (code === 'unknown') continue;
+        const displayName = code
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+        discovered.push({ code, displayName, orderCount: count, checked: true });
+      }
+
+      discovered.sort((a, b) => b.orderCount - a.orderCount);
+
+      if (discovered.length === 0) {
+        toast.info('No marketplace channels detected. Orders may all be direct Shopify sales.');
+        setDiscovering(false);
+        return;
+      }
+
+      setDiscoveredMarketplaces(discovered);
+      setDiscoveryOpen(true);
+    } catch (err: any) {
+      console.error('Discovery error:', err);
+      toast.error('Discovery failed — you can still use CSV uploads.');
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const toggleMarketplace = (idx: number) => {
+    setDiscoveredMarketplaces(prev =>
+      prev.map((m, i) => i === idx ? { ...m, checked: !m.checked } : m)
+    );
+  };
+
+  const handleCreateTabs = async () => {
+    setCreatingTabs(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const checked = discoveredMarketplaces.filter(m => m.checked);
+      const { data: existing } = await supabase
+        .from('marketplace_connections')
+        .select('marketplace_code');
+      const existingCodes = new Set((existing || []).map((e: any) => e.marketplace_code));
+
+      let created = 0;
+      for (const mp of checked) {
+        const code = `shopify_orders_${mp.code}`;
+        if (existingCodes.has(code)) continue;
+        await supabase.from('marketplace_connections').insert({
+          user_id: user.id,
+          marketplace_code: code,
+          marketplace_name: mp.displayName,
+          country_code: 'AU',
+          connection_type: 'auto_detected',
+          connection_status: 'active',
+        } as any);
+        created++;
+      }
+
+      toast.success(`${created > 0 ? created : checked.length} marketplace tab${created !== 1 ? 's' : ''} created`);
+      setDiscoveryOpen(false);
+
+      // Update last_fetched_at
+      await supabase.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'shopify_last_fetched_at',
+        value: new Date().toISOString(),
+      }, { onConflict: 'user_id,key' });
+
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create tabs');
+    } finally {
+      setCreatingTabs(false);
+    }
+  };
+
+  // ─── Connection handlers ──────────────────────────────────────────
 
   const isValidDomain = (domain: string) => {
     return domain.trim().endsWith('.myshopify.com') && domain.trim().length > '.myshopify.com'.length;
@@ -199,6 +333,9 @@ const ShopifyConnectionStatus = () => {
       setManualDomain('');
       setManualOpen(false);
       await fetchStatus();
+
+      // Trigger discovery after manual connection
+      runDiscovery(domain);
     } catch (error: any) {
       console.error('Error saving Shopify token:', error);
       toast.error(error.message || 'Failed to save token');
@@ -206,6 +343,8 @@ const ShopifyConnectionStatus = () => {
       setSavingToken(false);
     }
   };
+
+  // ─── Render ───────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -222,157 +361,238 @@ const ShopifyConnectionStatus = () => {
     : 0;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-[hsl(var(--chart-3))] flex items-center justify-center">
-              <ShoppingBag className="h-5 w-5 text-primary-foreground" />
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-[hsl(var(--chart-3))] flex items-center justify-center">
+                <ShoppingBag className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Shopify Integration</CardTitle>
+                <CardDescription>
+                  Connect your Shopify store to auto-fetch orders without CSV uploads
+                </CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-lg">Shopify Integration</CardTitle>
-              <CardDescription>
-                Connect your Shopify store to auto-fetch orders without CSV uploads
-              </CardDescription>
-            </div>
+            <Badge variant={status?.connected ? 'default' : 'secondary'}>
+              {status?.connected ? 'Connected' : 'Not Connected'}
+            </Badge>
           </div>
-          <Badge variant={status?.connected ? 'default' : 'secondary'}>
-            {status?.connected ? 'Connected' : 'Not Connected'}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {status?.connected && status.shops.length > 0 && (
-          <div className="bg-muted/50 rounded-lg p-3">
-            <p className="text-sm font-medium mb-2 flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-green-500" />
-              Connected Store
-            </p>
-            <ul className="space-y-1">
-              {status.shops.map((shop) => (
-                <li key={shop.shop_domain} className="text-sm text-muted-foreground pl-6">
-                  {shop.shop_domain}
-                </li>
-              ))}
-            </ul>
-            {scopeCount > 0 && (
-              <p className="text-xs text-muted-foreground mt-2 pl-6">
-                {scopeCount} scopes active
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {status?.connected && status.shops.length > 0 && (
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                Connected Store
               </p>
-            )}
-          </div>
-        )}
-
-        {!status?.connected ? (
-          <div className="space-y-3">
-            <Input
-              placeholder="yourstore.myshopify.com"
-              value={shopDomain}
-              onChange={(e) => setShopDomain(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-              autoComplete="off"
-            />
-            <Button
-              onClick={handleConnect}
-              disabled={connecting || !isValidDomain(shopDomain)}
-              className="w-full"
-            >
-              {connecting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <Link2 className="mr-2 h-4 w-4" />
-                  Connect Shopify →
-                </>
+              <ul className="space-y-1">
+                {status.shops.map((shop) => (
+                  <li key={shop.shop_domain} className="text-sm text-muted-foreground pl-6">
+                    {shop.shop_domain}
+                  </li>
+                ))}
+              </ul>
+              {scopeCount > 0 && (
+                <p className="text-xs text-muted-foreground mt-2 pl-6">
+                  {scopeCount} scopes active
+                </p>
               )}
-            </Button>
+            </div>
+          )}
 
-            <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="w-full text-muted-foreground text-xs gap-1">
-                  <Key className="h-3 w-3" />
-                  Using a Shopify Custom App instead?
-                  <ChevronDown className={`h-3 w-3 transition-transform ${manualOpen ? 'rotate-180' : ''}`} />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2 pt-2">
-                <Input
-                  placeholder="shpat_..."
-                  value={manualToken}
-                  onChange={(e) => setManualToken(e.target.value)}
-                  type="password"
-                />
-                <Input
-                  placeholder="yourstore.myshopify.com"
-                  value={manualDomain}
-                  onChange={(e) => setManualDomain(e.target.value)}
-                  autoComplete="off"
-                />
+          {!status?.connected ? (
+            <div className="space-y-3">
+              <Input
+                placeholder="yourstore.myshopify.com"
+                value={shopDomain}
+                onChange={(e) => setShopDomain(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+                autoComplete="off"
+              />
+              <Button
+                onClick={handleConnect}
+                disabled={connecting || !isValidDomain(shopDomain)}
+                className="w-full"
+              >
+                {connecting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="mr-2 h-4 w-4" />
+                    Connect Shopify →
+                  </>
+                )}
+              </Button>
+
+              <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="w-full text-muted-foreground text-xs gap-1">
+                    <Key className="h-3 w-3" />
+                    Using a Shopify Custom App instead?
+                    <ChevronDown className={`h-3 w-3 transition-transform ${manualOpen ? 'rotate-180' : ''}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2 pt-2">
+                  <Input
+                    placeholder="shpat_..."
+                    value={manualToken}
+                    onChange={(e) => setManualToken(e.target.value)}
+                    type="password"
+                  />
+                  <Input
+                    placeholder="yourstore.myshopify.com"
+                    value={manualDomain}
+                    onChange={(e) => setManualDomain(e.target.value)}
+                    autoComplete="off"
+                  />
+                  <Button
+                    onClick={handleManualSave}
+                    disabled={savingToken || !manualToken.trim() || !manualDomain.trim()}
+                    variant="secondary"
+                    className="w-full"
+                    size="sm"
+                  >
+                    {savingToken ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save connection'
+                    )}
+                  </Button>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex gap-2">
                 <Button
-                  onClick={handleManualSave}
-                  disabled={savingToken || !manualToken.trim() || !manualDomain.trim()}
-                  variant="secondary"
-                  className="w-full"
-                  size="sm"
+                  variant="outline"
+                  onClick={handleReauthorise}
+                  disabled={connecting}
+                  className="flex-1"
                 >
-                  {savingToken ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
+                  {connecting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    'Save connection'
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Re-authorise
+                    </>
                   )}
                 </Button>
-              </CollapsibleContent>
-            </Collapsible>
+                <Button
+                  variant="outline"
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
+                >
+                  {disconnecting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Unlink className="mr-2 h-4 w-4" />
+                      Disconnect
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={fetchStatus}
+                  title="Refresh status"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Discover marketplaces button */}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full gap-2"
+                onClick={() => {
+                  const domain = status.shops[0]?.shop_domain;
+                  if (domain) runDiscovery(domain);
+                }}
+                disabled={discovering}
+              >
+                {discovering ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Scanning orders...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Discover my sales channels
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Discovery Modal */}
+      <Dialog open={discoveryOpen} onOpenChange={setDiscoveryOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl">
+              We found your sales channels! 🎉
+            </DialogTitle>
+            <DialogDescription>
+              Select which marketplaces to create tabs for. Each checked channel will get its own dashboard.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-2">
+            {discoveredMarketplaces.map((mp, idx) => (
+              <label
+                key={mp.code}
+                className={`flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+                  mp.checked ? 'border-primary bg-primary/5' : 'border-border'
+                }`}
+                onClick={() => toggleMarketplace(idx)}
+              >
+                <Checkbox checked={mp.checked} onCheckedChange={() => toggleMarketplace(idx)} />
+                <div className="flex-1">
+                  <span className="text-sm font-medium">{mp.displayName}</span>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {mp.orderCount} order{mp.orderCount !== 1 ? 's' : ''}
+                </Badge>
+              </label>
+            ))}
           </div>
-        ) : (
-          <div className="flex gap-2">
+
+          <DialogFooter>
             <Button
-              variant="outline"
-              onClick={handleReauthorise}
-              disabled={connecting}
-              className="flex-1"
+              onClick={handleCreateTabs}
+              disabled={creatingTabs || discoveredMarketplaces.filter(m => m.checked).length === 0}
+              className="w-full gap-2"
             >
-              {connecting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+              {creatingTabs ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating...
+                </>
               ) : (
                 <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Re-authorise
+                  Create marketplace tabs →
                 </>
               )}
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-            >
-              {disconnecting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Unlink className="mr-2 h-4 w-4" />
-                  Disconnect
-                </>
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={fetchStatus}
-              title="Refresh status"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
