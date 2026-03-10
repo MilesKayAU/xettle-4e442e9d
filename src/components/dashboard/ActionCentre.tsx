@@ -84,6 +84,7 @@ const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
   reconciliation_mismatch: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-500' },
   xero_push_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-500' },
   validation_sweep_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-500' },
+  shopify_payout_synced: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
 };
 
 export default function ActionCentre({

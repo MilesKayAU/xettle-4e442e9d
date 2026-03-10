@@ -7,7 +7,7 @@
  * 3. Creates settlements with one-click confirmation
  */
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +22,7 @@ import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye, LayoutDashboard,
-  MapPin,
+  MapPin, RefreshCw,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
@@ -128,9 +128,45 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [isDragging, setIsDragging] = useState(false);
   const [unknownEntities, setUnknownEntities] = useState<UnknownEntity[]>([]);
   const [showEntityDialog, setShowEntityDialog] = useState(false);
+  const [shopifySyncing, setShopifySyncing] = useState(false);
+  const [hasShopifyConnection, setHasShopifyConnection] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
+
+  // Check if Shopify is connected
+  useEffect(() => {
+    supabase.from('shopify_tokens').select('id').limit(1)
+      .then(({ data }) => setHasShopifyConnection(!!(data && data.length > 0)));
+  }, []);
+
+  const handleShopifySync = useCallback(async () => {
+    setShopifySyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-shopify-payouts', {});
+      if (error) throw error;
+      if (data?.error) {
+        if (data.message) {
+          toast(data.message);
+        } else {
+          throw new Error(data.error);
+        }
+        return;
+      }
+      const synced = data?.synced || 0;
+      const skipped = data?.skipped || 0;
+      if (synced > 0) {
+        toast.success(`Synced ${synced} Shopify payout${synced > 1 ? 's' : ''} via API`);
+        onSettlementsSaved?.();
+      } else {
+        toast.info(`All Shopify payouts already imported (${skipped} checked)`);
+      }
+    } catch (err: any) {
+      toast.error(`Shopify sync failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setShopifySyncing(false);
+    }
+  }, [onSettlementsSaved]);
 
   // ── Pre-parse: immediately parse detected files to show preview ──
   const preParseFile = useCallback(async (file: File, detection: FileDetectionResult): Promise<StandardSettlement[]> => {
@@ -893,9 +929,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     <Upload className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                     <h3 className="text-sm font-semibold text-foreground">Files needed</h3>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {checkedItems.size} of {missingSettlements!.length} uploaded
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {hasShopifyConnection && missingSettlements!.some(ms => ms.marketplace_code === 'shopify_payments') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1.5"
+                        disabled={shopifySyncing}
+                        onClick={handleShopifySync}
+                      >
+                        {shopifySyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                        {shopifySyncing ? 'Syncing...' : 'Sync Shopify'}
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {checkedItems.size} of {missingSettlements!.length} uploaded
+                    </span>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {missingSettlements!.map((ms, i) => {
@@ -905,17 +955,22 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     const monthLabel = pStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
                     const dateRange = `${pStart.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} – ${pEnd.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
                     const sourceHint = MARKETPLACE_SOURCE_HINTS[ms.marketplace_code] || 'Check your marketplace portal or email';
+                    const isShopifyAutoSync = ms.marketplace_code === 'shopify_payments' && hasShopifyConnection;
                     return (
                       <div
                         key={`${ms.marketplace_code}-${ms.period_start}`}
                         className={`flex items-start gap-2 px-3 py-2 rounded-md transition-all ${
                           done
                             ? 'bg-emerald-100/80 dark:bg-emerald-900/30 opacity-70'
-                            : 'bg-background/80'
+                            : shopifySyncing && isShopifyAutoSync
+                              ? 'bg-blue-50/80 dark:bg-blue-900/20'
+                              : 'bg-background/80'
                         }`}
                       >
                         {done ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        ) : shopifySyncing && isShopifyAutoSync ? (
+                          <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin flex-shrink-0 mt-0.5" />
                         ) : (
                           <XCircle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                         )}
@@ -923,6 +978,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                           <div className={`flex items-center gap-1.5 ${done ? 'line-through' : ''}`}>
                             <span className="text-xs font-medium text-foreground">{ms.marketplace_label}</span>
                             <span className="text-xs text-muted-foreground">— {monthLabel}</span>
+                            {isShopifyAutoSync && !done && !shopifySyncing && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400">
+                                Auto-sync
+                              </Badge>
+                            )}
+                            {shopifySyncing && isShopifyAutoSync && (
+                              <span className="text-[10px] text-blue-500">Auto-syncing...</span>
+                            )}
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <button className="text-muted-foreground/60 hover:text-muted-foreground" onClick={e => e.stopPropagation()}>
@@ -930,8 +993,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs text-xs">
-                                <p className="font-medium mb-0.5">Where to find this file:</p>
-                                <p>{sourceHint}</p>
+                                <p className="font-medium mb-0.5">
+                                  {isShopifyAutoSync ? 'Auto-sync available:' : 'Where to find this file:'}
+                                </p>
+                                <p>{isShopifyAutoSync ? 'Click "Sync Shopify" above to pull payouts automatically via API. Manual CSV upload also works as fallback.' : sourceHint}</p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
