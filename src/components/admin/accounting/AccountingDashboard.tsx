@@ -31,6 +31,8 @@ import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settle
 import { useBulkSelect } from '@/hooks/use-bulk-select';
 import BulkDeleteDialog from '@/components/admin/accounting/shared/BulkDeleteDialog';
 import { useXeroSync } from '@/hooks/use-xero-sync';
+import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
+import { deleteSettlement } from '@/utils/settlement-engine';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
@@ -1896,7 +1898,8 @@ type SortField = 'period' | 'deposit' | 'status' | 'seq';
 type SortDir = 'asc' | 'desc';
 
 function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushToXero }: { settlements: SettlementRecord[]; loading: boolean; onDeleted: () => void; onReview?: (settlementId: string, settlementUuid: string) => void; onPushToXero?: (settlementId: string, settlementUuid: string) => void }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Shared drilldown hook replaces manual expandedId state
+  const { expandedLines: expandedId, loadLineItems: toggleExpand } = useTransactionDrilldown();
   const [sortField, setSortField] = useState<SortField>('period');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -2029,17 +2032,12 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
   };
 
   const handleDeleteOne = async (settlement: SettlementRecord) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      await supabase.from('settlement_lines').delete().eq('settlement_id', settlement.settlement_id).eq('user_id', user.id);
-      await supabase.from('settlement_unmapped').delete().eq('settlement_id', settlement.settlement_id).eq('user_id', user.id);
-      const { error } = await supabase.from('settlements').delete().eq('id', settlement.id).eq('user_id', user.id);
-      if (error) throw error;
+    const result = await deleteSettlement(settlement.id);
+    if (result.success) {
       toast.success(`Deleted settlement ${settlement.settlement_id}`);
       onDeleted();
-    } catch (err: any) {
-      toast.error(`Delete failed: ${err.message}`);
+    } else {
+      toast.error(`Delete failed: ${result.error}`);
     }
   };
 
@@ -2251,7 +2249,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                   <React.Fragment key={s.id}>
                     <tr
                       className={`border-b hover:bg-muted/30 cursor-pointer transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
-                      onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                      onClick={() => toggleExpand(s.id)}
                     >
                       <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
                         <input
