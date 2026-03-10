@@ -28,6 +28,7 @@ import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting
 import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
 import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@/utils/reconciliation-engine';
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
+import { useBulkSelect } from '@/hooks/use-bulk-select';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
