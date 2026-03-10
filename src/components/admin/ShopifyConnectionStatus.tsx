@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag, ChevronDown, Key, Sparkles } from 'lucide-react';
+import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag, ChevronDown, Key, Sparkles, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
 import { detectAllMarketplaces, classifyUnknownTag, type BatchDetectionResult } from '@/utils/shopify-order-detector';
