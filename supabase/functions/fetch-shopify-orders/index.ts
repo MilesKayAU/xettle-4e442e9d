@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
 
     // ─── Enforce accounting boundary ────────────────────────────────
     let effectiveDateFrom = dateFrom;
+    console.log("[fetch-shopify-orders] Querying accounting boundary...");
     const { data: boundarySetting } = await supabase
       .from("app_settings")
       .select("value")
@@ -88,14 +89,18 @@ Deno.serve(async (req) => {
         effectiveDateFrom = boundaryDate + "T00:00:00Z";
       }
     }
+    console.log("[fetch-shopify-orders] Boundary resolved, effectiveDateFrom:", effectiveDateFrom);
 
     // 1. Get access token from shopify_tokens
+    console.log("[fetch-shopify-orders] Querying shopify_tokens for:", shopDomain);
     const { data: tokenRow, error: tokenError } = await supabase
       .from("shopify_tokens")
       .select("access_token")
       .eq("user_id", resolvedUserId)
       .eq("shop_domain", shopDomain)
       .single();
+
+    console.log("[fetch-shopify-orders] Token query result:", { found: !!tokenRow, error: tokenError?.message });
 
     if (tokenError || !tokenRow) {
       return new Response(
@@ -105,6 +110,7 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = tokenRow.access_token;
+    console.log("[fetch-shopify-orders] Got access token, length:", accessToken?.length);
 
     // 2. Build Shopify API URL
     const buildUrl = (cursor?: string) => {
@@ -129,17 +135,22 @@ Deno.serve(async (req) => {
 
     do {
       const url = buildUrl(nextCursor);
+      console.log(`[fetch-shopify-orders] Fetching page ${page}:`, url.substring(0, 120));
       const res = await fetch(url, {
         headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
       });
 
+      console.log(`[fetch-shopify-orders] Shopify response: status=${res.status}`);
+
       if (res.status === 401) {
+        console.error("[fetch-shopify-orders] Shopify 401 — token invalid");
         return new Response(
           JSON.stringify({ error: "Shopify token invalid or expired" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       if (res.status === 429) {
+        console.error("[fetch-shopify-orders] Shopify 429 — rate limited");
         return new Response(
           JSON.stringify({ error: "Shopify rate limit exceeded. Try again shortly." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -147,6 +158,7 @@ Deno.serve(async (req) => {
       }
       if (!res.ok) {
         const body = await res.text();
+        console.error("[fetch-shopify-orders] Shopify error:", res.status, body);
         return new Response(
           JSON.stringify({ error: `Shopify API error ${res.status}`, detail: body }),
           { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
