@@ -99,12 +99,8 @@ export default function ActionCentre({
       setLoading(false);
     }
   }, []);
-    } catch (err) {
-      console.error('ActionCentre load error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+
+
 
   useEffect(() => { loadData(); }, [loadData]);
 
