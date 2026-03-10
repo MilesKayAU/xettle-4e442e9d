@@ -545,6 +545,65 @@ export default function ValidationSweep({
 
 // ─── Sub-components ──────────────────────────────────────────────────
 
+function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch: (row: ValidationRow, txnId: string) => void }) {
+  if (row.bank_matched) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            Auto-matched {row.bank_amount ? formatAUD(row.bank_amount) : ''}{row.bank_reference ? ` — ref: ${row.bank_reference}` : ''}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  if (!row.xero_pushed) {
+    return <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />;
+  }
+
+  // Check if < 3 days since push
+  if (row.xero_pushed_at) {
+    const pushDate = new Date(row.xero_pushed_at);
+    const daysSincePush = (Date.now() - pushDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSincePush < 3) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1">
+                <Search className="h-3.5 w-3.5 text-muted-foreground animate-pulse" />
+                <span className="text-[10px] text-muted-foreground">Searching...</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Waiting for bank deposit — usually appears within 3 days</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+  }
+
+  // > 3 days, not found
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1">
+            <XCircle className="h-3.5 w-3.5 text-red-500" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Not found — check bank feed</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+
 function SummaryCard({
   label, count, emoji, active, onClick, bgClass, borderClass,
 }: {
