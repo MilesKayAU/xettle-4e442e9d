@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw, CloudDownload, ShieldCheck, AlertTriangle, CheckSquare, Square } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw, CloudDownload, ShieldCheck, AlertTriangle, CheckSquare, Square, Zap, Clock } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
@@ -51,6 +51,16 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const [deletingBulk, setDeletingBulk] = useState(false);
   const [marking, setMarking] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  
+  // Smart sync state
+  const [smartSyncing, setSmartSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [cooldownMinutes, setCooldownMinutes] = useState<number | null>(null);
+  const [syncResult, setSyncResult] = useState<{
+    synced: number;
+    total_deposit: number;
+    settlements: Array<{ settlement_id: string; period_start: string; period_end: string; deposit: number }>;
+  } | null>(null);
 
   const loadApiSettlements = useCallback(async () => {
     setLoading(true);
@@ -59,6 +69,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         .from('settlements')
         .select('*')
         .eq('source', 'api')
+        .eq('marketplace', 'amazon_au')
         .order('period_end', { ascending: false });
       if (error) throw error;
       setSettlements((data || []) as unknown as AutoImportedSettlement[]);
@@ -69,11 +80,48 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
   }, []);
 
+  // Load cooldown status
+  const loadCooldown = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'amazon_settlement_last_sync')
+        .maybeSingle();
+      
+      if (data?.value) {
+        setLastSyncTime(data.value);
+        const lastSync = new Date(data.value);
+        const minutesAgo = Math.round((Date.now() - lastSync.getTime()) / 60000);
+        if (minutesAgo < 60) {
+          setCooldownMinutes(60 - minutesAgo);
+        } else {
+          setCooldownMinutes(null);
+        }
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
   useEffect(() => {
     loadApiSettlements();
-  }, [loadApiSettlements]);
+    loadCooldown();
+  }, [loadApiSettlements, loadCooldown]);
 
-  // Realtime subscription: auto-update when new api settlements are inserted/deleted
+  // Cooldown timer
+  useEffect(() => {
+    if (cooldownMinutes === null || cooldownMinutes <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownMinutes(prev => {
+        if (prev === null || prev <= 1) return null;
+        return prev - 1;
+      });
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [cooldownMinutes]);
+
+  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel('auto-imported-settlements')
@@ -86,7 +134,6 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
           filter: 'source=eq.api',
         },
         () => {
-          // Reload when any change happens to api settlements
           loadApiSettlements();
         }
       )
@@ -96,6 +143,50 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       supabase.removeChannel(channel);
     };
   }, [loadApiSettlements]);
+
+  // ─── Smart Sync Handler ────────────────────────────────────────
+  const handleSmartSync = async () => {
+    setSmartSyncing(true);
+    setSyncResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-amazon-settlements', {
+        headers: { 'x-action': 'smart-sync' },
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        if (data.message?.includes('cooldown')) {
+          toast.warning(data.message);
+          setCooldownMinutes(60 - Math.round((Date.now() - new Date(data.last_sync).getTime()) / 60000));
+        } else {
+          toast.error(data.error);
+        }
+        return;
+      }
+
+      const { synced = 0, total_deposit = 0, settlements: syncedSettlements = [], skipped = 0, errors } = data || {};
+
+      if (synced > 0) {
+        setSyncResult({ synced, total_deposit, settlements: syncedSettlements });
+        toast.success(`Found ${synced} new settlement${synced !== 1 ? 's' : ''} totalling ${formatAUD(total_deposit)} — ready to push to Xero`);
+        await loadApiSettlements();
+      } else {
+        toast.info('All Amazon settlements already imported — nothing new to sync.');
+      }
+
+      if (errors && errors.length > 0) {
+        console.warn('[Amazon Smart Sync Errors]', errors);
+      }
+
+      setLastSyncTime(new Date().toISOString());
+      setCooldownMinutes(60);
+    } catch (err: any) {
+      toast.error(`Sync failed: ${err.message}`);
+    } finally {
+      setSmartSyncing(false);
+    }
+  };
 
   const handleDelete = async (settlement: AutoImportedSettlement) => {
     if (!confirm(`Delete auto-imported settlement ${settlement.settlement_id}?`)) return;
@@ -197,7 +288,6 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   };
 
   const handleSyncToXero = async (settlement: AutoImportedSettlement) => {
-    // Guard: never sync if marked as already in Xero
     if (settlement.status === 'synced_external') {
       toast.error('This settlement is marked as already in Xero. Unmark it first if you want to sync.');
       return;
@@ -219,8 +309,14 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     if (settlement.status === 'synced_external') {
       return <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50"><ShieldCheck className="h-3 w-3 mr-1" /> Already in Xero</Badge>;
     }
+    if (settlement.status === 'already_recorded') {
+      return <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground"><ShieldCheck className="h-3 w-3 mr-1" /> Pre-boundary</Badge>;
+    }
     if (isSynced) {
       return <Badge className="bg-green-100 text-green-800 text-[10px]"><CheckCircle2 className="h-3 w-3 mr-1" /> Synced to Xero</Badge>;
+    }
+    if (settlement.status === 'ready_to_push') {
+      return <Badge className="bg-blue-100 text-blue-800 text-[10px]"><Zap className="h-3 w-3 mr-1" /> Ready to Push</Badge>;
     }
     if (settlement.reconciliation_status === 'matched') {
       return <Badge className="bg-blue-100 text-blue-800 text-[10px]"><CheckCircle2 className="h-3 w-3 mr-1" /> Ready to Sync</Badge>;
@@ -231,8 +327,12 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     return <Badge variant="secondary" className="text-[10px]">Imported</Badge>;
   };
 
-  // Count settlements needing attention
-  const needsReviewCount = settlements.filter(s => !isAlreadyInXero(s) && s.reconciliation_status === 'matched').length;
+  // Count settlements ready to push to Xero
+  const readyToPush = settlements.filter(s => 
+    (s.status === 'ready_to_push' || (s.reconciliation_status === 'matched' && s.status !== 'synced_external' && s.status !== 'already_recorded')) && 
+    !s.xero_journal_id && !s.xero_journal_id_1
+  );
+  const readyToPushTotal = readyToPush.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
 
   if (loading) {
     return (
@@ -245,196 +345,260 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     );
   }
 
-  if (settlements.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <CloudDownload className="h-4 w-4" />
-            Auto-Imported Settlements
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Settlements fetched via the Amazon SP-API will appear here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <CloudDownload className="h-8 w-8 mx-auto mb-2 opacity-40" />
-            <p className="text-sm">No auto-imported settlements yet.</p>
-            <p className="text-xs mt-1">Connect your Amazon account in Settings and click "Fetch Now" to get started.</p>
+  return (
+    <div className="space-y-4">
+      {/* ─── Sync Amazon Settlements Button ─────────────────────────── */}
+      <Card className="border-primary/20">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <CloudDownload className="h-4 w-4 text-primary" />
+                Sync Amazon Settlements
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {lastSyncTime
+                  ? `Last synced ${new Date(lastSyncTime).toLocaleString('en-AU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                  : 'Fetch missing settlements from Amazon SP-API'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {cooldownMinutes !== null && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {cooldownMinutes}m cooldown
+                </span>
+              )}
+              <Button
+                onClick={handleSmartSync}
+                disabled={smartSyncing || cooldownMinutes !== null}
+                className="gap-1.5"
+                size="sm"
+              >
+                {smartSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                {smartSyncing ? 'Syncing...' : cooldownMinutes !== null ? 'Cooldown' : 'Sync Now'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
-    );
-  }
 
-  return (
-    <div className="space-y-4">
-      {/* Warning banner if there are untagged settlements */}
-      {needsReviewCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-          <div className="text-xs text-amber-800">
-            <p className="font-medium">{needsReviewCount} settlement(s) ready to sync</p>
-            <p className="mt-0.5">If any of these are already in Xero (entered manually or via another tool), mark them as <strong>"Already in Xero"</strong> to prevent duplicate entries.</p>
+      {/* ─── Sync Result Banner ───────────────────────────────────── */}
+      {syncResult && syncResult.synced > 0 && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+          <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-green-800">
+              Found {syncResult.synced} new settlement{syncResult.synced !== 1 ? 's' : ''} totalling {formatAUD(syncResult.total_deposit)}
+            </p>
+            <p className="text-xs text-green-700 mt-1">
+              Ready to push to Xero. Review below and click "Push to Xero" for each settlement.
+            </p>
+            <div className="mt-2 space-y-1">
+              {syncResult.settlements.map(s => (
+                <div key={s.settlement_id} className="text-xs text-green-700 flex items-center gap-2">
+                  <span className="font-mono">{s.settlement_id}</span>
+                  <span>{formatDate(s.period_start)} → {formatDate(s.period_end)}</span>
+                  <span className="font-medium">{formatAUD(s.deposit)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => setSyncResult(null)}>
+            Dismiss
+          </Button>
+        </div>
+      )}
+
+      {/* ─── Ready to Push Summary ────────────────────────────────── */}
+      {readyToPush.length > 0 && !syncResult && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+          <Zap className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-xs text-blue-800">
+            <p className="font-medium">{readyToPush.length} settlement{readyToPush.length !== 1 ? 's' : ''} totalling {formatAUD(readyToPushTotal)} — ready to push to Xero</p>
+            <p className="mt-0.5">Click "Push to Xero" on each settlement below, or mark as "Already in Xero" if already booked.</p>
           </div>
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <CloudDownload className="h-4 w-4" />
-                Auto-Imported Settlements
-              </CardTitle>
-              <CardDescription className="text-xs">
-                {settlements.length} settlement(s) fetched from Amazon SP-API. Review and sync to Xero.
-              </CardDescription>
+      {settlements.length === 0 && !syncResult ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CloudDownload className="h-4 w-4" />
+              Auto-Imported Settlements
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Click "Sync Now" above to fetch settlement reports from Amazon.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 text-muted-foreground">
+              <CloudDownload className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No auto-imported settlements yet.</p>
+              <p className="text-xs mt-1">Connect your Amazon account and click "Sync Now" to get started.</p>
             </div>
-            <div className="flex items-center gap-2">
-              {settlements.length > 0 && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1"
-                    onClick={toggleSelectAll}
-                  >
-                    {selected.size === settlements.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                    {selected.size === settlements.length ? 'Deselect All' : 'Select All'}
-                  </Button>
-                  {selected.size > 0 && (
+          </CardContent>
+        </Card>
+      ) : settlements.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CloudDownload className="h-4 w-4" />
+                  Auto-Imported Settlements
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {settlements.length} settlement(s) fetched from Amazon SP-API. Review and sync to Xero.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {settlements.length > 0 && (
+                  <>
                     <Button
-                      variant="destructive"
+                      variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-xs gap-1"
-                      onClick={handleDeleteSelected}
-                      disabled={deletingBulk}
+                      onClick={toggleSelectAll}
                     >
-                      {deletingBulk ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                      Delete {selected.size}
+                      {selected.size === settlements.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                      {selected.size === settlements.length ? 'Deselect All' : 'Select All'}
                     </Button>
-                  )}
-                </>
-              )}
-              <Button variant="outline" size="sm" onClick={loadApiSettlements} className="gap-1.5">
-                <RefreshCw className="h-3.5 w-3.5" /> Refresh
-              </Button>
+                    {selected.size > 0 && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1"
+                        onClick={handleDeleteSelected}
+                        disabled={deletingBulk}
+                      >
+                        {deletingBulk ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        Delete {selected.size}
+                      </Button>
+                    )}
+                  </>
+                )}
+                <Button variant="outline" size="sm" onClick={loadApiSettlements} className="gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                </Button>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {settlements.map(s => {
-              const isDuplicateOfManual = existingSettlementIds.has(s.settlement_id);
-              const isSynced = !!(s.xero_journal_id || s.xero_journal_id_1);
-              const isMarkedExternal = s.status === 'synced_external';
-              const isDisabled = (isDuplicateOfManual && !isSynced) || isMarkedExternal;
-              const canSync = !isSynced && !isMarkedExternal && !isDuplicateOfManual && s.reconciliation_status === 'matched';
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {settlements.map(s => {
+                const isDuplicateOfManual = existingSettlementIds.has(s.settlement_id);
+                const isSynced = !!(s.xero_journal_id || s.xero_journal_id_1);
+                const isMarkedExternal = s.status === 'synced_external';
+                const isPreBoundary = s.status === 'already_recorded';
+                const isDisabled = (isDuplicateOfManual && !isSynced) || isMarkedExternal || isPreBoundary;
+                const canSync = !isSynced && !isMarkedExternal && !isPreBoundary && !isDuplicateOfManual && 
+                  (s.status === 'ready_to_push' || s.reconciliation_status === 'matched');
 
-              return (
-                <div
-                  key={s.id}
-                  className={`border rounded-lg p-3 transition-colors ${
-                    isMarkedExternal ? 'opacity-60 bg-amber-50/30 border-amber-200/50' :
-                    isDisabled ? 'opacity-50 bg-muted/30' : 'hover:bg-muted/20'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <button
-                      className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={() => toggleSelect(s.id)}
-                    >
-                      {selected.has(s.id) ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
-                        {getStatusBadge(s)}
-                        {isDuplicateOfManual && !isMarkedExternal && (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                            Already in History
-                          </Badge>
-                        )}
-                        {s.is_split_month && (
-                          <Badge variant="outline" className="text-[10px]">Split Month</Badge>
-                        )}
+                return (
+                  <div
+                    key={s.id}
+                    className={`border rounded-lg p-3 transition-colors ${
+                      isPreBoundary ? 'opacity-40 bg-muted/20 border-muted' :
+                      isMarkedExternal ? 'opacity-60 bg-amber-50/30 border-amber-200/50' :
+                      isDisabled ? 'opacity-50 bg-muted/30' : 'hover:bg-muted/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <button
+                        className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => toggleSelect(s.id)}
+                      >
+                        {selected.has(s.id) ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
+                          {getStatusBadge(s)}
+                          {isDuplicateOfManual && !isMarkedExternal && (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                              Already in History
+                            </Badge>
+                          )}
+                          {s.is_split_month && (
+                            <Badge variant="outline" className="text-[10px]">Split Month</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                          <span>{formatDate(s.period_start)} → {formatDate(s.period_end)}</span>
+                          <span className="font-medium text-foreground">{formatAUD(s.bank_deposit)}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                        <span>{formatDate(s.period_start)} → {formatDate(s.period_end)}</span>
-                        <span className="font-medium text-foreground">{formatAUD(s.bank_deposit)}</span>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {/* Mark / Unmark as Already in Xero */}
-                      {!isSynced && (
-                        isMarkedExternal ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs gap-1 text-amber-700 hover:text-amber-800"
-                            onClick={() => handleUnmarkFromXero(s)}
-                            disabled={marking === s.id}
-                          >
-                            {marking === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                            Unmark
-                          </Button>
-                        ) : (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Mark / Unmark as Already in Xero */}
+                        {!isSynced && !isPreBoundary && (
+                          isMarkedExternal ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs gap-1 text-amber-700 hover:text-amber-800"
+                              onClick={() => handleUnmarkFromXero(s)}
+                              disabled={marking === s.id}
+                            >
+                              {marking === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                              Unmark
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs gap-1"
+                              onClick={() => handleMarkAsInXero(s)}
+                              disabled={marking === s.id}
+                              title="Mark as already entered in Xero — prevents sync"
+                            >
+                              {marking === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                              Already in Xero
+                            </Button>
+                          )
+                        )}
+
+                        {onViewSettlement && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-7 px-2 text-xs gap-1"
-                            onClick={() => handleMarkAsInXero(s)}
-                            disabled={marking === s.id}
-                            title="Mark as already entered in Xero — prevents sync"
+                            onClick={() => onViewSettlement(s.settlement_id)}
                           >
-                            {marking === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                            Already in Xero
+                            <Eye className="h-3 w-3" /> View
                           </Button>
-                        )
-                      )}
-
-                      {onViewSettlement && (
+                        )}
+                        {canSync && onSyncToXero && (
+                          <Button
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1"
+                            onClick={() => handleSyncToXero(s)}
+                            disabled={syncing === s.id}
+                          >
+                            {syncing === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3" />}
+                            Push to Xero
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 px-2 text-xs gap-1"
-                          onClick={() => onViewSettlement(s.settlement_id)}
+                          className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(s)}
+                          disabled={deleting === s.id}
                         >
-                          <Eye className="h-3 w-3" /> View
+                          {deleting === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                         </Button>
-                      )}
-                      {canSync && onSyncToXero && (
-                        <Button
-                          size="sm"
-                          className="h-7 px-2 text-xs gap-1"
-                          onClick={() => handleSyncToXero(s)}
-                          disabled={syncing === s.id}
-                        >
-                          {syncing === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3" />}
-                          Sync to Xero
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(s)}
-                        disabled={deleting === s.id}
-                      >
-                        {deleting === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                      </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

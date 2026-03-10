@@ -328,15 +328,30 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SYNC ACTION: Full server-side fetch-parse-save loop
-// Called by cron or manually. Uses service role key.
-// Natural retry: any report not in settlements table gets retried.
+// Helper: upsert app_settings
+// ═══════════════════════════════════════════════════════════════
+async function upsertSetting(supabase: any, userId: string, key: string, value: string) {
+  const { data: existing } = await supabase
+    .from('app_settings')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('key', key)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase.from('app_settings').update({ value }).eq('id', existing.id);
+  } else {
+    await supabase.from('app_settings').insert({ user_id: userId, key, value } as any);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SYNC ACTION: Full server-side fetch-parse-save loop (cron)
 // ═══════════════════════════════════════════════════════════════
 async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported: number; skipped: number; errors: number; details: string[] }> {
   const details: string[] = [];
   let totalImported = 0, totalSkipped = 0, totalErrors = 0;
 
-  // Get all users with Amazon tokens
   const { data: amazonTokens, error: tokensError } = await supabaseAdmin
     .from('amazon_tokens')
     .select('*');
@@ -354,11 +369,9 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
     const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe;
 
     try {
-      // 1. Refresh access token
       const accessToken = await refreshAccessToken(amazonToken);
       console.log(`[Sync] Got access token for user ${userId}`);
 
-      // 2. Get user's GST rate and sync cutoff from app_settings
       const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
         .select('key, value')
@@ -369,9 +382,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
       (settingsData || []).forEach((s: any) => { settingsMap[s.key] = s.value; });
       const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
       const syncCutoffDate = settingsMap['sync_cutoff_date'] || null;
-      console.log(`[Sync] User ${userId}: gstRate=${gstRate}, syncCutoffDate=${syncCutoffDate}`);
 
-      // 3. List settlement reports (last 90 days)
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 90);
       const params = new URLSearchParams({
@@ -395,14 +406,12 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
 
       const reportsData = await reportsResponse.json();
       const allReports = reportsData.reports || [];
-      console.log(`[Sync] User ${userId}: ${allReports.length} reports from API`);
 
       if (allReports.length === 0) {
         details.push(`User ${userId}: No reports found`);
         continue;
       }
 
-      // 4. Check which settlements already exist (by ID and by fingerprint: dates + deposit)
       const { data: existingData } = await supabaseAdmin
         .from('settlements')
         .select('settlement_id, period_start, period_end, bank_deposit')
@@ -413,9 +422,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         (existingData || []).map((s: any) => `${s.period_start}|${s.period_end}|${round2(s.bank_deposit)}`)
       );
 
-      // 5. Process reports newest-first so fresh data gets imported even if we hit rate limits
       const sorted = [...allReports].sort((a: any, b: any) => {
-        // Sort by createdTime descending (newest first)
         return new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime();
       });
       let userImported = 0, userSkipped = 0, userErrors = 0;
@@ -424,35 +431,26 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         const report = sorted[i];
         if (!report.reportDocumentId) continue;
 
-        // Rate-limit delay (3s between downloads to avoid 429)
         if (i > 0) await new Promise(r => setTimeout(r, 3000));
 
         try {
-          // Download report
           const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId);
-
-          // Parse
           const parsed = parseSettlementTSV(content, gstRate);
 
-          // Dedup check 1: exact settlement ID match
           if (existingIds.has(parsed.header.settlementId)) {
             userSkipped++;
-            console.log(`[Sync] Skipping duplicate ${parsed.header.settlementId} (ID match)`);
             continue;
           }
 
-          // Dedup check 2: fingerprint match (dates + deposit amount)
           const fingerprint = `${parsed.header.periodStart}|${parsed.header.periodEnd}|${round2(parsed.header.totalAmount)}`;
           if (existingFingerprints.has(fingerprint)) {
             userSkipped++;
-            console.log(`[Sync] Skipping duplicate ${parsed.header.settlementId} (fingerprint match: ${fingerprint})`);
             continue;
           }
 
           const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd <= syncCutoffDate;
           const { header, summary, lines, unmapped, splitMonth } = parsed;
 
-          // Insert settlement
           const { error: settError } = await supabaseAdmin.from('settlements').insert({
             user_id: userId,
             settlement_id: header.settlementId,
@@ -483,12 +481,10 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
           });
 
           if (settError) {
-            console.error(`[Sync] Insert settlement error: ${settError.message}`);
             userErrors++;
             continue;
           }
 
-          // Insert lines in batches
           if (lines.length > 0) {
             const lineRows = lines.map((l: any) => ({
               user_id: userId,
@@ -508,7 +504,6 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
             }
           }
 
-          // Insert unmapped
           if (unmapped.length > 0) {
             await supabaseAdmin.from('settlement_unmapped').insert(unmapped.map((u: any) => ({
               user_id: userId,
@@ -523,11 +518,8 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
 
           existingIds.add(parsed.header.settlementId);
           userImported++;
-          console.log(`[Sync] Imported ${header.settlementId} for user ${userId}`);
         } catch (dlErr: any) {
-          console.error(`[Sync] Report ${report.reportDocumentId} failed: ${dlErr.message}`);
           userErrors++;
-          // Continue to next report — will be retried on next cron run
         }
       }
 
@@ -536,13 +528,339 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
       totalSkipped += userSkipped;
       totalErrors += userErrors;
     } catch (userErr: any) {
-      console.error(`[Sync] User ${userId} failed: ${userErr.message}`);
       details.push(`User ${userId}: FAILED — ${userErr.message}`);
       totalErrors++;
     }
   }
 
   return { users: amazonTokens.length, imported: totalImported, skipped: totalSkipped, errors: totalErrors, details };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SMART-SYNC: User-authenticated sync (like Shopify payouts)
+// - 1-hour cooldown
+// - Respects accounting boundary
+// - Deduplicates by settlement_id and fingerprint
+// - Returns summary with totals for UI
+// ═══════════════════════════════════════════════════════════════
+async function handleSmartSync(supabase: any, userId: string): Promise<Response> {
+  // ─── Check cooldown (1 hour minimum between syncs) ────────────
+  const { data: cooldownSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'amazon_settlement_last_sync')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (cooldownSetting?.value) {
+    const lastSync = new Date(cooldownSetting.value);
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    if (lastSync > hourAgo) {
+      return new Response(
+        JSON.stringify({
+          error: 'Sync cooldown active',
+          message: `Last sync was ${Math.round((Date.now() - lastSync.getTime()) / 60000)} minutes ago. Please wait at least 1 hour between syncs.`,
+          last_sync: cooldownSetting.value,
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // ─── Get Amazon token ──────────────────────────────────────────
+  const { data: amazonToken, error: tokenError } = await supabase
+    .from('amazon_tokens')
+    .select('*')
+    .eq('user_id', userId)
+    .limit(1)
+    .single();
+
+  if (tokenError || !amazonToken) {
+    return new Response(
+      JSON.stringify({ error: 'No Amazon connection found. Connect your Amazon account first.' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // ─── Get settings ──────────────────────────────────────────────
+  const { data: settingsData } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .eq('user_id', userId)
+    .in('key', ['accounting_gst_rate', 'accounting_boundary_date']);
+
+  const settingsMap: Record<string, string> = {};
+  (settingsData || []).forEach((s: any) => { settingsMap[s.key] = s.value; });
+  const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
+  const accountingBoundary = settingsMap['accounting_boundary_date'] || null;
+
+  // ─── Refresh SP-API access token ───────────────────────────────
+  const region = amazonToken.region || 'fe';
+  const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe;
+  let accessToken: string;
+  try {
+    accessToken = await refreshAccessToken(amazonToken);
+  } catch (err: any) {
+    return new Response(
+      JSON.stringify({ error: 'Failed to refresh Amazon token. Please reconnect your Amazon account.', details: err.message }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // ─── List settlement reports (last 90 days) ────────────────────
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 90);
+  const params = new URLSearchParams({
+    reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
+    processingStatuses: 'DONE',
+    pageSize: '50',
+    createdSince: startDate.toISOString(),
+  });
+
+  const reportsUrl = `${baseUrl}/reports/2021-06-30/reports?${params.toString()}`;
+  const reportsResponse = await fetch(reportsUrl, {
+    headers: { 'x-amz-access-token': accessToken, 'Content-Type': 'application/json' },
+  });
+
+  if (!reportsResponse.ok) {
+    const errBody = await reportsResponse.text();
+    return new Response(
+      JSON.stringify({ error: `Amazon API error: ${reportsResponse.status}`, details: errBody }),
+      { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const reportsData = await reportsResponse.json();
+  const allReports = reportsData.reports || [];
+
+  if (allReports.length === 0) {
+    await upsertSetting(supabase, userId, 'amazon_settlement_last_sync', new Date().toISOString());
+    return new Response(
+      JSON.stringify({ success: true, synced: 0, skipped: 0, message: 'No settlement reports found on Amazon' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // ─── Get existing settlements for dedup ─────────────────────────
+  const { data: existingData } = await supabase
+    .from('settlements')
+    .select('settlement_id, period_start, period_end, bank_deposit')
+    .eq('marketplace', 'amazon_au');
+
+  const existingIds = new Set((existingData || []).map((s: any) => s.settlement_id));
+  const existingFingerprints = new Set(
+    (existingData || []).map((s: any) => `${s.period_start}|${s.period_end}|${round2(s.bank_deposit)}`)
+  );
+
+  // ─── Process reports newest-first ──────────────────────────────
+  const sorted = [...allReports].sort((a: any, b: any) =>
+    new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime()
+  );
+
+  let synced = 0;
+  let totalDeposit = 0;
+  const syncedSettlements: Array<{ settlement_id: string; period_start: string; period_end: string; deposit: number }> = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const report = sorted[i];
+    if (!report.reportDocumentId) continue;
+
+    // Rate-limit delay
+    if (i > 0) await new Promise(r => setTimeout(r, 3000));
+
+    try {
+      const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId);
+      const parsed = parseSettlementTSV(content, gstRate);
+
+      // Dedup check 1: exact settlement ID
+      if (existingIds.has(parsed.header.settlementId)) {
+        continue;
+      }
+
+      // Dedup check 2: fingerprint (dates + deposit)
+      const fingerprint = `${parsed.header.periodStart}|${parsed.header.periodEnd}|${round2(parsed.header.totalAmount)}`;
+      if (existingFingerprints.has(fingerprint)) {
+        continue;
+      }
+
+      // Determine status based on accounting boundary
+      const isBeforeBoundary = accountingBoundary && parsed.header.periodEnd && parsed.header.periodEnd <= accountingBoundary;
+      const settlementStatus = isBeforeBoundary ? 'already_recorded' : 'ready_to_push';
+
+      const { header, summary, lines, unmapped, splitMonth } = parsed;
+
+      // Insert settlement
+      const { error: settError } = await supabase.from('settlements').insert({
+        user_id: userId,
+        settlement_id: header.settlementId,
+        marketplace: 'amazon_au',
+        period_start: header.periodStart,
+        period_end: header.periodEnd,
+        deposit_date: header.depositDate,
+        sales_principal: summary.salesPrincipal,
+        sales_shipping: summary.salesShipping,
+        promotional_discounts: summary.promotionalDiscounts,
+        seller_fees: summary.sellerFees,
+        fba_fees: summary.fbaFees,
+        storage_fees: summary.storageFees,
+        refunds: summary.refunds,
+        reimbursements: summary.reimbursements,
+        other_fees: summary.otherFees,
+        net_ex_gst: summary.netExGst,
+        gst_on_income: summary.gstOnIncome,
+        gst_on_expenses: summary.gstOnExpenses,
+        bank_deposit: summary.bankDeposit,
+        reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
+        status: settlementStatus,
+        source: 'api',
+        is_split_month: splitMonth.isSplitMonth,
+        split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
+        split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
+        parser_version: PARSER_VERSION,
+      } as any);
+
+      if (settError) {
+        // Handle unique constraint violation gracefully
+        if (settError.code === '23505') {
+          continue; // Already exists — skip
+        }
+        errors.push(`Settlement ${header.settlementId}: ${settError.message}`);
+        continue;
+      }
+
+      // Insert lines in batches
+      if (lines.length > 0) {
+        const lineRows = lines.map((l: any) => ({
+          user_id: userId,
+          settlement_id: header.settlementId,
+          transaction_type: l.transactionType,
+          amount_type: l.amountType,
+          amount_description: l.amountDescription,
+          accounting_category: l.accountingCategory,
+          amount: l.amount,
+          order_id: l.orderId || null,
+          sku: l.sku || null,
+          posted_date: l.postedDate || null,
+          marketplace_name: l.marketplaceName || null,
+        }));
+        for (let j = 0; j < lineRows.length; j += 500) {
+          await supabase.from('settlement_lines').insert(lineRows.slice(j, j + 500));
+        }
+      }
+
+      // Insert unmapped
+      if (unmapped.length > 0) {
+        await supabase.from('settlement_unmapped').insert(unmapped.map((u: any) => ({
+          user_id: userId,
+          settlement_id: header.settlementId,
+          transaction_type: u.transactionType,
+          amount_type: u.amountType,
+          amount_description: u.amountDescription,
+          amount: u.amount,
+          raw_row: u.rawRow,
+        })));
+      }
+
+      // Upsert marketplace_validation
+      const periodMonth = header.periodEnd.substring(0, 7);
+      const monthStart = `${periodMonth}-01`;
+      const monthEnd = new Date(
+        parseInt(periodMonth.split('-')[0]),
+        parseInt(periodMonth.split('-')[1]),
+        0
+      ).toISOString().split('T')[0];
+      const periodLabel = new Date(header.periodEnd + 'T00:00:00').toLocaleDateString('en-AU', {
+        month: 'short',
+        year: 'numeric',
+      });
+
+      const { data: existingVal } = await supabase
+        .from('marketplace_validation')
+        .select('id, settlement_net')
+        .eq('marketplace_code', 'amazon_au')
+        .eq('period_start', monthStart)
+        .maybeSingle();
+
+      if (existingVal) {
+        await supabase
+          .from('marketplace_validation')
+          .update({
+            settlement_uploaded: true,
+            settlement_uploaded_at: new Date().toISOString(),
+            settlement_id: header.settlementId,
+            settlement_net: (existingVal.settlement_net || 0) + summary.bankDeposit,
+            overall_status: isBeforeBoundary ? 'already_recorded' : 'ready_to_push',
+          })
+          .eq('id', existingVal.id);
+      } else {
+        await supabase.from('marketplace_validation').insert({
+          user_id: userId,
+          marketplace_code: 'amazon_au',
+          period_label: periodLabel,
+          period_start: monthStart,
+          period_end: monthEnd,
+          settlement_uploaded: true,
+          settlement_uploaded_at: new Date().toISOString(),
+          settlement_id: header.settlementId,
+          settlement_net: summary.bankDeposit,
+          overall_status: isBeforeBoundary ? 'already_recorded' : 'ready_to_push',
+        } as any);
+      }
+
+      // Log system event
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'amazon_settlement_synced',
+        marketplace_code: 'amazon_au',
+        period_label: periodLabel,
+        settlement_id: header.settlementId,
+        severity: 'info',
+        details: { net: summary.bankDeposit, source: 'api', lines_count: lines.length },
+      } as any);
+
+      existingIds.add(header.settlementId);
+      existingFingerprints.add(fingerprint);
+
+      if (!isBeforeBoundary) {
+        synced++;
+        totalDeposit += summary.bankDeposit;
+        syncedSettlements.push({
+          settlement_id: header.settlementId,
+          period_start: header.periodStart,
+          period_end: header.periodEnd,
+          deposit: summary.bankDeposit,
+        });
+      }
+    } catch (dlErr: any) {
+      errors.push(`Report ${report.reportDocumentId}: ${dlErr.message}`);
+    }
+  }
+
+  // ─── Update cooldown timestamp ─────────────────────────────────
+  await upsertSetting(supabase, userId, 'amazon_settlement_last_sync', new Date().toISOString());
+
+  // ─── Log sync history ──────────────────────────────────────────
+  await supabase.from('sync_history').insert({
+    user_id: userId,
+    event_type: 'amazon_smart_sync',
+    status: errors.length > 0 ? 'partial' : 'success',
+    settlements_affected: synced,
+    details: { synced, totalDeposit: round2(totalDeposit), settlements: syncedSettlements, errors },
+  } as any);
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      synced,
+      total_deposit: round2(totalDeposit),
+      settlements: syncedSettlements,
+      skipped: allReports.length - synced - errors.length,
+      errors: errors.length > 0 ? errors : undefined,
+      total_reports: allReports.length,
+    }),
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -556,9 +874,8 @@ serve(async (req) => {
   try {
     const action = req.headers.get('x-action') || 'list';
 
-    // ─── SYNC: Server-side full sync (cron or manual trigger) ────
+    // ─── SYNC: Server-side full sync (cron) ──────────────────────
     if (action === 'sync') {
-      // Use service role key for cron access (bypasses RLS)
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
@@ -589,6 +906,11 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders })
     }
     const userId = claimsData.claims.sub as string
+
+    // ─── SMART-SYNC: User-triggered smart sync ──────────────────
+    if (action === 'smart-sync') {
+      return await handleSmartSync(supabase, userId);
+    }
 
     // First, get a fresh access token via the amazon-auth function
     const { data: authData, error: authError } = await supabase.functions.invoke('amazon-auth', {
@@ -626,7 +948,6 @@ serve(async (req) => {
 
       if (!reportsResponse.ok) {
         const errBody = await reportsResponse.text()
-        console.error('SP-API reports list failed:', reportsResponse.status, errBody)
         return new Response(JSON.stringify({ error: `SP-API error: ${reportsResponse.status}`, details: errBody }), {
           status: reportsResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
