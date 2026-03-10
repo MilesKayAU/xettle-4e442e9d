@@ -149,6 +149,8 @@ export default function BugReportsDashboard() {
             <SelectItem value="API bug">API bug</SelectItem>
             <SelectItem value="Logic bug">Logic bug</SelectItem>
             <SelectItem value="Performance">Performance</SelectItem>
+            <SelectItem value="New marketplace">New Marketplace</SelectItem>
+            <SelectItem value="New marketplace saved">New Marketplace (Saved)</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline" size="sm" onClick={loadReports}>
