@@ -8,10 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
   CheckSquare, Square, Eye, ShieldCheck, ShieldAlert,
-  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown
+  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, CloudUpload, BarChart3, Scale
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
