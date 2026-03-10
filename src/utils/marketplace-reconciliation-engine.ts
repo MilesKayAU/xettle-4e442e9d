@@ -235,6 +235,11 @@ export async function autoReconcileSettlement(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // For Shopify Payments, reconciliation should only compare against bank verification
+    // NOT against Shopify order totals (which come from a different data source)
+    // Skip auto-reconciliation for shopify_payments — it will be handled by bank matching
+    if (marketplace === 'shopify_payments') return;
+
     // Check if Shopify is connected
     const { data: tokens } = await supabase
       .from('shopify_tokens')
@@ -249,12 +254,14 @@ export async function autoReconcileSettlement(
     const start = new Date(periodStart);
     const end = new Date(periodEnd);
 
+    // IMPORTANT: Filter by marketplace_name to avoid pulling lines from unrelated marketplaces
     const { data: orderSettlements } = await supabase
       .from('settlement_lines')
       .select('order_id, amount, posted_date, marketplace_name')
       .eq('user_id', user.id)
       .gte('posted_date', periodStart)
-      .lte('posted_date', periodEnd);
+      .lte('posted_date', periodEnd)
+      .ilike('marketplace_name', `%${marketplace.replace(/_/g, '%')}%`);
 
     // Build ShopifyOrder-compatible objects from settlement lines
     // Group by order_id to get order totals
