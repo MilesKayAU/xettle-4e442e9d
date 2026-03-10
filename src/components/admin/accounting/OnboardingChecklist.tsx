@@ -47,7 +47,31 @@ export default function OnboardingChecklist({
     checkDismissed();
   }, []);
 
+  // Check if accounting boundary is set
+  const [boundarySet, setBoundarySet] = useState(false);
+  useEffect(() => {
+    const checkBoundary = async () => {
+      try {
+        const { data } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'accounting_boundary_date')
+          .maybeSingle();
+        if (data?.value) setBoundarySet(true);
+      } catch {}
+    };
+    checkBoundary();
+  }, []);
+
   const steps: SetupStep[] = [
+    {
+      id: 'boundary',
+      title: 'Set accounting boundary',
+      description: 'Scan your Xero history to detect where automation should begin — prevents duplicate entries.',
+      completed: boundarySet,
+      actionLabel: boundarySet ? 'Set ✓' : 'Set boundary',
+      onAction: onGoToSettings,
+    },
     {
       id: 'xero',
       title: 'Connect to Xero',

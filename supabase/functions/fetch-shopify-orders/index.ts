@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         fields:
           "id,name,created_at,processed_at,financial_status,gateway,note_attributes,tags,subtotal_price,total_shipping_price_set,total_tax,total_price,line_items,payment_gateway_names",
       });
-      if (dateFrom) params.set("created_at_min", dateFrom);
+      if (effectiveDateFrom) params.set("created_at_min", effectiveDateFrom);
       if (dateTo) params.set("created_at_max", dateTo);
       if (cursor) params.set("page_info", cursor);
       return `https://${shopDomain}/admin/api/2026-01/orders.json?${params.toString()}`;

@@ -183,6 +183,44 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated' };
 
+    // ─── Accounting Boundary Check ──────────────────────────────────
+    const { data: boundarySetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'accounting_boundary_date')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (boundarySetting?.value && settlement.period_end < boundarySetting.value) {
+      // Save with special status — no Xero entry will be created
+      const meta = settlement.metadata || {};
+      const { error } = await supabase.from('settlements').insert({
+        user_id: user.id,
+        settlement_id: settlement.settlement_id,
+        marketplace: settlement.marketplace,
+        period_start: settlement.period_start,
+        period_end: settlement.period_end,
+        sales_principal: settlement.sales_ex_gst,
+        sales_shipping: meta.shippingExGst || 0,
+        seller_fees: settlement.fees_ex_gst,
+        refunds: meta.refundsExGst || 0,
+        reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
+        other_fees: (meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0),
+        gst_on_income: settlement.gst_on_sales,
+        gst_on_expenses: settlement.gst_on_fees,
+        bank_deposit: settlement.net_payout,
+        source: settlement.source,
+        status: 'already_recorded',
+        reconciliation_status: 'reconciled',
+      } as any);
+
+      if (error) return { success: false, error: error.message };
+      return {
+        success: true,
+        error: `This period is before your accounting boundary (set: ${boundarySetting.value}). Settlement saved as 'Already Recorded' — no Xero entry will be created.`,
+      };
+    }
+
     // Check for duplicate
     const { data: existing } = await supabase
       .from('settlements')
