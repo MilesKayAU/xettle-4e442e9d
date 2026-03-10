@@ -2046,37 +2046,11 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     return `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoiceId}`;
   };
 
-  const handleMarkSyncedOne = async (settlement: SettlementRecord) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      const { error } = await supabase.from('settlements').update({ status: 'synced_external' } as any).eq('id', settlement.id).eq('user_id', user.id);
-      if (error) throw error;
-      toast.success(`Marked ${settlement.settlement_id} as already in Xero`);
-      onDeleted(); // reloads
-    } catch (err: any) {
-      toast.error(`Failed: ${err.message}`);
-    }
-  };
+  const handleMarkSyncedOne = (settlement: SettlementRecord) => xeroMarkSynced(settlement.settlement_id);
 
-
-  const handleMarkSyncedBulk = async () => {
-    if (selectedIds.size === 0) return;
-    setMarkingSynced(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      for (const uuid of Array.from(selectedIds)) {
-        const { error } = await supabase.from('settlements').update({ status: 'synced_external' } as any).eq('id', uuid).eq('user_id', user.id);
-        if (error) throw error;
-      }
-      toast.success(`Marked ${selectedIds.size} settlement(s) as already in Xero`);
-      onDeleted(); // reloads
-    } catch (err: any) {
-      toast.error(`Failed: ${err.message}`);
-    } finally {
-      setMarkingSynced(false);
-    }
+  const handleMarkSyncedBulk = () => {
+    const selected = settlements.filter(s => selectedIds.has(s.id));
+    xeroBulkMarkSynced(selected as any);
   };
 
   if (loading) {
