@@ -937,6 +937,50 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         toast.info(`${label}: All ${dupCount} settlement${dupCount > 1 ? 's' : ''} already exist (duplicates skipped).`);
       }
 
+      // ── Learning loop: save fingerprint for low-confidence files ──
+      if (df.wasLowConfidence && savedCount > 0) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            // Extract headers for fingerprint
+            const extracted = await extractFileHeaders(df.file);
+            if (extracted) {
+              // Save to marketplace_file_fingerprints
+              await supabase.from('marketplace_file_fingerprints').insert({
+                user_id: user.id,
+                marketplace_code: marketplace,
+                column_signature: extracted.headers as any,
+                column_mapping: df.detection?.columnMapping || {} as any,
+                is_multi_marketplace: false,
+                file_pattern: df.file.name.replace(/\d+/g, '*'),
+              } as any);
+
+              // Create bug report for admin visibility
+              const scrubbedSample = scrubSampleRows(extracted.headers, extracted.sampleRows.slice(0, 3));
+              await supabase.from('bug_reports').insert({
+                submitted_by: user.id,
+                ai_classification: 'New marketplace saved',
+                description: `User confirmed new marketplace: ${MARKETPLACE_LABELS[marketplace] || marketplace}. Column signature saved to fingerprints. File: ${df.file.name}. Confidence was ${df.detection?.confidence || 0}%.`,
+                console_errors: JSON.stringify({
+                  type: 'new_marketplace_saved',
+                  filename: df.file.name,
+                  confidence: df.detection?.confidence || 0,
+                  marketplace,
+                  headers: extracted.headers,
+                  sampleRows: scrubbedSample,
+                }),
+                severity: 'low',
+                status: 'open',
+                page_url: window.location.pathname,
+              } as any);
+            }
+          }
+        } catch { /* silent — don't fail save for learning loop */ }
+
+        // Show post-save validation banner
+        setShowNewFormatBanner(true);
+      }
+
       setFiles(prev => {
         const updated = [...prev];
         updated[idx] = { ...updated[idx], status: 'saved', settlements, savedCount };
