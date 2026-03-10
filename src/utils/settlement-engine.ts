@@ -236,6 +236,61 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       ).catch(console.error);
     });
 
+    // Fire-and-forget: calculate and persist profit data
+    (async () => {
+      try {
+        const { calculateMarketplaceProfit } = await import('./profit-engine');
+        const [linesRes, costsRes] = await Promise.all([
+          supabase
+            .from('settlement_lines')
+            .select('settlement_id, sku, amount, order_id, transaction_type')
+            .eq('user_id', user.id)
+            .eq('settlement_id', settlement.settlement_id),
+          supabase
+            .from('product_costs')
+            .select('sku, cost, currency, label')
+            .eq('user_id', user.id),
+        ]);
+
+        const profitInput = {
+          settlement_id: settlement.settlement_id,
+          marketplace: settlement.marketplace,
+          gross_amount: Math.abs(settlement.sales_ex_gst || 0),
+          fees_amount: Math.abs(settlement.fees_ex_gst || 0),
+          period_start: settlement.period_start,
+          period_end: settlement.period_end,
+        };
+
+        const periodLabel = `${settlement.period_start} → ${settlement.period_end}`;
+        const profit = calculateMarketplaceProfit(
+          settlement.marketplace,
+          periodLabel,
+          profitInput,
+          (linesRes.data || []) as any,
+          (costsRes.data || []) as any,
+        );
+
+        await supabase.from('settlement_profit').upsert({
+          user_id: user.id,
+          settlement_id: settlement.settlement_id,
+          marketplace_code: profit.marketplace_code,
+          period_label: profit.period_label,
+          gross_revenue: profit.gross_revenue,
+          total_cogs: profit.total_cogs,
+          marketplace_fees: profit.marketplace_fees,
+          gross_profit: profit.gross_profit,
+          margin_percent: profit.margin_percent,
+          orders_count: profit.orders_count,
+          units_sold: profit.units_sold,
+          uncosted_sku_count: profit.uncosted_sku_count,
+          uncosted_revenue: profit.uncosted_revenue,
+          calculated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,marketplace_code,settlement_id' });
+      } catch (e) {
+        console.error('[profit-engine] fire-and-forget failed:', e);
+      }
+    })();
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Unknown error' };
