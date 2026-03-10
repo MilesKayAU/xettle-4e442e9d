@@ -2040,58 +2040,20 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     return `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoiceId}`;
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    if (selectedIds.size === settlements.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(settlements.map(s => s.id)));
-    }
-  };
-
-  const handleDelete = async () => {
-    if (selectedIds.size === 0) return;
-    setDeleting(true);
+  const handleDeleteOne = async (settlement: SettlementRecord) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-
-      // Get settlement_ids (text) for the selected rows
-      const selectedSettlements = settlements.filter(s => selectedIds.has(s.id));
-      const settlementTextIds = selectedSettlements.map(s => s.settlement_id);
-
-      // Delete related lines and unmapped first, then settlements
-      for (const sid of settlementTextIds) {
-        await supabase.from('settlement_lines').delete().eq('settlement_id', sid).eq('user_id', user.id);
-        await supabase.from('settlement_unmapped').delete().eq('settlement_id', sid).eq('user_id', user.id);
-      }
-
-      // Delete settlement records by UUID
-      const uuids = Array.from(selectedIds);
-      for (const uuid of uuids) {
-        const { error } = await supabase.from('settlements').delete().eq('id', uuid).eq('user_id', user.id);
-        if (error) throw error;
-      }
-
-      toast.success(`Deleted ${selectedIds.size} settlement${selectedIds.size !== 1 ? 's' : ''}`);
-      setSelectedIds(new Set());
-      setConfirmDelete(false);
+      await supabase.from('settlement_lines').delete().eq('settlement_id', settlement.settlement_id).eq('user_id', user.id);
+      await supabase.from('settlement_unmapped').delete().eq('settlement_id', settlement.settlement_id).eq('user_id', user.id);
+      const { error } = await supabase.from('settlements').delete().eq('id', settlement.id).eq('user_id', user.id);
+      if (error) throw error;
+      toast.success(`Deleted settlement ${settlement.settlement_id}`);
       onDeleted();
     } catch (err: any) {
       toast.error(`Delete failed: ${err.message}`);
-    } finally {
-      setDeleting(false);
     }
   };
-
-  const handleMarkSyncedOne = async (settlement: SettlementRecord) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
