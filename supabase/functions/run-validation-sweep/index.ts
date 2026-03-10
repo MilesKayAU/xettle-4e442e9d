@@ -350,6 +350,48 @@ async function sweepUser(adminSupabase: any, userId: string) {
     }
   }
 
+  // Bank matching for pushed but unmatched settlements (>3 days old)
+  try {
+    const { data: unmatchedPushed } = await adminSupabase
+      .from('marketplace_validation')
+      .select('settlement_id, marketplace_code, xero_pushed_at')
+      .eq('user_id', userId)
+      .eq('xero_pushed', true)
+      .eq('bank_matched', false)
+      .not('settlement_id', 'is', null)
+
+    if (unmatchedPushed && unmatchedPushed.length > 0) {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+      const eligible = unmatchedPushed.filter((r: any) => {
+        if (!r.xero_pushed_at) return true
+        return new Date(r.xero_pushed_at) < threeDaysAgo
+      })
+
+      if (eligible.length > 0) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+        for (const row of eligible) {
+          try {
+            await fetch(`${supabaseUrl}/functions/v1/match-bank-deposits`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serviceRoleKey}`,
+              },
+              body: JSON.stringify({ userId, settlementId: row.settlement_id }),
+            })
+          } catch (e) {
+            console.error(`Bank match call failed for ${row.settlement_id}:`, e)
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Bank matching step error:', e)
+  }
+
   // Log sweep completion
   await logEvent(adminSupabase, userId, 'validation_sweep_complete', summary, 'info')
 
