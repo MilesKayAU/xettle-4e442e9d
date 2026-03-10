@@ -9,6 +9,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -22,7 +23,7 @@ import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye, LayoutDashboard,
-  MapPin, RefreshCw,
+  MapPin, RefreshCw, ShoppingBag, Link2,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
@@ -1135,7 +1136,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         </CardContent>
       </Card>
 
-      {/* Shopify Sync Banner — always visible when Shopify is connected */}
+      {/* Shopify Connection / Sync Banners */}
+      {!hasShopifyConnection && (
+        <ShopifyConnectBanner />
+      )}
       {hasShopifyConnection && shopifyTokenInvalid && (
         <ShopifyReconnectBanner shopDomain={shopifyShopDomain} />
       )}
@@ -1773,6 +1777,84 @@ function FileGuide({ forceCollapsed }: { forceCollapsed?: boolean }) {
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+// ─── Shopify Connect Banner (no token exists) ──────────────────────────────
+
+function ShopifyConnectBanner() {
+  const [connecting, setConnecting] = useState(false);
+  const [shopDomain, setShopDomain] = useState('');
+
+  const handleConnect = async () => {
+    const domain = shopDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!domain) {
+      toast.error('Please enter your Shopify store domain (e.g. mystore.myshopify.com)');
+      return;
+    }
+
+    setConnecting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('You must be logged in');
+        setConnecting(false);
+        return;
+      }
+
+      const { data: result, error } = await supabase.functions.invoke('shopify-auth', {
+        body: { action: 'initiate', shop: domain, userId: session.user.id },
+      });
+
+      if (error) throw new Error(error.message);
+      if (result?.error) throw new Error(result.error);
+
+      if (result?.authUrl) {
+        window.location.href = result.authUrl;
+      }
+    } catch (err: any) {
+      console.error('Connect error:', err);
+      toast.error(err.message || 'Failed to connect');
+      setConnecting(false);
+    }
+  };
+
+  return (
+    <Card className="border-l-4 border-l-primary border-border bg-card">
+      <CardContent className="py-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <ShoppingBag className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Connect Shopify</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Connect your Shopify store to auto-sync payouts directly via API — no CSV uploads needed.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="mystore.myshopify.com"
+            value={shopDomain}
+            onChange={(e) => setShopDomain(e.target.value)}
+            className="text-sm h-9 max-w-xs"
+            onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+          />
+          <Button
+            onClick={handleConnect}
+            disabled={connecting}
+            size="sm"
+            className="gap-2 shrink-0"
+          >
+            {connecting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Link2 className="h-4 w-4" />
+            )}
+            {connecting ? 'Connecting…' : 'Connect'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
