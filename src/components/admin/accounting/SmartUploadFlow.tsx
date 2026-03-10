@@ -106,6 +106,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [files, setFiles] = useState<DetectedFile[]>([]);
   const [processingAll, setProcessingAll] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [unknownEntities, setUnknownEntities] = useState<UnknownEntity[]>([]);
+  const [showEntityDialog, setShowEntityDialog] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
