@@ -859,6 +859,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                         )}
                       </div>
                     )}
+                  </div>
                 );
               })}
             </div>
