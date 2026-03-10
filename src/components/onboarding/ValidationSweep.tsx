@@ -242,32 +242,38 @@ export default function ValidationSweep({
   };
 
   // Counts
+  // Filter out already_recorded rows from actionable views
+  const actionableRows = useMemo(() => {
+    return rows.filter(r => r.overall_status !== 'already_recorded');
+  }, [rows]);
+
   const counts = useMemo(() => {
     const c = { complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
-    rows.forEach(r => {
+    actionableRows.forEach(r => {
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') c.complete++;
       else if (r.overall_status === 'ready_to_push') c.ready_to_push++;
+      else if (r.overall_status === 'pushed_to_xero') c.complete++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') c.settlement_needed++;
       else if (r.overall_status === 'gap_detected') c.gap_detected++;
     });
     return c;
-  }, [rows]);
+  }, [actionableRows]);
 
   const filteredRows = useMemo(() => {
-    if (filter === 'all') return rows;
-    if (filter === 'complete') return rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched');
-    if (filter === 'ready_to_push') return rows.filter(r => r.overall_status === 'ready_to_push');
-    if (filter === 'settlement_needed') return rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-    if (filter === 'gap_detected') return rows.filter(r => r.overall_status === 'gap_detected');
-    return rows;
-  }, [rows, filter]);
+    if (filter === 'all') return actionableRows;
+    if (filter === 'complete') return actionableRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
+    if (filter === 'ready_to_push') return actionableRows.filter(r => r.overall_status === 'ready_to_push');
+    if (filter === 'settlement_needed') return actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+    if (filter === 'gap_detected') return actionableRows.filter(r => r.overall_status === 'gap_detected');
+    return actionableRows;
+  }, [actionableRows, filter]);
 
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at)
     : null;
 
-  const readyToPushRows = rows.filter(r => r.overall_status === 'ready_to_push');
-  const uploadNeededRows = rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+  const readyToPushRows = actionableRows.filter(r => r.overall_status === 'ready_to_push');
+  const uploadNeededRows = actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
 
   // ─── Sweep Animation ──────────────────────────────────────────────
   if (sweeping) {
