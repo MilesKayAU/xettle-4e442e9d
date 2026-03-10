@@ -8,6 +8,7 @@ import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyRe
 import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
 import SettlementsSummaryStrip from '@/components/admin/accounting/SettlementsSummaryStrip';
 import ActionControlPanel from '@/components/admin/accounting/ActionControlPanel';
+import NextExpectedSettlements from '@/components/admin/accounting/NextExpectedSettlements';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
