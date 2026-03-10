@@ -249,6 +249,16 @@ export default function ReconciliationStatus({ marketplaceCode, userId }: Reconc
           );
         })}
       </CardContent>
+
+      {unmatchedModalCheck && (
+        <UnmatchedOrdersModal
+          open={!!unmatchedModalCheck}
+          periodLabel={formatPeriodLabel(unmatchedModalCheck.period_start, unmatchedModalCheck.period_end)}
+          marketplaceName={unmatchedModalCheck.marketplace_code.replace(/_/g, ' ')}
+          orders={unmatchedOrders}
+          onClose={() => { setUnmatchedModalCheck(null); setUnmatchedOrders([]); }}
+        />
+      )}
     </Card>
   );
 }
