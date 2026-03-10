@@ -237,6 +237,7 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
   return { success: true, overwritten: isOverwrite };
 }
 
+export default function AccountingDashboard() {
   const [selectedPlatform, setSelectedPlatform] = useState('amazon');
   const selectedMarketplace = SELECTED_MARKETPLACE;
   const [activeTab, setActiveTab] = useState('upload');
