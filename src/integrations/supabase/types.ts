@@ -80,6 +80,48 @@ export type Database = {
         }
         Relationships: []
       }
+      entity_library: {
+        Row: {
+          accounting_impact: string
+          confirmed_count: number | null
+          created_at: string | null
+          detection_field: string | null
+          entity_name: string
+          entity_type: string
+          id: string
+          notes: string | null
+          source: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          accounting_impact: string
+          confirmed_count?: number | null
+          created_at?: string | null
+          detection_field?: string | null
+          entity_name: string
+          entity_type: string
+          id?: string
+          notes?: string | null
+          source?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          accounting_impact?: string
+          confirmed_count?: number | null
+          created_at?: string | null
+          detection_field?: string | null
+          entity_name?: string
+          entity_type?: string
+          id?: string
+          notes?: string | null
+          source?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       marketplace_ad_spend: {
         Row: {
           created_at: string
