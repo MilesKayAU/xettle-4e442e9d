@@ -65,7 +65,7 @@ const STATUS_ICONS: Record<string, { icon: string; label: string }> = {
   complete: { icon: '✅', label: 'Complete' },
   bank_matched: { icon: '✅', label: 'Complete' },
   ready_to_push: { icon: '🟡', label: 'Ready to push' },
-  pushed_to_xero: { icon: '🔄', label: 'In progress' },
+  pushed_to_xero: { icon: '✅', label: 'Synced to Xero' },
   settlement_needed: { icon: '❌', label: 'Missing/needed' },
   missing: { icon: '❌', label: 'Missing/needed' },
   gap_detected: { icon: '⚠️', label: 'Gap detected' },

@@ -172,7 +172,10 @@ export default function ReconciliationStatus({ marketplaceCode, userId }: Reconc
                     {formatPeriodLabel(check.period_start, check.period_end)}
                   </span>
                   <span className="text-xs text-muted-foreground truncate">
-                    {formatAUD(check.shopify_order_total)} → {formatAUD(check.settlement_net_received)}
+                    {formatAUD(check.settlement_net_received)}
+                    {check.shopify_order_total > 0 && check.shopify_order_total !== check.settlement_net_received
+                      ? ` vs ${formatAUD(check.shopify_order_total)} orders`
+                      : ' — Bank not verified'}
                   </span>
                 </div>
                 <Badge variant="outline" className={`text-[10px] h-5 flex-shrink-0 ${config.badgeClass}`}>
