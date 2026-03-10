@@ -28,6 +28,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
 import UnknownEntityDialog from './UnknownEntityDialog';
+import FirstContactModal from './FirstContactModal';
 import {
   Select,
   SelectContent,
