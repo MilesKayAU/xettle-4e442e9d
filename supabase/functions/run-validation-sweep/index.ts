@@ -259,27 +259,27 @@ async function sweepUser(adminSupabase: any, userId: string) {
           processing_error: null,
         }
 
-        // Step 1: Orders — filter by period date range
+        // Step 1: Orders — filter lines by this period's exact date range
         const periodStart = record.period_start
         const periodEnd = record.period_end
-        let orderData: { count: number; total: number } | null = null
-        for (const [aggKey, agg] of orderAgg) {
-          const [mName, mk] = aggKey.split('|')
-          const matchesMarketplace = mName?.toLowerCase().includes(mc.replace('_', ' ').toLowerCase()) ||
-              mName?.toLowerCase().includes(mc.split('_')[0])
-          if (!matchesMarketplace) continue
-          // mk is YYYY-MM — check if it falls within the period
-          const monthStart = `${mk}-01`
-          const monthEnd = `${mk}-28`
-          if (monthEnd < periodStart || monthStart > periodEnd) continue
-          if (!orderData) orderData = { count: 0, total: 0 }
-          orderData.count += agg.count
-          orderData.total += agg.total
+        const mcLowerInner = mc.replace('_', ' ').toLowerCase()
+        const mcPrefixInner = mc.split('_')[0].toLowerCase()
+        const uniqueOrders = new Set<string>()
+        let orderTotal = 0
+        for (const line of allOrderLines) {
+          if (!line.posted_date || !line.marketplace_name) continue
+          const mLower = line.marketplace_name.toLowerCase()
+          if (!(mLower.includes(mcLowerInner) || mLower.includes(mcPrefixInner))) continue
+          // Filter by period date range
+          if (line.posted_date < periodStart || line.posted_date > periodEnd) continue
+          orderTotal += Math.abs(Number(line.amount) || 0)
+          if (line.order_id) uniqueOrders.add(line.order_id)
         }
-        if (orderData) {
+        const orderCount = uniqueOrders.size || (orderTotal > 0 ? 1 : 0)
+        if (orderTotal > 0) {
           record.orders_found = true
-          record.orders_count = orderData.count
-          record.orders_total = orderData.total
+          record.orders_count = orderCount
+          record.orders_total = orderTotal
           record.orders_fetched_at = new Date().toISOString()
         }
 
