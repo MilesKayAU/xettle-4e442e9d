@@ -336,7 +336,7 @@ export default function ValidationSweep({
     );
   }
 
-  const allComplete = rows.every(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched');
+  const allComplete = actionableRows.length > 0 && actionableRows.every(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
 
   return (
     <div className="space-y-6">
