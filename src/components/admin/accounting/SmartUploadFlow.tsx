@@ -156,6 +156,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const { data, error } = await supabase.functions.invoke('fetch-shopify-payouts', {});
       if (error) throw error;
       if (data?.error) {
+        // Handle invalid/expired token
+        if (data.error === 'Shopify token invalid or expired') {
+          setShopifyTokenInvalid(true);
+          toast.error('Shopify token is invalid. Please reconnect via OAuth in Settings.');
+          return;
+        }
         if (data.message) {
           toast(data.message);
         } else {
@@ -172,7 +178,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         toast.info(`All Shopify payouts already imported (${skipped} checked)`);
       }
     } catch (err: any) {
-      toast.error(`Shopify sync failed: ${err.message || 'Unknown error'}`);
+      // Also catch 401 from the function invoke
+      if (err.message?.includes('401') || err.message?.includes('invalid') || err.message?.includes('expired')) {
+        setShopifyTokenInvalid(true);
+        toast.error('Shopify token is invalid. Please reconnect via OAuth in Settings.');
+      } else {
+        toast.error(`Shopify sync failed: ${err.message || 'Unknown error'}`);
+      }
     } finally {
       setShopifySyncing(false);
     }
