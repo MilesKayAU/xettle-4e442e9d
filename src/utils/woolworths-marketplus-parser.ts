@@ -231,8 +231,34 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
       const fields = parseCSVRow(lines[i]);
       if (fields.length < 5) continue;
 
-      const orderSource = fields[colMap.orderSource] || '';
-      if (!orderSource.trim()) continue;
+      let orderSource = (fields[colMap.orderSource] || '').trim();
+
+      // Rows with empty Order Source — infer from InvoiceRef or other fields
+      if (!orderSource) {
+        const invoiceRef = colMap.invoiceRef >= 0 ? (fields[colMap.invoiceRef] || '').trim() : '';
+        const orderId = colMap.orderId >= 0 ? (fields[colMap.orderId] || '').trim() : '';
+        
+        // MIL prefix on InvoiceRef = MyDeal
+        if (/^MIL/i.test(invoiceRef)) {
+          orderSource = 'MyDeal';
+        }
+        // BWM prefix = BigW
+        else if (/^BWM/i.test(invoiceRef)) {
+          orderSource = 'BigW';
+        }
+        // EDM or EM prefix = EverydayMarket
+        else if (/^(EDM|EM)/i.test(invoiceRef)) {
+          orderSource = 'EverydayMarket';
+        }
+        // If still empty, check if the row has any financial data — skip truly empty rows
+        else {
+          const netAmt = parseAmount(fields[colMap.netAmount] || '');
+          const salePrice = parseAmount(fields[colMap.totalSalePrice] || '');
+          if (netAmt === 0 && salePrice === 0) continue;
+          // Default unattributable rows to MyDeal (most common for transaction fees)
+          orderSource = 'MyDeal';
+        }
+      }
 
       allRows.push({
         orderId:         colMap.orderId >= 0 ? fields[colMap.orderId] || '' : '',
@@ -249,7 +275,7 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
         gstOnNetAmount:  colMap.gstOnNetAmount >= 0 ? parseAmount(fields[colMap.gstOnNetAmount] || '') : 0,
         originalOrderId: colMap.originalOrderId >= 0 ? fields[colMap.originalOrderId] || '' : '',
         invoiceRef:      colMap.invoiceRef >= 0 ? fields[colMap.invoiceRef] || '' : '',
-        orderSource:     orderSource.trim(),
+        orderSource:     orderSource,
         bankPaymentRef:  colMap.bankPaymentRef >= 0 ? fields[colMap.bankPaymentRef] || '' : '',
         bankPaymentDate: colMap.bankPaymentDate >= 0 ? normaliseDate(fields[colMap.bankPaymentDate] || '') : '',
       });
