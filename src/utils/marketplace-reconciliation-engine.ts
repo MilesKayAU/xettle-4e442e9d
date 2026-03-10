@@ -178,7 +178,7 @@ export async function saveReconciliationResult(
 
     const { error } = await supabase
       .from('reconciliation_checks')
-      .upsert(row, {
+      .upsert(row as any, {
         onConflict: 'user_id,marketplace_code,period_label',
       });
 
