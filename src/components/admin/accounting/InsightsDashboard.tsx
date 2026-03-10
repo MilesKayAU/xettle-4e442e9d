@@ -511,6 +511,9 @@ export default function InsightsDashboard() {
           </Card>
         </div>
 
+        {/* Reconciliation Health */}
+        <ReconciliationHealth />
+
         {/* $1 Sale Breakdown — main chart */}
         <Card>
           <CardHeader className="pb-3">

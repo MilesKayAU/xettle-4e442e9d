@@ -695,6 +695,19 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         )}
       </div>
 
+      {/* Reconciliation Status */}
+      {hasShopify && currentUserId ? (
+        <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
+      ) : !hasShopify && settlements.length > 0 ? (
+        <Card className="border-dashed border-border">
+          <CardContent className="py-4 text-center">
+            <p className="text-xs text-muted-foreground">
+              Connect Shopify to enable reconciliation →
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* Xero-aware bulk delete confirmation dialog */}
       <BulkDeleteDialog
         open={bulkDeleteDialogOpen}
