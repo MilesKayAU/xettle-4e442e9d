@@ -69,6 +69,9 @@ const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
   xero_push_success: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
   reconciliation_run: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
   validation_sweep_complete: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
+  bank_match_confirmed: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
+  bank_match_query: { icon: <Search className="h-3.5 w-3.5" />, color: 'text-blue-500' },
+  bank_match_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-500' },
   reconciliation_mismatch: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-500' },
   xero_push_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-500' },
   validation_sweep_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-500' },
@@ -483,6 +486,12 @@ function formatEventLabel(event: SystemEvent): string {
     case 'xero_push_success': return `Pushed to Xero: ${mp} ${period}`;
     case 'xero_push_failed': return `Xero push failed: ${mp} ${period}`;
     case 'reconciliation_run': return `Reconciliation completed: ${mp} ${period}`;
+    case 'bank_match_confirmed': return `Bank deposit matched: ${mp} ${period}`;
+    case 'bank_match_failed': return `No bank deposit found: ${mp} ${period}`;
+    case 'bank_match_query': {
+      const count = event.details?.txns_returned;
+      return `Bank feed queried: ${mp} — ${count ?? 0} transactions found`;
+    }
     case 'reconciliation_mismatch': {
       const diff = event.details?.difference;
       return `Reconciliation gap${diff ? `: ${formatAUD(diff)}` : ''} ${mp}`;

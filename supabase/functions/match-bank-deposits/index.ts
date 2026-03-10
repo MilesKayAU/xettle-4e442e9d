@@ -210,9 +210,33 @@ Deno.serve(async (req) => {
           const data = await res.json()
           bankTxns = data?.BankTransactions || []
           console.log(`[bank-match] Xero returned ${bankTxns.length} RECEIVE transactions. First:`, bankTxns.length > 0 ? JSON.stringify({ Total: bankTxns[0].Total, Date: bankTxns[0].Date, Reference: bankTxns[0].Reference, Contact: bankTxns[0].Contact?.Name, LineItem0: bankTxns[0].LineItems?.[0]?.Description }) : 'none')
+
+          // Log diagnostic to system_events so it's visible from the dashboard
+          await adminSupabase.from('system_events').insert({
+            user_id: userId,
+            event_type: 'bank_match_query',
+            marketplace_code: marketplace,
+            settlement_id: s.settlement_id,
+            period_label: `${s.period_start} → ${s.period_end}`,
+            details: {
+              where_clause: whereClause,
+              txns_returned: bankTxns.length,
+              deposit_amount_searched: depositAmount,
+              first_txn: bankTxns.length > 0 ? { total: bankTxns[0].Total, date: parseXeroDate(bankTxns[0].Date), reference: bankTxns[0].Reference, contact: bankTxns[0].Contact?.Name } : null,
+            },
+            severity: 'info',
+          })
         } else {
           const errText = await res.text()
           console.error(`Xero bank API error [${res.status}]:`, errText)
+          await adminSupabase.from('system_events').insert({
+            user_id: userId,
+            event_type: 'bank_match_query',
+            marketplace_code: marketplace,
+            settlement_id: s.settlement_id,
+            details: { error: `Xero API ${res.status}`, response: errText.substring(0, 500) },
+            severity: 'error',
+          })
         }
       } catch (e) {
         console.error('Xero bank fetch error:', e)
