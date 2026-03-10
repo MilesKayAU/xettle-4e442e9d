@@ -207,6 +207,10 @@ export default function Admin() {
               <Bug className="h-3.5 w-3.5" />
               Bug Reports
             </TabsTrigger>
+            <TabsTrigger value="integrity" className="flex items-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Data Integrity
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
