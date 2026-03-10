@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       }
 
       const scopes = 'read_fulfillments,read_inventory,read_orders,read_products,read_reports,read_shopify_payments_accounts,read_shopify_payments_payouts'
-      const redirectUri = 'https://xettle.lovable.app/shopify/callback'
+      const redirectUri = 'https://xettle.app/shopify/callback'
 
       const authUrl = `https://${shop}/admin/oauth/authorize?` +
         `client_id=${SHOPIFY_CLIENT_ID}&` +
