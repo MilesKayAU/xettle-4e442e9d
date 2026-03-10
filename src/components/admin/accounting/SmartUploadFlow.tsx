@@ -345,16 +345,30 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
     const results = await Promise.allSettled(
       uniqueFiles.map(async (file, idx) => {
+        // ── Step 0: For CSV files, check for multi-marketplace split ──
+        const isCSV = file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv');
+        if (isCSV) {
+          try {
+            const text = await file.text();
+            const parsed = parseCSVForSplitDetection(text);
+            if (parsed) {
+              const splitResult = detectMultiMarketplace({ headers: parsed.headers, rows: parsed.rows, filename: file.name });
+              if (splitResult.isMultiMarketplace && splitResult.groups.length > 1) {
+                // Multi-marketplace detected — return early with split result
+                return { idx, result: null, settlements: [] as StandardSettlement[], dbDupeIds: [] as string[], splitResult, csvHeaders: parsed.headers };
+              }
+            }
+          } catch { /* Fall through to normal detection */ }
+        }
+
         const result = await detectFile(file);
         let settlements: StandardSettlement[] = [];
         if (result && result.isSettlementFile) {
           settlements = await preParseFile(file, result);
 
           // Create the marketplace tab immediately on detection (before save)
-          // so the user sees it appear right away even if saving takes a while
           const mktCode = result.marketplace;
           if (mktCode && mktCode !== 'amazon_au') {
-            // Woolworths MarketPlus creates tabs for each sub-marketplace
             if (mktCode === 'woolworths_marketplus' && settlements.length > 0) {
               const subCodes = new Set(settlements.map(s => {
                 const subCode = s.metadata?.marketplaceCode;
@@ -368,7 +382,6 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               }
               onMarketplacesChanged?.();
             } else if (mktCode === 'shopify_orders' && settlements.length > 0) {
-              // Shopify Orders creates tabs for each detected sub-marketplace (kogan, mydeal, etc.)
               const subCodes = new Set(settlements.map(s => {
                 const subKey = s.metadata?.marketplaceKey;
                 return subKey || mktCode;
@@ -405,7 +418,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           } catch {}
         }
 
-        return { idx, result, settlements, dbDupeIds };
+        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: undefined as string[] | undefined };
       })
     );
 
