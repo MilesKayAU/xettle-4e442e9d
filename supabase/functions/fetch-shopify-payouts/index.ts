@@ -262,13 +262,17 @@ Deno.serve(async (req) => {
         const feesExGst = Math.abs(totalFees) - gstOnExpenses;
         const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
+        // Determine if this payout falls before the accounting boundary
+        const isBeforeBoundary = dateMin && payoutDate < dateMin;
+        const settlementStatus = isBeforeBoundary ? "already_recorded" : "ready_to_push";
+
         // ─── Insert settlement ───────────────────────────────────
         const { error: insertError } = await supabase.from("settlements").insert({
           user_id: userId,
           settlement_id: String(payout.id),
           marketplace: "shopify_payments",
           source: "api",
-          status: "ready_to_push",
+          status: settlementStatus,
           period_start: payoutDate,
           period_end: payoutDate,
           deposit_date: payoutDate,
