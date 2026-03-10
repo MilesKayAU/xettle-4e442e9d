@@ -135,6 +135,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         const text = await file.text();
         const result = parseShopifyOrdersCSV(text);
         if (!result.success) return [];
+
+        // Run entity detection on all parsed orders to find unknown tags
+        const allOrders = [...result.groups, ...result.unknownGroups].flatMap(g => g.orders);
+        if (allOrders.length > 0) {
+          try {
+            const entityResult = await detectUnknownEntities(allOrders);
+            if (entityResult.unknowns.length > 0) {
+              setUnknownEntities(entityResult.unknowns);
+              setShowEntityDialog(true);
+            }
+          } catch { /* silent — don't block parsing */ }
+        }
+
         return result.settlements;
       }
 
