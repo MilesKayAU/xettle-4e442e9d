@@ -4,7 +4,7 @@
  * All marketplace dashboards MUST use this hook for settlement CRUD.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { deleteSettlement } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
