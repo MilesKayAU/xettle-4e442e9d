@@ -534,8 +534,8 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
 
   const fileFormat = name.endsWith('.tsv') || name.endsWith('.txt') ? 'tsv' : name.endsWith('.xlsx') || name.endsWith('.xls') ? 'xlsx' : 'csv';
 
-  // Level 1: Hardcoded fingerprint
-  const fp = detectFromHeaders(extracted.headers);
+  // Level 1: Hardcoded fingerprint only (not heuristic)
+  const fp = detectByFingerprint(extracted.headers);
   if (fp) {
     fp.recordCount = extracted.rowCount;
     fp.fileFormat = fileFormat;
