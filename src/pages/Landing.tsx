@@ -86,7 +86,7 @@ export default function Landing() {
             <span className="text-primary">Your accountant is losing their mind.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Xettle automatically pulls every settlement from Amazon, Shopify, BigW, MyDeal, Everyday Market and more — reconciles the fees, and pushes clean invoices to Xero. No spreadsheets. No Sunday nights.
+            Xettle pulls every settlement from Amazon, Shopify, BigW, MyDeal and more — calculates every fee, and pushes clean invoices to Xero. Automatically.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
             No card needed · Works in minutes · Australian GST built in
@@ -336,6 +336,23 @@ export default function Landing() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
+          TRUST BAR
+          ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-10 px-4 bg-muted/30">
+        <div className="container-custom max-w-4xl mx-auto text-center">
+          <p className="text-sm font-medium text-muted-foreground tracking-wide">
+            Trusted by Australian sellers on{' '}
+            <span className="text-foreground font-semibold">Amazon</span> ·{' '}
+            <span className="text-foreground font-semibold">Shopify</span> ·{' '}
+            <span className="text-foreground font-semibold">BigW</span> ·{' '}
+            <span className="text-foreground font-semibold">MyDeal</span> ·{' '}
+            <span className="text-foreground font-semibold">Everyday Market</span> ·{' '}
+            <span className="text-foreground font-semibold">Bunnings</span>
+          </p>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
           PROFIT LEAK
           ════════════════════════════════════════════════════════════════════ */}
       <section className="py-20 px-4">
@@ -345,14 +362,14 @@ export default function Landing() {
               See your real marketplace profit
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              What landed in your bank after every marketplace fee and refund.
+              What landed in your bank after every marketplace fee and refund — across Amazon AU, Shopify, BigW and more.
             </p>
           </div>
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative">
               <img
                 src={profitLeakImg}
-                alt="Profit Leak Breakdown showing fee-by-fee analysis across Bunnings and Amazon AU"
+                alt="Profit Leak Breakdown showing fee-by-fee analysis across Amazon AU, Shopify and BigW"
                 className="rounded-2xl border border-border shadow-xl w-full"
                 loading="lazy"
               />
