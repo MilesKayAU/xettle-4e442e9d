@@ -410,7 +410,9 @@ export default function ActionCentre({
           )}
 
           {/* Awaiting Bank Match */}
-          {awaitingBank.length > 0 && (
+          {awaitingBank.length > 0 && (() => {
+            const grouped = groupByMarketplaceMonth(awaitingBank);
+            return (
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
@@ -421,16 +423,21 @@ export default function ActionCentre({
                   {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} pending bank match
                 </p>
                 <ul className="space-y-1">
-                  {(expandedCards['bank'] ? awaitingBank : awaitingBank.slice(0, 3)).map(r => (
-                    <li key={r.id} className="text-xs flex items-center gap-1.5">
+                  {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
+                    <li key={g.key} className="text-xs flex items-center gap-1.5">
                       <span className="text-blue-500">•</span>
-                      {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {r.settlement_net ? formatAUD(r.settlement_net) : ''}
+                      <span>{g.label}</span>
+                      {g.count > 1 ? (
+                        <span className="text-muted-foreground">· {g.count} settlements{g.total ? ` · ${formatAUD(g.total)}` : ''}</span>
+                      ) : g.total ? (
+                        <span className="text-muted-foreground">· {formatAUD(g.total)}</span>
+                      ) : null}
                     </li>
                   ))}
-                  {awaitingBank.length > 3 && (
+                  {grouped.length > 3 && (
                     <li>
                       <button onClick={() => setExpandedCards(prev => ({ ...prev, bank: !prev.bank }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                        {expandedCards['bank'] ? '− Show less' : `+ ${awaitingBank.length - 3} more`}
+                        {expandedCards['bank'] ? '− Show less' : `+ ${grouped.length - 3} more`}
                       </button>
                     </li>
                   )}
@@ -440,7 +447,8 @@ export default function ActionCentre({
                 </Button>
               </CardContent>
             </Card>
-          )}
+            );
+          })()}
 
           {/* All Clear */}
           {complete.length > 0 && (() => {
