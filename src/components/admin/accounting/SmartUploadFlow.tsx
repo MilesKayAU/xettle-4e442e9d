@@ -1752,6 +1752,83 @@ function FileGuide({ forceCollapsed }: { forceCollapsed?: boolean }) {
   );
 }
 
+// ─── Shopify Reconnect Banner ───────────────────────────────────────────────
+
+function ShopifyReconnectBanner({ shopDomain }: { shopDomain: string | null }) {
+  const [reconnecting, setReconnecting] = useState(false);
+
+  const handleReconnect = async () => {
+    setReconnecting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('You must be logged in');
+        setReconnecting(false);
+        return;
+      }
+
+      const domain = shopDomain || '';
+      if (!domain) {
+        toast.error('No shop domain found. Please go to Settings → Shopify to reconnect.');
+        setReconnecting(false);
+        return;
+      }
+
+      // Delete invalid token first
+      await supabase.functions.invoke('shopify-auth', {
+        method: 'POST',
+        headers: { 'x-action': 'disconnect' },
+      });
+
+      // Re-initiate OAuth
+      const { data: result, error } = await supabase.functions.invoke('shopify-auth', {
+        body: { action: 'initiate', shop: domain, userId: session.user.id },
+      });
+
+      if (error) throw new Error(error.message);
+      if (result?.error) throw new Error(result.error);
+
+      if (result?.authUrl) {
+        window.location.href = result.authUrl;
+      }
+    } catch (err: any) {
+      console.error('Reconnect error:', err);
+      toast.error(err.message || 'Failed to reconnect');
+      setReconnecting(false);
+    }
+  };
+
+  return (
+    <Card className="border-l-4 border-l-amber-500 border-border bg-card">
+      <CardContent className="py-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Shopify Token Invalid</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Your Shopify connection needs to be re-authorised via OAuth. This usually happens when the app credentials change. Click below to reconnect — it only takes a few seconds.
+            </p>
+          </div>
+        </div>
+        <Button
+          onClick={handleReconnect}
+          disabled={reconnecting}
+          size="sm"
+          variant="default"
+          className="gap-2"
+        >
+          {reconnecting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {reconnecting ? 'Reconnecting…' : 'Reconnect Shopify'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Shopify Sync Banner ────────────────────────────────────────────────────
 
 function ShopifySyncBanner({ onSync, syncing }: { onSync: () => void; syncing: boolean }) {
