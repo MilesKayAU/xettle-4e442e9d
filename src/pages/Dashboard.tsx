@@ -369,6 +369,16 @@ export default function Dashboard() {
                   }}
                 />
               )}
+
+              {/* Accounting Boundary Settings */}
+              <AccountingBoundarySettings
+                xeroConnected={false}
+                onConnectXero={() => {
+                  switchView('settlements');
+                  setSelectedMarketplace('amazon_au');
+                  setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
+                }}
+              />
             </div>
           </ErrorBoundary>
         )}
