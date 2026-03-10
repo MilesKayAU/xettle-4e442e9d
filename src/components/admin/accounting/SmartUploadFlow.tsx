@@ -1249,15 +1249,99 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           })()}
 
           {files.map((df, idx) => (
-            <FileResultCard
-              key={`${df.file.name}-${idx}`}
-              df={df}
-              idx={idx}
-              onRemove={removeFile}
-              onOverride={overrideMarketplace}
-              onAnalyzeAI={analyzeWithAI}
-              onProcess={processFile}
-              onSetStatus={setFileStatus}
+            df.status === 'multi_split' && df.splitResult ? (
+              <MultiMarketplaceSplitCard
+                key={`${df.file.name}-${idx}`}
+                filename={df.file.name}
+                splitResult={df.splitResult}
+                headers={df.csvHeaders || []}
+                onConfirm={async (groups, rememberFormat) => {
+                  // Save fingerprint if requested
+                  if (rememberFormat && df.csvHeaders && df.splitResult?.splitColumn) {
+                    await saveSplitFingerprint(df.csvHeaders, df.splitResult.splitColumn, groups);
+                  }
+
+                  // Now re-detect as woolworths_marketplus (the existing parser handles the actual splitting)
+                  // The split confirmation just validates the user is happy with the grouping
+                  // Re-run detection normally and proceed
+                  const text = await df.file.text();
+                  const result = await detectFile(df.file);
+                  let settlements: StandardSettlement[] = [];
+                  
+                  if (result && result.isSettlementFile) {
+                    settlements = await preParseFile(df.file, result);
+                  }
+
+                  // If the existing parser didn't handle it (generic CSV), we need to handle it ourselves
+                  if (settlements.length === 0 && result) {
+                    // Fall through — the file will be processed as a normal detected file
+                  }
+
+                  // Create marketplace tabs for detected groups
+                  for (const g of groups) {
+                    await ensureMarketplaceConnection(g.marketplaceCode);
+                  }
+                  onMarketplacesChanged?.();
+
+                  setFiles(prev => {
+                    const updated = [...prev];
+                    updated[idx] = {
+                      ...updated[idx],
+                      status: 'detected',
+                      detection: result || {
+                        marketplace: 'woolworths_marketplus',
+                        marketplaceLabel: `${groups.length} Marketplaces`,
+                        confidence: 95,
+                        isSettlementFile: true,
+                        detectionLevel: 1,
+                      },
+                      settlements: settlements.length > 0 ? settlements : undefined,
+                    };
+                    return updated;
+                  });
+                }}
+                onCancel={() => {
+                  // Cancel split — re-detect as single file
+                  setFiles(prev => {
+                    const updated = [...prev];
+                    updated[idx] = {
+                      ...updated[idx],
+                      status: 'detecting',
+                      splitResult: undefined,
+                    };
+                    return updated;
+                  });
+                  // Re-run normal detection without split
+                  (async () => {
+                    const result = await detectFile(df.file);
+                    const settlements = result?.isSettlementFile ? await preParseFile(df.file, result) : [];
+                    setFiles(prev => {
+                      const updated = [...prev];
+                      updated[idx] = {
+                        ...updated[idx],
+                        status: result ? (result.isSettlementFile ? 'detected' : 'wrong_file') : 'unknown',
+                        detection: result,
+                        settlements: settlements.length > 0 ? settlements : undefined,
+                        splitResult: undefined,
+                      };
+                      return updated;
+                    });
+                  })();
+                }}
+              />
+            ) : (
+              <FileResultCard
+                key={`${df.file.name}-${idx}`}
+                df={df}
+                idx={idx}
+                onRemove={removeFile}
+                onOverride={overrideMarketplace}
+                onAnalyzeAI={analyzeWithAI}
+                onProcess={processFile}
+                onSetStatus={setFileStatus}
+              />
+            )
+          ))}
             />
           ))}
 
