@@ -482,6 +482,7 @@ export type Database = {
           settlement_net_received: number | null
           shopify_order_total: number | null
           status: string | null
+          unmatched_orders: string[] | null
           updated_at: string | null
           user_id: string
         }
@@ -499,6 +500,7 @@ export type Database = {
           settlement_net_received?: number | null
           shopify_order_total?: number | null
           status?: string | null
+          unmatched_orders?: string[] | null
           updated_at?: string | null
           user_id: string
         }
@@ -516,6 +518,7 @@ export type Database = {
           settlement_net_received?: number | null
           shopify_order_total?: number | null
           status?: string | null
+          unmatched_orders?: string[] | null
           updated_at?: string | null
           user_id?: string
         }

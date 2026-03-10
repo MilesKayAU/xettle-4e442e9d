@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, AlertTriangle, XCircle, Clock, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, Clock, ChevronDown, ChevronRight, ExternalLink, Eye } from 'lucide-react';
+import UnmatchedOrdersModal, { type UnmatchedOrder } from './UnmatchedOrdersModal';
 
 interface ReconciliationCheck {
   id: string;
@@ -23,6 +24,7 @@ interface ReconciliationCheck {
   difference: number;
   status: string;
   notes: string | null;
+  unmatched_orders: string[] | null;
 }
 
 interface ReconciliationStatusProps {
@@ -72,6 +74,8 @@ export default function ReconciliationStatus({ marketplaceCode, userId }: Reconc
   const [checks, setChecks] = useState<ReconciliationCheck[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [unmatchedModalCheck, setUnmatchedModalCheck] = useState<ReconciliationCheck | null>(null);
+  const [unmatchedOrders, setUnmatchedOrders] = useState<UnmatchedOrder[]>([]);
 
   useEffect(() => {
     loadChecks();
@@ -208,6 +212,32 @@ export default function ReconciliationStatus({ marketplaceCode, userId }: Reconc
                     </ul>
                   </div>
 
+                  {check.unmatched_orders && check.unmatched_orders.length > 0 && (
+                    <div className="border-t border-border pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Build basic unmatched order objects from stored IDs
+                          const orders: UnmatchedOrder[] = check.unmatched_orders!.map(id => ({
+                            order_number: id,
+                            date: '—',
+                            amount: 0,
+                            customer: '—',
+                            status: 'unmatched',
+                          }));
+                          setUnmatchedOrders(orders);
+                          setUnmatchedModalCheck(check);
+                        }}
+                      >
+                        <Eye className="h-3 w-3" />
+                        View {check.unmatched_orders.length} unmatched order{check.unmatched_orders.length !== 1 ? 's' : ''}
+                      </Button>
+                    </div>
+                  )}
+
                   {check.notes && (
                     <p className="text-[10px] text-muted-foreground italic border-t border-border pt-1">
                       {check.notes}
@@ -219,6 +249,16 @@ export default function ReconciliationStatus({ marketplaceCode, userId }: Reconc
           );
         })}
       </CardContent>
+
+      {unmatchedModalCheck && (
+        <UnmatchedOrdersModal
+          open={!!unmatchedModalCheck}
+          periodLabel={formatPeriodLabel(unmatchedModalCheck.period_start, unmatchedModalCheck.period_end)}
+          marketplaceName={unmatchedModalCheck.marketplace_code.replace(/_/g, ' ')}
+          orders={unmatchedOrders}
+          onClose={() => { setUnmatchedModalCheck(null); setUnmatchedOrders([]); }}
+        />
+      )}
     </Card>
   );
 }
