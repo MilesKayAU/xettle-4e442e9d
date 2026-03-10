@@ -264,16 +264,22 @@ async function sweepUser(adminSupabase: any, userId: string) {
           processing_error: null,
         }
 
-        // Step 1: Orders
+        // Step 1: Orders — filter by period date range
+        const periodStart = record.period_start
+        const periodEnd = record.period_end
         let orderData: { count: number; total: number } | null = null
         for (const [aggKey, agg] of orderAgg) {
-          const [mName] = aggKey.split('|')
-          if (mName?.toLowerCase().includes(mc.replace('_', ' ').toLowerCase()) ||
-              mName?.toLowerCase().includes(mc.split('_')[0])) {
-            if (!orderData) orderData = { count: 0, total: 0 }
-            orderData.count += agg.count
-            orderData.total += agg.total
-          }
+          const [mName, mk] = aggKey.split('|')
+          const matchesMarketplace = mName?.toLowerCase().includes(mc.replace('_', ' ').toLowerCase()) ||
+              mName?.toLowerCase().includes(mc.split('_')[0])
+          if (!matchesMarketplace) continue
+          // mk is YYYY-MM — check if it falls within the period
+          const monthStart = `${mk}-01`
+          const monthEnd = `${mk}-28`
+          if (monthEnd < periodStart || monthStart > periodEnd) continue
+          if (!orderData) orderData = { count: 0, total: 0 }
+          orderData.count += agg.count
+          orderData.total += agg.total
         }
         if (orderData) {
           record.orders_found = true

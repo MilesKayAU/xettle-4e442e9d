@@ -448,7 +448,7 @@ export default function ValidationSweep({
 
                   {/* Orders */}
                   <td className="px-4 py-3 text-center">
-                    {row.orders_found ? (
+                    {row.orders_found && row.orders_count > 0 ? (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -460,6 +460,8 @@ export default function ValidationSweep({
                           <TooltipContent>{row.orders_count} orders totalling {formatAUD(row.orders_total)}</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
+                    ) : row.settlement_uploaded ? (
+                      <span className="text-xs text-muted-foreground">—</span>
                     ) : (
                       <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
                     )}
