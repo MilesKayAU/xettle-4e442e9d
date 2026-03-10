@@ -269,6 +269,19 @@ export async function autoReconcileSettlement(
     );
 
     await saveReconciliationResult(result);
+
+    // Fire-and-forget: update marketplace_validation with reconciliation result
+    supabase.from('marketplace_validation' as any).upsert({
+      user_id: user.id,
+      marketplace_code: marketplace,
+      period_label: periodLabel,
+      period_start: periodStart,
+      period_end: periodEnd,
+      reconciliation_status: result.status,
+      reconciliation_difference: result.difference,
+    } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
+      if (valErr) console.error('[marketplace_validation] recon upsert error:', valErr);
+    });
   } catch (err) {
     console.error('[autoReconcileSettlement] Error:', err);
   }
