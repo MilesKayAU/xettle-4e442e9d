@@ -385,6 +385,7 @@ export default function Dashboard() {
                   setSelectedMarketplace('amazon_au');
                   setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
                 }}
+                onGoToUpload={() => switchView('smart_upload')}
               />
             </div>
           </ErrorBoundary>
