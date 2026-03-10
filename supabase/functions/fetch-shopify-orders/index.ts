@@ -114,6 +114,17 @@ Deno.serve(async (req) => {
 
     // 2. Build Shopify API URL
     const buildUrl = (cursor?: string) => {
+      // When using cursor pagination, Shopify only allows limit, fields, and page_info
+      if (cursor) {
+        const params = new URLSearchParams({
+          limit: String(effectiveLimit),
+          page_info: cursor,
+          fields:
+            "id,name,created_at,processed_at,financial_status,gateway,note_attributes,tags,subtotal_price,total_shipping_price_set,total_tax,total_price,total_discounts,line_items,payment_gateway_names,source_name",
+        });
+        return `https://${shopDomain}/admin/api/2026-01/orders.json?${params.toString()}`;
+      }
+
       const params = new URLSearchParams({
         status: "any",
         financial_status: "paid",
@@ -123,7 +134,6 @@ Deno.serve(async (req) => {
       });
       if (effectiveDateFrom) params.set("created_at_min", effectiveDateFrom);
       if (dateTo) params.set("created_at_max", dateTo);
-      if (cursor) params.set("page_info", cursor);
       return `https://${shopDomain}/admin/api/2026-01/orders.json?${params.toString()}`;
     };
 
