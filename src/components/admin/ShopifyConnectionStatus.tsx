@@ -288,6 +288,11 @@ const ShopifyConnectionStatus = () => {
       return;
     }
 
+    if (!token.startsWith('shpat_')) {
+      toast.error('Invalid token — Custom App tokens must start with "shpat_". If you connected via OAuth, use the "Connect Shopify" button instead.');
+      return;
+    }
+
     setSavingToken(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
