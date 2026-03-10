@@ -467,6 +467,60 @@ export type Database = {
         }
         Relationships: []
       }
+      reconciliation_checks: {
+        Row: {
+          actual_commission: number | null
+          created_at: string | null
+          difference: number | null
+          expected_commission: number | null
+          id: string
+          marketplace_code: string
+          notes: string | null
+          period_end: string
+          period_label: string
+          period_start: string
+          settlement_net_received: number | null
+          shopify_order_total: number | null
+          status: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          actual_commission?: number | null
+          created_at?: string | null
+          difference?: number | null
+          expected_commission?: number | null
+          id?: string
+          marketplace_code: string
+          notes?: string | null
+          period_end: string
+          period_label: string
+          period_start: string
+          settlement_net_received?: number | null
+          shopify_order_total?: number | null
+          status?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          actual_commission?: number | null
+          created_at?: string | null
+          difference?: number | null
+          expected_commission?: number | null
+          id?: string
+          marketplace_code?: string
+          notes?: string | null
+          period_end?: string
+          period_label?: string
+          period_start?: string
+          settlement_net_received?: number | null
+          shopify_order_total?: number | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       settlement_lines: {
         Row: {
           accounting_category: string | null
