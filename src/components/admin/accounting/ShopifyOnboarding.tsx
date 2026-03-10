@@ -477,6 +477,25 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
               </div>
             </div>
 
+            {/* Or fetch via API */}
+            {shopConnected && shopDomain && (
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center"><span className="bg-card px-3 text-xs text-muted-foreground">or</span></div>
+              </div>
+            )}
+            {shopConnected && shopDomain && (
+              <Button
+                onClick={handleApiFetch}
+                disabled={apiFetching}
+                variant="outline"
+                className="w-full gap-2"
+              >
+                {apiFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Fetch orders from {shopDomain} automatically
+              </Button>
+            )}
+
             {/* What Xettle does */}
             <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2">
               <p className="text-xs font-medium text-foreground">That's it. Xettle will:</p>
