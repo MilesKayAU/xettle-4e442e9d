@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.fetch-shopify-payouts]
 verify_jwt = false
+
+[functions.auto-push-xero]
+verify_jwt = false
+
+[functions.scheduled-sync]
+verify_jwt = false
