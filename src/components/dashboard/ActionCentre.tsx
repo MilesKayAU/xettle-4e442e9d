@@ -438,7 +438,7 @@ export default function ActionCentre({
               <span>🟡 Ready to push</span>
               <span>⚠️ Gap detected</span>
               <span>❌ Missing/needed</span>
-              <span>🔄 In progress</span>
+              <span>✅ Synced to Xero</span>
             </div>
           </CardContent>
         </Card>
