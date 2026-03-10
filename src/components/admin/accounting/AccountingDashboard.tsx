@@ -2494,89 +2494,16 @@ function BatchSettlementReview({
     onBatchUpdate(updated);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { header, summary, lines, unmapped, splitMonth } = item.parsed;
-
-      // Duplicate check: overwrite existing with fresh parse
-      const { data: existingData } = await supabase
-        .from('settlements')
-        .select('id')
-        .eq('settlement_id', header.settlementId)
-        .eq('user_id', user.id)
-        .limit(1);
-
-      if (existingData && existingData.length > 0) {
-        await removeExistingSettlementForUser(user.id, header.settlementId, selectedCountry);
-        toast.warning(`Settlement ${header.settlementId} already saved. Overwriting with freshly parsed data.`);
-      }
-
-      await supabase.from('settlements').insert({
-        user_id: user.id,
-        settlement_id: header.settlementId,
-        marketplace: selectedCountry,
-        period_start: header.periodStart,
-        period_end: header.periodEnd,
-        deposit_date: header.depositDate,
-        sales_principal: summary.salesPrincipal,
-        sales_shipping: summary.salesShipping,
-        promotional_discounts: summary.promotionalDiscounts,
-        seller_fees: summary.sellerFees,
-        fba_fees: summary.fbaFees,
-        storage_fees: summary.storageFees,
-        refunds: summary.refunds,
-        reimbursements: summary.reimbursements,
-        other_fees: summary.otherFees,
-        net_ex_gst: summary.netExGst,
-        gst_on_income: summary.gstOnIncome,
-        gst_on_expenses: summary.gstOnExpenses,
-        bank_deposit: summary.bankDeposit,
-        reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
-        status: 'saved',
-        is_split_month: splitMonth.isSplitMonth,
-        split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
-        split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-        parser_version: PARSER_VERSION,
-      } as any);
-
-      if (lines.length > 0) {
-        const lineRows = lines.map(l => ({
-          user_id: user.id,
-          settlement_id: header.settlementId,
-          transaction_type: l.transactionType,
-          amount_type: l.amountType,
-          amount_description: l.amountDescription,
-          accounting_category: l.accountingCategory,
-          amount: l.amount,
-          order_id: l.orderId || null,
-          sku: l.sku || null,
-          posted_date: l.postedDate || null,
-          marketplace_name: l.marketplaceName || null,
-        }));
-        for (let i = 0; i < lineRows.length; i += 500) {
-          const chunk = lineRows.slice(i, i + 500);
-          await supabase.from('settlement_lines').insert(chunk);
-        }
-      }
-
-      if (unmapped.length > 0) {
-        const unmappedRows = unmapped.map(u => ({
-          user_id: user.id,
-          settlement_id: header.settlementId,
-          transaction_type: u.transactionType,
-          amount_type: u.amountType,
-          amount_description: u.amountDescription,
-          amount: u.amount,
-          raw_row: u.rawRow,
-        }));
-        await supabase.from('settlement_unmapped').insert(unmappedRows);
+      const result = await saveAmazonSettlement({ parsed: item.parsed, marketplace: selectedCountry });
+      if (!result.success) throw new Error(result.error);
+      if (result.overwritten) {
+        toast.warning(`Settlement ${item.parsed.header.settlementId} already saved. Overwriting with freshly parsed data.`);
       }
 
       const u2 = [...batch];
       u2[index] = { ...u2[index], saving: false, saved: true };
       onBatchUpdate(u2);
-      toast.success(`Settlement ${header.settlementId} saved ✓`);
+      toast.success(`Settlement ${item.parsed.header.settlementId} saved ✓`);
     } catch (err: any) {
       toast.error(`Save failed: ${err.message}`);
       const u2 = [...batch];
