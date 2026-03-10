@@ -304,7 +304,7 @@ export default function ActionCentre({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Needs Attention */}
-          {uploadNeeded.length > 0 && (
+          {uploadNeededManual.length > 0 && (
             <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center justify-between">
@@ -323,17 +323,17 @@ export default function ActionCentre({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {refreshingUploads ? 'Checking...' : `${uploadNeeded.length} marketplace settlement${uploadNeeded.length > 1 ? 's' : ''} missing`}
+                  {refreshingUploads ? 'Checking...' : `${uploadNeededManual.length} marketplace settlement${uploadNeededManual.length > 1 ? 's' : ''} missing`}
                 </p>
                 <ul className="space-y-1">
-                  {uploadNeeded.slice(0, 3).map(r => (
+                  {uploadNeededManual.slice(0, 3).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-amber-500">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
                     </li>
                   ))}
-                  {uploadNeeded.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {uploadNeeded.length - 3} more</li>
+                  {uploadNeededManual.length > 3 && (
+                    <li className="text-xs text-muted-foreground">+ {uploadNeededManual.length - 3} more</li>
                   )}
                 </ul>
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
