@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
 
     // ─── Enforce accounting boundary ────────────────────────────────
     let effectiveDateFrom = dateFrom;
+    console.log("[fetch-shopify-orders] Querying accounting boundary...");
     const { data: boundarySetting } = await supabase
       .from("app_settings")
       .select("value")
@@ -88,14 +89,18 @@ Deno.serve(async (req) => {
         effectiveDateFrom = boundaryDate + "T00:00:00Z";
       }
     }
+    console.log("[fetch-shopify-orders] Boundary resolved, effectiveDateFrom:", effectiveDateFrom);
 
     // 1. Get access token from shopify_tokens
+    console.log("[fetch-shopify-orders] Querying shopify_tokens for:", shopDomain);
     const { data: tokenRow, error: tokenError } = await supabase
       .from("shopify_tokens")
       .select("access_token")
       .eq("user_id", resolvedUserId)
       .eq("shop_domain", shopDomain)
       .single();
+
+    console.log("[fetch-shopify-orders] Token query result:", { found: !!tokenRow, error: tokenError?.message });
 
     if (tokenError || !tokenRow) {
       return new Response(
@@ -105,6 +110,7 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = tokenRow.access_token;
+    console.log("[fetch-shopify-orders] Got access token, length:", accessToken?.length);
 
     // 2. Build Shopify API URL
     const buildUrl = (cursor?: string) => {
