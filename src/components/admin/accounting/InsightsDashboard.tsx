@@ -519,6 +519,9 @@ export default function InsightsDashboard() {
         {/* Cross-Marketplace Profit Comparison */}
         <MarketplaceProfitComparison />
 
+        {/* SKU Profit Comparison */}
+        <SkuComparisonView />
+
         {/* $1 Sale Breakdown — main chart */}
         <Card>
           <CardHeader className="pb-3">
