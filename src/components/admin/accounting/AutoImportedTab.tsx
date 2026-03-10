@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import {
   CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw,
   CloudDownload, ShieldCheck, AlertTriangle, CheckSquare, Square, Zap, Clock,
-  Search, Banknote, FileCheck, HelpCircle
+  Search, Banknote, FileCheck, HelpCircle, ChevronDown, ChevronRight
 } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
 
 interface AutoImportedSettlement {
   id: string;
