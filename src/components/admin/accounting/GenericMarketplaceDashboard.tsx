@@ -165,7 +165,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             {refreshingXero ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             Refresh from Xero
           </Button>
-          <XeroConnectionStatus />
+          
         </div>
       </div>
 

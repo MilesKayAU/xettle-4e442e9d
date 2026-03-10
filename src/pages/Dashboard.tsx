@@ -492,14 +492,6 @@ export default function Dashboard() {
           <ErrorBoundary>
             <div className="space-y-6">
 
-              {/* Monthly Reconciliation Status */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <MonthlyReconciliationStatus
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                  onSelectMarketplace={setSelectedMarketplace}
-                />
-              )}
 
               {/* Marketplace Switcher */}
               <div>
