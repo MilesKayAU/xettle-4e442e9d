@@ -41,7 +41,7 @@ const ShopifyConnectionStatus = () => {
   // Discovery modal state
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
   const [discovering, setDiscovering] = useState(false);
-  const [discoveredMarketplaces, setDiscoveredMarketplaces] = useState<DiscoveredMarketplace[]>([]);
+  const [discoveryResult, setDiscoveryResult] = useState<BatchDetectionResult | null>(null);
   const [creatingTabs, setCreatingTabs] = useState(false);
 
   // Pre-populate shop domain from app_settings
