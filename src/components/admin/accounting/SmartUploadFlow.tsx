@@ -362,7 +362,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               const splitResult = detectMultiMarketplace({ headers: parsed.headers, rows: parsed.rows, filename: file.name });
               if (splitResult.isMultiMarketplace && splitResult.groups.length > 1) {
                 // Multi-marketplace detected — return early with split result
-                return { idx, result: null, settlements: [] as StandardSettlement[], dbDupeIds: [] as string[], splitResult, csvHeaders: parsed.headers };
+                return { idx, result: null, settlements: [] as StandardSettlement[], dbDupeIds: [] as string[], splitResult, csvHeaders: parsed.headers, sampleRows: parsed.rows.slice(0, 3).map((r: Record<string, string>) => Object.values(r)) };
               }
             }
           } catch { /* Fall through to normal detection */ }
