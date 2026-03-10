@@ -159,6 +159,26 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     }
   };
 
+  const handleRescan = async () => {
+    setSyncing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error('Please log in first.'); return; }
+
+      toast.info('Re-scanning channels...');
+      await supabase.functions.invoke('scan-shopify-channels', {
+        body: { userId: user.id },
+      });
+
+      await loadAlerts();
+      toast.success('Channel scan complete.');
+    } catch (err: any) {
+      toast.error(`Scan failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleIgnore = async (alert: ChannelAlert) => {
     await supabase
       .from('channel_alerts' as any)
