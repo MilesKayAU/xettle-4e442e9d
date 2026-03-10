@@ -97,6 +97,8 @@ export default function ActionCentre({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingUploads, setRefreshingUploads] = useState(false);
+  const [userCreatedAt, setUserCreatedAt] = useState<Date | null>(null);
+  const [apiSyncedMarketplaces, setApiSyncedMarketplaces] = useState<Set<string>>(new Set());
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -106,13 +108,19 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
+        supabase.auth.getUser(),
+        supabase.from('settlements').select('marketplace').eq('source', 'api'),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
       if (eventsRes.data) setEvents(eventsRes.data as SystemEvent[]);
+      if (userRes.data?.user?.created_at) setUserCreatedAt(new Date(userRes.data.user.created_at));
+      if (apiSettlementsRes.data) {
+        setApiSyncedMarketplaces(new Set(apiSettlementsRes.data.map((s: any) => s.marketplace)));
+      }
     } catch (err) {
       console.error('ActionCentre load error:', err);
     } finally {
@@ -149,11 +157,13 @@ export default function ActionCentre({
 
   // ─── Computed ──────────────────────────────────────────────────────
   const uploadNeeded = rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+  // Filter out API-synced marketplaces from the "needs upload" list — they sync automatically
+  const uploadNeededManual = uploadNeeded.filter(r => !apiSyncedMarketplaces.has(r.marketplace_code));
   const readyToPush = rows.filter(r => r.overall_status === 'ready_to_push');
   const awaitingBank = rows.filter(r => r.overall_status === 'pushed_to_xero' || (r.xero_pushed && !r.bank_matched));
   const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded');
   const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
-  const allComplete = rows.length > 0 && uploadNeeded.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0;
+  const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0;
 
   // Build a lookup of last known settlement amount per marketplace
   const lastKnownAmounts = useMemo(() => {
@@ -167,7 +177,7 @@ export default function ActionCentre({
   }, [rows]);
 
   const buildMissingList = useCallback((): MissingSettlement[] => {
-    return uploadNeeded.map(r => ({
+    return uploadNeededManual.map(r => ({
       marketplace_code: r.marketplace_code,
       marketplace_label: MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code,
       period_label: r.period_label,
@@ -175,15 +185,20 @@ export default function ActionCentre({
       period_end: r.period_end,
       estimated_amount: lastKnownAmounts[r.marketplace_code] || null,
     }));
-  }, [uploadNeeded, lastKnownAmounts]);
+  }, [uploadNeededManual, lastKnownAmounts]);
 
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at) : null;
 
-  // Overdue: settlement_needed for > 30 days
+  // Overdue: settlement_needed for > 30 days, but only for periods AFTER user account creation
   const overdueRows = uploadNeeded.filter(r => {
     const periodEnd = new Date(r.period_end);
-    return Date.now() - periodEnd.getTime() > 30 * 24 * 60 * 60 * 1000;
+    const isOldEnough = Date.now() - periodEnd.getTime() > 30 * 24 * 60 * 60 * 1000;
+    // Don't show overdue for periods before user signed up (historical backfill)
+    const isAfterSignup = userCreatedAt ? periodEnd >= userCreatedAt : true;
+    // Don't show overdue for marketplaces that sync via API (they backfill automatically)
+    const isApiSynced = apiSyncedMarketplaces.has(r.marketplace_code);
+    return isOldEnough && isAfterSignup && !isApiSynced;
   });
 
   // 3-month timeline
@@ -289,7 +304,7 @@ export default function ActionCentre({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Needs Attention */}
-          {uploadNeeded.length > 0 && (
+          {uploadNeededManual.length > 0 && (
             <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center justify-between">
@@ -308,17 +323,17 @@ export default function ActionCentre({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {refreshingUploads ? 'Checking...' : `${uploadNeeded.length} marketplace settlement${uploadNeeded.length > 1 ? 's' : ''} missing`}
+                  {refreshingUploads ? 'Checking...' : `${uploadNeededManual.length} marketplace settlement${uploadNeededManual.length > 1 ? 's' : ''} missing`}
                 </p>
                 <ul className="space-y-1">
-                  {uploadNeeded.slice(0, 3).map(r => (
+                  {uploadNeededManual.slice(0, 3).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-amber-500">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
                     </li>
                   ))}
-                  {uploadNeeded.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {uploadNeeded.length - 3} more</li>
+                  {uploadNeededManual.length > 3 && (
+                    <li className="text-xs text-muted-foreground">+ {uploadNeededManual.length - 3} more</li>
                   )}
                 </ul>
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
