@@ -63,14 +63,14 @@ interface ActionCentreProps {
 
 // Status icons for the timeline grid
 const STATUS_ICONS: Record<string, { icon: string; label: string }> = {
-  complete: { icon: '✅', label: 'Complete' },
-  bank_matched: { icon: '✅', label: 'Complete' },
+  complete: { icon: '✅', label: 'Complete — verified in Xero' },
+  bank_matched: { icon: '✅', label: 'Complete — bank matched' },
   ready_to_push: { icon: '🟡', label: 'Ready to push' },
   pushed_to_xero: { icon: '✅', label: 'Synced to Xero' },
   settlement_needed: { icon: '❌', label: 'Missing/needed' },
   missing: { icon: '❌', label: 'Missing/needed' },
   gap_detected: { icon: '⚠️', label: 'Gap detected' },
-  already_recorded: { icon: '✅', label: 'Complete' },
+  already_recorded: { icon: '➖', label: 'Pre-boundary — assumed in Xero (not verified)' },
 };
 
 const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
@@ -173,9 +173,10 @@ export default function ActionCentre({
   const uploadNeededManual = uploadNeeded.filter(r => !apiSyncedMarketplaces.has(r.marketplace_code));
   const readyToPush = rows.filter(r => r.overall_status === 'ready_to_push');
   const awaitingBank = rows.filter(r => r.overall_status === 'pushed_to_xero' || (r.xero_pushed && !r.bank_matched));
-  const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded');
+  const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
+  const preBoundary = rows.filter(r => r.overall_status === 'already_recorded');
   const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
-  const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0;
+  const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && (complete.length > 0 || preBoundary.length > 0);
 
   // Build a lookup of last known settlement amount per marketplace
   const lastKnownAmounts = useMemo(() => {
@@ -475,11 +476,11 @@ export default function ActionCentre({
               </tbody>
             </table>
             <div className="flex flex-wrap gap-4 mt-3 text-[10px] text-muted-foreground">
-              <span>✅ Complete</span>
+              <span>✅ Complete (verified)</span>
               <span>🟡 Ready to push</span>
               <span>⚠️ Gap detected</span>
               <span>❌ Missing/needed</span>
-              <span>✅ Synced to Xero</span>
+              <span>➖ Pre-boundary (assumed)</span>
             </div>
           </CardContent>
         </Card>
