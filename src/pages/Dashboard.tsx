@@ -450,6 +450,7 @@ export default function Dashboard() {
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
               <ActionCentre
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);
