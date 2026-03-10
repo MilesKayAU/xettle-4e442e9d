@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { detectFile, extractFileHeaders, MARKETPLACE_LABELS, type FileDetectionResult, type ColumnMapping } from '@/utils/file-fingerprint-engine';
+import { detectFile, extractFileHeaders, MARKETPLACE_LABELS, needsFirstContact, confidenceTier, scrubSampleRows, type FileDetectionResult, type ColumnMapping } from '@/utils/file-fingerprint-engine';
 import type { MissingSettlement } from '@/components/dashboard/ActionCentre';
 import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
