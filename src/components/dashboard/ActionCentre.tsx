@@ -550,7 +550,7 @@ export default function ActionCentre({
                       {MARKETPLACE_LABELS[mp] || mp}
                     </td>
                     {timelineData.months.map(m => {
-                      const status = getStatusForCell(mp, m);
+                      const { status, tooltip } = getStatusForCell(mp, m);
                       const config = STATUS_ICONS[status] || STATUS_ICONS.missing;
                       return (
                         <td key={m} className="text-center py-2.5 px-3">
@@ -559,7 +559,7 @@ export default function ActionCentre({
                               <TooltipTrigger asChild>
                                 <span className="text-base cursor-default">{config.icon}</span>
                               </TooltipTrigger>
-                              <TooltipContent>{config.label}</TooltipContent>
+                              <TooltipContent className="text-xs">{tooltip}</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </td>
