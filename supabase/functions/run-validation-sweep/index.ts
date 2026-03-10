@@ -128,12 +128,12 @@ async function sweepUser(adminSupabase: any, userId: string) {
 
   const { data: orderLines } = await adminSupabase
     .from('settlement_lines')
-    .select('marketplace_name, posted_date, amount, order_id')
+    .select('marketplace_name, posted_date, amount, order_id, amount_type')
     .eq('user_id', userId)
     .gte('posted_date', boundaryDate)
 
   // Order lines kept as flat array — we'll filter per-period below instead of pre-aggregating by month
-  const allOrderLines = (orderLines || []) as Array<{ marketplace_name: string | null; posted_date: string | null; amount: number | null; order_id: string | null }>
+  const allOrderLines = (orderLines || []) as Array<{ marketplace_name: string | null; posted_date: string | null; amount: number | null; order_id: string | null; amount_type: string | null }>
 
   const settlementMap = new Map<string, any>()
   for (const s of (settlements || [])) {
