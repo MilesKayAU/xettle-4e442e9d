@@ -493,6 +493,9 @@ export async function syncSettlementToXero(
     // Fire-and-forget: trigger validation sweep after Xero push
     triggerValidationSweep();
 
+    // Fire-and-forget: trigger bank deposit matching after Xero push
+    triggerBankMatch(settlementId);
+
     // Fire-and-forget: log Xero push event
     supabase.from('system_events' as any).insert({
       user_id: user.id,
