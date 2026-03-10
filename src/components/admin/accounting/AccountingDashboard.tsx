@@ -1267,6 +1267,7 @@ export default function AccountingDashboard() {
                 }} />
                 <XeroConnectionStatus />
                 <ShopifyConnectionStatus />
+                <ChannelManagement />
                 <AutomationSettingsPanel userTier={userTier} />
                 <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />
                 <SyncHistoryCard />
