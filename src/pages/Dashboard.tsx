@@ -7,6 +7,9 @@ import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/ac
 import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyReconciliationStatus';
 import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
+import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
+import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
+import SkuComparisonView from '@/components/insights/SkuComparisonView';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
@@ -17,7 +20,9 @@ import { supabase } from '@/integrations/supabase/client';
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
 
-type DashboardView = 'settlements' | 'insights' | 'smart_upload';
+type DashboardView = 'smart_upload' | 'settlements' | 'insights';
+type SettlementsSubTab = 'all' | 'overview';
+type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -25,6 +30,12 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeView, setActiveView] = useState<DashboardView>(() => {
     return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'smart_upload';
+  });
+  const [settlementsSubTab, setSettlementsSubTab] = useState<SettlementsSubTab>(() => {
+    return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'all';
+  });
+  const [insightsSubTab, setInsightsSubTab] = useState<InsightsSubTab>(() => {
+    return (localStorage.getItem('xettle_insights_subtab') as InsightsSubTab) || 'overview';
   });
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
@@ -109,15 +120,12 @@ export default function Dashboard() {
         const settlements = JSON.parse(raw);
         if (!Array.isArray(settlements) || settlements.length === 0) return;
 
-        // Clear immediately to prevent double-claim
         sessionStorage.removeItem('xettle_demo_settlements');
         sessionStorage.removeItem('xettle_demo_marketplace');
 
-        // Dynamically import the save function
         const { saveSettlement } = await import('@/utils/settlement-engine');
         const { MARKETPLACE_CATALOG } = await import('@/components/admin/accounting/MarketplaceSwitcher');
 
-        // Ensure marketplace connection exists
         const { data: existing } = await supabase
           .from('marketplace_connections')
           .select('id')
@@ -136,7 +144,6 @@ export default function Dashboard() {
           } as any);
         }
 
-        // Save settlements
         let saved = 0;
         for (const s of settlements) {
           const result = await saveSettlement(s);
@@ -148,7 +155,6 @@ export default function Dashboard() {
           toast.success(`🎉 ${saved} settlement${saved > 1 ? 's' : ''} from your demo — ready to push to Xero!`);
         }
 
-        // Reload marketplaces and switch to the right one
         await loadMarketplaces();
         setSelectedMarketplace(marketplace);
         switchView('settlements');
@@ -164,6 +170,16 @@ export default function Dashboard() {
     localStorage.setItem('xettle_dashboard_view', view);
   }
 
+  function switchSettlementsSubTab(tab: SettlementsSubTab) {
+    setSettlementsSubTab(tab);
+    localStorage.setItem('xettle_settlements_subtab', tab);
+  }
+
+  function switchInsightsSubTab(tab: InsightsSubTab) {
+    setInsightsSubTab(tab);
+    localStorage.setItem('xettle_insights_subtab', tab);
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -177,6 +193,19 @@ export default function Dashboard() {
   const isAmazonAU = selectedMarketplace === 'amazon_au';
   const isShopifyOrders = selectedMarketplace === 'shopify_orders';
   const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
+
+  // Sub-tab config
+  const settlementSubTabs: { key: SettlementsSubTab; label: string }[] = [
+    { key: 'all', label: 'All Settlements' },
+    { key: 'overview', label: 'Overview' },
+  ];
+
+  const insightsSubTabs: { key: InsightsSubTab; label: string; pro?: boolean }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'reconciliation', label: 'Reconciliation' },
+    { key: 'profit', label: 'Profit Analysis', pro: true },
+    { key: 'sku', label: 'SKU Comparison', pro: true },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -196,7 +225,6 @@ export default function Dashboard() {
             <Button variant="ghost" size="sm" onClick={() => {
               switchView('settlements');
               setSelectedMarketplace('amazon_au');
-              // Delay to let AccountingDashboard mount before dispatching
               setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
             }}>
               <Settings className="h-4 w-4 mr-1" />
@@ -226,7 +254,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Section switcher — Settlements | Insights */}
+      {/* Primary tab bar */}
       <div className="border-b border-border bg-card/50">
         <div className="container-custom">
           <nav className="flex gap-1 -mb-px">
@@ -267,19 +295,71 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Sub-tab bar for Settlements and Insights */}
+      {(activeView === 'settlements' || activeView === 'insights') && (
+        <div className="border-b border-border/60 bg-muted/30">
+          <div className="container-custom">
+            <nav className="flex gap-0.5 -mb-px">
+              {activeView === 'settlements' && settlementSubTabs.map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => switchSettlementsSubTab(tab.key)}
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                    settlementsSubTab === tab.key
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+              {activeView === 'insights' && insightsSubTabs.map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => switchInsightsSubTab(tab.key)}
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                    insightsSubTab === tab.key
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.pro && (
+                    <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary font-semibold">PRO</span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
+
       <div className="container-custom py-8">
-        {activeView === 'settlements' ? (
+        {/* ─── Smart Upload ──────────────────────────────────────────── */}
+        {activeView === 'smart_upload' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              {/* Settlements Overview — at-a-glance marketplace status */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <SettlementsOverview
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                  onSelectMarketplace={setSelectedMarketplace}
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Smart Upload</h2>
+                <p className="text-muted-foreground mt-1">
+                  Drop any settlement files — Amazon TSV, Shopify CSV, Bunnings PDF, or anything else. Xettle auto-detects the marketplace, parses your data, and if you're uploading from a new marketplace we'll set it up for you automatically. No configuration needed.
+                </p>
+              </div>
+              <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+                <SmartUploadFlow
+                  onSettlementsSaved={loadMarketplaces}
+                  onMarketplacesChanged={loadMarketplaces}
+                  onViewSettlements={() => switchView('settlements')}
                 />
-              )}
+              </Suspense>
+            </div>
+          </ErrorBoundary>
+        )}
 
+        {/* ─── Settlements → All Settlements ─────────────────────────── */}
+        {activeView === 'settlements' && settlementsSubTab === 'all' && (
+          <ErrorBoundary>
+            <div className="space-y-6">
               {/* Monthly Reconciliation Status */}
               {!marketplacesLoading && userMarketplaces.length > 0 && (
                 <MonthlyReconciliationStatus
@@ -313,27 +393,75 @@ export default function Dashboard() {
               ) : null}
             </div>
           </ErrorBoundary>
-        ) : activeView === 'smart_upload' ? (
+        )}
+
+        {/* ─── Settlements → Overview ────────────────────────────────── */}
+        {activeView === 'settlements' && settlementsSubTab === 'overview' && (
+          <ErrorBoundary>
+            <div className="space-y-6">
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <SettlementsOverview
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                  onSelectMarketplace={(code) => {
+                    setSelectedMarketplace(code);
+                    switchSettlementsSubTab('all');
+                  }}
+                />
+              )}
+            </div>
+          </ErrorBoundary>
+        )}
+
+        {/* ─── Insights → Overview ───────────────────────────────────── */}
+        {activeView === 'insights' && insightsSubTab === 'overview' && (
+          <ErrorBoundary>
+            <InsightsDashboard />
+          </ErrorBoundary>
+        )}
+
+        {/* ─── Insights → Reconciliation ─────────────────────────────── */}
+        {activeView === 'insights' && insightsSubTab === 'reconciliation' && (
           <ErrorBoundary>
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-foreground">Smart Upload</h2>
+                <h2 className="text-2xl font-bold text-foreground">Reconciliation</h2>
                 <p className="text-muted-foreground mt-1">
-                  Drop any settlement files — Amazon TSV, Shopify CSV, Bunnings PDF, or anything else. Xettle auto-detects the marketplace, parses your data, and if you're uploading from a new marketplace we'll set it up for you automatically. No configuration needed.
+                  Settlement vs order reconciliation across all connected marketplaces.
                 </p>
               </div>
-              <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                <SmartUploadFlow
-                  onSettlementsSaved={loadMarketplaces}
-                  onMarketplacesChanged={loadMarketplaces}
-                  onViewSettlements={() => switchView('settlements')}
-                />
-              </Suspense>
+              <ReconciliationHealth />
             </div>
           </ErrorBoundary>
-        ) : (
+        )}
+
+        {/* ─── Insights → Profit Analysis ────────────────────────────── */}
+        {activeView === 'insights' && insightsSubTab === 'profit' && (
           <ErrorBoundary>
-            <InsightsDashboard />
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Profit Analysis</h2>
+                <p className="text-muted-foreground mt-1">
+                  Cross-marketplace profit ranking and margin comparison.
+                </p>
+              </div>
+              <MarketplaceProfitComparison />
+            </div>
+          </ErrorBoundary>
+        )}
+
+        {/* ─── Insights → SKU Comparison ─────────────────────────────── */}
+        {activeView === 'insights' && insightsSubTab === 'sku' && (
+          <ErrorBoundary>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">SKU Comparison</h2>
+                <p className="text-muted-foreground mt-1">
+                  Compare SKU-level profitability across marketplaces.
+                </p>
+              </div>
+              <SkuComparisonView />
+            </div>
           </ErrorBoundary>
         )}
       </div>
