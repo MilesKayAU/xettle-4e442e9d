@@ -213,12 +213,25 @@ export default function ActionCentre({
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    const marketplaces = [...new Set(rows.map(r => r.marketplace_code))];
+    // Combine marketplaces from validation rows AND connected marketplaces
+    const allMps = new Set([
+      ...rows.map(r => r.marketplace_code),
+      ...connectedMarketplaces,
+    ]);
+    const marketplaces = [...allMps].sort();
 
     return { months, marketplaces };
-  }, [rows]);
+  }, [rows, connectedMarketplaces]);
 
   const getStatusForCell = (marketplace: string, monthKey: string): string => {
+    // Check if this month is before the accounting boundary
+    if (accountingBoundary) {
+      const boundaryMonth = accountingBoundary.substring(0, 7); // YYYY-MM
+      if (monthKey < boundaryMonth) {
+        return 'already_recorded';
+      }
+    }
+
     const row = rows.find(r => {
       const d = new Date(r.period_start);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
