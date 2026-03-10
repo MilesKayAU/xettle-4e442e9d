@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag, ChevronDown, Key, Sparkles } from 'lucide-react';
+import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag, ChevronDown, Key, Sparkles, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
 import { detectAllMarketplaces, classifyUnknownTag, type BatchDetectionResult } from '@/utils/shopify-order-detector';
@@ -31,6 +31,7 @@ const ShopifyConnectionStatus = () => {
   const [manualToken, setManualToken] = useState('');
   const [manualDomain, setManualDomain] = useState('');
   const [savingToken, setSavingToken] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
 
   // Discovery modal state
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
@@ -190,6 +191,44 @@ const ShopifyConnectionStatus = () => {
     await classifyUnknownTag(tag, type);
   };
 
+  // ─── Reconnect: delete invalid token then re-initiate OAuth ─────
+  const handleReconnect = async () => {
+    const domain = status?.shops?.[0]?.shop_domain;
+    if (!domain) return;
+    setReconnecting(true);
+    try {
+      // Step 1: Delete invalid token
+      await supabase.functions.invoke('shopify-auth', {
+        method: 'POST',
+        headers: { 'x-action': 'disconnect' },
+      });
+      setStatus({ connected: false, shops: [] });
+
+      // Step 2: Re-initiate OAuth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('You must be logged in');
+        setReconnecting(false);
+        return;
+      }
+
+      const { data: result, error } = await supabase.functions.invoke('shopify-auth', {
+        body: { action: 'initiate', shop: domain, userId: session.user.id },
+      });
+
+      if (error) throw new Error(error.message);
+      if (result?.error) throw new Error(result.error);
+
+      if (result?.authUrl) {
+        window.location.href = result.authUrl;
+      }
+    } catch (error: any) {
+      console.error('Reconnect error:', error);
+      toast.error(error.message || 'Failed to reconnect');
+      setReconnecting(false);
+    }
+  };
+
   // ─── Connection handlers ──────────────────────────────────────────
 
   const isValidDomain = (domain: string) => {
@@ -287,6 +326,11 @@ const ShopifyConnectionStatus = () => {
       return;
     }
 
+    if (!token.startsWith('shpat_')) {
+      toast.error('Invalid token — Custom App tokens must start with "shpat_". If you connected via OAuth, use the "Connect Shopify" button instead.');
+      return;
+    }
+
     setSavingToken(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -367,24 +411,62 @@ const ShopifyConnectionStatus = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           {status?.connected && status.shops.length > 0 && (
-            <div className="bg-muted/50 rounded-lg p-3">
-              <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                Connected Store
-              </p>
-              <ul className="space-y-1">
-                {status.shops.map((shop) => (
-                  <li key={shop.shop_domain} className="text-sm text-muted-foreground pl-6">
-                    {shop.shop_domain}
-                  </li>
-                ))}
-              </ul>
-              {scopeCount > 0 && (
-                <p className="text-xs text-muted-foreground mt-2 pl-6">
-                  {scopeCount} scopes active
-                </p>
+            <>
+              {/* Invalid token warning */}
+              {status.shops[0]?.scope === 'custom_app' && (
+                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        Token may be invalid
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Your Shopify token was entered manually and may not be a valid API token. Reconnect via OAuth to fix this automatically.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="bg-amber-600 hover:bg-amber-700 text-white"
+                        onClick={handleReconnect}
+                        disabled={reconnecting}
+                      >
+                        {reconnecting ? (
+                          <>
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                            Reconnecting...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                            Reconnect Shopify
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               )}
-            </div>
+
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  Connected Store
+                </p>
+                <ul className="space-y-1">
+                  {status.shops.map((shop) => (
+                    <li key={shop.shop_domain} className="text-sm text-muted-foreground pl-6">
+                      {shop.shop_domain}
+                    </li>
+                  ))}
+                </ul>
+                {scopeCount > 0 && status.shops[0]?.scope !== 'custom_app' && (
+                  <p className="text-xs text-muted-foreground mt-2 pl-6">
+                    {scopeCount} scopes active
+                  </p>
+                )}
+              </div>
+            </>
           )}
 
           {!status?.connected ? (
