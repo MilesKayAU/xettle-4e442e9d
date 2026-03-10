@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher';
 import { formatSettlementDate, formatAUD } from '@/utils/settlement-engine';
-import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
+
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 
 // ── Shared architecture hooks + components ──────────────────────────────────
