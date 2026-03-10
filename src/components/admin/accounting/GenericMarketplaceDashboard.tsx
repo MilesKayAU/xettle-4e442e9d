@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import ReconciliationStatus from '@/components/shared/ReconciliationStatus';
+import MarketplaceProfitCard from '@/components/shared/MarketplaceProfitCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
