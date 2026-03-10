@@ -304,6 +304,15 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SetupWizard
+        open={showWizard}
+        onClose={handleWizardClose}
+        onComplete={handleWizardComplete}
+        initialStep={wizardInitialStep}
+        hasAmazon={hasAmazon}
+        hasShopify={hasShopify}
+        hasXero={xeroConnected}
+      />
       {/* Top bar */}
       <header className="border-b border-border bg-card">
         <div className="container-custom flex items-center justify-between h-16">
