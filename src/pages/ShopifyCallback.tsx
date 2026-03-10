@@ -15,11 +15,16 @@ const ShopifyCallback = () => {
 
   useEffect(() => {
     const handleCallback = async () => {
-      const code = searchParams.get('code');
-      const shop = searchParams.get('shop');
-      const state = searchParams.get('state');
-      const hmac = searchParams.get('hmac');
-      const timestamp = searchParams.get('timestamp');
+      // Collect ALL query params to forward for HMAC verification
+      const allParams: Record<string, string> = {};
+      searchParams.forEach((value, key) => {
+        allParams[key] = value;
+      });
+
+      const code = allParams.code;
+      const shop = allParams.shop;
+      const state = allParams.state;
+      const hmac = allParams.hmac;
 
       if (!code || !shop || !state || !hmac) {
         setStatus('error');
@@ -29,7 +34,7 @@ const ShopifyCallback = () => {
 
       try {
         const { data: result, error: funcError } = await supabase.functions.invoke('shopify-auth', {
-          body: { action: 'callback', code, shop, state, hmac, timestamp },
+          body: { action: 'callback', ...allParams },
         });
 
         if (funcError) throw new Error(funcError.message || 'Failed to complete authorization');

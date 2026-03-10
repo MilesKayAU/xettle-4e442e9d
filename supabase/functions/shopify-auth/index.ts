@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     // ACTION: callback — verify HMAC, exchange code, store token
     if (action === 'callback') {
       const body = parsedBody || await req.json()
-      const { code, shop, state, hmac, timestamp } = body
+      const { code, shop, state, hmac, ...restParams } = body
 
       if (!code || !shop || !state || !hmac) {
         return new Response(
@@ -79,9 +79,10 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Verify HMAC signature
-      const params: Record<string, string> = { code, shop, state }
-      if (timestamp) params.timestamp = timestamp
+      // Verify HMAC signature using ALL params except hmac and action
+      const params: Record<string, string> = { code, shop, state, ...restParams }
+      delete params.action
+      delete params.hmac
 
       const sortedKeys = Object.keys(params).sort()
       const message = sortedKeys.map(k => `${k}=${params[k]}`).join('&')
