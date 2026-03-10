@@ -167,10 +167,16 @@ export function parseDate(raw: string | undefined | null): string | null {
   const trimmed = String(raw).trim();
   if (!trimmed) return null;
 
-  // Strip time portion for cleaner matching (keep original for formats that need it)
+  // Try each format parser, then validate plausibility as a final gate
   for (const parser of FORMAT_CHAIN) {
     const result = parser(trimmed);
-    if (result) return result;
+    if (result) {
+      if (!isPlausible(result)) {
+        console.warn(`[date-parser] Parsed "${trimmed}" → ${result} but outside plausible range`);
+        return null;
+      }
+      return result;
+    }
   }
 
   console.warn(`[date-parser] Could not parse date: "${trimmed}"`);
