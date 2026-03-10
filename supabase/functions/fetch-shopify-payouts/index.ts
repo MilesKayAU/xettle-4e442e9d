@@ -106,6 +106,7 @@ Deno.serve(async (req) => {
     }
 
     // ─── Enforce accounting boundary ──────────────────────────────────
+    // Use explicit boundary if set, otherwise use user creation date as fallback
     let dateMin: string | undefined;
     const { data: boundarySetting } = await supabase
       .from("app_settings")
@@ -116,6 +117,12 @@ Deno.serve(async (req) => {
 
     if (boundarySetting?.value) {
       dateMin = boundarySetting.value;
+    } else {
+      // Fallback: use the user's account creation date as the boundary
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user?.created_at) {
+        dateMin = userData.user.created_at.substring(0, 10); // YYYY-MM-DD
+      }
     }
 
     // ─── Fetch paid payouts from Shopify ──────────────────────────────
