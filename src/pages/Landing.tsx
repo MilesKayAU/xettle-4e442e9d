@@ -86,7 +86,7 @@ export default function Landing() {
             <span className="text-primary">Your accountant is losing their mind.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Xettle automatically pulls every settlement from Amazon, Shopify, BigW, MyDeal, Everyday Market and more — reconciles the fees, and pushes clean invoices to Xero. No spreadsheets. No Sunday nights.
+            Xettle pulls every settlement from Amazon, Shopify, BigW, MyDeal and more — calculates every fee, and pushes clean invoices to Xero. Automatically.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
             No card needed · Works in minutes · Australian GST built in
