@@ -408,49 +408,52 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                 </div>
                               </>
                             )}
-                            {/* Bank verification status */}
-                            {s.bank_verified ? (
-                              <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
-                                <ShieldCheck className="h-3 w-3" />
-                                Bank verified {formatAUD(s.bank_verified_amount || 0)} — {s.bank_verified_at ? new Date(s.bank_verified_at).toLocaleDateString('en-AU') : ''}
-                              </p>
-                            ) : isSyncable ? (
-                              <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
-                                <ShieldAlert className="h-3 w-3" />
-                                Bank not verified
-                              </p>
-                            ) : null}
-                            {/* Inline reconciliation toggle */}
-                            <button
-                              onClick={() => toggleReconCheck(s)}
-                              className="text-[10px] text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 cursor-pointer"
-                            >
-                              {expandedRecon === s.settlement_id ? <ChevronDown className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
-                              {reconResults[s.settlement_id]
-                                ? `Recon: ${reconResults[s.settlement_id].overallStatus === 'pass' ? '✅ Pass' : reconResults[s.settlement_id].overallStatus === 'warn' ? '⚠️ Warnings' : '❌ Fail'}`
-                                : 'Run recon checks'
-                              }
-                            </button>
-                            {/* Inline reconciliation results */}
-                            {expandedRecon === s.settlement_id && reconResults[s.settlement_id] && (
-                              <div className="mt-1.5 space-y-1 bg-muted/30 rounded-md px-3 py-2">
-                                {reconResults[s.settlement_id].checks.map((check) => (
-                                  <div key={check.id} className="flex items-center gap-2 text-[10px]">
-                                    <span>
-                                      {check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️' : '❌'}
-                                    </span>
-                                    <span className="font-medium text-foreground">{check.label}</span>
-                                    <span className="text-muted-foreground">— {check.detail}</span>
+                            {!isCollapsed && (
+                              <>
+                                {/* Bank verification status */}
+                                {s.bank_verified ? (
+                                  <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Bank verified {formatAUD(s.bank_verified_amount || 0)} — {s.bank_verified_at ? new Date(s.bank_verified_at).toLocaleDateString('en-AU') : ''}
+                                  </p>
+                                ) : isSyncable ? (
+                                  <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
+                                    <ShieldAlert className="h-3 w-3" />
+                                    Bank not verified
+                                  </p>
+                                ) : null}
+                                {/* Inline reconciliation toggle */}
+                                <button
+                                  onClick={() => toggleReconCheck(s)}
+                                  className="text-[10px] text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 cursor-pointer"
+                                >
+                                  {expandedRecon === s.settlement_id ? <ChevronDown className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                                  {reconResults[s.settlement_id]
+                                    ? `Recon: ${reconResults[s.settlement_id].overallStatus === 'pass' ? '✅ Pass' : reconResults[s.settlement_id].overallStatus === 'warn' ? '⚠️ Warnings' : '❌ Fail'}`
+                                    : 'Run recon checks'
+                                  }
+                                </button>
+                                {/* Inline reconciliation results */}
+                                {expandedRecon === s.settlement_id && reconResults[s.settlement_id] && (
+                                  <div className="mt-1.5 space-y-1 bg-muted/30 rounded-md px-3 py-2">
+                                    {reconResults[s.settlement_id].checks.map((check) => (
+                                      <div key={check.id} className="flex items-center gap-2 text-[10px]">
+                                        <span>
+                                          {check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️' : '❌'}
+                                        </span>
+                                        <span className="font-medium text-foreground">{check.label}</span>
+                                        <span className="text-muted-foreground">— {check.detail}</span>
+                                      </div>
+                                    ))}
+                                    {!reconResults[s.settlement_id].canSync && (
+                                      <p className="text-[10px] font-medium text-destructive mt-1">⛔ Xero push blocked — resolve critical issues first</p>
+                                    )}
                                   </div>
-                                ))}
-                                {!reconResults[s.settlement_id].canSync && (
-                                  <p className="text-[10px] font-medium text-destructive mt-1">⛔ Xero push blocked — resolve critical issues first</p>
                                 )}
-                              </div>
+                              </>
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
                           {/* Push to Xero — Ready state */}
                           {isSyncable && (
                             <>
