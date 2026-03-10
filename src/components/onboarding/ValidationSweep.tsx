@@ -220,7 +220,7 @@ export default function ValidationSweep({
         metadata: {
           refundsExGst: settlement.refunds || 0,
           shippingExGst: settlement.sales_shipping || 0,
-          subscriptionAmount: settlement.other_fees || 0,
+          subscriptionAmount: (settlement.other_fees && settlement.other_fees < 0) ? 0 : (settlement.other_fees || 0),
           refundCommissionExGst: settlement.reimbursements || 0,
         },
       };

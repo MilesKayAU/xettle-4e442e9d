@@ -41,7 +41,8 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
     metadata: {
       refundsExGst: s.refunds || 0,
       shippingExGst: s.sales_shipping || 0,
-      subscriptionAmount: s.other_fees || 0,
+      // Exclude payout-type adjustments from subscription — only include positive other_fees (real subscription charges)
+      subscriptionAmount: (s.other_fees && s.other_fees < 0) ? 0 : (s.other_fees || 0),
       refundCommissionExGst: s.reimbursements || 0,
     },
   }), []);
