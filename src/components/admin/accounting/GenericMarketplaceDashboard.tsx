@@ -101,7 +101,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [hasShopify, setHasShopify] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
-  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
+  
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
@@ -127,13 +127,6 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   const marketplaceName = def?.name || marketplace.marketplace_name;
 
-  const toggleCardCollapse = (id: string) => {
-    setCollapsedCards(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
 
   // Filter settlements
   const filteredSettlements = settlements.filter(s => {
@@ -341,208 +334,236 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               </div>
             </div>
 
-            {filteredSettlements.map((s, idx) => {
-              const sales = s.sales_principal || 0;
-              const fees = s.seller_fees || 0;
-              const net = s.bank_deposit || 0;
-              const gstIncome = s.gst_on_income || 0;
-              const isSelected = selected.has(s.id);
-              const isSyncable = s.status === 'saved' || s.status === 'parsed';
-              const isPushFailed = s.status === 'push_failed';
-              const isSynced = s.status === 'synced' || s.status === 'pushed_to_xero';
+            {/* Audit table header */}
+            <Card>
+              <CardContent className="p-0">
+                <div className="hidden sm:grid sm:grid-cols-[auto_1fr_80px_80px_120px_auto] gap-2 px-3 py-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+                  <div className="w-5" />
+                  <div>Settlement</div>
+                  <div className="text-center">Xero</div>
+                  <div className="text-center">Bank</div>
+                  <div className="text-center">Status</div>
+                  <div className="text-right">Actions</div>
+                </div>
 
-              const prev = filteredSettlements[idx + 1];
-              const isCollapsed = collapsedCards.has(s.id);
-              let hasGap = false;
-              if (prev && s.period_start > prev.period_end) {
-                const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
-                const gapDays = gapMs / (1000 * 60 * 60 * 24);
-                // Shopify payouts are daily — gaps up to 4 days (weekends/holidays) are normal
-                const isShopify = (s.marketplace || '').toLowerCase().includes('shopify');
-                const tolerance = isShopify ? 4 : 1;
-                hasGap = gapDays > tolerance;
-              }
+                <div className="space-y-0">
+                  {filteredSettlements.map((s, idx) => {
+                    const sales = s.sales_principal || 0;
+                    const fees = s.seller_fees || 0;
+                    const net = s.bank_deposit || 0;
+                    const isSelected = selected.has(s.id);
+                    const isSyncable = s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push';
+                    const isPushFailed = s.status === 'push_failed';
+                    const isSynced = s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external';
+                    const isAlreadyRecorded = s.status === 'already_recorded';
 
-              return (
-                <React.Fragment key={s.id}>
-                  {hasGap && (
-                    <div className="flex items-center gap-2 py-1 px-3">
-                      <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">
-                        Gap: missing settlement between {formatSettlementDate(prev.period_end)} and {formatSettlementDate(s.period_start)}
-                      </p>
-                    </div>
-                  )}
-                  <Card className={`shadow-sm border-border/80 hover:border-primary/20 transition-colors border-l-4 ${
-                    isSynced ? 'border-l-emerald-500' : isPushFailed ? 'border-l-red-400' : 'border-l-amber-400'
-                  } ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}>
-                    <CardContent className="py-3 px-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <button
-                            onClick={() => toggleSelect(s.id)}
-                            className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-                          >
-                            {isSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-semibold text-foreground">
-                                {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
-                              </span>
-                              <SettlementStatusBadge status={s.status} xeroInvoiceNumber={s.xero_invoice_number} xeroType={(s as any).xero_type} xeroStatus={s.xero_status} />
-                              {s.marketplace.startsWith('shopify_orders_') && (
-                                <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
-                              )}
-                              <span className="font-semibold text-primary text-sm">{formatAUD(net)}</span>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); toggleCardCollapse(s.id); }}
-                                className="text-muted-foreground hover:text-foreground ml-auto"
-                              >
-                                {isCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-                              </button>
-                            </div>
-                            {!isCollapsed && (
-                              <>
-                                <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                                  ID: {s.settlement_id}
-                                  {s.xero_invoice_number && s.xero_status && (
-                                    <span className="ml-2 text-primary">{s.xero_invoice_number} · {s.xero_status}</span>
-                                  )}
-                                </p>
-                                <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
-                                  <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
-                                  <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
-                                  {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
-                                  <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
-                                </div>
-                              </>
-                            )}
-                            {!isCollapsed && (
-                              <>
-                                {/* Bank verification status */}
-                                {s.bank_verified ? (
-                                  <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
-                                    <ShieldCheck className="h-3 w-3" />
-                                    Bank verified {formatAUD(s.bank_verified_amount || 0)} — {s.bank_verified_at ? new Date(s.bank_verified_at).toLocaleDateString('en-AU') : ''}
-                                  </p>
-                                ) : isSyncable ? (
-                                  <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
-                                    <ShieldAlert className="h-3 w-3" />
-                                    Bank not verified
-                                  </p>
-                                ) : null}
-                                {/* Inline reconciliation toggle */}
-                                <button
-                                  onClick={() => toggleReconCheck(s)}
-                                  className="text-[10px] text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 cursor-pointer"
-                                >
-                                  {expandedRecon === s.settlement_id ? <ChevronDown className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
-                                  {reconResults[s.settlement_id]
-                                    ? `Recon: ${reconResults[s.settlement_id].overallStatus === 'pass' ? '✅ Pass' : reconResults[s.settlement_id].overallStatus === 'warn' ? '⚠️ Warnings' : '❌ Fail'}`
-                                    : 'Run recon checks'
-                                  }
-                                </button>
-                                {/* Inline reconciliation results */}
-                                {expandedRecon === s.settlement_id && reconResults[s.settlement_id] && (
-                                  <div className="mt-1.5 space-y-1 bg-muted/30 rounded-md px-3 py-2">
-                                    {reconResults[s.settlement_id].checks.map((check) => (
-                                      <div key={check.id} className="flex items-center gap-2 text-[10px]">
-                                        <span>
-                                          {check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️' : '❌'}
-                                        </span>
-                                        <span className="font-medium text-foreground">{check.label}</span>
-                                        <span className="text-muted-foreground">— {check.detail}</span>
-                                      </div>
-                                    ))}
-                                    {!reconResults[s.settlement_id].canSync && (
-                                      <p className="text-[10px] font-medium text-destructive mt-1">⛔ Xero push blocked — resolve critical issues first</p>
-                                    )}
-                                  </div>
-                                )}
-                              </>
-                            )}
+                    const prev = filteredSettlements[idx + 1];
+                    let hasGap = false;
+                    if (prev && s.period_start > prev.period_end) {
+                      const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
+                      const gapDays = gapMs / (1000 * 60 * 60 * 24);
+                      const isShopify = (s.marketplace || '').toLowerCase().includes('shopify');
+                      const tolerance = isShopify ? 4 : 1;
+                      hasGap = gapDays > tolerance;
+                    }
+
+                    const isExpanded = expandedLines === s.settlement_id;
+                    const lines = lineItems[s.settlement_id] || [];
+                    const isLoadingLines = loadingLines === s.settlement_id;
+
+                    return (
+                      <React.Fragment key={s.id}>
+                        {hasGap && (
+                          <div className="flex items-center gap-2 py-1 px-3 bg-amber-50/50 dark:bg-amber-950/10 border-b border-border">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                            <p className="text-xs text-muted-foreground">
+                              Gap: missing settlement between {formatSettlementDate(prev.period_end)} and {formatSettlementDate(s.period_start)}
+                            </p>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {/* Push to Xero — Ready state */}
-                          {isSyncable && (
-                            <>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant={verifyingId === s.id || s.bank_verified ? 'default' : 'outline'}
-                                      onClick={() => {
-                                        // Duplicate prevention: warn if already has xero_journal_id
-                                        if (s.xero_journal_id) {
-                                          const confirmed = window.confirm(
-                                            `This settlement already has a Xero invoice (${s.xero_invoice_number || s.xero_journal_id}). Push again?`
-                                          );
-                                          if (!confirmed) return;
-                                        }
-                                        if (verifyingId === s.id) {
-                                          setVerifyingId(null);
-                                          setBankAmountInput('');
-                                          setBankVerifyConfirmed(false);
-                                        } else {
-                                          setVerifyingId(s.id);
-                                          setBankAmountInput('');
-                                          setBankVerifyConfirmed(false);
-                                        }
-                                      }}
-                                    >
-                                      <Send className="h-3.5 w-3.5 mr-1" />
-                                      Push to Xero
-                                    </Button>
-                                  </TooltipTrigger>
-                                  {!s.bank_verified && verifyingId !== s.id && (
-                                    <TooltipContent>
-                                      <p className="text-xs">Bank amount not verified — we recommend checking your bank statement before pushing</p>
-                                    </TooltipContent>
-                                  )}
-                                </Tooltip>
-                              </TooltipProvider>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-muted-foreground"
-                                onClick={() => handleMarkAlreadySynced(s.settlement_id)}
-                              >
-                                <SkipForward className="h-3.5 w-3.5 mr-1" />
-                                Already in Xero
-                              </Button>
-                            </>
-                          )}
-                          {/* Retry — Push failed state */}
-                          {isPushFailed && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                              disabled={pushing === s.id}
-                              onClick={async () => {
-                                // Reset status and retry
-                                await supabase
-                                  .from('settlements')
-                                  .update({ status: 'saved', xero_journal_id: null } as any)
-                                  .eq('id', s.id);
-                                loadSettlements();
-                                toast.info('Status reset — you can now retry pushing to Xero');
-                              }}
+                        )}
+                        <div className={`border-b border-border last:border-b-0 transition-colors ${
+                          isAlreadyRecorded ? 'opacity-40 bg-muted/20' :
+                          isSynced ? 'bg-emerald-50/30 dark:bg-emerald-950/10' :
+                          isPushFailed ? 'bg-red-50/30 dark:bg-red-950/10' :
+                          'hover:bg-muted/20'
+                        } ${isSelected ? 'bg-primary/5' : ''}`}>
+                          <div className="p-2.5 sm:grid sm:grid-cols-[auto_1fr_80px_80px_120px_auto] gap-2 items-center">
+                            {/* Checkbox */}
+                            <button
+                              className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
+                              onClick={() => toggleSelect(s.id)}
                             >
-                              {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5 mr-1" />}
-                              ⚠️ Retry Push
-                            </Button>
-                          )}
-                          {/* Synced state — show green badge + rollback */}
-                          {isSynced && (
-                            <>
-                              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-                                ✅ {s.xero_invoice_number || 'Pushed'}
-                              </Badge>
-                              {s.xero_journal_id && (
+                              {isSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                            </button>
+
+                            {/* Settlement info — clickable to expand */}
+                            <button
+                              className="min-w-0 text-left cursor-pointer hover:opacity-80 flex items-center gap-2"
+                              onClick={() => loadLineItems(s.settlement_id)}
+                            >
+                              {isLoadingLines ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+                              ) : isExpanded ? (
+                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              ) : (
+                                <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0 rotate-90" />
+                              )}
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
+                                  {s.marketplace.startsWith('shopify_orders_') && (
+                                    <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                                  <span>{formatSettlementDate(s.period_start)} → {formatSettlementDate(s.period_end)}</span>
+                                  <span className="font-medium text-foreground">{formatAUD(net)}</span>
+                                </div>
+                              </div>
+                            </button>
+
+                            {/* Xero indicator */}
+                            <div className="flex justify-center">
+                              {isSynced ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        <span className="text-xs font-medium">Found</span>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-xs">
+                                      {s.xero_invoice_number
+                                        ? `Invoice ${s.xero_invoice_number} (${s.xero_status || 'AUTHORISED'})`
+                                        : s.status === 'synced_external' ? 'Marked as already in Xero' : 'Pushed via Xettle'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <span className="flex items-center gap-1 text-muted-foreground">
+                                  <span className="text-xs">—</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Bank indicator */}
+                            <div className="flex justify-center">
+                              {s.bank_verified ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        <span className="text-xs font-medium">Matched</span>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-xs">
+                                      {s.bank_verified_amount
+                                        ? `${formatAUD(s.bank_verified_amount)} verified`
+                                        : 'Bank deposit matched'}
+                                      {s.bank_verified_at && (
+                                        <> on {formatSettlementDate(s.bank_verified_at.split('T')[0])}</>
+                                      )}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <span className="flex items-center gap-1 text-muted-foreground">
+                                  <span className="text-xs">—</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Status badge */}
+                            <div className="flex justify-center">
+                              <SettlementStatusBadge
+                                status={s.status}
+                                xeroInvoiceNumber={s.xero_invoice_number}
+                                xeroType={(s as any).xero_type}
+                                xeroStatus={s.xero_status}
+                              />
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 justify-end">
+                              {/* Push to Xero */}
+                              {isSyncable && !isAlreadyRecorded && (
+                                <>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          className="h-7 px-2 text-xs gap-1"
+                                          disabled={pushing === s.id}
+                                          onClick={() => {
+                                            if (s.xero_journal_id) {
+                                              const confirmed = window.confirm(
+                                                `This settlement already has a Xero invoice (${s.xero_invoice_number || s.xero_journal_id}). Push again?`
+                                              );
+                                              if (!confirmed) return;
+                                            }
+                                            if (verifyingId === s.id) {
+                                              setVerifyingId(null);
+                                              setBankAmountInput('');
+                                              setBankVerifyConfirmed(false);
+                                            } else {
+                                              setVerifyingId(s.id);
+                                              setBankAmountInput('');
+                                              setBankVerifyConfirmed(false);
+                                            }
+                                          }}
+                                        >
+                                          {pushing === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                                          Push
+                                        </Button>
+                                      </TooltipTrigger>
+                                      {!s.bank_verified && verifyingId !== s.id && (
+                                        <TooltipContent>
+                                          <p className="text-xs">Bank amount not verified — we recommend checking first</p>
+                                        </TooltipContent>
+                                      )}
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 px-2 text-xs text-muted-foreground"
+                                          onClick={() => handleMarkAlreadySynced(s.settlement_id)}
+                                        >
+                                          <ShieldCheck className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="text-xs">Mark as already in Xero</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </>
+                              )}
+                              {/* Retry */}
+                              {isPushFailed && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs text-amber-600 border-amber-300"
+                                  disabled={pushing === s.id}
+                                  onClick={async () => {
+                                    await supabase
+                                      .from('settlements')
+                                      .update({ status: 'saved', xero_journal_id: null } as any)
+                                      .eq('id', s.id);
+                                    loadSettlements();
+                                    toast.info('Status reset — you can now retry pushing to Xero');
+                                  }}
+                                >
+                                  {pushing === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <AlertTriangle className="h-3 w-3" />}
+                                </Button>
+                              )}
+                              {/* Synced — rollback */}
+                              {isSynced && s.xero_journal_id && (
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -560,245 +581,168 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                   </Tooltip>
                                 </TooltipProvider>
                               )}
-                            </>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                            disabled={deleting === s.id}
-                            onClick={() => handleDelete(s)}
-                          >
-                            {deleting === s.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                          {/* Transaction drill-down button */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                            onClick={() => loadLineItems(s.settlement_id)}
-                          >
-                            {loadingLines === s.settlement_id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Eye className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* ── Transaction drill-down ── */}
-                      {expandedLines === s.settlement_id && (
-                        <div className="mt-3 pt-3 border-t border-border">
-                          {lineItems[s.settlement_id] && lineItems[s.settlement_id].length > 0 ? (() => {
-                            const lines = lineItems[s.settlement_id];
-                            const PAGE_SIZE = 25;
-                            const totalLines = lines.length;
-                            const totalAmount = lines.reduce((sum: number, l: any) => sum + (l.amount || 0), 0);
-
-                            const getRowBg = (line: any) => {
-                              const type = (line.transaction_type || line.amount_type || '').toLowerCase();
-                              if (type.includes('refund') || type === 'refund') return 'bg-red-50 dark:bg-red-950/20';
-                              if (type.includes('fee') || type === 'fee') return 'bg-amber-50 dark:bg-amber-950/20';
-                              if (type.includes('adjustment') || type === 'adjustment') return 'bg-blue-50 dark:bg-blue-950/10';
-                              return '';
-                            };
-
-                            const exportCSV = () => {
-                              const csvHeader = 'Date,Order ID,SKU,Detail,Amount,Type\n';
-                              const csvRows = lines.map((l: any) =>
-                                `"${l.posted_date || ''}","${l.order_id || ''}","${l.sku || ''}","${(l.amount_description || '').replace(/"/g, '""')}",${l.amount || 0},"${l.transaction_type || l.amount_type || ''}"`
-                              ).join('\n');
-                              const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = `${s.settlement_id}-transactions.csv`;
-                              a.click();
-                              URL.revokeObjectURL(url);
-                            };
-
-                            return (
-                              <>
-                                <div className="flex items-center justify-between mb-2">
-                                  <p className="text-[10px] text-muted-foreground font-medium">
-                                    {totalLines} transaction{totalLines !== 1 ? 's' : ''} — source: {s.marketplace.startsWith('shopify_orders_') ? 'Shopify Orders CSV' : 'Settlement file'}
-                                  </p>
-                                  <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1" onClick={exportCSV}>
-                                    <Download className="h-3 w-3" /> Export CSV
-                                  </Button>
-                                </div>
-                                <div className="overflow-auto max-h-72 rounded-lg border border-border">
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead className="text-[10px]">Date</TableHead>
-                                        <TableHead className="text-[10px]">Order</TableHead>
-                                        <TableHead className="text-[10px]">SKU / Detail</TableHead>
-                                        <TableHead className="text-[10px] text-right">Amount</TableHead>
-                                        <TableHead className="text-[10px]">Type</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {lines.map((line: any, lIdx: number) => (
-                                        <TableRow key={lIdx} className={getRowBg(line)}>
-                                          <TableCell className="text-[10px] text-muted-foreground py-1">{line.posted_date || '—'}</TableCell>
-                                          <TableCell className="text-[10px] font-mono py-1">{line.order_id || '—'}</TableCell>
-                                          <TableCell className="text-[10px] text-muted-foreground py-1 max-w-[200px] truncate">{line.amount_description || line.sku || '—'}</TableCell>
-                                          <TableCell className="text-[10px] text-right font-medium py-1">{formatAUD(line.amount || 0)}</TableCell>
-                                          <TableCell className="text-[10px] text-muted-foreground py-1">{line.transaction_type || line.amount_type || '—'}</TableCell>
-                                        </TableRow>
-                                      ))}
-                                      {/* Totals row */}
-                                      <TableRow className="border-t-2 border-border bg-muted/30 font-semibold">
-                                        <TableCell className="text-[10px] py-1.5" colSpan={3}>
-                                          Totals ({totalLines} rows)
-                                        </TableCell>
-                                        <TableCell className="text-[10px] text-right py-1.5 font-bold">{formatAUD(totalAmount)}</TableCell>
-                                        <TableCell className="text-[10px] py-1.5" />
-                                      </TableRow>
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                                {/* Reconciliation footer */}
-                                <div className="mt-2 flex items-center justify-between">
-                                  <p className="text-[10px] text-muted-foreground">
-                                    Net total: <span className="font-semibold text-foreground">{formatAUD(totalAmount)}</span>
-                                    {Math.abs(totalAmount - net) <= 0.05 ? (
-                                      <span className="text-green-600 dark:text-green-400 ml-2">✅ Matches settlement</span>
-                                    ) : (
-                                      <span className="text-amber-500 ml-2">⚠️ Difference of {formatAUD(Math.abs(totalAmount - net))}</span>
-                                    )}
-                                  </p>
-                                </div>
-                              </>
-                            );
-                          })() : lineItems[s.settlement_id] ? (
-                            <div className="py-4 px-3 text-center space-y-3">
-                              <p className="text-xs text-muted-foreground">
-                                📋 Transaction detail not available for this settlement — it was uploaded before detailed tracking was enabled.
-                              </p>
-                              <div className="bg-muted/30 rounded-lg px-4 py-3 inline-block text-left">
-                                <p className="text-[10px] text-muted-foreground mb-1 font-medium">Settlement summary:</p>
-                                <div className="flex gap-4 text-xs">
-                                  <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
-                                  <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
-                                  <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
-                                </div>
-                              </div>
-                              <p className="text-[10px] text-muted-foreground">
-                                To see full detail, re-upload this settlement file via Smart Upload.
-                              </p>
-                              {onSwitchToUpload && (
-                                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onSwitchToUpload}>
-                                  <RefreshCw className="h-3 w-3" /> Re-upload settlement file
-                                </Button>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 py-3 justify-center text-xs text-muted-foreground">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading transactions…
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* ── Bank Verification Panel ── */}
-                      {verifyingId === s.id && isSyncable && (() => {
-                        const enteredAmount = parseFloat(bankAmountInput);
-                        const isValidInput = !isNaN(enteredAmount) && bankAmountInput.trim() !== '';
-                        const diff = isValidInput ? Math.abs(enteredAmount - net) : 0;
-                        const isMatch = isValidInput && diff <= 0.05;
-                        const isMismatch = isValidInput && diff > 0.05;
-
-                        return (
-                          <div className="mt-3 pt-3 border-t border-border space-y-3">
-                            <div className="flex items-center gap-2">
-                              <ShieldCheck className="h-4 w-4 text-primary" />
-                              <span className="text-sm font-semibold text-foreground">Verify bank deposit</span>
-                            </div>
-                            <div className="text-xs text-muted-foreground space-y-1">
-                              <p>Reference: <span className="font-mono font-medium text-foreground">{s.settlement_id}</span></p>
-                              {s.period_end && <p>Period: {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}</p>}
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1">
-                                <label className="text-xs text-muted-foreground mb-1 block">Enter the amount that hit your bank account:</label>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground">$</span>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    value={bankAmountInput}
-                                    onChange={(e) => setBankAmountInput(e.target.value)}
-                                    className="h-8 w-36 text-sm"
-                                  />
-                                  <span className="text-xs text-muted-foreground">AUD</span>
-                                </div>
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                <p>Xettle calculated:</p>
-                                <p className="font-semibold text-foreground">{formatAUD(net)}</p>
-                              </div>
-                            </div>
-
-                            {isMatch && (
-                              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/20 rounded-md px-3 py-2">
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                <span className="text-xs font-medium text-green-700 dark:text-green-400">Amounts match — safe to push</span>
-                              </div>
-                            )}
-                            {isMismatch && (
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-2">
-                                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                                    Difference of {formatAUD(diff)} detected
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 pl-1">
-                                  <Checkbox
-                                    id={`verify-${s.id}`}
-                                    checked={bankVerifyConfirmed}
-                                    onCheckedChange={(checked) => setBankVerifyConfirmed(!!checked)}
-                                  />
-                                  <label htmlFor={`verify-${s.id}`} className="text-xs text-muted-foreground cursor-pointer">
-                                    I understand the difference and want to push anyway
-                                  </label>
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="flex items-center gap-2">
+                              {/* Delete */}
                               <Button
-                                size="sm"
-                                disabled={pushing === s.id || (isValidInput && isMismatch && !bankVerifyConfirmed)}
-                                onClick={() => handlePushToXero(s, isValidInput ? enteredAmount : undefined)}
-                              >
-                                {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-                                {isMatch ? 'Push to Xero ✓' : isValidInput ? 'Push to Xero' : 'Skip verification & Push'}
-                              </Button>
-                              <Button
-                                size="sm"
                                 variant="ghost"
-                                onClick={() => { setVerifyingId(null); setBankAmountInput(''); setBankVerifyConfirmed(false); }}
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                disabled={deleting === s.id}
+                                onClick={() => handleDelete(s)}
                               >
-                                Cancel
+                                {deleting === s.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
                               </Button>
                             </div>
                           </div>
-                        );
-                      })()}
-                    </CardContent>
-                  </Card>
-                </React.Fragment>
-              );
-            })}
+
+                          {/* Bank Verification Panel — inline below the row */}
+                          {verifyingId === s.id && isSyncable && (() => {
+                            const enteredAmount = parseFloat(bankAmountInput);
+                            const isValidInput = !isNaN(enteredAmount) && bankAmountInput.trim() !== '';
+                            const diff = isValidInput ? Math.abs(enteredAmount - net) : 0;
+                            const isMatch = isValidInput && diff <= 0.05;
+                            const isMismatch = isValidInput && diff > 0.05;
+
+                            return (
+                              <div className="px-4 pb-3 pt-1 border-t border-border space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck className="h-4 w-4 text-primary" />
+                                  <span className="text-sm font-semibold text-foreground">Verify bank deposit</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-1">
+                                    <label className="text-xs text-muted-foreground mb-1 block">Enter the amount that hit your bank account:</label>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-muted-foreground">$</span>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={bankAmountInput}
+                                        onChange={(e) => setBankAmountInput(e.target.value)}
+                                        className="h-8 w-36 text-sm"
+                                      />
+                                      <span className="text-xs text-muted-foreground">AUD</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    <p>Xettle calculated:</p>
+                                    <p className="font-semibold text-foreground">{formatAUD(net)}</p>
+                                  </div>
+                                </div>
+
+                                {isMatch && (
+                                  <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/20 rounded-md px-3 py-2">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Amounts match — safe to push</span>
+                                  </div>
+                                )}
+                                {isMismatch && (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-2">
+                                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                      <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                        Difference of {formatAUD(diff)} detected
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 pl-1">
+                                      <Checkbox
+                                        id={`verify-${s.id}`}
+                                        checked={bankVerifyConfirmed}
+                                        onCheckedChange={(checked) => setBankVerifyConfirmed(!!checked)}
+                                      />
+                                      <label htmlFor={`verify-${s.id}`} className="text-xs text-muted-foreground cursor-pointer">
+                                        I understand the difference and want to push anyway
+                                      </label>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    disabled={pushing === s.id || (isValidInput && isMismatch && !bankVerifyConfirmed)}
+                                    onClick={() => handlePushToXero(s, isValidInput ? enteredAmount : undefined)}
+                                  >
+                                    {pushing === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                                    {isMatch ? 'Push to Xero ✓' : isValidInput ? 'Push to Xero' : 'Skip verification & Push'}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => { setVerifyingId(null); setBankAmountInput(''); setBankVerifyConfirmed(false); }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Transaction drill-down */}
+                          {isExpanded && (
+                            <div className="border-t border-border px-3 py-2 bg-muted/30">
+                              {lines.length === 0 && !isLoadingLines ? (
+                                <p className="text-xs text-muted-foreground py-2 text-center">No transaction lines found for this settlement.</p>
+                              ) : isLoadingLines ? (
+                                <div className="flex items-center gap-2 py-3 justify-center text-xs text-muted-foreground">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading transactions…
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                        <th className="text-left py-1 pr-2">Order ID</th>
+                                        <th className="text-left py-1 pr-2">SKU</th>
+                                        <th className="text-left py-1 pr-2">Type</th>
+                                        <th className="text-left py-1 pr-2">Description</th>
+                                        <th className="text-right py-1">Amount</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {lines.map((line: any, lIdx: number) => {
+                                        const isRefund = line.transaction_type?.toLowerCase().includes('refund');
+                                        const isFee = (line.amount || 0) < 0 && !isRefund;
+                                        return (
+                                          <tr
+                                            key={lIdx}
+                                            className={`border-t border-border/50 ${
+                                              isRefund ? 'text-destructive' :
+                                              isFee ? 'text-amber-600 dark:text-amber-400' :
+                                              ''
+                                            }`}
+                                          >
+                                            <td className="py-1 pr-2 font-mono">{line.order_id || '—'}</td>
+                                            <td className="py-1 pr-2">{line.sku || '—'}</td>
+                                            <td className="py-1 pr-2">{line.transaction_type || '—'}</td>
+                                            <td className="py-1 pr-2 max-w-[200px] truncate">{line.amount_description || '—'}</td>
+                                            <td className="py-1 text-right font-mono font-medium">{formatAUD(line.amount || 0)}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                      <tr className="border-t-2 border-border font-semibold">
+                                        <td colSpan={4} className="py-1.5 pr-2">Total ({lines.length} lines)</td>
+                                        <td className="py-1.5 text-right font-mono">
+                                          {formatAUD(lines.reduce((sum: number, l: any) => sum + (l.amount || 0), 0))}
+                                        </td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
