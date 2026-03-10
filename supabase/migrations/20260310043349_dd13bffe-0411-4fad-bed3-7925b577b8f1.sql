@@ -1,0 +1,1 @@
+ALTER TABLE public.settlements ADD COLUMN IF NOT EXISTS raw_payload jsonb DEFAULT NULL;
