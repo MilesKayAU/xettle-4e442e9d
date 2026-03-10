@@ -63,14 +63,14 @@ interface ActionCentreProps {
 
 // Status icons for the timeline grid
 const STATUS_ICONS: Record<string, { icon: string; label: string }> = {
-  complete: { icon: '✅', label: 'Complete — verified in Xero' },
-  bank_matched: { icon: '✅', label: 'Complete — bank matched' },
-  ready_to_push: { icon: '🟡', label: 'Ready to push' },
-  pushed_to_xero: { icon: '✅', label: 'Synced to Xero' },
-  settlement_needed: { icon: '❌', label: 'Missing/needed' },
+  complete: { icon: '✅', label: 'Complete — verified in Xero + bank matched' },
+  bank_matched: { icon: '✅', label: 'Bank matched' },
+  pushed_to_xero: { icon: '✅', label: 'Pushed to Xero — awaiting bank match' },
+  ready_to_push: { icon: '🟡', label: 'Ready to push to Xero' },
+  settlement_needed: { icon: '❌', label: 'Settlement needed' },
   missing: { icon: '❌', label: 'Missing/needed' },
   gap_detected: { icon: '⚠️', label: 'Gap detected' },
-  already_recorded: { icon: '➖', label: 'Pre-boundary — assumed in Xero (not verified)' },
+  not_tracked: { icon: '·', label: 'Before accounting boundary — not tracked by Xettle' },
 };
 
 const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
@@ -181,7 +181,7 @@ export default function ActionCentre({
   const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
   const preBoundary = rows.filter(r => r.overall_status === 'already_recorded');
   const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
-  const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && (complete.length > 0 || preBoundary.length > 0);
+  const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && (complete.length > 0);
 
   // Build a lookup of last known settlement amount per marketplace
   const lastKnownAmounts = useMemo(() => {
@@ -230,11 +230,11 @@ export default function ActionCentre({
   }, [rows, connectedMarketplaces]);
 
   const getStatusForCell = (marketplace: string, monthKey: string): string => {
-    // Check if this month is before the accounting boundary
+    // Before accounting boundary — don't assume, just mark as not tracked
     if (accountingBoundary) {
       const boundaryMonth = accountingBoundary.substring(0, 7); // YYYY-MM
       if (monthKey < boundaryMonth) {
-        return 'already_recorded';
+        return 'not_tracked';
       }
     }
 
@@ -485,7 +485,7 @@ export default function ActionCentre({
               <span>🟡 Ready to push</span>
               <span>⚠️ Gap detected</span>
               <span>❌ Missing/needed</span>
-              <span>➖ Pre-boundary (assumed)</span>
+              <span>· Not tracked (pre-boundary)</span>
             </div>
           </CardContent>
         </Card>
