@@ -36,6 +36,7 @@ const SELECTED_MARKETPLACE = 'amazon_au';
 interface SettlementRecord {
   id: string;
   settlement_id: string;
+  marketplace: string;
   period_start: string;
   period_end: string;
   deposit_date: string;
@@ -55,6 +56,8 @@ interface SettlementRecord {
   gst_on_expenses: number;
   reconciliation_status: string;
   xero_journal_id: string | null;
+  xero_invoice_number: string | null;
+  xero_status: string | null;
   created_at: string;
   is_split_month?: boolean;
   split_month_1_data?: string | null;
