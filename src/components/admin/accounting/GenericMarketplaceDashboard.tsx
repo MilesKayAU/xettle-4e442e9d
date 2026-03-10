@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import ReconciliationStatus from '@/components/shared/ReconciliationStatus';
+import FileReconciliationStatus from '@/components/shared/FileReconciliationStatus';
 import MarketplaceProfitCard from '@/components/shared/MarketplaceProfitCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -213,18 +214,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       <div className="space-y-3">
         <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
           <Scale className="h-4 w-4 text-primary" />
-          Reconciliation Health
+          {hasShopify ? 'Reconciliation Health' : 'File Reconciliation'}
         </h4>
         {hasShopify && currentUserId ? (
           <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
-        ) : !hasShopify && settlements.length > 0 ? (
-          <Card className="border-dashed border-border">
-            <CardContent className="py-4 text-center">
-              <p className="text-xs text-muted-foreground">
-                Connect Shopify to enable reconciliation →
-              </p>
-            </CardContent>
-          </Card>
+        ) : settlements.length > 0 ? (
+          <FileReconciliationStatus settlements={settlements} />
         ) : null}
       </div>
 
