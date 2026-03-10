@@ -230,11 +230,11 @@ export default function ActionCentre({
   }, [rows, connectedMarketplaces]);
 
   const getStatusForCell = (marketplace: string, monthKey: string): string => {
-    // Check if this month is before the accounting boundary
+    // Before accounting boundary — don't assume, just mark as not tracked
     if (accountingBoundary) {
       const boundaryMonth = accountingBoundary.substring(0, 7); // YYYY-MM
       if (monthKey < boundaryMonth) {
-        return 'already_recorded';
+        return 'not_tracked';
       }
     }
 
