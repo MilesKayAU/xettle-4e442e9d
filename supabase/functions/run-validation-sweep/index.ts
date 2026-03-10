@@ -117,7 +117,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
 
   const { data: settlements } = await adminSupabase
     .from('settlements')
-    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at')
+    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at')
     .eq('user_id', userId)
     .gte('period_end', boundaryDate)
 
@@ -290,10 +290,14 @@ async function sweepUser(adminSupabase: any, userId: string) {
           record.settlement_uploaded_at = settlement.created_at || new Date().toISOString()
         }
 
-        // Step 3: Reconciliation
+        // Step 3: Reconciliation — check reconciliation_checks first, then fall back to settlement's own status
         if (recon) {
           record.reconciliation_status = recon.status || 'pending'
           record.reconciliation_difference = recon.difference || 0
+        } else if (settlement?.reconciliation_status === 'reconciled') {
+          record.reconciliation_status = 'matched'
+          record.reconciliation_difference = 0
+          record.orders_found = true
         }
 
         // Step 4: Xero
