@@ -134,21 +134,8 @@ function parseAmount(raw: string): number {
   return isNaN(val) ? 0 : val;
 }
 
-function normaliseDate(raw: string): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.substring(0, 10);
-  const slashParts = trimmed.split(/[\/ ]/)[0]?.split('/');
-  if (slashParts && slashParts.length === 3) {
-    const [a, b, c] = slashParts;
-    if (parseInt(c) > 100) return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-  }
-  try {
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
-  } catch { /* fall through */ }
-  return trimmed;
-}
+/** @deprecated Use parseDateOrEmpty from date-parser.ts */
+const normaliseDate = parseDateOrEmpty;
 
 /**
  * Normalise a SKU for consistent matching:
