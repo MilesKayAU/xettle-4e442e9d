@@ -19,7 +19,7 @@ export function hasSettlementGap(currentStart: string, previousEnd: string, mark
   const gapMs = new Date(currentStart).getTime() - new Date(previousEnd).getTime();
   const gapDays = gapMs / (1000 * 60 * 60 * 24);
   const isShopify = marketplace.toLowerCase().includes('shopify');
-  const tolerance = isShopify ? 4 : 1;
+  const tolerance = isShopify ? 7 : 1;
   return gapDays > tolerance;
 }
 

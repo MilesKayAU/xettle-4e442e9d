@@ -386,7 +386,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                       const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
                       const gapDays = gapMs / (1000 * 60 * 60 * 24);
                       const isShopify = (s.marketplace || '').toLowerCase().includes('shopify');
-                      const tolerance = isShopify ? 4 : 1;
+                      const tolerance = isShopify ? 7 : 1;
                       hasGap = gapDays > tolerance;
                     }
 
