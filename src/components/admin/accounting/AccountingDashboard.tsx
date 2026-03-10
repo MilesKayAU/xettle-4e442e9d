@@ -613,17 +613,7 @@ export default function AccountingDashboard() {
 
         // Invoice 1: Month-1 actual lines + balancing 612 line
         const lines1 = buildInvoiceLineItems(month1Lines, `${m1.monthLabel}`, header.settlementId);
-        // Rollover must offset the GST-inclusive Xero total so Invoice 1 nets to $0.00
-        // Xero adds GST on OUTPUT/INPUT lines but not BASEXCLUDED, so we compute the inclusive total
-        let xeroInclusiveTotal = 0;
-        for (const item of lines1) {
-          if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
-            xeroInclusiveTotal += round2(round2(item.UnitAmount) * 1.1);
-          } else {
-            xeroInclusiveTotal += round2(item.UnitAmount);
-          }
-        }
-        const rolloverAmount = round2(xeroInclusiveTotal);
+        const rolloverAmount = computeXeroInclusiveTotal(lines1);
 
         console.info('[Split Month Invoice Rollover]', {
           settlementId: header.settlementId,
