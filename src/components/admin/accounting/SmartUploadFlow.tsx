@@ -23,6 +23,8 @@ import {
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye,
 } from 'lucide-react';
+import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
+import UnknownEntityDialog from './UnknownEntityDialog';
 import {
   Select,
   SelectContent,
