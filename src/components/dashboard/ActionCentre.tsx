@@ -474,7 +474,7 @@ export default function ActionCentre({
       {/* Floating upload button */}
       <div className="fixed bottom-6 right-6 z-40">
         <Button
-          onClick={onSwitchToUpload}
+          onClick={() => onSwitchToUpload()}
           className="h-12 px-5 gap-2 shadow-lg rounded-full"
         >
           <Plus className="h-4 w-4" /> Upload settlement

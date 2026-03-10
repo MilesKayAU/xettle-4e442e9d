@@ -105,7 +105,7 @@ const MARKETPLACE_COLORS: Record<string, string> = {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChanged, onViewSettlements }: SmartUploadFlowProps) {
+export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChanged, onViewSettlements, missingSettlements, onReturnToDashboard }: SmartUploadFlowProps) {
   const [files, setFiles] = useState<DetectedFile[]>([]);
   const [processingAll, setProcessingAll] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
