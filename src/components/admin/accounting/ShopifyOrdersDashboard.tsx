@@ -579,6 +579,172 @@ export default function ShopifyOrdersDashboard() {
     setDeleteConfirmId(null);
   };
 
+  // ─── API Fetch Orders ────────────────────────────────────────────
+  const handleFetchOrders = useCallback(async () => {
+    if (!shopifyShopDomain) {
+      toast.error('No Shopify store connected');
+      return;
+    }
+    setApiFetching(true);
+    setParseError(null);
+
+    try {
+      // Get last_fetched_at for incremental fetch
+      let dateFrom: string | undefined;
+      try {
+        const { data: settings } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'shopify_last_fetched_at')
+          .single();
+        if (settings?.value) dateFrom = settings.value;
+      } catch { /* no previous fetch — fetch all */ }
+
+      const { data, error } = await supabase.functions.invoke('fetch-shopify-orders', {
+        body: {
+          shopDomain: shopifyShopDomain,
+          dateFrom,
+          limit: 250,
+        },
+      });
+
+      if (error) throw new Error(error.message || 'Failed to fetch orders');
+      if (!data?.success) throw new Error(data?.error || 'Shopify API error');
+
+      const apiOrders: ShopifyApiOrder[] = data.orders || [];
+      if (apiOrders.length === 0) {
+        toast.info('No new orders found from Shopify.');
+        setApiFetching(false);
+        return;
+      }
+
+      // Convert API orders → parser rows
+      const { rows, unpaidCount } = convertApiOrdersToRows(apiOrders);
+
+      if (rows.length === 0) {
+        toast.info(`Fetched ${apiOrders.length} orders but none were paid/partially_refunded.`);
+        setApiFetching(false);
+        return;
+      }
+
+      // Run through the existing parser pipeline by building CSV-like content
+      // We use the rows directly with the grouping logic
+      const result = parseShopifyOrdersCSV('', { preloadedRows: rows } as any);
+
+      // Actually, we need to use the rows directly. Let's group them manually.
+      // Import the grouping logic from the parser
+      const { buildSettlementsFromGroups } = await import('@/utils/shopify-orders-parser');
+      const { detectMarketplaceFromRow, getRegistryEntry: getEntry } = await import('@/utils/marketplace-registry');
+
+      // Group orders by marketplace + currency
+      const groupMap = new Map<string, typeof rows>();
+      for (const order of rows) {
+        const key = JSON.stringify({ m: order.detectedMarketplace, c: order.currency });
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        groupMap.get(key)!.push(order);
+      }
+
+      const readyGroups: MarketplaceGroup[] = [];
+      const unknownGroups: MarketplaceGroup[] = [];
+      const skippedGroups: MarketplaceGroup[] = [];
+
+      for (const [key, orders] of groupMap) {
+        const { m: mktKey, c: currency } = JSON.parse(key);
+        const entry = getEntry(mktKey);
+        const dates = orders.map(o => o.paidAt).filter(Boolean).sort();
+        const uniqueNames = new Set(orders.map(o => o.name).filter(Boolean));
+
+        const group: MarketplaceGroup = {
+          marketplaceKey: mktKey,
+          registryEntry: entry,
+          orders,
+          orderCount: uniqueNames.size || orders.length,
+          totalSubtotal: Math.round(orders.reduce((s, o) => s + o.subtotal, 0) * 100) / 100,
+          totalShipping: Math.round(orders.reduce((s, o) => s + o.shipping, 0) * 100) / 100,
+          totalTaxes: Math.round(orders.reduce((s, o) => s + o.taxes, 0) * 100) / 100,
+          totalAmount: Math.round(orders.reduce((s, o) => s + o.total, 0) * 100) / 100,
+          totalDiscounts: Math.round(orders.reduce((s, o) => s + o.discountAmount, 0) * 100) / 100,
+          periodStart: dates[0] || '',
+          periodEnd: dates[dates.length - 1] || '',
+          currency,
+          skipped: !!entry.skip,
+          skipReason: entry.skip_reason || entry.reason,
+          status: entry.skip ? 'skipped' : (mktKey === 'unknown' ? 'unknown' : 'ready'),
+          sampleNoteAttributes: [...new Set(orders.map(o => o.noteAttributes).filter(Boolean))].slice(0, 3),
+          sampleTags: [...new Set(orders.map(o => o.tags).filter(Boolean))].slice(0, 3),
+          statusBreakdown: {
+            paid: orders.filter(o => o.financialStatus === 'paid').length,
+            partially_refunded: orders.filter(o => o.financialStatus === 'partially_refunded').length,
+          },
+        };
+
+        if (entry.skip) skippedGroups.push(group);
+        else if (mktKey === 'unknown') unknownGroups.push(group);
+        else readyGroups.push(group);
+      }
+
+      readyGroups.sort((a, b) => b.orderCount - a.orderCount);
+      const builtSettlements = buildSettlementsFromGroups(readyGroups);
+
+      // Build parse result
+      const allDates = rows.map(o => o.paidAt).filter(Boolean).sort();
+      const apiParseResult: ShopifyOrdersParseResult = {
+        success: true,
+        groups: readyGroups,
+        skippedGroups,
+        unknownGroups,
+        unpaidCount,
+        totalOrderCount: apiOrders.length,
+        paidCount: rows.length,
+        duplicateLineItemCount: 0,
+        settlements: builtSettlements,
+        periodStart: allDates[0] || '',
+        periodEnd: allDates[allDates.length - 1] || '',
+        partialPeriodWarning: false,
+        statusBreakdown: { paid: rows.filter(r => r.financialStatus === 'paid').length, partially_refunded: rows.filter(r => r.financialStatus === 'partially_refunded').length, refunded: 0, other_excluded: 0 },
+      };
+
+      setParseResult(apiParseResult);
+      setSettlements(builtSettlements);
+      setActiveTab('review');
+
+      toast.success(
+        `Fetched ${rows.length} paid orders from Shopify — ${readyGroups.length} source${readyGroups.length !== 1 ? 's' : ''} detected` +
+        (unknownGroups.length > 0 ? `, ${unknownGroups.reduce((s, g) => s + g.orderCount, 0)} unknown` : '')
+      );
+
+      // Run entity detection for unknown tags
+      if (rows.length > 0) {
+        try {
+          const entityResult = await detectUnknownEntities(rows);
+          if (entityResult.unknowns.length > 0) {
+            setUnknownEntities(entityResult.unknowns);
+            setShowEntityDialog(true);
+          }
+        } catch { /* silent */ }
+      }
+
+      // Update last_fetched_at
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('app_settings').upsert({
+            user_id: user.id,
+            key: 'shopify_last_fetched_at',
+            value: new Date().toISOString(),
+          }, { onConflict: 'user_id,key' });
+        }
+      } catch { /* silent */ }
+
+    } catch (err: any) {
+      const msg = err.message || 'Failed to fetch orders';
+      setParseError(msg);
+      toast.error(msg);
+    } finally {
+      setApiFetching(false);
+    }
+  }, [shopifyShopDomain]);
+
   const clearUpload = () => {
     setFile(null);
     setParseResult(null);
