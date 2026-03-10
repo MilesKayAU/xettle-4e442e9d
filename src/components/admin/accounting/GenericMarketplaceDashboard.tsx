@@ -453,6 +453,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               </>
                             )}
                           </div>
+                        </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {/* Push to Xero — Ready state */}
                           {isSyncable && (
