@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
+import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
@@ -513,6 +514,9 @@ export default function InsightsDashboard() {
 
         {/* Reconciliation Health */}
         <ReconciliationHealth />
+
+        {/* Cross-Marketplace Profit Comparison */}
+        <MarketplaceProfitComparison />
 
         {/* $1 Sale Breakdown — main chart */}
         <Card>

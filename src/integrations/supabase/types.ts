@@ -572,6 +572,63 @@ export type Database = {
         }
         Relationships: []
       }
+      settlement_profit: {
+        Row: {
+          calculated_at: string
+          created_at: string
+          gross_profit: number
+          gross_revenue: number
+          id: string
+          margin_percent: number
+          marketplace_code: string
+          marketplace_fees: number
+          orders_count: number
+          period_label: string
+          settlement_id: string
+          total_cogs: number
+          uncosted_revenue: number
+          uncosted_sku_count: number
+          units_sold: number
+          user_id: string
+        }
+        Insert: {
+          calculated_at?: string
+          created_at?: string
+          gross_profit?: number
+          gross_revenue?: number
+          id?: string
+          margin_percent?: number
+          marketplace_code: string
+          marketplace_fees?: number
+          orders_count?: number
+          period_label: string
+          settlement_id: string
+          total_cogs?: number
+          uncosted_revenue?: number
+          uncosted_sku_count?: number
+          units_sold?: number
+          user_id: string
+        }
+        Update: {
+          calculated_at?: string
+          created_at?: string
+          gross_profit?: number
+          gross_revenue?: number
+          id?: string
+          margin_percent?: number
+          marketplace_code?: string
+          marketplace_fees?: number
+          orders_count?: number
+          period_label?: string
+          settlement_id?: string
+          total_cogs?: number
+          uncosted_revenue?: number
+          uncosted_sku_count?: number
+          units_sold?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       settlement_unmapped: {
         Row: {
           amount: number | null
