@@ -145,7 +145,7 @@ export default function Dashboard() {
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
-
+  const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/auth');
