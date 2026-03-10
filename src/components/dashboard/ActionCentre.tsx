@@ -285,12 +285,23 @@ export default function ActionCentre({
           {uploadNeeded.length > 0 && (
             <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
               <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🔴</span>
-                  <h3 className="font-semibold text-sm">Upload Needed</h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🔴</span>
+                    <h3 className="font-semibold text-sm">Upload Needed</h3>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    disabled={refreshingUploads}
+                    onClick={handleRefreshUploads}
+                  >
+                    <RefreshCw className={cn("h-3.5 w-3.5", refreshingUploads && "animate-spin")} />
+                  </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {uploadNeeded.length} marketplace settlement{uploadNeeded.length > 1 ? 's' : ''} missing
+                  {refreshingUploads ? 'Checking...' : `${uploadNeeded.length} marketplace settlement${uploadNeeded.length > 1 ? 's' : ''} missing`}
                 </p>
                 <ul className="space-y-1">
                   {uploadNeeded.slice(0, 3).map(r => (
