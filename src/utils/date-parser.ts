@@ -26,16 +26,25 @@ const MONTH_NAMES: Record<string, number> = {
 // ─── Range validation ───────────────────────────────────────────────────────
 
 const MIN_YEAR = 2020;
-const MAX_YEAR = 2030;
+
+/** Plausibility ceiling: current month + 3 months */
+function getMaxPlausibleDate(): string {
+  const now = new Date();
+  const ceiling = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate());
+  return `${ceiling.getFullYear()}-${String(ceiling.getMonth() + 1).padStart(2, '0')}-${String(ceiling.getDate()).padStart(2, '0')}`;
+}
 
 function isValidDate(year: number, month: number, day: number): boolean {
-  if (year < MIN_YEAR || year > MAX_YEAR) return false;
+  if (year < MIN_YEAR || year > 2099) return false;
   if (month < 1 || month > 12) return false;
   if (day < 1 || day > 31) return false;
-  // Check actual days in month
   const daysInMonth = [0, 31, (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 29 : 28,
     31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   return day <= daysInMonth[month];
+}
+
+function isPlausible(dateStr: string): boolean {
+  return dateStr >= '2020-01-01' && dateStr <= getMaxPlausibleDate();
 }
 
 function formatDate(year: number, month: number, day: number): string {
