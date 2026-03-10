@@ -4,7 +4,7 @@
  * All marketplace dashboards MUST use this hook for settlement CRUD.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { deleteSettlement } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
@@ -74,15 +74,20 @@ export function useSettlementManager<T extends BaseSettlementRow = BaseSettlemen
     loadSettlements(true);
   }, [loadSettlements]);
 
-  // Realtime subscription
+  // Debounced realtime subscription — prevents flickering during rapid sync updates
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const channel = supabase
       .channel(`settlements-${marketplaceCode}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => {
-        loadSettlements();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => loadSettlements(), 2000);
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [loadSettlements, marketplaceCode]);
 
   const handleDelete = useCallback(async (settlement: BaseSettlementRow) => {
