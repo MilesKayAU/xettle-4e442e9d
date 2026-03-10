@@ -272,7 +272,23 @@ Deno.serve(async (req) => {
 
             await new Promise(r => setTimeout(r, 1000))
           } catch (pushErr: any) {
-            console.error(`[auto-push-xero] Error pushing ${s.settlement_id}:`, pushErr.message)
+            const errMsg = pushErr?.message || String(pushErr)
+            console.error(`[auto-push-xero] Error pushing ${s.settlement_id}:`, errMsg)
+
+            await supabase
+              .from('settlements')
+              .update({ status: 'push_failed' })
+              .eq('id', s.id)
+
+            await supabase.from('system_events').insert({
+              user_id: userId,
+              event_type: 'auto_push_xero',
+              severity: 'error',
+              marketplace_code: marketplace,
+              settlement_id: s.settlement_id,
+              details: { settlement_id: s.settlement_id, marketplace, error: errMsg, type: 'network_error', amount: netAmount },
+            })
+
             userErrors++
           }
         }
