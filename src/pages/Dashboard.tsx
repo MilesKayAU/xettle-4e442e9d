@@ -16,7 +16,7 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
