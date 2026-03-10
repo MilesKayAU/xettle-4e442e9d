@@ -356,7 +356,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Synced ${updated} (reference) + ${fuzzyMatched} (fuzzy) for user ${userId}`);
+    console.log(`[sync-xero-status] User ${userId}: ${updated} reference matches, ${fuzzyMatched} fuzzy matches, ${allInvoices.length} Xero invoices scanned, ${unmatchedSettlements?.length || 0} unmatched settlements checked`);
 
     return new Response(JSON.stringify({
       success: true,
