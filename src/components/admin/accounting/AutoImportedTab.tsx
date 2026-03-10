@@ -217,6 +217,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const [marking, setMarking] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [auditing, setAuditing] = useState(false);
+  const [lastAuditTime, setLastAuditTime] = useState<string | null>(null);
 
   // Transaction drill-down
   const { expandedLines, lineItems, loadingLines, loadLineItems } = useTransactionDrilldown();
