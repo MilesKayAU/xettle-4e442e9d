@@ -187,9 +187,18 @@ Deno.serve(async (req) => {
       const fromDate = addDays(periodEnd, -7)
       const toDate = addDays(periodEnd, 21)
 
+      // Xero where clause format: DateTime(YYYY, MM, DD) with AND (not &&)
+      // Docs: https://developer.xero.com/documentation/api/accounting/banktransactions
+      const formatXeroDateTime = (d: string) => {
+        const [y, m, dd] = d.split('-')
+        return `DateTime(${y}, ${m}, ${dd})`
+      }
+      const whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)} AND Date<=${formatXeroDateTime(toDate)}`
+
       let bankTxns: any[] = []
       try {
-        const url = `https://api.xero.com/api.xro/2.0/BankTransactions?where=Type=="RECEIVE"&&Date>=DateTime(${fromDate.replace(/-/g, ',')})&&Date<=DateTime(${toDate.replace(/-/g, ',')})`
+        const url = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(whereClause)}`
+        console.log(`[bank-match] Querying Xero: ${whereClause} for ${marketplace} (${s.settlement_id})`)
         const res = await fetch(url, {
           headers: {
             'Authorization': `Bearer ${xeroToken.access_token}`,
@@ -200,6 +209,7 @@ Deno.serve(async (req) => {
         if (res.ok) {
           const data = await res.json()
           bankTxns = data?.BankTransactions || []
+          console.log(`[bank-match] Xero returned ${bankTxns.length} RECEIVE transactions. First:`, bankTxns.length > 0 ? JSON.stringify({ Total: bankTxns[0].Total, Date: bankTxns[0].Date, Reference: bankTxns[0].Reference, Contact: bankTxns[0].Contact?.Name, LineItem0: bankTxns[0].LineItems?.[0]?.Description }) : 'none')
         } else {
           const errText = await res.text()
           console.error(`Xero bank API error [${res.status}]:`, errText)
