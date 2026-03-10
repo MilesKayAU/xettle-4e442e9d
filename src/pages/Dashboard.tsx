@@ -439,7 +439,7 @@ export default function Dashboard() {
 
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
-        {/* ─── Dashboard (Action Centre Homepage) ────────────────────── */}
+        {/* ─── Dashboard (Homepage with Overview) ────────────────────── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
@@ -454,16 +454,9 @@ export default function Dashboard() {
                 }}
                 userName={user?.email?.split('@')[0]}
               />
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <SettlementsOverview
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                  onSelectMarketplace={(code) => {
-                    setSelectedMarketplace(code);
-                    switchView('settlements');
-                  }}
-                />
-              )}
+              <ValidationSweep
+                onSwitchToUpload={() => switchView('smart_upload')}
+              />
             </div>
           </ErrorBoundary>
         )}
