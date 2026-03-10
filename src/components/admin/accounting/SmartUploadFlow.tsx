@@ -955,17 +955,22 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     const monthLabel = pStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
                     const dateRange = `${pStart.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} – ${pEnd.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
                     const sourceHint = MARKETPLACE_SOURCE_HINTS[ms.marketplace_code] || 'Check your marketplace portal or email';
+                    const isShopifyAutoSync = ms.marketplace_code === 'shopify_payments' && hasShopifyConnection;
                     return (
                       <div
                         key={`${ms.marketplace_code}-${ms.period_start}`}
                         className={`flex items-start gap-2 px-3 py-2 rounded-md transition-all ${
                           done
                             ? 'bg-emerald-100/80 dark:bg-emerald-900/30 opacity-70'
-                            : 'bg-background/80'
+                            : shopifySyncing && isShopifyAutoSync
+                              ? 'bg-blue-50/80 dark:bg-blue-900/20'
+                              : 'bg-background/80'
                         }`}
                       >
                         {done ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        ) : shopifySyncing && isShopifyAutoSync ? (
+                          <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin flex-shrink-0 mt-0.5" />
                         ) : (
                           <XCircle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                         )}
@@ -973,6 +978,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                           <div className={`flex items-center gap-1.5 ${done ? 'line-through' : ''}`}>
                             <span className="text-xs font-medium text-foreground">{ms.marketplace_label}</span>
                             <span className="text-xs text-muted-foreground">— {monthLabel}</span>
+                            {isShopifyAutoSync && !done && !shopifySyncing && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400">
+                                Auto-sync
+                              </Badge>
+                            )}
+                            {shopifySyncing && isShopifyAutoSync && (
+                              <span className="text-[10px] text-blue-500">Auto-syncing...</span>
+                            )}
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <button className="text-muted-foreground/60 hover:text-muted-foreground" onClick={e => e.stopPropagation()}>
@@ -980,8 +993,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs text-xs">
-                                <p className="font-medium mb-0.5">Where to find this file:</p>
-                                <p>{sourceHint}</p>
+                                <p className="font-medium mb-0.5">
+                                  {isShopifyAutoSync ? 'Auto-sync available:' : 'Where to find this file:'}
+                                </p>
+                                <p>{isShopifyAutoSync ? 'Click "Sync Shopify" above to pull payouts automatically via API. Manual CSV upload also works as fallback.' : sourceHint}</p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
