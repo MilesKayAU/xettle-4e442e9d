@@ -26,6 +26,8 @@ interface ShopifyOrder {
 }
 
 Deno.serve(async (req) => {
+  console.log("[fetch-shopify-orders] Handler invoked", req.method);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -33,6 +35,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
+      console.error("[fetch-shopify-orders] No auth header");
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -45,19 +48,29 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-    if (userError || !user) {
-      console.error("[fetch-shopify-orders] Auth failed:", userError?.message);
-      return new Response(JSON.stringify({ error: "Unauthorized", detail: userError?.message }), {
+    // Use getClaims for JWT verification (signing-keys compatible)
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      console.error("[fetch-shopify-orders] Auth failed:", claimsError?.message);
+      return new Response(JSON.stringify({ error: "Unauthorized", detail: claimsError?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const authenticatedUserId = claimsData.claims.sub as string;
+    console.log("[fetch-shopify-orders] Auth OK, user:", authenticatedUserId);
 
-    const { userId, shopDomain, dateFrom, dateTo, limit } = await req.json();
-    const resolvedUserId = userId || user.id;
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      console.error("[fetch-shopify-orders] Failed to parse request body");
+    }
+    const { userId, shopDomain, dateFrom, dateTo, limit } = body;
+    console.log("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit });
+
+    const resolvedUserId = userId || authenticatedUserId;
     const effectiveLimit = Math.min(limit || 250, 250);
 
     // ─── Enforce accounting boundary ────────────────────────────────
@@ -191,6 +204,7 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
+    console.error("[fetch-shopify-orders] FATAL:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error", detail: String(err) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
