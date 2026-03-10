@@ -501,7 +501,9 @@ export async function syncSettlementToXero(
       settlement_id: settlementId,
       details: { invoice_id: result.invoiceId, invoice_number: result.invoiceNumber },
       severity: 'info',
-    } as any).catch(console.error);
+    } as any).then(({ error: evErr }) => {
+      if (evErr) console.error('[system_events] xero push log error:', evErr);
+    });
 
     return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
   } catch (err: any) {
