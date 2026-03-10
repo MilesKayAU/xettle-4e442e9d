@@ -6,6 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const STEP_TIMEOUT_MS = 45_000; // 45 seconds per step
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -41,9 +43,17 @@ Deno.serve(async (req) => {
     if (data?.id) interimIds[userId] = data.id;
   }
 
-  // Helper to call sibling edge functions
-  async function callFunction(name: string, extraHeaders: Record<string, string> = {}, body: any = { time: new Date().toISOString() }) {
+  // Helper to call sibling edge functions with timeout
+  async function callFunction(
+    name: string,
+    extraHeaders: Record<string, string> = {},
+    body: any = { time: new Date().toISOString() },
+    timeoutMs: number = STEP_TIMEOUT_MS,
+  ) {
     const url = `${supabaseUrl}/functions/v1/${name}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -53,13 +63,20 @@ Deno.serve(async (req) => {
           ...extraHeaders,
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      clearTimeout(timer);
       const respBody = await res.json().catch(() => ({ status: res.status }));
       if (!res.ok) {
         return { error: respBody?.error || `HTTP ${res.status}`, ...respBody };
       }
       return { status: res.status, ...respBody };
-    } catch (err) {
+    } catch (err: any) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        console.error(`[scheduled-sync] ${name} timed out after ${timeoutMs}ms`);
+        return { error: `timed_out after ${timeoutMs}ms`, timed_out: true };
+      }
       return { error: String(err) };
     }
   }
@@ -131,8 +148,8 @@ Deno.serve(async (req) => {
   for (const userId of allUserIds) {
     const interimId = interimIds[userId];
     const details = {
-      amazon: results.amazon?.results?.find((r: any) => r.user_id === userId) || (results.amazon?.error ? { error: results.amazon.error } : null),
-      shopify: results.shopify?.results?.find((r: any) => r.user_id === userId) || (results.shopify?.error ? { error: results.shopify.error } : null),
+      amazon: results.amazon?.results?.find((r: any) => r.user_id === userId) || (results.amazon?.error ? { error: results.amazon.error, timed_out: results.amazon.timed_out || false } : null),
+      shopify: results.shopify?.results?.find((r: any) => r.user_id === userId) || (results.shopify?.error ? { error: results.shopify.error, timed_out: results.shopify.timed_out || false } : null),
       xero_push: results.xero_push?.results?.find((r: any) => r.userId === userId) || null,
       xero_audit: results.xero_audit?.results?.find((r: any) => r.user_id === userId) || null,
       duration_ms: durationMs,
@@ -149,7 +166,6 @@ Deno.serve(async (req) => {
         } as any)
         .eq('id', interimId);
     } else {
-      // Fallback insert if interim wasn't created
       await adminClient.from("sync_history").insert({
         user_id: userId,
         event_type: "scheduled_sync",

@@ -797,6 +797,7 @@ export type Database = {
           period_end: string
           period_start: string
           promotional_discounts: number | null
+          push_retry_count: number
           raw_payload: Json | null
           reconciliation_status: string | null
           refunds: number | null
@@ -839,6 +840,7 @@ export type Database = {
           period_end: string
           period_start: string
           promotional_discounts?: number | null
+          push_retry_count?: number
           raw_payload?: Json | null
           reconciliation_status?: string | null
           refunds?: number | null
@@ -881,6 +883,7 @@ export type Database = {
           period_end?: string
           period_start?: string
           promotional_discounts?: number | null
+          push_retry_count?: number
           raw_payload?: Json | null
           reconciliation_status?: string | null
           refunds?: number | null

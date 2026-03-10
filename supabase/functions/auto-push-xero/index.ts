@@ -85,13 +85,23 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // ─── Get all ready_to_push settlements ────────────────────
-        const { data: settlements, error: settErr } = await supabase
+        // ─── Get ready_to_push + retryable push_failed settlements ──
+        const { data: readySettlements, error: settErr } = await supabase
           .from('settlements')
           .select('*')
           .eq('user_id', userId)
           .eq('status', 'ready_to_push')
           .order('period_start', { ascending: true })
+
+        const { data: failedSettlements } = await supabase
+          .from('settlements')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'push_failed')
+          .lt('push_retry_count', 3)
+          .order('period_start', { ascending: true })
+
+        const settlements = [...(readySettlements || []), ...(failedSettlements || [])]
 
         if (settErr) {
           console.error(`[auto-push-xero] User ${userId}: query error:`, settErr.message)
@@ -221,18 +231,21 @@ Deno.serve(async (req) => {
               const errMsg = pushResult.error || `HTTP ${pushResponse.status}`
               console.error(`[auto-push-xero] Failed ${s.settlement_id}: ${errMsg}`)
 
+              const newRetryCount = (s.push_retry_count || 0) + 1
+              const newStatus = newRetryCount >= 3 ? 'push_failed_permanent' : 'push_failed'
+
               await supabase
                 .from('settlements')
-                .update({ status: 'push_failed' })
+                .update({ status: newStatus, push_retry_count: newRetryCount } as any)
                 .eq('id', s.id)
 
               await supabase.from('system_events').insert({
                 user_id: userId,
                 event_type: 'auto_push_xero',
-                severity: 'warning',
+                severity: newRetryCount >= 3 ? 'error' : 'warning',
                 marketplace_code: marketplace,
                 settlement_id: s.settlement_id,
-                details: { error: errMsg, settlement_id: s.settlement_id, marketplace, amount: netAmount },
+                details: { error: errMsg, settlement_id: s.settlement_id, marketplace, amount: netAmount, retry_count: newRetryCount, permanent: newRetryCount >= 3 },
               })
 
               userErrors++
@@ -244,11 +257,12 @@ Deno.serve(async (req) => {
               .from('settlements')
               .update({
                 status: 'pushed_to_xero',
+                push_retry_count: 0,
                 xero_journal_id: pushResult.invoiceId,
                 xero_invoice_number: pushResult.invoiceNumber || null,
                 xero_status: 'AUTHORISED',
                 xero_type: pushResult.xeroType || 'invoice',
-              })
+              } as any)
               .eq('id', s.id)
 
             await supabase.from('system_events').insert({
@@ -275,18 +289,21 @@ Deno.serve(async (req) => {
             const errMsg = pushErr?.message || String(pushErr)
             console.error(`[auto-push-xero] Error pushing ${s.settlement_id}:`, errMsg)
 
+            const newRetryCount = (s.push_retry_count || 0) + 1
+            const newStatus = newRetryCount >= 3 ? 'push_failed_permanent' : 'push_failed'
+
             await supabase
               .from('settlements')
-              .update({ status: 'push_failed' })
+              .update({ status: newStatus, push_retry_count: newRetryCount } as any)
               .eq('id', s.id)
 
             await supabase.from('system_events').insert({
               user_id: userId,
               event_type: 'auto_push_xero',
-              severity: 'error',
+              severity: newRetryCount >= 3 ? 'error' : 'warning',
               marketplace_code: marketplace,
               settlement_id: s.settlement_id,
-              details: { settlement_id: s.settlement_id, marketplace, error: errMsg, type: 'network_error', amount: netAmount },
+              details: { settlement_id: s.settlement_id, marketplace, error: errMsg, type: 'network_error', amount: netAmount, retry_count: newRetryCount, permanent: newRetryCount >= 3 },
             })
 
             userErrors++
