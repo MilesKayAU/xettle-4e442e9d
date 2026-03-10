@@ -23,6 +23,8 @@ import {
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye,
 } from 'lucide-react';
+import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
+import UnknownEntityDialog from './UnknownEntityDialog';
 import {
   Select,
   SelectContent,
@@ -104,6 +106,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [files, setFiles] = useState<DetectedFile[]>([]);
   const [processingAll, setProcessingAll] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [unknownEntities, setUnknownEntities] = useState<UnknownEntity[]>([]);
+  const [showEntityDialog, setShowEntityDialog] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
@@ -131,6 +135,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         const text = await file.text();
         const result = parseShopifyOrdersCSV(text);
         if (!result.success) return [];
+
+        // Run entity detection on all parsed orders to find unknown tags
+        const allOrders = [...result.groups, ...result.unknownGroups].flatMap(g => g.orders);
+        if (allOrders.length > 0) {
+          try {
+            const entityResult = await detectUnknownEntities(allOrders);
+            if (entityResult.unknowns.length > 0) {
+              setUnknownEntities(entityResult.unknowns);
+              setShowEntityDialog(true);
+            }
+          } catch { /* silent — don't block parsing */ }
+        }
+
         return result.settlements;
       }
 
@@ -978,6 +995,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           )}
         </div>
       )}
+      {/* Unknown Entity Classification Dialog */}
+      <UnknownEntityDialog
+        open={showEntityDialog}
+        onOpenChange={setShowEntityDialog}
+        unknowns={unknownEntities}
+        onClassified={(results) => {
+          // If any were classified as marketplace, trigger marketplace tab creation
+          const newMarketplaces = results.filter(r => r.type === 'marketplace');
+          if (newMarketplaces.length > 0) {
+            for (const mp of newMarketplaces) {
+              ensureMarketplaceConnection(mp.name.toLowerCase().replace(/\s+/g, '_'));
+            }
+            onMarketplacesChanged?.();
+          }
+          setUnknownEntities([]);
+        }}
+      />
     </div>
   );
 }
