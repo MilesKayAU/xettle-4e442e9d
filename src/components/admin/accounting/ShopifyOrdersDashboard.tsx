@@ -1545,6 +1545,20 @@ export default function ShopifyOrdersDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Unknown Entity Classification Dialog */}
+      <UnknownEntityDialog
+        open={showEntityDialog}
+        onOpenChange={setShowEntityDialog}
+        unknowns={unknownEntities}
+        onClassified={(results) => {
+          const newMarketplaces = results.filter(r => r.type === 'marketplace');
+          if (newMarketplaces.length > 0) {
+            toast.success(`New marketplace${newMarketplaces.length > 1 ? 's' : ''} added: ${newMarketplaces.map(m => m.name).join(', ')}`);
+            loadHistory();
+          }
+          setUnknownEntities([]);
+        }}
+      />
     </div>
   );
 }
