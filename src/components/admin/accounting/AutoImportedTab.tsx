@@ -410,13 +410,27 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         </div>
       )}
 
-      {/* ─── Ready to Push Summary ────────────────────────────────── */}
-      {readyToPush.length > 0 && !syncResult && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-          <Zap className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-          <div className="text-xs text-blue-800">
-            <p className="font-medium">{readyToPush.length} settlement{readyToPush.length !== 1 ? 's' : ''} totalling {formatAUD(readyToPushTotal)} — ready to push to Xero</p>
-            <p className="mt-0.5">Click "Push to Xero" on each settlement below, or mark as "Already in Xero" if already booked.</p>
+      {/* ─── Summary: Ready vs Synced ─────────────────────────── */}
+      {settlements.length > 0 && (
+        <div className="grid gap-3 grid-cols-2">
+          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+            <p className="text-xs font-medium text-blue-800 dark:text-blue-300">
+              🟡 {readyToPush.length} ready to push
+            </p>
+            {readyToPush.length > 0 && (
+              <p className="text-lg font-bold text-blue-900 dark:text-blue-200 mt-1">{formatAUD(readyToPushTotal)}</p>
+            )}
+            {readyToPush.length === 0 && (
+              <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">All synced ✓</p>
+            )}
+          </div>
+          <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
+            <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+              ✅ {settlements.filter(s => !!(s.xero_journal_id || s.xero_journal_id_1) || s.status === 'synced_external').length} in Xero
+            </p>
+            <p className="text-lg font-bold text-emerald-900 dark:text-emerald-200 mt-1">
+              {formatAUD(settlements.filter(s => !!(s.xero_journal_id || s.xero_journal_id_1) || s.status === 'synced_external').reduce((sum, s) => sum + (s.bank_deposit || 0), 0))}
+            </p>
           </div>
         </div>
       )}
