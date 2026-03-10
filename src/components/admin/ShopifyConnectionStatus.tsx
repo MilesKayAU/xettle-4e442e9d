@@ -191,6 +191,44 @@ const ShopifyConnectionStatus = () => {
     await classifyUnknownTag(tag, type);
   };
 
+  // ─── Reconnect: delete invalid token then re-initiate OAuth ─────
+  const handleReconnect = async () => {
+    const domain = status?.shops?.[0]?.shop_domain;
+    if (!domain) return;
+    setReconnecting(true);
+    try {
+      // Step 1: Delete invalid token
+      await supabase.functions.invoke('shopify-auth', {
+        method: 'POST',
+        headers: { 'x-action': 'disconnect' },
+      });
+      setStatus({ connected: false, shops: [] });
+
+      // Step 2: Re-initiate OAuth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('You must be logged in');
+        setReconnecting(false);
+        return;
+      }
+
+      const { data: result, error } = await supabase.functions.invoke('shopify-auth', {
+        body: { action: 'initiate', shop: domain, userId: session.user.id },
+      });
+
+      if (error) throw new Error(error.message);
+      if (result?.error) throw new Error(result.error);
+
+      if (result?.authUrl) {
+        window.location.href = result.authUrl;
+      }
+    } catch (error: any) {
+      console.error('Reconnect error:', error);
+      toast.error(error.message || 'Failed to reconnect');
+      setReconnecting(false);
+    }
+  };
+
   // ─── Connection handlers ──────────────────────────────────────────
 
   const isValidDomain = (domain: string) => {
