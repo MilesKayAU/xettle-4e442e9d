@@ -557,6 +557,34 @@ export async function syncXeroStatus(): Promise<{ success: boolean; updated?: nu
   }
 }
 
+// ─── Validation Sweep Trigger ────────────────────────────────────────────────
+
+/**
+ * Fire-and-forget trigger for the validation sweep edge function.
+ * Called after settlement save, Xero push, Shopify connect, or boundary confirmation.
+ */
+export async function triggerValidationSweep(): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    fetch(
+      `https://${projectId}.supabase.co/functions/v1/run-validation-sweep`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({}),
+      }
+    ).catch(console.error);
+  } catch {
+    // fire-and-forget
+  }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 export function formatSettlementDate(d: string): string {
