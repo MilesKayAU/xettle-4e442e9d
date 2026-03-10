@@ -7,6 +7,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { detectMarketplaceFromOrder, detectAllMarketplaces, classifyUnknownTag, type OrderDetectionResult } from '@/utils/shopify-order-detector';
+import { auditSubChannels, type DetectedSubChannel } from '@/utils/sub-channel-detection';
+import SubChannelBanner from '@/components/shopify/SubChannelBanner';
 import ShopifyOnboarding from './ShopifyOnboarding';
 import UnknownEntityDialog from './UnknownEntityDialog';
 import SkuCostManager from './SkuCostManager';
@@ -135,6 +137,7 @@ export default function ShopifyOrdersDashboard() {
   const [apiFetching, setApiFetching] = useState(false);
   const [unknownEntities, setUnknownEntities] = useState<UnknownEntity[]>([]);
   const [showEntityDialog, setShowEntityDialog] = useState(false);
+  const [detectedSubChannels, setDetectedSubChannels] = useState<DetectedSubChannel[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -756,6 +759,14 @@ export default function ShopifyOrdersDashboard() {
         } catch { /* silent */ }
       }
 
+      // Run sub-channel detection on raw API orders
+      try {
+        const subChannelResult = await auditSubChannels(apiOrders);
+        if (subChannelResult.new_channels.length > 0) {
+          setDetectedSubChannels(subChannelResult.new_channels);
+        }
+      } catch { /* silent */ }
+
       // Update last_fetched_at
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -854,6 +865,18 @@ export default function ShopifyOrdersDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Sub-channel detection banner */}
+      {detectedSubChannels.length > 0 && (
+        <SubChannelBanner
+          channels={detectedSubChannels}
+          onSetupComplete={() => {
+            setDetectedSubChannels([]);
+            loadHistory();
+          }}
+        />
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="upload" className="gap-1.5">
