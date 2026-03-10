@@ -819,8 +819,96 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const totalSettlements = readyFiles.reduce((sum, f) => sum + (f.settlements?.length || 0), 0);
   const hasFiles = files.length > 0;
 
+  // ── Missing settlements checklist ──
+  const hasMissingChecklist = missingSettlements && missingSettlements.length > 0;
+  const checkedItems = useMemo(() => {
+    if (!missingSettlements || missingSettlements.length === 0) return new Set<number>();
+    const matched = new Set<number>();
+    const savedFiles = files.filter(f => f.status === 'saved' && f.detection);
+    for (let mi = 0; mi < missingSettlements.length; mi++) {
+      const ms = missingSettlements[mi];
+      const isMatched = savedFiles.some(sf => {
+        const mkt = sf.overrideMarketplace || sf.detection?.marketplace || '';
+        if (mkt !== ms.marketplace_code) return false;
+        // Check if any settlement period overlaps
+        if (sf.settlements) {
+          return sf.settlements.some(s => {
+            const sPeriod = new Date(s.period_start + 'T00:00:00');
+            const msPeriod = new Date(ms.period_start + 'T00:00:00');
+            return sPeriod.getMonth() === msPeriod.getMonth() && sPeriod.getFullYear() === msPeriod.getFullYear();
+          });
+        }
+        return true; // marketplace matched at minimum
+      });
+      if (isMatched) matched.add(mi);
+    }
+    return matched;
+  }, [missingSettlements, files]);
+
+  const allMissingUploaded = hasMissingChecklist && checkedItems.size === missingSettlements!.length;
+
   return (
     <div className="space-y-4">
+      {/* Missing settlements checklist banner */}
+      {hasMissingChecklist && (
+        <Card className={`border-amber-200 dark:border-amber-800 ${allMissingUploaded ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50/50 dark:bg-amber-900/10'} sticky top-0 z-10`}>
+          <CardContent className="py-4">
+            {allMissingUploaded ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">All caught up!</p>
+                    <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80">All missing settlements have been uploaded.</p>
+                  </div>
+                </div>
+                {onReturnToDashboard && (
+                  <Button size="sm" className="gap-2" onClick={onReturnToDashboard}>
+                    <LayoutDashboard className="h-3.5 w-3.5" />
+                    Return to Dashboard
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Upload className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <h3 className="text-sm font-semibold text-foreground">Files needed</h3>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {checkedItems.size} of {missingSettlements!.length} uploaded
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                  {missingSettlements!.map((ms, i) => {
+                    const done = checkedItems.has(i);
+                    return (
+                      <div
+                        key={`${ms.marketplace_code}-${ms.period_start}`}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-all ${
+                          done
+                            ? 'bg-emerald-100/80 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 line-through opacity-70'
+                            : 'bg-background/80 text-foreground'
+                        }`}
+                      >
+                        {done ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                        ) : (
+                          <XCircle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+                        )}
+                        <span className="font-medium">{ms.marketplace_label}</span>
+                        <span className="text-muted-foreground">— {new Date(ms.period_start + 'T00:00:00').toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Drop zone */}
       <Card
         className={`border-2 border-dashed transition-all cursor-pointer ${
