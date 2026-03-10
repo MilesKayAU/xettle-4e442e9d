@@ -50,8 +50,19 @@ Deno.serve(async (req) => {
   results.validation = await callFunction("run-validation-sweep");
 
   // 4. Auto-push ready settlements to Xero
-  console.log("[scheduled-sync] Step 4: Auto-push to Xero...");
-  results.xero_push = await callFunction("auto-push-xero");
+  //    Defaults to dry_run unless admin has set auto_push_live_mode=true in app_settings
+  console.log("[scheduled-sync] Step 4: Auto-push to Xero (checking live mode)...");
+  let autoPushLive = false;
+  const { data: liveModeSettings } = await adminClient
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'auto_push_live_mode')
+    .eq('value', 'true');
+  if (liveModeSettings && liveModeSettings.length > 0) {
+    autoPushLive = true;
+  }
+  console.log(`[scheduled-sync] Auto-push mode: ${autoPushLive ? 'LIVE' : 'DRY RUN'}`);
+  results.xero_push = await callFunction("auto-push-xero", {}, { dry_run: !autoPushLive });
 
   // 5. Sync Xero status back (audit matched invoices)
   console.log("[scheduled-sync] Step 5: Xero status audit...");
