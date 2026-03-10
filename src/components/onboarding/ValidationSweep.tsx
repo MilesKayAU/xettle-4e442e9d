@@ -86,6 +86,32 @@ export default function ValidationSweep({
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
+  const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
+
+  const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
+    setConfirmingBank(row.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/match-bank-deposits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ settlementId: row.settlement_id, force_match: true, transaction_id: transactionId }),
+      });
+      const data = await res.json();
+      if (data?.matched || data?.results?.[0]?.matched) {
+        toast.success('Bank deposit confirmed ✅');
+        loadData();
+      } else {
+        toast.error('Could not confirm match');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Bank match failed');
+    } finally {
+      setConfirmingBank(null);
+    }
+  };
 
   const loadData = useCallback(async () => {
     try {
