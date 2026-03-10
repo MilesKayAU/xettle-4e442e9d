@@ -85,6 +85,7 @@ const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
   xero_push_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-500' },
   validation_sweep_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-500' },
   shopify_payout_synced: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
+  scheduled_sync: { icon: <RefreshCw className="h-3.5 w-3.5" />, color: 'text-blue-500' },
 };
 
 export default function ActionCentre({
@@ -101,6 +102,7 @@ export default function ActionCentre({
   const [apiSyncedMarketplaces, setApiSyncedMarketplaces] = useState<Set<string>>(new Set());
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
+  const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -110,13 +112,14 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
         supabase.from('settlements').select('marketplace').eq('source', 'api'),
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
+        supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -132,6 +135,9 @@ export default function ActionCentre({
       }
       if (connectionsRes.data) {
         setConnectedMarketplaces(connectionsRes.data.map((c: any) => c.marketplace_code));
+      }
+      if (lastSyncRes.data?.created_at) {
+        setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
@@ -282,6 +288,12 @@ export default function ActionCentre({
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {lastAutoSync && (
+            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-3 w-3" />
+              Auto-sync {formatTimeAgo(lastAutoSync)}
+            </span>
+          )}
           {lastChecked && <span>Updated {formatTimeAgo(lastChecked)}</span>}
           <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="h-7 px-2 gap-1.5">
             {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -569,7 +581,8 @@ function formatEventLabel(event: SystemEvent): string {
       const diff = event.details?.difference;
       return `Reconciliation gap${diff ? `: ${formatAUD(diff)}` : ''} ${mp}`;
     }
-    case 'settlement_detected': return `Settlement detected: ${mp} ${period}`;
+    case 'shopify_payout_synced': return `Shopify payout synced: ${period}`;
+    case 'scheduled_sync': return 'Auto-sync completed';
     default: return event.event_type.replace(/_/g, ' ');
   }
 }
