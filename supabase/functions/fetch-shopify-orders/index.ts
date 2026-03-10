@@ -19,8 +19,10 @@ interface ShopifyOrder {
   total_shipping_price_set: unknown;
   total_tax: string;
   total_price: string;
+  total_discounts?: string;
   line_items: unknown[];
   payment_gateway_names: string[];
+  source_name?: string;
 }
 
 Deno.serve(async (req) => {

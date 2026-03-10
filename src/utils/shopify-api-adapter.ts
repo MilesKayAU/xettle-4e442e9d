@@ -34,6 +34,7 @@ export interface ShopifyApiOrder {
   }>;
   payment_gateway_names: string[];
   currency?: string;
+  source_name?: string;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
