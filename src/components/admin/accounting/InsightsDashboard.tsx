@@ -169,7 +169,7 @@ export default function InsightsDashboard() {
           : null;
         const fbaTotal = Math.abs(rows.reduce((sum, r) => sum + (r.fba_fees || 0), 0));
         const storageTotal = Math.abs(rows.reduce((sum, r) => sum + (r.storage_fees || 0), 0));
-        const otherFeesTotal = Math.abs(rows.reduce((sum, r) => sum + (r.other_fees || 0), 0));
+        const otherFeesTotal = rows.reduce((sum, r) => sum + Math.max(r.other_fees || 0, 0), 0);
 
         const adSpend = adSpendByMp[mp] || 0;
         const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
