@@ -285,7 +285,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                       </p>
                     </div>
                   )}
-                  <Card className={`border-border hover:border-primary/20 transition-colors ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}>
+                  <Card className={`shadow-sm border-border/80 hover:border-primary/20 transition-colors border-l-4 ${
+                    isSynced ? 'border-l-emerald-500' : isPushFailed ? 'border-l-red-400' : 'border-l-amber-400'
+                  } ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}>
                     <CardContent className="py-3 px-4">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
