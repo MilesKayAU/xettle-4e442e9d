@@ -390,11 +390,17 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const prev = filteredSettlements[idx + 1];
                     let hasGap = false;
                     if (prev && s.period_start > prev.period_end) {
-                      const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
-                      const gapDays = gapMs / (1000 * 60 * 60 * 24);
-                      const isShopify = (s.marketplace || '').toLowerCase().includes('shopify');
-                      const tolerance = isShopify ? 7 : 1;
-                      hasGap = gapDays > tolerance;
+                      // Suppress gap warnings for pre-boundary settlements
+                      const bothPreBoundary = accountingBoundary &&
+                        new Date(s.period_end) < new Date(accountingBoundary) &&
+                        new Date(prev.period_end) < new Date(accountingBoundary);
+                      if (!bothPreBoundary) {
+                        const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
+                        const gapDays = gapMs / (1000 * 60 * 60 * 24);
+                        const isShopify = (s.marketplace || '').toLowerCase().includes('shopify');
+                        const tolerance = isShopify ? 7 : 1;
+                        hasGap = gapDays > tolerance;
+                      }
                     }
 
                     const isExpanded = expandedLines === s.settlement_id;

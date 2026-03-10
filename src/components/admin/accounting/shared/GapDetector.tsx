@@ -11,11 +11,16 @@ interface GapDetectorProps {
   currentStart: string;
   previousEnd: string;
   marketplace: string;
+  accountingBoundary?: string;
 }
 
 /** Returns true if there's a meaningful gap between two settlements */
-export function hasSettlementGap(currentStart: string, previousEnd: string, marketplace: string): boolean {
+export function hasSettlementGap(currentStart: string, previousEnd: string, marketplace: string, accountingBoundary?: string): boolean {
   if (currentStart <= previousEnd) return false;
+  // Suppress gaps when both settlements are before the accounting boundary
+  if (accountingBoundary && new Date(currentStart) < new Date(accountingBoundary) && new Date(previousEnd) < new Date(accountingBoundary)) {
+    return false;
+  }
   const gapMs = new Date(currentStart).getTime() - new Date(previousEnd).getTime();
   const gapDays = gapMs / (1000 * 60 * 60 * 24);
   const isShopify = marketplace.toLowerCase().includes('shopify');
@@ -23,8 +28,8 @@ export function hasSettlementGap(currentStart: string, previousEnd: string, mark
   return gapDays > tolerance;
 }
 
-export default function GapDetector({ currentStart, previousEnd, marketplace }: GapDetectorProps) {
-  if (!hasSettlementGap(currentStart, previousEnd, marketplace)) return null;
+export default function GapDetector({ currentStart, previousEnd, marketplace, accountingBoundary }: GapDetectorProps) {
+  if (!hasSettlementGap(currentStart, previousEnd, marketplace, accountingBoundary)) return null;
   
   return (
     <div className="flex items-center gap-2 py-1 px-3">
