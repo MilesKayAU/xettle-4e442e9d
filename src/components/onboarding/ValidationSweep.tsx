@@ -187,7 +187,7 @@ export default function ValidationSweep({
       await triggerValidationSweep();
       // Animation will complete and then loadData
     } catch {
-      toast.error('Sweep failed');
+      toast.error('Status refresh failed');
       setSweeping(false);
     }
   };

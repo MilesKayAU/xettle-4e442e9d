@@ -122,11 +122,11 @@ export default function AccountingBoundarySettings({
         setSweepResult(detail || data);
         toast.success(`Validation sweep complete — ${detail?.marketplaces_checked || 0} marketplaces checked`);
       } else {
-        toast.error(data.error || 'Sweep failed');
+        toast.error(data.error || 'Status refresh failed');
       }
     } catch (err) {
-      console.error('Sweep failed:', err);
-      toast.error('Failed to run validation sweep');
+      console.error('Status refresh failed:', err);
+      toast.error('Failed to refresh status');
     } finally {
       setSweepRunning(false);
     }
