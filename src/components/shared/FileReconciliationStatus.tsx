@@ -36,12 +36,11 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
     const sales = Number(s.sales_principal) || 0;
     const fees = Number(s.seller_fees) || 0;
     const refunds = Number(s.refunds) || 0;
-    const gstIncome = Number(s.gst_on_income) || 0;
-    const gstExpenses = Number(s.gst_on_expenses) || 0;
     const bankDeposit = Number(s.bank_deposit) || 0;
 
-    // Reconstruct: sales + gst_income - fees - gst_expenses + refunds ≈ bank_deposit
-    const calculatedNet = Math.round((sales + gstIncome - fees - gstExpenses + refunds) * 100) / 100;
+    // Net = Sales - Fees + Refunds (refunds are typically negative)
+    // GST columns are informational only — already baked into the net payout figure
+    const calculatedNet = Math.round((sales - fees + refunds) * 100) / 100;
     const diff = Math.round(Math.abs(calculatedNet - bankDeposit) * 100) / 100;
     const reconciles = diff <= 1.00;
 
