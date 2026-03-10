@@ -345,6 +345,9 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       }
     })();
 
+    // Fire-and-forget: trigger validation sweep
+    triggerValidationSweep();
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Unknown error' };
