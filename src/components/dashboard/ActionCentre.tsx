@@ -190,16 +190,7 @@ export default function ActionCentre({
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at) : null;
 
-  // Overdue: settlement_needed for > 30 days, but only for periods AFTER user account creation
-  const overdueRows = uploadNeeded.filter(r => {
-    const periodEnd = new Date(r.period_end);
-    const isOldEnough = Date.now() - periodEnd.getTime() > 30 * 24 * 60 * 60 * 1000;
-    // Don't show overdue for periods before user signed up (historical backfill)
-    const isAfterSignup = userCreatedAt ? periodEnd >= userCreatedAt : true;
-    // Don't show overdue for marketplaces that sync via API (they backfill automatically)
-    const isApiSynced = apiSyncedMarketplaces.has(r.marketplace_code);
-    return isOldEnough && isAfterSignup && !isApiSynced;
-  });
+  // Overdue alerts removed — they were creating noise with historical backfill data
 
   // 3-month timeline
   const timelineData = useMemo(() => {
