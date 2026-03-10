@@ -46,6 +46,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    // If no orders in local table, report it — don't attempt API calls
+    if (!channelRows || channelRows.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, new_channels: 0, scanned_sources: [], needs_initial_sync: true, message: "shopify_orders table is empty for this user. A manual Shopify sync is needed first." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Aggregate locally (supabase JS client doesn't support GROUP BY)
     const sourceNameCounts: Record<string, { count: number; revenue: number }> = {};
 
