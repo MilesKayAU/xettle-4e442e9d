@@ -9,6 +9,7 @@
 
 import * as pdfjsLib from 'pdfjs-dist';
 import type { StandardSettlement } from './settlement-engine';
+import { parseDateOrEmpty } from './date-parser';
 
 // Configure worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
