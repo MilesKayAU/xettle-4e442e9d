@@ -1,0 +1,643 @@
+/**
+ * ValidationSweep — Shows the 5-step validation pipeline for every marketplace period.
+ * Used as Settlements → Overview tab and triggered after boundary confirmation.
+ */
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw,
+  Upload, ArrowRight, Send, Search, PartyPopper, Clock,
+} from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+interface ValidationRow {
+  id: string;
+  marketplace_code: string;
+  period_label: string;
+  period_start: string;
+  period_end: string;
+  orders_found: boolean;
+  orders_count: number;
+  orders_total: number;
+  settlement_uploaded: boolean;
+  settlement_id: string | null;
+  settlement_net: number;
+  reconciliation_status: string;
+  reconciliation_difference: number;
+  reconciliation_confidence: number | null;
+  reconciliation_confidence_reason: string | null;
+  xero_pushed: boolean;
+  xero_invoice_id: string | null;
+  bank_matched: boolean;
+  bank_amount: number | null;
+  overall_status: string;
+  last_checked_at: string | null;
+  processing_state: string | null;
+}
+
+interface ValidationSweepProps {
+  onSwitchToUpload?: () => void;
+  onPushToXero?: (settlementId: string, marketplace: string) => void;
+  showSweepAnimation?: boolean;
+}
+
+type FilterStatus = 'all' | 'complete' | 'ready_to_push' | 'settlement_needed' | 'gap_detected';
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; bgClass: string; borderClass: string }> = {
+  complete: { label: 'Complete', color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', borderClass: 'border-emerald-200 dark:border-emerald-800' },
+  bank_matched: { label: 'Complete', color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', borderClass: 'border-emerald-200 dark:border-emerald-800' },
+  ready_to_push: { label: 'Ready to Push', color: 'text-blue-700 dark:text-blue-400', bgClass: 'bg-blue-100 dark:bg-blue-900/30', borderClass: 'border-blue-200 dark:border-blue-800' },
+  pushed_to_xero: { label: 'Pushed', color: 'text-blue-700 dark:text-blue-400', bgClass: 'bg-blue-100 dark:bg-blue-900/30', borderClass: 'border-blue-200 dark:border-blue-800' },
+  settlement_needed: { label: 'Upload Needed', color: 'text-amber-700 dark:text-amber-400', bgClass: 'bg-amber-100 dark:bg-amber-900/30', borderClass: 'border-amber-200 dark:border-amber-800' },
+  gap_detected: { label: 'Gap Detected', color: 'text-red-700 dark:text-red-400', bgClass: 'bg-red-100 dark:bg-red-900/30', borderClass: 'border-red-200 dark:border-red-800' },
+  missing: { label: 'Missing', color: 'text-muted-foreground', bgClass: 'bg-muted', borderClass: 'border-border' },
+  already_recorded: { label: 'Already Recorded', color: 'text-muted-foreground', bgClass: 'bg-muted', borderClass: 'border-border' },
+};
+
+// Sweep animation steps
+const SWEEP_STEPS = [
+  'Checking Shopify orders...',
+  'Checking uploaded settlements...',
+  'Checking Xero accounting...',
+  'Checking bank deposits...',
+];
+
+export default function ValidationSweep({
+  onSwitchToUpload,
+  onPushToXero,
+  showSweepAnimation = false,
+}: ValidationSweepProps) {
+  const [rows, setRows] = useState<ValidationRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sweeping, setSweeping] = useState(showSweepAnimation);
+  const [sweepStep, setSweepStep] = useState(0);
+  const [sweepStartTime, setSweepStartTime] = useState<number | null>(null);
+  const [sweepDuration, setSweepDuration] = useState<number | null>(null);
+  const [filter, setFilter] = useState<FilterStatus>('all');
+  const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
+  const [pushing, setPushing] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('marketplace_validation')
+        .select('*')
+        .order('marketplace_code')
+        .order('period_start', { ascending: false });
+
+      if (error) throw error;
+      setRows((data || []) as ValidationRow[]);
+    } catch (err) {
+      console.error('Failed to load validation data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Load boundary date
+  useEffect(() => {
+    supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'accounting_boundary_date')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.value) setBoundaryDate(data.value);
+      });
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('validation-sweep-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation' }, () => {
+        loadData();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadData]);
+
+  // Sweep animation
+  useEffect(() => {
+    if (!sweeping) return;
+    setSweepStartTime(Date.now());
+    setSweepStep(0);
+
+    const intervals = SWEEP_STEPS.map((_, i) =>
+      setTimeout(() => setSweepStep(i + 1), (i + 1) * 1200)
+    );
+
+    const done = setTimeout(() => {
+      setSweepDuration(Math.round((Date.now() - Date.now()) / 1000));
+      setSweeping(false);
+      loadData();
+    }, SWEEP_STEPS.length * 1200 + 800);
+
+    return () => {
+      intervals.forEach(clearTimeout);
+      clearTimeout(done);
+    };
+  }, [sweeping, loadData]);
+
+  const handleRefresh = async () => {
+    setSweeping(true);
+    setSweepStartTime(Date.now());
+    try {
+      await triggerValidationSweep();
+      // Animation will complete and then loadData
+    } catch {
+      toast.error('Sweep failed');
+      setSweeping(false);
+    }
+  };
+
+  const handlePushToXero = async (row: ValidationRow) => {
+    if (!row.settlement_id) return;
+    setPushing(row.id);
+    try {
+      const { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines } = await import('@/utils/settlement-engine');
+      
+      const { data: settlement } = await supabase
+        .from('settlements')
+        .select('*')
+        .eq('settlement_id', row.settlement_id)
+        .maybeSingle();
+
+      if (!settlement) throw new Error('Settlement not found');
+
+      const std = {
+        marketplace: settlement.marketplace || row.marketplace_code,
+        settlement_id: settlement.settlement_id,
+        period_start: settlement.period_start,
+        period_end: settlement.period_end,
+        sales_ex_gst: settlement.sales_principal || 0,
+        gst_on_sales: settlement.gst_on_income || 0,
+        fees_ex_gst: settlement.seller_fees || 0,
+        gst_on_fees: settlement.gst_on_expenses || 0,
+        net_payout: settlement.bank_deposit || 0,
+        source: 'csv_upload' as const,
+        reconciles: true,
+        metadata: {
+          refundsExGst: settlement.refunds || 0,
+          shippingExGst: settlement.sales_shipping || 0,
+          subscriptionAmount: settlement.other_fees || 0,
+          refundCommissionExGst: settlement.reimbursements || 0,
+        },
+      };
+      const lineItems = buildSimpleInvoiceLines(std);
+      const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace || row.marketplace_code, { lineItems });
+      
+      if (result.success) {
+        toast.success(`Pushed to Xero ✅`);
+        await syncXeroStatus();
+        loadData();
+      } else {
+        toast.error(result.error || 'Push failed');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Push failed');
+    } finally {
+      setPushing(null);
+    }
+  };
+
+  // Counts
+  const counts = useMemo(() => {
+    const c = { complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
+    rows.forEach(r => {
+      if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') c.complete++;
+      else if (r.overall_status === 'ready_to_push') c.ready_to_push++;
+      else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') c.settlement_needed++;
+      else if (r.overall_status === 'gap_detected') c.gap_detected++;
+    });
+    return c;
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    if (filter === 'all') return rows;
+    if (filter === 'complete') return rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched');
+    if (filter === 'ready_to_push') return rows.filter(r => r.overall_status === 'ready_to_push');
+    if (filter === 'settlement_needed') return rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+    if (filter === 'gap_detected') return rows.filter(r => r.overall_status === 'gap_detected');
+    return rows;
+  }, [rows, filter]);
+
+  const lastChecked = rows.length > 0 && rows[0].last_checked_at
+    ? new Date(rows[0].last_checked_at)
+    : null;
+
+  const readyToPushRows = rows.filter(r => r.overall_status === 'ready_to_push');
+  const uploadNeededRows = rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+
+  // ─── Sweep Animation ──────────────────────────────────────────────
+  if (sweeping) {
+    return (
+      <Card className="border-border">
+        <CardContent className="py-10 space-y-4">
+          <h3 className="text-lg font-semibold text-center">Scanning your data...</h3>
+          <div className="max-w-sm mx-auto space-y-3">
+            {SWEEP_STEPS.map((step, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'flex items-center gap-3 text-sm transition-all duration-500',
+                  i < sweepStep ? 'opacity-100' : 'opacity-30'
+                )}
+                style={{ transitionDelay: `${i * 100}ms` }}
+              >
+                {i < sweepStep ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                ) : (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+                )}
+                <span>{step}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ─── Loading ──────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}
+        </div>
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
+  // ─── Empty / All Complete ─────────────────────────────────────────
+  if (rows.length === 0) {
+    return (
+      <Card className="border-border">
+        <CardContent className="py-10 text-center space-y-3">
+          <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
+          <h3 className="text-lg font-semibold">No validation data yet</h3>
+          <p className="text-sm text-muted-foreground">
+            Connect Shopify and upload settlements to see your validation pipeline.
+          </p>
+          <Button variant="outline" onClick={handleRefresh} className="mt-2">
+            <RefreshCw className="h-4 w-4 mr-2" /> Run validation sweep
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const allComplete = rows.every(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched');
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Here's your complete picture</h2>
+          {boundaryDate && (
+            <p className="text-sm text-muted-foreground mt-1">
+              From {new Date(boundaryDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })} to today
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {lastChecked && (
+            <span>
+              Last updated: {formatTimeAgo(lastChecked)}
+            </span>
+          )}
+          <Button variant="ghost" size="sm" onClick={handleRefresh} className="h-7 px-2 gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* All-complete banner */}
+      {allComplete && (
+        <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20">
+          <CardContent className="py-6 flex items-center gap-3">
+            <PartyPopper className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            <div>
+              <h3 className="font-semibold text-emerald-800 dark:text-emerald-300">Everything is up to date!</h3>
+              <p className="text-sm text-emerald-700/80 dark:text-emerald-400/80">
+                All settlements reconciled and in Xero. Next check: tomorrow at 6am AEST.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <SummaryCard
+          label="Complete"
+          count={counts.complete}
+          emoji="🟢"
+          active={filter === 'complete'}
+          onClick={() => setFilter(filter === 'complete' ? 'all' : 'complete')}
+          bgClass="bg-emerald-50 dark:bg-emerald-900/20"
+          borderClass={filter === 'complete' ? 'border-emerald-400 ring-1 ring-emerald-400' : 'border-emerald-200 dark:border-emerald-800'}
+        />
+        <SummaryCard
+          label="Ready to Push"
+          count={counts.ready_to_push}
+          emoji="🔵"
+          active={filter === 'ready_to_push'}
+          onClick={() => setFilter(filter === 'ready_to_push' ? 'all' : 'ready_to_push')}
+          bgClass="bg-blue-50 dark:bg-blue-900/20"
+          borderClass={filter === 'ready_to_push' ? 'border-blue-400 ring-1 ring-blue-400' : 'border-blue-200 dark:border-blue-800'}
+        />
+        <SummaryCard
+          label="Upload Needed"
+          count={counts.settlement_needed}
+          emoji="🟡"
+          active={filter === 'settlement_needed'}
+          onClick={() => setFilter(filter === 'settlement_needed' ? 'all' : 'settlement_needed')}
+          bgClass="bg-amber-50 dark:bg-amber-900/20"
+          borderClass={filter === 'settlement_needed' ? 'border-amber-400 ring-1 ring-amber-400' : 'border-amber-200 dark:border-amber-800'}
+        />
+        <SummaryCard
+          label="Gaps"
+          count={counts.gap_detected}
+          emoji="🔴"
+          active={filter === 'gap_detected'}
+          onClick={() => setFilter(filter === 'gap_detected' ? 'all' : 'gap_detected')}
+          bgClass="bg-red-50 dark:bg-red-900/20"
+          borderClass={filter === 'gap_detected' ? 'border-red-400 ring-1 ring-red-400' : 'border-red-200 dark:border-red-800'}
+        />
+      </div>
+
+      {/* Validation table */}
+      <Card className="border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Marketplace</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Period</th>
+                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Orders</th>
+                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Settlement</th>
+                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Xero</th>
+                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Bank</th>
+                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
+              {filteredRows.map(row => (
+                <tr key={row.id} className="hover:bg-muted/20 transition-colors">
+                  {/* Marketplace */}
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    {MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}
+                  </td>
+
+                  {/* Period */}
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {formatPeriod(row.period_start)}
+                  </td>
+
+                  {/* Orders */}
+                  <td className="px-4 py-3 text-center">
+                    {row.orders_found ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                              <span className="text-xs">{row.orders_count} {formatAUD(row.orders_total)}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>{row.orders_count} orders totalling {formatAUD(row.orders_total)}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+                    )}
+                  </td>
+
+                  {/* Settlement */}
+                  <td className="px-4 py-3 text-center">
+                    <SettlementCell row={row} />
+                  </td>
+
+                  {/* Xero */}
+                  <td className="px-4 py-3 text-center">
+                    {row.xero_pushed ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+                    )}
+                  </td>
+
+                  {/* Bank */}
+                  <td className="px-4 py-3 text-center">
+                    {row.bank_matched ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                    ) : row.xero_pushed ? (
+                      <Search className="h-3.5 w-3.5 text-amber-500 mx-auto" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+                    )}
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-4 py-3 text-center">
+                    <StatusPill status={row.overall_status} />
+                  </td>
+
+                  {/* Action */}
+                  <td className="px-4 py-3 text-right">
+                    <RowAction
+                      row={row}
+                      pushing={pushing === row.id}
+                      onUpload={() => onSwitchToUpload?.()}
+                      onPush={() => handlePushToXero(row)}
+                    />
+                  </td>
+                </tr>
+              ))}
+              {filteredRows.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                    No records match the selected filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Bottom action bar */}
+      {(readyToPushRows.length > 0 || uploadNeededRows.length > 0) && (
+        <Card className="border-border">
+          <CardContent className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              {readyToPushRows.length > 0 && (
+                <p className="text-sm font-medium">
+                  {readyToPushRows.length} settlement{readyToPushRows.length > 1 ? 's' : ''} validated and ready for Xero
+                </p>
+              )}
+              {uploadNeededRows.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {uploadNeededRows.length} marketplace settlement{uploadNeededRows.length > 1 ? 's' : ''} still needed
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {readyToPushRows.length > 0 && (
+                <Button size="sm" className="gap-1.5" onClick={async () => {
+                  for (const r of readyToPushRows) {
+                    await handlePushToXero(r);
+                  }
+                }}>
+                  <Send className="h-3.5 w-3.5" /> Push all to Xero
+                </Button>
+              )}
+              {uploadNeededRows.length > 0 && onSwitchToUpload && (
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={onSwitchToUpload}>
+                  <Upload className="h-3.5 w-3.5" /> Go to Smart Upload
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────
+
+function SummaryCard({
+  label, count, emoji, active, onClick, bgClass, borderClass,
+}: {
+  label: string; count: number; emoji: string; active: boolean;
+  onClick: () => void; bgClass: string; borderClass: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'rounded-lg border p-4 text-left transition-all hover:shadow-sm cursor-pointer',
+        bgClass, borderClass,
+      )}
+    >
+      <div className="text-2xl font-bold">{emoji} {count}</div>
+      <div className="text-xs font-medium text-muted-foreground mt-1">{label}</div>
+    </button>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const config = STATUS_CONFIG[status] || STATUS_CONFIG.missing;
+  return (
+    <Badge className={cn('text-[10px] font-medium', config.bgClass, config.color, config.borderClass)}>
+      {config.label}
+    </Badge>
+  );
+}
+
+function SettlementCell({ row }: { row: ValidationRow }) {
+  if (!row.settlement_uploaded) {
+    return <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />;
+  }
+
+  // Confidence badge
+  const conf = row.reconciliation_confidence;
+  let confIcon: React.ReactNode;
+  let confLabel: string;
+
+  if (conf === null || conf === undefined) {
+    confIcon = <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+    confLabel = 'Uploaded';
+  } else if (conf >= 0.9) {
+    confIcon = <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+    confLabel = 'Matched';
+  } else if (conf >= 0.7) {
+    confIcon = <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
+    confLabel = 'Near match';
+  } else {
+    confIcon = <AlertTriangle className="h-3.5 w-3.5 text-red-500" />;
+    confLabel = 'Gap — review';
+  }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1">
+            {confIcon}
+            <span className="text-xs">{confLabel}</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          {row.reconciliation_confidence_reason || `Confidence: ${conf !== null ? (conf * 100).toFixed(0) + '%' : 'N/A'}`}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function RowAction({
+  row, pushing, onUpload, onPush,
+}: {
+  row: ValidationRow; pushing: boolean;
+  onUpload: () => void; onPush: () => void;
+}) {
+  if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
+    return (
+      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onUpload}>
+        <Upload className="h-3 w-3" /> Upload
+      </Button>
+    );
+  }
+  if (row.overall_status === 'ready_to_push') {
+    return (
+      <Button size="sm" className="h-7 text-xs gap-1" onClick={onPush} disabled={pushing}>
+        {pushing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
+        Push →
+      </Button>
+    );
+  }
+  if (row.overall_status === 'gap_detected') {
+    return (
+      <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-red-200 text-red-700 dark:border-red-800 dark:text-red-400">
+        <AlertTriangle className="h-3 w-3" /> Review
+      </Button>
+    );
+  }
+  return <span className="text-xs text-muted-foreground">—</span>;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+function formatPeriod(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' });
+}
+
+function formatTimeAgo(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
