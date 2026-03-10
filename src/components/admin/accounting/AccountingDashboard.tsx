@@ -31,6 +31,8 @@ import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settle
 import { useBulkSelect } from '@/hooks/use-bulk-select';
 import BulkDeleteDialog from '@/components/admin/accounting/shared/BulkDeleteDialog';
 import { useXeroSync } from '@/hooks/use-xero-sync';
+import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
+import { deleteSettlement } from '@/utils/settlement-engine';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
