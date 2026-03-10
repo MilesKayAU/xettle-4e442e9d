@@ -243,16 +243,9 @@ export default function SkuCostManager({ skus, onCostsSaved, compact }: SkuCostM
             <Package className="h-5 w-5 text-primary" />
             <CardTitle className={compact ? 'text-sm' : 'text-base'}>Product Costs (COGS)</CardTitle>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-[10px]">
-              {costedCount}/{rows.length} costed
+          <Badge variant="secondary" className={`text-[10px] ${rows.length > 0 ? (Math.round(costedCount / rows.length * 100) >= 80 ? 'text-emerald-600' : Math.round(costedCount / rows.length * 100) >= 50 ? 'text-amber-600' : 'text-destructive') : ''}`}>
+              {costedCount} of {rows.length} SKUs costed — {rows.length > 0 ? Math.round(costedCount / rows.length * 100) : 0}% coverage
             </Badge>
-            {uncostedCount > 0 && (
-              <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
-                {uncostedCount} missing
-              </Badge>
-            )}
-          </div>
         </div>
         {!compact && (
           <CardDescription>
