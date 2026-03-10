@@ -812,9 +812,12 @@ export default function ShopifyOrdersDashboard() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => toast.info('Auto-fetch coming soon — use CSV upload in the meantime')}
+              onClick={handleFetchOrders}
+              disabled={apiFetching}
+              className="gap-2"
             >
-              Fetch latest orders
+              {apiFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Package className="h-3.5 w-3.5" />}
+              {apiFetching ? 'Fetching orders...' : 'Fetch latest orders'}
             </Button>
           </CardContent>
         </Card>
