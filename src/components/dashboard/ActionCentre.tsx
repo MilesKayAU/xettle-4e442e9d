@@ -151,15 +151,24 @@ export default function ActionCentre({
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Realtime
+  // Debounced realtime — prevent flickering during rapid sync updates
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedLoadData = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => loadData(), 2000);
+  }, [loadData]);
+
   useEffect(() => {
     const channel = supabase
       .channel('action-centre-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation' }, () => loadData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_events' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation' }, () => debouncedLoadData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_events' }, () => debouncedLoadData())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadData]);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [debouncedLoadData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
