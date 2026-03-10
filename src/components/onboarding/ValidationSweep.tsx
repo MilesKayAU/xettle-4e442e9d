@@ -58,6 +58,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bgClass: str
   bank_matched: { label: 'Complete', color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', borderClass: 'border-emerald-200 dark:border-emerald-800' },
   ready_to_push: { label: 'Ready to Push', color: 'text-blue-700 dark:text-blue-400', bgClass: 'bg-blue-100 dark:bg-blue-900/30', borderClass: 'border-blue-200 dark:border-blue-800' },
   pushed_to_xero: { label: 'Pushed', color: 'text-blue-700 dark:text-blue-400', bgClass: 'bg-blue-100 dark:bg-blue-900/30', borderClass: 'border-blue-200 dark:border-blue-800' },
+  synced_external: { label: 'In Xero (legacy)', color: 'text-muted-foreground', bgClass: 'bg-muted', borderClass: 'border-border' },
   settlement_needed: { label: 'Upload Needed', color: 'text-amber-700 dark:text-amber-400', bgClass: 'bg-amber-100 dark:bg-amber-900/30', borderClass: 'border-amber-200 dark:border-amber-800' },
   gap_detected: { label: 'Gap Detected', color: 'text-red-700 dark:text-red-400', bgClass: 'bg-red-100 dark:bg-red-900/30', borderClass: 'border-red-200 dark:border-red-800' },
   missing: { label: 'Missing', color: 'text-muted-foreground', bgClass: 'bg-muted', borderClass: 'border-border' },
