@@ -6,6 +6,8 @@ import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMa
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyReconciliationStatus';
 import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
+import ValidationSweep from '@/components/onboarding/ValidationSweep';
+import ActionCentre from '@/components/dashboard/ActionCentre';
 import SettlementsSummaryStrip from '@/components/admin/accounting/SettlementsSummaryStrip';
 import ActionControlPanel from '@/components/admin/accounting/ActionControlPanel';
 import NextExpectedSettlements from '@/components/admin/accounting/NextExpectedSettlements';
