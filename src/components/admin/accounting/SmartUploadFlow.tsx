@@ -947,7 +947,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             // Extract headers for fingerprint
             const extracted = await extractFileHeaders(df.file);
             if (extracted) {
-              // Save to marketplace_file_fingerprints
+              // Save to marketplace_file_fingerprints with reconciliation_type
               await supabase.from('marketplace_file_fingerprints').insert({
                 user_id: user.id,
                 marketplace_code: marketplace,
@@ -955,6 +955,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 column_mapping: df.detection?.columnMapping || {} as any,
                 is_multi_marketplace: false,
                 file_pattern: df.file.name.replace(/\d+/g, '*'),
+                reconciliation_type: 'csv_only',
               } as any);
 
               // Create bug report for admin visibility
