@@ -106,8 +106,18 @@ export default function AccountingDashboard() {
   const [transactionFile, setTransactionFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<ParsedSettlement | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
-  const [loadingSettlements, setLoadingSettlements] = useState(true);
+  
+  // ── Shared hook: replaces custom loadSettlements + realtime ──────────
+  const {
+    settlements: sharedSettlements,
+    loading: loadingSettlements,
+    loadSettlements,
+  } = useSettlementManager<SettlementRecord>({
+    marketplaceCode: selectedMarketplace,
+    selectFields: '*',
+  });
+  const settlements = sharedSettlements as unknown as SettlementRecord[];
+  
   const [uploadWarning, setUploadWarning] = useState<{ type: 'duplicate' | 'gap'; message: string; existing?: SettlementRecord } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
