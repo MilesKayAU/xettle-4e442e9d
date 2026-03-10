@@ -4,10 +4,9 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Search, X, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { supabase } from '@/integrations/supabase/client';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
