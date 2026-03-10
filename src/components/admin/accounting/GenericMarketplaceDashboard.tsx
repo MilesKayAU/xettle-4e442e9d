@@ -103,6 +103,16 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
   const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
 
+  // Auto-audit Xero status once settlements are loaded
+  const [hasAutoAudited, setHasAutoAudited] = useState(false);
+  useEffect(() => {
+    if (hasLoadedOnce && settlements.length > 0 && !hasAutoAudited && !refreshingXero) {
+      setHasAutoAudited(true);
+      console.log(`[GenericDashboard] Auto-auditing Xero status for ${code} (${settlements.length} settlements)`);
+      handleRefreshXero();
+    }
+  }, [hasLoadedOnce, settlements.length, hasAutoAudited, refreshingXero, handleRefreshXero, code]);
+
   useEffect(() => {
     async function checkShopify() {
       const { data: { user } } = await supabase.auth.getUser();
