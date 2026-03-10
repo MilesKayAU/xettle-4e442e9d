@@ -257,6 +257,22 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
 
     if (error) return { success: false, error: error.message };
 
+    // Fire-and-forget: upsert marketplace_validation
+    const periodLabel = `${settlement.period_start} → ${settlement.period_end}`;
+    supabase.from('marketplace_validation' as any).upsert({
+      user_id: user.id,
+      marketplace_code: settlement.marketplace,
+      period_label: periodLabel,
+      period_start: settlement.period_start,
+      period_end: settlement.period_end,
+      settlement_uploaded: true,
+      settlement_id: settlement.settlement_id,
+      settlement_net: settlement.net_payout,
+      settlement_uploaded_at: new Date().toISOString(),
+    } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
+      if (valErr) console.error('[marketplace_validation] upsert error:', valErr);
+    });
+
     // Fire-and-forget: extract fee observations for intelligence engine
     import('./fee-observation-engine').then(({ extractFeeObservations }) => {
       extractFeeObservations(settlement, user.id).catch(console.error);
