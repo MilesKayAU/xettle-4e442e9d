@@ -619,7 +619,6 @@ export default function AccountingDashboard() {
           settlementId: header.settlementId,
           month1: m1.monthLabel,
           month2: m2.monthLabel,
-          xeroInclusiveTotal: round2(xeroInclusiveTotal),
           rolloverAmount,
         });
 
