@@ -7,6 +7,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { detectMarketplaceFromOrder, detectAllMarketplaces, classifyUnknownTag, type OrderDetectionResult } from '@/utils/shopify-order-detector';
+import { auditSubChannels, type DetectedSubChannel } from '@/utils/sub-channel-detection';
+import SubChannelBanner from '@/components/shopify/SubChannelBanner';
 import ShopifyOnboarding from './ShopifyOnboarding';
 import UnknownEntityDialog from './UnknownEntityDialog';
 import SkuCostManager from './SkuCostManager';
