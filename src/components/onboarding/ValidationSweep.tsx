@@ -546,6 +546,12 @@ export default function ValidationSweep({
 // ─── Sub-components ──────────────────────────────────────────────────
 
 function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch: (row: ValidationRow, txnId: string) => void }) {
+  const [checking, setChecking] = React.useState(false);
+  const [fuzzyMatch, setFuzzyMatch] = React.useState<{
+    date: string | null; amount: number; reference: string; narration: string; transaction_id: string;
+  } | null>(null);
+  const [fuzzyDiff, setFuzzyDiff] = React.useState<number>(0);
+
   if (row.bank_matched) {
     return (
       <TooltipProvider>
@@ -588,16 +594,77 @@ function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch:
     }
   }
 
-  // > 3 days, not found
+  // Fuzzy match found — show confirmation UI
+  if (fuzzyMatch) {
+    return (
+      <div className="text-left space-y-1">
+        <p className="text-[10px] text-muted-foreground">
+          Deposit found: {formatAUD(fuzzyMatch.amount)} on {fuzzyMatch.date || '—'}
+        </p>
+        <p className="text-[10px] text-amber-600 dark:text-amber-400">
+          Difference: {formatAUD(fuzzyDiff)}
+        </p>
+        <div className="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-5 text-[10px] px-1.5 gap-0.5 border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"
+            onClick={() => onConfirmMatch(row, fuzzyMatch.transaction_id)}
+          >
+            <CheckCircle2 className="h-2.5 w-2.5" /> Confirm
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 text-[10px] px-1.5"
+            onClick={() => setFuzzyMatch(null)}
+          >
+            <XCircle className="h-2.5 w-2.5" /> Not this
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // > 3 days, not found — show "Check bank" button
+  const handleCheckBank = async () => {
+    setChecking(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/match-bank-deposits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ settlementId: row.settlement_id }),
+      });
+      const data = await res.json();
+      const result = data?.results?.[0];
+      if (result?.matched) {
+        toast.success('Bank deposit matched ✅');
+      } else if (result?.possible_match) {
+        setFuzzyMatch(result.possible_match);
+        setFuzzyDiff(result.difference || 0);
+      } else {
+        toast.info('No bank deposit found yet');
+      }
+    } catch {
+      toast.error('Bank check failed');
+    } finally {
+      setChecking(false);
+    }
+  };
+
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex items-center gap-1">
-            <XCircle className="h-3.5 w-3.5 text-red-500" />
-          </span>
+          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-1.5 gap-1" onClick={handleCheckBank} disabled={checking}>
+            {checking ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3.5 w-3.5 text-red-500" />}
+            {checking ? 'Checking...' : 'Check bank'}
+          </Button>
         </TooltipTrigger>
-        <TooltipContent>Not found — check bank feed</TooltipContent>
+        <TooltipContent>Not found — click to check bank feed</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
