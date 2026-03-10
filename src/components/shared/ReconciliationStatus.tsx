@@ -24,6 +24,7 @@ interface ReconciliationCheck {
   difference: number;
   status: string;
   notes: string | null;
+  unmatched_orders: string[] | null;
 }
 
 interface ReconciliationStatusProps {
