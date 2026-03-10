@@ -2181,7 +2181,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
               {someSelected && ` ${selectedIds.size} selected.`}
             </CardDescription>
           </div>
-          {someSelected && !confirmDelete && (
+          {someSelected && (
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -2196,39 +2196,23 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => setConfirmDelete(true)}
+                onClick={handleBulkDelete}
+                disabled={deleting}
                 className="gap-1.5"
               >
-                <XCircle className="h-3.5 w-3.5" />
+                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                 Delete {selectedIds.size === settlements.length ? 'All' : selectedIds.size}
               </Button>
             </div>
           )}
-          {confirmDelete && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-destructive font-medium">
-                Delete {selectedIds.size} settlement{selectedIds.size !== 1 ? 's' : ''}?
-              </span>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDelete}
-                disabled={deleting}
-                className="gap-1.5"
-              >
-                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                {deleting ? 'Deleting…' : 'Confirm'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConfirmDelete(false)}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
+          {/* Xero-aware bulk delete confirmation dialog */}
+          <BulkDeleteDialog
+            open={bulkDeleteDialogOpen}
+            selectedCount={selectedIds.size}
+            syncedCount={syncedSelectedCount}
+            onConfirm={confirmBulkDelete}
+            onCancel={cancelBulkDelete}
+          />
         </div>
       </CardHeader>
       <CardContent className="p-0">
