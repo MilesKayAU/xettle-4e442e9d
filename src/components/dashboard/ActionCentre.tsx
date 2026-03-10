@@ -445,14 +445,18 @@ export default function ActionCentre({
                   {complete.length} settlement{complete.length > 1 ? 's' : ''} synced
                 </p>
                 <ul className="space-y-1">
-                  {complete.slice(0, 3).map(r => (
+                  {(expandedCards['complete'] ? complete : complete.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
                     </li>
                   ))}
                   {complete.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {complete.length - 3} more</li>
+                    <li>
+                      <button onClick={() => setExpandedCards(prev => ({ ...prev, complete: !prev.complete }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {expandedCards['complete'] ? '− Show less' : `+ ${complete.length - 3} more`}
+                      </button>
+                    </li>
                   )}
                 </ul>
               </CardContent>
