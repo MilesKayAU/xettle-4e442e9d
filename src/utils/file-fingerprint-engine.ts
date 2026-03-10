@@ -2,9 +2,12 @@
  * File Fingerprint Engine — 3-level intelligent file detection
  * 
  * Level 1: Instant fingerprint matching against known column patterns
+ * Level 1.5: Database fingerprint lookup (learned from First Contact saves)
  * Level 2: Heuristic column mapping with confidence scoring
  * Level 3: AI fallback (calls edge function — handled by SmartUploadFlow)
  */
+
+import { supabase } from '@/integrations/supabase/client';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
