@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ShopifyOnboarding from './ShopifyOnboarding';
+import UnknownEntityDialog from './UnknownEntityDialog';
 import SkuCostManager from './SkuCostManager';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
