@@ -97,6 +97,8 @@ export default function ActionCentre({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingUploads, setRefreshingUploads] = useState(false);
+  const [userCreatedAt, setUserCreatedAt] = useState<Date | null>(null);
+  const [apiSyncedMarketplaces, setApiSyncedMarketplaces] = useState<Set<string>>(new Set());
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
