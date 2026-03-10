@@ -341,8 +341,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               const isPushFailed = s.status === 'push_failed';
               const isSynced = s.status === 'synced' || s.status === 'pushed_to_xero';
 
-              // Gap detection — allow tolerance for daily-payout marketplaces like Shopify
-              const prev = settlements[idx + 1];
+              const prev = filteredSettlements[idx + 1];
+              const isCollapsed = collapsedCards.has(s.id);
               let hasGap = false;
               if (prev && s.period_start > prev.period_end) {
                 const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
