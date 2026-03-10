@@ -42,6 +42,8 @@ export interface ReconciliationResult {
   status: 'matched' | 'warning' | 'alert' | 'pending';
   unmatched_orders: string[];
   notes: string;
+  reconciliation_confidence: number;
+  reconciliation_confidence_reason: string;
 }
 
 // ─── Core Calculation ───────────────────────────────────────────────────────
@@ -118,6 +120,30 @@ export async function calculateReconciliation(
     settlement.settlement_id
   );
 
+  // 7. Reconciliation confidence
+  let reconciliation_confidence = 0.5;
+  let reconciliation_confidence_reason = '';
+
+  if (shopify_order_total === 0) {
+    reconciliation_confidence = 0.5;
+    reconciliation_confidence_reason = 'No Shopify orders found for comparison';
+  } else if (Math.abs(difference) === 0) {
+    reconciliation_confidence = 1.0;
+    reconciliation_confidence_reason = `Exact match — ${ordersInPeriod.length} orders fully reconciled`;
+  } else if (Math.abs(difference) <= 1) {
+    reconciliation_confidence = 0.9;
+    reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} rounding difference — likely GST`;
+  } else if (Math.abs(difference) < 10) {
+    reconciliation_confidence = 0.8;
+    reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} minor difference — ${ordersInPeriod.length} orders matched`;
+  } else if (unmatched_orders.length > 0 && Math.abs(difference) < 50) {
+    reconciliation_confidence = 0.7;
+    reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} gap with ${unmatched_orders.length} unmatched orders`;
+  } else {
+    reconciliation_confidence = 0.3;
+    reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} gap — possible returns pending`;
+  }
+
   // Build notes
   const notesParts: string[] = [];
   if (observedRate !== null) {
@@ -143,6 +169,8 @@ export async function calculateReconciliation(
     status,
     unmatched_orders,
     notes: notesParts.join('. '),
+    reconciliation_confidence,
+    reconciliation_confidence_reason,
   };
 }
 
@@ -279,6 +307,8 @@ export async function autoReconcileSettlement(
       period_end: periodEnd,
       reconciliation_status: result.status,
       reconciliation_difference: result.difference,
+      reconciliation_confidence: result.reconciliation_confidence,
+      reconciliation_confidence_reason: result.reconciliation_confidence_reason,
     } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
       if (valErr) console.error('[marketplace_validation] recon upsert error:', valErr);
     });

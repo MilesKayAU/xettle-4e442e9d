@@ -402,6 +402,7 @@ export type Database = {
           id: string
           last_checked_at: string | null
           marketplace_code: string
+          marketplace_period_id: string | null
           orders_count: number | null
           orders_fetched_at: string | null
           orders_found: boolean | null
@@ -410,6 +411,12 @@ export type Database = {
           period_end: string
           period_label: string
           period_start: string
+          processing_completed_at: string | null
+          processing_error: string | null
+          processing_started_at: string | null
+          processing_state: string | null
+          reconciliation_confidence: number | null
+          reconciliation_confidence_reason: string | null
           reconciliation_difference: number | null
           reconciliation_status: string | null
           settlement_id: string | null
@@ -431,6 +438,7 @@ export type Database = {
           id?: string
           last_checked_at?: string | null
           marketplace_code: string
+          marketplace_period_id?: string | null
           orders_count?: number | null
           orders_fetched_at?: string | null
           orders_found?: boolean | null
@@ -439,6 +447,12 @@ export type Database = {
           period_end: string
           period_label: string
           period_start: string
+          processing_completed_at?: string | null
+          processing_error?: string | null
+          processing_started_at?: string | null
+          processing_state?: string | null
+          reconciliation_confidence?: number | null
+          reconciliation_confidence_reason?: string | null
           reconciliation_difference?: number | null
           reconciliation_status?: string | null
           settlement_id?: string | null
@@ -460,6 +474,7 @@ export type Database = {
           id?: string
           last_checked_at?: string | null
           marketplace_code?: string
+          marketplace_period_id?: string | null
           orders_count?: number | null
           orders_fetched_at?: string | null
           orders_found?: boolean | null
@@ -468,6 +483,12 @@ export type Database = {
           period_end?: string
           period_label?: string
           period_start?: string
+          processing_completed_at?: string | null
+          processing_error?: string | null
+          processing_started_at?: string | null
+          processing_state?: string | null
+          reconciliation_confidence?: number | null
+          reconciliation_confidence_reason?: string | null
           reconciliation_difference?: number | null
           reconciliation_status?: string | null
           settlement_id?: string | null
@@ -940,6 +961,42 @@ export type Database = {
           id?: string
           settlements_affected?: number | null
           status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      system_events: {
+        Row: {
+          created_at: string | null
+          details: Json | null
+          event_type: string
+          id: string
+          marketplace_code: string | null
+          period_label: string | null
+          settlement_id: string | null
+          severity: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          details?: Json | null
+          event_type: string
+          id?: string
+          marketplace_code?: string | null
+          period_label?: string | null
+          settlement_id?: string | null
+          severity?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          details?: Json | null
+          event_type?: string
+          id?: string
+          marketplace_code?: string | null
+          period_label?: string | null
+          settlement_id?: string | null
+          severity?: string | null
           user_id?: string
         }
         Relationships: []

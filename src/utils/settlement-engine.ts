@@ -273,6 +273,19 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       if (valErr) console.error('[marketplace_validation] upsert error:', valErr);
     });
 
+    // Fire-and-forget: log system event
+    supabase.from('system_events' as any).insert({
+      user_id: user.id,
+      event_type: 'settlement_saved',
+      marketplace_code: settlement.marketplace,
+      settlement_id: settlement.settlement_id,
+      period_label: periodLabel,
+      details: { net_payout: settlement.net_payout, source: settlement.source },
+      severity: 'info',
+    } as any).then(({ error: evErr }) => {
+      if (evErr) console.error('[system_events] insert error:', evErr);
+    });
+
     // Fire-and-forget: extract fee observations for intelligence engine
     import('./fee-observation-engine').then(({ extractFeeObservations }) => {
       extractFeeObservations(settlement, user.id).catch(console.error);
@@ -479,6 +492,18 @@ export async function syncSettlementToXero(
 
     // Fire-and-forget: trigger validation sweep after Xero push
     triggerValidationSweep();
+
+    // Fire-and-forget: log Xero push event
+    supabase.from('system_events' as any).insert({
+      user_id: user.id,
+      event_type: 'xero_push_success',
+      marketplace_code: marketplace,
+      settlement_id: settlementId,
+      details: { invoice_id: result.invoiceId, invoice_number: result.invoiceNumber },
+      severity: 'info',
+    } as any).then(({ error: evErr }) => {
+      if (evErr) console.error('[system_events] xero push log error:', evErr);
+    });
 
     return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
   } catch (err: any) {
