@@ -224,58 +224,8 @@ export default function MonthlyReconciliationStatus({
           </div>
         ) : (
           <>
-            {/* Missing marketplaces warning */}
-            {missingCodes.length > 0 && (
-              <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/20 rounded-lg px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                    ⚠️ {missingCodes.length} missing — {missingNames.join(', ')}
-                  </span>
-                </div>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0 text-xs text-amber-700 dark:text-amber-400"
-                  onClick={() => {
-                    if (onSelectMarketplace && missingCodes[0]) onSelectMarketplace(missingCodes[0]);
-                    if (onSwitchToUpload) onSwitchToUpload();
-                  }}
-                >
-                  Upload now →
-                </Button>
-              </div>
-            )}
+            {/* Status pills and missing banner removed — surfaced in Dashboard and Overview tab instead */}
 
-            {/* Summary stats */}
-            {settlements.length > 0 && (
-              <div className="flex items-center gap-3 flex-wrap">
-                {pushed > 0 && (
-                  <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    {pushed} in Xero
-                  </Badge>
-                )}
-                {readyToPush > 0 && (
-                  <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs font-medium">
-                    <span className="h-2 w-2 rounded-full bg-amber-500 mr-1.5" />
-                    {readyToPush} ready to push
-                  </Badge>
-                )}
-                {failed > 0 && (
-                  <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    {failed} failed
-                  </Badge>
-                )}
-                {missingCodes.length > 0 && (
-                  <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    {missingCodes.length} missing
-                  </Badge>
-                )}
-              </div>
-            )}
 
             {settlements.length === 0 && missingCodes.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-2">
