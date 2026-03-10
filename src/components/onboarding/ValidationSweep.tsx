@@ -35,9 +35,11 @@ interface ValidationRow {
   reconciliation_confidence: number | null;
   reconciliation_confidence_reason: string | null;
   xero_pushed: boolean;
+  xero_pushed_at: string | null;
   xero_invoice_id: string | null;
   bank_matched: boolean;
   bank_amount: number | null;
+  bank_reference: string | null;
   overall_status: string;
   last_checked_at: string | null;
   processing_state: string | null;
@@ -84,6 +86,32 @@ export default function ValidationSweep({
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
+  const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
+
+  const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
+    setConfirmingBank(row.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/match-bank-deposits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ settlementId: row.settlement_id, force_match: true, transaction_id: transactionId }),
+      });
+      const data = await res.json();
+      if (data?.matched || data?.results?.[0]?.matched) {
+        toast.success('Bank deposit confirmed ✅');
+        loadData();
+      } else {
+        toast.error('Could not confirm match');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Bank match failed');
+    } finally {
+      setConfirmingBank(null);
+    }
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -445,13 +473,7 @@ export default function ValidationSweep({
 
                   {/* Bank */}
                   <td className="px-4 py-3 text-center">
-                    {row.bank_matched ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
-                    ) : row.xero_pushed ? (
-                      <Search className="h-3.5 w-3.5 text-amber-500 mx-auto" />
-                    ) : (
-                      <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
-                    )}
+                    <BankCell row={row} onConfirmMatch={handleConfirmBankMatch} />
                   </td>
 
                   {/* Status */}
@@ -522,6 +544,65 @@ export default function ValidationSweep({
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────
+
+function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch: (row: ValidationRow, txnId: string) => void }) {
+  if (row.bank_matched) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            Auto-matched {row.bank_amount ? formatAUD(row.bank_amount) : ''}{row.bank_reference ? ` — ref: ${row.bank_reference}` : ''}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  if (!row.xero_pushed) {
+    return <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />;
+  }
+
+  // Check if < 3 days since push
+  if (row.xero_pushed_at) {
+    const pushDate = new Date(row.xero_pushed_at);
+    const daysSincePush = (Date.now() - pushDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSincePush < 3) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1">
+                <Search className="h-3.5 w-3.5 text-muted-foreground animate-pulse" />
+                <span className="text-[10px] text-muted-foreground">Searching...</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Waiting for bank deposit — usually appears within 3 days</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+  }
+
+  // > 3 days, not found
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-1">
+            <XCircle className="h-3.5 w-3.5 text-red-500" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Not found — check bank feed</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 
 function SummaryCard({
   label, count, emoji, active, onClick, bgClass, borderClass,

@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.fetch-shopify-orders]
 verify_jwt = false
+
+[functions.match-bank-deposits]
+verify_jwt = false
+
+[functions.run-validation-sweep]
+verify_jwt = false

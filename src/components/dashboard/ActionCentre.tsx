@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   RefreshCw, Upload, Send, CheckCircle2, AlertTriangle, Plus,
-  ArrowRight, Clock, PartyPopper, Loader2,
+  ArrowRight, Clock, PartyPopper, Loader2, Search,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
@@ -128,8 +128,10 @@ export default function ActionCentre({
   // ─── Computed ──────────────────────────────────────────────────────
   const uploadNeeded = rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
   const readyToPush = rows.filter(r => r.overall_status === 'ready_to_push');
+  const awaitingBank = rows.filter(r => r.overall_status === 'pushed_to_xero' || (r.xero_pushed && !r.bank_matched));
   const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded');
-  const allComplete = rows.length > 0 && uploadNeeded.length === 0 && readyToPush.length === 0;
+  const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
+  const allComplete = rows.length > 0 && uploadNeeded.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0;
 
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at) : null;
@@ -239,7 +241,7 @@ export default function ActionCentre({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Needs Attention */}
           {uploadNeeded.length > 0 && (
             <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
@@ -294,6 +296,35 @@ export default function ActionCentre({
                 </ul>
                 <Button size="sm" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
                   <Send className="h-3 w-3" /> Push all to Xero
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Awaiting Bank Match */}
+          {awaitingBank.length > 0 && (
+            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-900/10">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🔵</span>
+                  <h3 className="font-semibold text-sm">Awaiting bank match</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} pending bank match
+                </p>
+                <ul className="space-y-1">
+                  {awaitingBank.slice(0, 3).map(r => (
+                    <li key={r.id} className="text-xs flex items-center gap-1.5">
+                      <span className="text-blue-500">•</span>
+                      {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {r.settlement_net ? formatAUD(r.settlement_net) : ''}
+                    </li>
+                  ))}
+                  {awaitingBank.length > 3 && (
+                    <li className="text-xs text-muted-foreground">+ {awaitingBank.length - 3} more</li>
+                  )}
+                </ul>
+                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
+                  <Search className="h-3 w-3" /> Check bank feed
                 </Button>
               </CardContent>
             </Card>
