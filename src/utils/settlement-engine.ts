@@ -428,7 +428,7 @@ export async function syncSettlementToXero(
         Description: 'Marketplace Commission',
         AccountCode: '407',
         TaxType: 'INPUT',
-        UnitAmount: Math.round(s.seller_fees * 100) / 100,
+        UnitAmount: -Math.abs(Math.round(s.seller_fees * 100) / 100),
         Quantity: 1,
       },
     ];
