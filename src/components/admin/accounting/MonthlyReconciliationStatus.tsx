@@ -200,7 +200,7 @@ export default function MonthlyReconciliationStatus({
               Refresh from Xero
             </Button>
             {readyToPush > 0 && (
-              <Button size="sm" className="h-7 text-xs gap-1" onClick={handlePushAll} disabled={pushingAll}>
+              <Button size="sm" className="h-7 text-xs gap-1" onClick={handlePushAll} disabled={pushingAll} data-push-all>
                 {pushingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                 Push All Ready ({readyToPush})
               </Button>
