@@ -1811,11 +1811,21 @@ function SettlementGuidancePanel({
     );
   }
 
-  const statusBadge = (status: string) => {
+  const statusBadge = (status: string, xeroStatus?: string | null) => {
+    const xs = (xeroStatus || '').toUpperCase();
     switch (status) {
       case 'pushed_to_xero':
       case 'synced':
-        return <Badge className="bg-green-100 text-green-800 text-[10px]">Posted to Xero ✓</Badge>;
+        if (xs === 'DRAFT') return <Badge className="bg-orange-100 text-orange-700 text-[10px]">In Xero — Draft</Badge>;
+        if (xs === 'AUTHORISED') return <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">In Xero — Awaiting Payment</Badge>;
+        if (xs === 'PAID') return <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Fully Reconciled ✓</Badge>;
+        return <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Posted to Xero ✓</Badge>;
+      case 'synced_external':
+        return <Badge variant="outline" className="border-muted-foreground/40 text-[10px]">Already in Xero (legacy)</Badge>;
+      case 'ready_to_push':
+        return <Badge className="bg-amber-100 text-amber-700 text-[10px]">Ready for Xero</Badge>;
+      case 'already_recorded':
+        return <Badge variant="secondary" className="text-[10px] text-muted-foreground">Pre-accounting boundary</Badge>;
       case 'saved': return <Badge variant="secondary" className="text-[10px]">Saved</Badge>;
       case 'pending': return <Badge variant="outline" className="text-[10px]">Pending</Badge>;
       default: return <Badge variant="outline" className="text-[10px]">{status}</Badge>;
