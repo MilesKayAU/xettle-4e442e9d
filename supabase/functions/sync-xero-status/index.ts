@@ -71,6 +71,13 @@ function extractSettlementId(reference: string): string | null {
     const rest = reference.slice(7);
     return rest.replace(/-P[12]$/, '');
   }
+  // Legacy format: AMZN-{settlement_id}
+  if (reference.startsWith('AMZN-')) {
+    return reference.slice(5);
+  }
+  // Split-month format: LMB-AU-{settlement_id}-1 or LMB-AU-{settlement_id}-2
+  const lmbMatch = reference.match(/^LMB-\w+-(\d+)-\d+$/);
+  if (lmbMatch) return lmbMatch[1];
   // Old format: "Amazon AU Settlement 12284044573 - Part 2 (March)"
   // Extract the numeric settlement ID, NOT the month in parentheses
   // Look for a long numeric ID (8+ digits) in the reference
