@@ -108,13 +108,19 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
+        supabase.auth.getUser(),
+        supabase.from('settlements').select('marketplace').eq('source', 'api'),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
       if (eventsRes.data) setEvents(eventsRes.data as SystemEvent[]);
+      if (userRes.data?.user?.created_at) setUserCreatedAt(new Date(userRes.data.user.created_at));
+      if (apiSettlementsRes.data) {
+        setApiSyncedMarketplaces(new Set(apiSettlementsRes.data.map((s: any) => s.marketplace)));
+      }
     } catch (err) {
       console.error('ActionCentre load error:', err);
     } finally {
