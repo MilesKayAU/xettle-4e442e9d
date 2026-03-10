@@ -174,10 +174,14 @@ Deno.serve(async (req) => {
 
       // Batch upsert in chunks of 500
       for (let i = 0; i < rows.length; i += 500) {
-        await adminClient
+        const { error: upsertErr } = await adminClient
           .from("shopify_orders")
           .upsert(rows.slice(i, i + 500), { onConflict: "user_id,shopify_order_id" });
+        if (upsertErr) {
+          console.error("[fetch-shopify-orders] upsert error:", upsertErr.message);
+        }
       }
+      console.log(`[fetch-shopify-orders] Persisted ${rows.length} orders to shopify_orders`);
     }
 
     return new Response(
