@@ -1,0 +1,1 @@
+ALTER TABLE public.reconciliation_checks ADD COLUMN IF NOT EXISTS unmatched_orders text[] DEFAULT '{}'::text[];
