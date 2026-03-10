@@ -307,6 +307,8 @@ export async function autoReconcileSettlement(
       period_end: periodEnd,
       reconciliation_status: result.status,
       reconciliation_difference: result.difference,
+      reconciliation_confidence: result.reconciliation_confidence,
+      reconciliation_confidence_reason: result.reconciliation_confidence_reason,
     } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
       if (valErr) console.error('[marketplace_validation] recon upsert error:', valErr);
     });
