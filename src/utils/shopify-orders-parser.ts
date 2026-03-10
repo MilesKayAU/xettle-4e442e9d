@@ -13,6 +13,7 @@
  */
 
 import type { StandardSettlement } from './settlement-engine';
+import { parseDateOrEmpty } from './date-parser';
 import {
   MARKETPLACE_REGISTRY,
   detectMarketplaceFromRow,
