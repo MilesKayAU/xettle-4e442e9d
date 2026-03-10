@@ -443,7 +443,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders } = r.value;
+          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
             // If multi-marketplace split detected, show confirmation card
@@ -453,6 +453,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 status: 'multi_split',
                 splitResult,
                 csvHeaders,
+                sampleRows,
                 detection: {
                   marketplace: 'multi_marketplace',
                   marketplaceLabel: `${splitResult.groups.length} Marketplaces`,
@@ -468,8 +469,11 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             const allDupes = settlements.length > 0 && dbDupeIds.length === settlements.length;
             const someDupes = dbDupeIds.length > 0 && !allDupes;
 
+            // Check if First Contact modal should be triggered
+            const isFirstContact = result && result.isSettlementFile && needsFirstContact(result);
+
             let status: FileStatus = result
-              ? (result.isSettlementFile ? 'detected' : 'wrong_file')
+              ? (result.isSettlementFile ? (isFirstContact ? 'first_contact' : 'detected') : 'wrong_file')
               : 'unknown';
 
             let error: string | undefined;
@@ -484,6 +488,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               settlements: settlements.length > 0 ? settlements : undefined,
               status,
               error,
+              csvHeaders: result ? (csvHeaders || undefined) : undefined,
+              sampleRows: sampleRows || undefined,
+              wasLowConfidence: isFirstContact || false,
             };
 
             if (someDupes) {
