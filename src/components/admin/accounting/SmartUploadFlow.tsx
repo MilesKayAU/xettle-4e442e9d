@@ -1135,7 +1135,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         </CardContent>
       </Card>
 
-      {/* Shopify Sync Banner — always visible when Shopify is connected */}
+      {/* Shopify Connection / Sync Banners */}
+      {!hasShopifyConnection && (
+        <ShopifyConnectBanner />
+      )}
       {hasShopifyConnection && shopifyTokenInvalid && (
         <ShopifyReconnectBanner shopDomain={shopifyShopDomain} />
       )}
