@@ -290,22 +290,39 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
   }, []);
 
-  const [hasAutoAudited, setHasAutoAudited] = useState(false);
+  const AUDIT_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
 
-  useEffect(() => {
-    loadApiSettlements();
-    loadXeroMatches();
-    loadCooldown();
-  }, [loadApiSettlements, loadXeroMatches, loadCooldown]);
+  const getAuditCacheKey = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user ? `xettle_last_audit_${user.id}` : null;
+  }, []);
 
-  // Auto-audit Xero status on first load when settlements exist
+  // Auto-audit Xero status on first load — with 30-minute cooldown
   useEffect(() => {
-    if (!loading && settlements.length > 0 && !hasAutoAudited && !auditing) {
-      setHasAutoAudited(true);
+    if (loading || settlements.length === 0 || auditing) return;
+
+    const checkAndAudit = async () => {
+      const cacheKey = await getAuditCacheKey();
+      if (!cacheKey) return;
+
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const elapsed = Date.now() - parseInt(cached, 10);
+        if (elapsed < AUDIT_COOLDOWN_MS) {
+          const mins = Math.round((AUDIT_COOLDOWN_MS - elapsed) / 60000);
+          setLastAuditTime(new Date(parseInt(cached, 10)).toISOString());
+          console.log(`[AutoImported] Skipping auto-audit — last run ${Math.round(elapsed / 60000)}min ago (cooldown: ${mins}min left)`);
+          return;
+        }
+      }
+
       console.log(`[AutoImported] Auto-auditing Xero status for ${settlements.length} settlements`);
       handleRunAudit();
-    }
-  }, [loading, settlements.length, hasAutoAudited, auditing]);
+    };
+
+    checkAndAudit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, settlements.length]);
 
   // Cooldown timer
   useEffect(() => {
