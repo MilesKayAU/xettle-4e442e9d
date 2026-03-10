@@ -1850,7 +1850,7 @@ function SettlementGuidancePanel({
                 </p>
                 <p className="text-xs text-muted-foreground font-mono">ID: {lastSettlement.settlement_id}</p>
                 <div className="flex items-center gap-2">
-                  {statusBadge(lastSettlement.status || 'pending')}
+                  {statusBadge(lastSettlement.status || 'pending', lastSettlement.xero_status)}
                   <span className="text-xs text-muted-foreground">{formatAUD(lastSettlement.bank_deposit || 0)}</span>
                 </div>
               </div>
