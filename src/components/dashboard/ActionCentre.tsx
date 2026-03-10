@@ -86,71 +86,12 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, settlementsRes, eventsRes] = await Promise.all([
+      const [validationRes, eventsRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
-        supabase.from('settlements').select('id, settlement_id, marketplace, status, period_start, period_end, bank_deposit, bank_verified, xero_journal_id, xero_status').order('marketplace').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
       ]);
 
-      // Build validation rows, then backfill from settlements for periods not in validation
-      const validationRows = (validationRes.data || []) as ValidationRow[];
-      const validationKeys = new Set(validationRows.map(r => `${r.marketplace_code}_${r.period_start}`));
-
-      const settlementRows = (settlementsRes.data || []) as any[];
-      // Group settlements by marketplace + month
-      const settlementsByMonth = new Map<string, any[]>();
-      for (const s of settlementRows) {
-        const mp = s.marketplace || 'unknown';
-        const monthStart = s.period_start?.substring(0, 7) + '-01'; // YYYY-MM-01
-        const key = `${mp}_${monthStart}`;
-        if (!settlementsByMonth.has(key)) settlementsByMonth.set(key, []);
-        settlementsByMonth.get(key)!.push(s);
-      }
-
-      // Create synthetic validation rows for settlement months not in marketplace_validation
-      const syntheticRows: ValidationRow[] = [];
-      for (const [key, settlements] of settlementsByMonth) {
-        const mp = settlements[0].marketplace;
-        const monthStart = key.split('_').slice(1).join('_'); // YYYY-MM-01
-        // Check if ANY validation row covers this marketplace+month
-        const hasValidation = validationRows.some(v => {
-          const vMonth = v.period_start?.substring(0, 7);
-          const sMonth = monthStart.substring(0, 7);
-          return v.marketplace_code === mp && vMonth === sMonth;
-        });
-        if (hasValidation) continue;
-
-        // Derive status from settlement data
-        const hasXero = settlements.some((s: any) => s.xero_journal_id || s.status === 'synced' || s.status === 'pushed_to_xero');
-        const hasBankVerified = settlements.some((s: any) => s.bank_verified);
-        const totalNet = settlements.reduce((sum: number, s: any) => sum + (s.bank_deposit || 0), 0);
-
-        let overall_status = 'settlement_needed';
-        if (hasXero && hasBankVerified) overall_status = 'complete';
-        else if (hasXero) overall_status = 'pushed_to_xero';
-        else if (settlements.length > 0) overall_status = 'ready_to_push';
-
-        const lastPeriodEnd = settlements.reduce((max: string, s: any) => s.period_end > max ? s.period_end : max, settlements[0].period_end);
-
-        syntheticRows.push({
-          id: `synth_${key}`,
-          marketplace_code: mp,
-          period_label: `${monthStart} → ${lastPeriodEnd}`,
-          period_start: monthStart,
-          period_end: lastPeriodEnd,
-          orders_found: false,
-          settlement_uploaded: true,
-          settlement_id: settlements[0].settlement_id,
-          settlement_net: totalNet,
-          reconciliation_status: 'pending',
-          xero_pushed: hasXero,
-          bank_matched: hasBankVerified,
-          overall_status,
-          last_checked_at: null,
-        });
-      }
-
-      setRows([...validationRows, ...syntheticRows]);
+      if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
       if (eventsRes.data) setEvents(eventsRes.data as SystemEvent[]);
     } catch (err) {
       console.error('ActionCentre load error:', err);
@@ -158,6 +99,8 @@ export default function ActionCentre({
       setLoading(false);
     }
   }, []);
+
+
 
   useEffect(() => { loadData(); }, [loadData]);
 
