@@ -161,9 +161,9 @@ Deno.serve(async (req) => {
             { Description: `${contactName} Promotional Discounts`, AccountCode: getCode('Promotional Discounts'), TaxType: 'OUTPUT', UnitAmount: round2(s.promotional_discounts || 0), Quantity: 1 },
             { Description: `${contactName} Refunds`, AccountCode: getCode('Refunds'), TaxType: 'OUTPUT', UnitAmount: round2(s.refunds || 0), Quantity: 1 },
             { Description: `${contactName} Reimbursements`, AccountCode: getCode('Reimbursements'), TaxType: 'NONE', UnitAmount: round2(s.reimbursements || 0), Quantity: 1 },
-            { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: round2(s.seller_fees || 0), Quantity: 1 },
-            { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: round2(s.fba_fees || 0), Quantity: 1 },
-            { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: round2(s.storage_fees || 0), Quantity: 1 },
+            { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.seller_fees || 0)), Quantity: 1 },
+            { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.fba_fees || 0)), Quantity: 1 },
+            { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.storage_fees || 0)), Quantity: 1 },
             { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: round2(s.other_fees || 0), Quantity: 1 },
           ].filter(item => Math.abs(item.UnitAmount) > 0.01)
 
