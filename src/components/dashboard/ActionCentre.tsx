@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   RefreshCw, Upload, Send, CheckCircle2, AlertTriangle, Plus,
-  ArrowRight, Clock, PartyPopper, Loader2,
+  ArrowRight, Clock, PartyPopper, Loader2, Search,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
