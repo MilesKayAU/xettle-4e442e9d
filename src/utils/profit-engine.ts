@@ -6,6 +6,7 @@
  */
 
 import type { MarketplaceGroup, ShopifyOrderRow } from './shopify-orders-parser';
+import { MARKETPLACE_LABELS } from './settlement-engine';
 
 export interface ProductCost {
   sku: string;
