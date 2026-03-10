@@ -140,7 +140,10 @@ export type Database = {
       channel_alerts: {
         Row: {
           actioned_at: string | null
+          candidate_tags: Json | null
           created_at: string | null
+          detected_label: string | null
+          detection_method: string | null
           first_seen_at: string | null
           id: string
           order_count: number | null
@@ -151,7 +154,10 @@ export type Database = {
         }
         Insert: {
           actioned_at?: string | null
+          candidate_tags?: Json | null
           created_at?: string | null
+          detected_label?: string | null
+          detection_method?: string | null
           first_seen_at?: string | null
           id?: string
           order_count?: number | null
@@ -162,7 +168,10 @@ export type Database = {
         }
         Update: {
           actioned_at?: string | null
+          candidate_tags?: Json | null
           created_at?: string | null
+          detected_label?: string | null
+          detection_method?: string | null
           first_seen_at?: string | null
           id?: string
           order_count?: number | null
