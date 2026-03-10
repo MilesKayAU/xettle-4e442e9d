@@ -929,9 +929,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     <Upload className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                     <h3 className="text-sm font-semibold text-foreground">Files needed</h3>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {checkedItems.size} of {missingSettlements!.length} uploaded
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {hasShopifyConnection && missingSettlements!.some(ms => ms.marketplace_code === 'shopify_payments') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1.5"
+                        disabled={shopifySyncing}
+                        onClick={handleShopifySync}
+                      >
+                        {shopifySyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                        {shopifySyncing ? 'Syncing...' : 'Sync Shopify'}
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {checkedItems.size} of {missingSettlements!.length} uploaded
+                    </span>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {missingSettlements!.map((ms, i) => {
