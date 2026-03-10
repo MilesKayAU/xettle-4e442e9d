@@ -167,6 +167,120 @@ export function buildInvoiceDescription(settlement: StandardSettlement): string 
   return `${label} Settlement ${periodLabel}`;
 }
 
+// ─── Universal Duplicate Prevention ─────────────────────────────────────────
+
+/**
+ * UNIVERSAL DEDUP — ALL settlement inserts must go through this function.
+ * This applies to: CSV upload, API sync, manual entry, auto-sync, any future source.
+ * When adding a new marketplace API integration, do NOT bypass this check.
+ * The alias registry handles ID format differences between CSV and API paths.
+ */
+export async function checkForDuplicate(params: {
+  settlementId: string;
+  marketplace: string;
+  userId: string;
+  periodStart: string;
+  periodEnd: string;
+  bankDeposit: number;
+}): Promise<{ isDuplicate: boolean; canonicalId?: string; matchMethod?: string }> {
+  const { settlementId, marketplace, userId, periodStart, periodEnd, bankDeposit } = params;
+
+  // 1. Exact settlement_id match
+  const { data: exactMatch } = await supabase
+    .from('settlements')
+    .select('settlement_id')
+    .eq('settlement_id', settlementId)
+    .eq('user_id', userId)
+    .eq('marketplace', marketplace)
+    .maybeSingle();
+
+  if (exactMatch) {
+    return { isDuplicate: true, canonicalId: exactMatch.settlement_id, matchMethod: 'exact_id' };
+  }
+
+  // 2. Alias registry match
+  const { data: aliasMatch } = await supabase
+    .from('settlement_id_aliases' as any)
+    .select('canonical_settlement_id')
+    .eq('alias_id', settlementId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (aliasMatch) {
+    const canonical = (aliasMatch as any).canonical_settlement_id;
+    // Verify the canonical settlement still exists
+    const { data: canonicalExists } = await supabase
+      .from('settlements')
+      .select('settlement_id')
+      .eq('settlement_id', canonical)
+      .eq('user_id', userId)
+      .eq('marketplace', marketplace)
+      .maybeSingle();
+
+    if (canonicalExists) {
+      return { isDuplicate: true, canonicalId: canonical, matchMethod: 'alias_registry' };
+    }
+  }
+
+  // 3. Fingerprint match (marketplace + dates + amount ±$0.05)
+  const { data: fingerprints } = await supabase
+    .from('settlements')
+    .select('settlement_id, bank_deposit')
+    .eq('user_id', userId)
+    .eq('marketplace', marketplace)
+    .eq('period_start', periodStart)
+    .eq('period_end', periodEnd);
+
+  if (fingerprints) {
+    for (const fp of fingerprints) {
+      const existingAmount = parseFloat(String(fp.bank_deposit)) || 0;
+      if (Math.abs(existingAmount - bankDeposit) <= 0.05) {
+        return { isDuplicate: true, canonicalId: fp.settlement_id, matchMethod: 'fingerprint_amount_date' };
+      }
+    }
+  }
+
+  return { isDuplicate: false };
+}
+
+/**
+ * Register settlement ID aliases for cross-source dedup.
+ */
+async function registerAliases(
+  settlementId: string,
+  userId: string,
+  source: string,
+  sourceReference?: string,
+): Promise<void> {
+  const aliases: Array<{ canonical_settlement_id: string; alias_id: string; user_id: string; source: string }> = [];
+
+  // Always register the settlement_id itself
+  aliases.push({
+    canonical_settlement_id: settlementId,
+    alias_id: settlementId,
+    user_id: userId,
+    source,
+  });
+
+  // Register source_reference as alias if different from settlement_id
+  if (sourceReference && sourceReference !== settlementId) {
+    aliases.push({
+      canonical_settlement_id: settlementId,
+      alias_id: sourceReference,
+      user_id: userId,
+      source,
+    });
+  }
+
+  for (const alias of aliases) {
+    await supabase.from('settlement_id_aliases' as any)
+      .upsert(alias as any, { onConflict: 'alias_id,user_id' })
+      .then(({ error }) => {
+        if (error) console.error('[alias-registry] upsert error:', error);
+      });
+  }
+}
+
 // ─── Save to Database ───────────────────────────────────────────────────────
 
 export interface SaveResult {
@@ -177,7 +291,7 @@ export interface SaveResult {
 
 /**
  * Save a StandardSettlement to the settlements table.
- * Checks for duplicates first.
+ * Uses universal checkForDuplicate() before insert.
  */
 export async function saveSettlement(settlement: StandardSettlement): Promise<SaveResult> {
   try {
@@ -211,28 +325,46 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
         gst_on_expenses: settlement.gst_on_fees,
         bank_deposit: settlement.net_payout,
         source: settlement.source,
+        source_reference: meta.sourceReference || null,
         status: 'already_recorded',
         reconciliation_status: 'reconciled',
       } as any);
 
       if (error) return { success: false, error: error.message };
+
+      // Register aliases for boundary settlements too
+      registerAliases(settlement.settlement_id, user.id, settlement.source, meta.sourceReference);
+
       return {
         success: true,
         error: `This period is before your accounting boundary (set: ${boundarySetting.value}). Settlement saved as 'Already Recorded' — no Xero entry will be created.`,
       };
     }
 
-    // Check for duplicate
-    const { data: existing } = await supabase
-      .from('settlements')
-      .select('id')
-      .eq('settlement_id', settlement.settlement_id)
-      .eq('user_id', user.id)
-      .eq('marketplace', settlement.marketplace)
-      .maybeSingle();
+    // ─── Universal Duplicate Check ──────────────────────────────────
+    const dupCheck = await checkForDuplicate({
+      settlementId: settlement.settlement_id,
+      marketplace: settlement.marketplace,
+      userId: user.id,
+      periodStart: settlement.period_start,
+      periodEnd: settlement.period_end,
+      bankDeposit: settlement.net_payout,
+    });
 
-    if (existing) {
-      return { success: false, error: 'This settlement has already been saved.', duplicate: true };
+    if (dupCheck.isDuplicate) {
+      // Log duplicate detection to system_events
+      supabase.from('system_events' as any).insert({
+        user_id: user.id,
+        event_type: 'duplicate_blocked',
+        marketplace_code: settlement.marketplace,
+        settlement_id: settlement.settlement_id,
+        details: { canonical_id: dupCheck.canonicalId, match_method: dupCheck.matchMethod, source: settlement.source },
+        severity: 'warning',
+      } as any).then(({ error: evErr }) => {
+        if (evErr) console.error('[system_events] duplicate log error:', evErr);
+      });
+
+      return { success: false, error: `This settlement has already been saved (matched by ${dupCheck.matchMethod}).`, duplicate: true };
     }
 
     const meta = settlement.metadata || {};
