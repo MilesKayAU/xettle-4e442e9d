@@ -111,13 +111,14 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
         supabase.from('settlements').select('marketplace').eq('source', 'api'),
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
+        supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
