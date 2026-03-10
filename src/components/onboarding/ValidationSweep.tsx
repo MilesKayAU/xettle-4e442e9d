@@ -35,9 +35,11 @@ interface ValidationRow {
   reconciliation_confidence: number | null;
   reconciliation_confidence_reason: string | null;
   xero_pushed: boolean;
+  xero_pushed_at: string | null;
   xero_invoice_id: string | null;
   bank_matched: boolean;
   bank_amount: number | null;
+  bank_reference: string | null;
   overall_status: string;
   last_checked_at: string | null;
   processing_state: string | null;
