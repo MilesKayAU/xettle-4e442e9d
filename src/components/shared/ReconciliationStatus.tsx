@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, AlertTriangle, XCircle, Clock, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, Clock, ChevronDown, ChevronRight, ExternalLink, Eye } from 'lucide-react';
+import UnmatchedOrdersModal, { type UnmatchedOrder } from './UnmatchedOrdersModal';
 
 interface ReconciliationCheck {
   id: string;
