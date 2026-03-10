@@ -378,7 +378,7 @@ export default function ActionCentre({
                   {readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''} validated
                 </p>
                 <ul className="space-y-1">
-                  {readyToPush.slice(0, 3).map(r => (
+                  {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-blue-500">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
@@ -386,7 +386,11 @@ export default function ActionCentre({
                     </li>
                   ))}
                   {readyToPush.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {readyToPush.length - 3} more</li>
+                    <li>
+                      <button onClick={() => setExpandedCards(prev => ({ ...prev, ready: !prev.ready }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {expandedCards['ready'] ? '− Show less' : `+ ${readyToPush.length - 3} more`}
+                      </button>
+                    </li>
                   )}
                 </ul>
                 <Button size="sm" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
