@@ -515,6 +515,9 @@ export default function InsightsDashboard() {
         {/* Reconciliation Health */}
         <ReconciliationHealth />
 
+        {/* Cross-Marketplace Profit Comparison */}
+        <MarketplaceProfitComparison />
+
         {/* $1 Sale Breakdown — main chart */}
         <Card>
           <CardHeader className="pb-3">

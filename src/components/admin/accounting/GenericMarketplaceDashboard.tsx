@@ -709,6 +709,11 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         </Card>
       ) : null}
 
+      {/* Profit Summary */}
+      {currentUserId && (
+        <MarketplaceProfitCard marketplaceCode={code} userId={currentUserId} />
+      )}
+
       {/* Xero-aware bulk delete confirmation dialog */}
       <BulkDeleteDialog
         open={bulkDeleteDialogOpen}
