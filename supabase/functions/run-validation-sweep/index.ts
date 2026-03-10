@@ -117,7 +117,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
 
   const { data: settlements } = await adminSupabase
     .from('settlements')
-    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at')
+    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at')
     .eq('user_id', userId)
     .gte('period_end', boundaryDate)
 
