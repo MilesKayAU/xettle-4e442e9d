@@ -382,6 +382,10 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         setSyncResult({ synced, total_deposit, settlements: syncedSettlements });
         toast.success(`Found ${synced} new settlement${synced !== 1 ? 's' : ''} totalling ${formatAUD(total_deposit)}`);
         await loadApiSettlements();
+        
+        // Auto-run Xero audit to check which settlements already exist in Xero
+        toast.info('Running accounting audit to detect existing Xero records...');
+        await handleRunAudit();
       } else {
         toast.info('All Amazon settlements already imported — nothing new to sync.');
       }
