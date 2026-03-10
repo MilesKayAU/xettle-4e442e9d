@@ -865,6 +865,18 @@ export default function ShopifyOrdersDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Sub-channel detection banner */}
+      {detectedSubChannels.length > 0 && (
+        <SubChannelBanner
+          channels={detectedSubChannels}
+          onSetupComplete={() => {
+            setDetectedSubChannels([]);
+            loadHistory();
+          }}
+        />
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="upload" className="gap-1.5">
