@@ -2078,7 +2078,6 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
         if (error) throw error;
       }
       toast.success(`Marked ${selectedIds.size} settlement(s) as already in Xero`);
-      setSelectedIds(new Set());
       onDeleted(); // reloads
     } catch (err: any) {
       toast.error(`Failed: ${err.message}`);
