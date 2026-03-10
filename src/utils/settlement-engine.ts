@@ -257,6 +257,22 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
 
     if (error) return { success: false, error: error.message };
 
+    // Fire-and-forget: upsert marketplace_validation
+    const periodLabel = `${settlement.period_start} → ${settlement.period_end}`;
+    supabase.from('marketplace_validation' as any).upsert({
+      user_id: user.id,
+      marketplace_code: settlement.marketplace,
+      period_label: periodLabel,
+      period_start: settlement.period_start,
+      period_end: settlement.period_end,
+      settlement_uploaded: true,
+      settlement_id: settlement.settlement_id,
+      settlement_net: settlement.net_payout,
+      settlement_uploaded_at: new Date().toISOString(),
+    } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
+      if (valErr) console.error('[marketplace_validation] upsert error:', valErr);
+    });
+
     // Fire-and-forget: extract fee observations for intelligence engine
     import('./fee-observation-engine').then(({ extractFeeObservations }) => {
       extractFeeObservations(settlement, user.id).catch(console.error);
@@ -432,6 +448,31 @@ export async function syncSettlementToXero(
       } as any)
       .eq('settlement_id', settlementId)
       .eq('user_id', user.id);
+
+    // Fire-and-forget: update marketplace_validation with Xero push
+    const { data: settlementRow } = await supabase
+      .from('settlements')
+      .select('period_start, period_end, marketplace')
+      .eq('settlement_id', settlementId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (settlementRow) {
+      const s2 = settlementRow as any;
+      const periodLabel = `${s2.period_start} → ${s2.period_end}`;
+      supabase.from('marketplace_validation' as any).upsert({
+        user_id: user.id,
+        marketplace_code: marketplace,
+        period_label: periodLabel,
+        period_start: s2.period_start,
+        period_end: s2.period_end,
+        xero_pushed: true,
+        xero_invoice_id: result.invoiceId,
+        xero_pushed_at: new Date().toISOString(),
+      } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
+        if (valErr) console.error('[marketplace_validation] xero upsert error:', valErr);
+      });
+    }
 
     return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
   } catch (err: any) {
