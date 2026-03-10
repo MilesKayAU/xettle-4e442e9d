@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
+import { MARKETPLACE_LABELS, triggerValidationSweep } from '@/utils/settlement-engine';
 
 interface DetectedSettlement {
   marketplace: string;
@@ -212,6 +212,9 @@ export default function AccountingBoundarySetup({
       setConfirmedDate(boundaryDate);
       setState('confirmed');
       toast.success(`Accounting boundary set to ${format(new Date(boundaryDate), 'dd MMM yyyy')}`);
+
+      // Fire-and-forget: trigger validation sweep
+      triggerValidationSweep();
 
       // Load marketplace statuses for next step
       await loadMarketplaceStatuses();
