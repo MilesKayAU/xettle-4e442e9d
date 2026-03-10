@@ -494,7 +494,12 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
     setSyncing(settlement.id);
     try {
-      onSyncToXero?.(settlement.settlement_id);
+      if (onSyncToXero) {
+        await onSyncToXero(settlement.settlement_id);
+      }
+      await loadApiSettlements();
+    } catch (err: any) {
+      toast.error(`Push failed: ${err.message}`);
     } finally {
       setSyncing(null);
     }
