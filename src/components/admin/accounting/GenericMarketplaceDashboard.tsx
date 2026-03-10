@@ -53,6 +53,7 @@ interface SettlementRow {
   gst_on_income: number | null;
   gst_on_expenses: number | null;
   refunds: number | null;
+  reconciliation_status: string | null;
   reimbursements: number | null;
   other_fees: number | null;
   xero_journal_id: string | null;

@@ -27,7 +27,7 @@ export interface BaseSettlementRow {
   xero_status: string | null;
 }
 
-const DEFAULT_SELECT = 'id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, refunds, reimbursements, other_fees, xero_journal_id, xero_invoice_number, xero_status, sales_shipping, bank_verified, bank_verified_amount, bank_verified_at, bank_verified_by';
+const DEFAULT_SELECT = 'id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, refunds, reimbursements, other_fees, xero_journal_id, xero_invoice_number, xero_status, sales_shipping, bank_verified, bank_verified_amount, bank_verified_at, bank_verified_by, reconciliation_status';
 
 interface UseSettlementManagerOptions {
   /** Primary marketplace code */
