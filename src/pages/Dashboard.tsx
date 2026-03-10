@@ -278,7 +278,6 @@ export default function Dashboard() {
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                   }`}
                 >
-                  <span className="text-xs opacity-60">{tab.step}</span>
                   <Icon className="h-4 w-4" />
                   {tab.label}
                 </button>
