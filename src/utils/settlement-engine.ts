@@ -619,6 +619,33 @@ export async function triggerValidationSweep(): Promise<void> {
   }
 }
 
+// ─── Bank Match Trigger ─────────────────────────────────────────────────────
+
+/**
+ * Fire-and-forget trigger for bank deposit matching after Xero push.
+ */
+export async function triggerBankMatch(settlementId?: string): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    fetch(
+      `https://${projectId}.supabase.co/functions/v1/match-bank-deposits`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(settlementId ? { settlementId } : {}),
+      }
+    ).catch(console.error);
+  } catch {
+    // fire-and-forget
+  }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 export function formatSettlementDate(d: string): string {
