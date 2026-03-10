@@ -63,20 +63,40 @@ const parseISO: FormatParser = (input) => {
   return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
 };
 
-/** 2. DD/MM/YYYY (Australian default for slash dates) */
-const parseDDslashMMslashYYYY: FormatParser = (input) => {
+/**
+ * 2. DD/MM/YYYY with plausibility-aware MM/DD fallback.
+ * Prefers DD/MM (Australian). If DD/MM is valid but implausible (future date beyond
+ * current month + 3), and MM/DD would be plausible, uses MM/DD instead.
+ */
+const parseSlashDate: FormatParser = (input) => {
   const m = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (!m) return null;
-  const [, d, mo, y] = m.map(Number);
-  return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
+  const a = parseInt(m[1]), b = parseInt(m[2]), y = parseInt(m[3]);
+
+  // Try DD/MM first (Australian default)
+  const ddmm = isValidDate(y, b, a) ? formatDate(y, b, a) : null;
+  // Try MM/DD as alternative
+  const mmdd = isValidDate(y, a, b) ? formatDate(y, a, b) : null;
+
+  if (ddmm && isPlausible(ddmm)) return ddmm;        // DD/MM is plausible → use it
+  if (ddmm && !mmdd) return ddmm;                     // DD/MM is only valid option
+  if (!ddmm && mmdd) return mmdd;                      // Only MM/DD is valid
+  if (ddmm && mmdd && isPlausible(mmdd)) return mmdd;  // DD/MM implausible, MM/DD plausible → use MM/DD
+  return ddmm ?? mmdd ?? null;                         // Both implausible — return whichever is valid
 };
 
-/** 3. DD-MM-YYYY */
-const parseDDdashMMdashYYYY: FormatParser = (input) => {
+/** 3. DD-MM-YYYY with same plausibility fallback */
+const parseDashDate: FormatParser = (input) => {
   const m = input.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
   if (!m) return null;
-  const [, d, mo, y] = m.map(Number);
-  return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
+  const a = parseInt(m[1]), b = parseInt(m[2]), y = parseInt(m[3]);
+  const ddmm = isValidDate(y, b, a) ? formatDate(y, b, a) : null;
+  const mmdd = isValidDate(y, a, b) ? formatDate(y, a, b) : null;
+  if (ddmm && isPlausible(ddmm)) return ddmm;
+  if (ddmm && !mmdd) return ddmm;
+  if (!ddmm && mmdd) return mmdd;
+  if (ddmm && mmdd && isPlausible(mmdd)) return mmdd;
+  return ddmm ?? mmdd ?? null;
 };
 
 /** 4. DD.MM.YYYY (Amazon AU settlement format, with optional time) */
@@ -84,14 +104,6 @@ const parseDDdotMMdotYYYY: FormatParser = (input) => {
   const m = input.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
   if (!m) return null;
   const [, d, mo, y] = m.map(Number);
-  return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
-};
-
-/** 5. MM/DD/YYYY fallback — only if DD/MM/YYYY failed (i.e. day > 12 made it invalid) */
-const parseMMslashDDslashYYYY: FormatParser = (input) => {
-  const m = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (!m) return null;
-  const [, mo, d, y] = m.map(Number);
   return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
 };
 
