@@ -17,6 +17,7 @@ const MARKETPLACE_CONTACTS: Record<string, string> = {
   woolworths: 'Woolworths Everyday Market',
   theiconic: 'THE ICONIC',
   etsy: 'Etsy',
+  everyday_market: 'Everyday Market',
 }
 
 function round2(n: number): number {
