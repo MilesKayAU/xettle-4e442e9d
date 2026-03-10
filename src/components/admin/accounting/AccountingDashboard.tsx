@@ -1913,7 +1913,12 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
   } = useBulkSelect({ settlements: settlements as any, onComplete: onDeleted });
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [rollbackConfirm, setRollbackConfirm] = useState<{ settlement: SettlementRecord; scope: 'all' | 'journal_1' | 'journal_2' } | null>(null);
-  const [markingSynced, setMarkingSynced] = useState(false);
+
+  // Shared Xero sync hook for mark-as-synced (rollback stays Amazon-specific due to split-month scope)
+  const {
+    handleMarkAlreadySynced: xeroMarkSynced,
+    handleBulkMarkSynced: xeroBulkMarkSynced,
+  } = useXeroSync({ loadSettlements: onDeleted });
 
   const handleRollback = async (settlement: SettlementRecord, scope: 'all' | 'journal_1' | 'journal_2' = 'all') => {
     let journalIds: string[] = [];
