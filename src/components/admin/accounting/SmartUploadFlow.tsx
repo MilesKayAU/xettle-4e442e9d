@@ -1089,6 +1089,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         </CardContent>
       </Card>
 
+      {/* Shopify Sync Banner — always visible when Shopify is connected */}
+      {hasShopifyConnection && (
+        <ShopifySyncBanner
+          onSync={handleShopifySync}
+          syncing={shopifySyncing}
+        />
+      )}
+
       {/* Where to find your files — collapsible guide, auto-collapses when files uploaded */}
       <FileGuide forceCollapsed={hasFiles} />
 
