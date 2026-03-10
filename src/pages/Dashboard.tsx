@@ -10,6 +10,7 @@ import SettlementsSummaryStrip from '@/components/admin/accounting/SettlementsSu
 import ActionControlPanel from '@/components/admin/accounting/ActionControlPanel';
 import NextExpectedSettlements from '@/components/admin/accounting/NextExpectedSettlements';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
+import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
 import SkuComparisonView from '@/components/insights/SkuComparisonView';
