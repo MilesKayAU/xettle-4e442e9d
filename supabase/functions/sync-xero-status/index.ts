@@ -336,7 +336,6 @@ serve(async (req) => {
 
     // ─── Update marketplace_validation for all matched settlements ───
     for (const [settlementId, inv] of seen.entries()) {
-      // Get settlement details for validation update
       const { data: sett } = await supabase
         .from('settlements')
         .select('marketplace, period_start, period_end')
@@ -359,12 +358,36 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[sync-xero-status] User ${userId}: ${updated} reference matches, ${fuzzyMatched} fuzzy matches, ${allInvoices.length} Xero invoices scanned, ${unmatchedSettlements?.length || 0} unmatched settlements checked`);
+    // ─── Count remaining unmatched for logging ───
+    const { data: stillUnmatched } = await supabase
+      .from('settlements')
+      .select('settlement_id')
+      .eq('user_id', userId)
+      .is('xero_journal_id', null)
+      .in('status', ['saved', 'parsed', 'ready_to_push']);
+    const unmatchedCount = stillUnmatched?.length || 0;
+
+    // ─── Log to system_events ───
+    await supabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'xero_audit_complete',
+      severity: 'info',
+      details: {
+        matched: updated,
+        fuzzy_matched: fuzzyMatched,
+        unmatched: unmatchedCount,
+        total_scanned: allInvoices.length,
+        unmatched_settlements_checked: unmatchedSettlements?.length || 0,
+      },
+    });
+
+    console.log(`[sync-xero-status] User ${userId}: ${updated} reference matches, ${fuzzyMatched} fuzzy matches, ${allInvoices.length} Xero invoices scanned, ${unmatchedCount} still unmatched`);
 
     return new Response(JSON.stringify({
       success: true,
       updated,
       fuzzy_matched: fuzzyMatched,
+      unmatched: unmatchedCount,
       total: seen.size + fuzzyMatched,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
