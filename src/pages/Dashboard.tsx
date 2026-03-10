@@ -22,7 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
 
-type DashboardView = 'smart_upload' | 'settlements' | 'insights';
+type DashboardView = 'dashboard' | 'smart_upload' | 'settlements' | 'insights';
 type SettlementsSubTab = 'all' | 'overview';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
