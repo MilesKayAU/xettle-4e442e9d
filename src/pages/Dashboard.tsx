@@ -35,9 +35,10 @@ export default function Dashboard() {
   const [xeroConnected, setXeroConnected] = useState(false);
 
   useEffect(() => {
+    if (!user) return;
     supabase.from('xero_tokens').select('id').limit(1)
       .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
-  }, []);
+  }, [user]);
   const [activeView, setActiveView] = useState<DashboardView>(() => {
     return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
   });
