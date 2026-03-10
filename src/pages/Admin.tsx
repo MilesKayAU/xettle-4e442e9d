@@ -27,9 +27,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
+import BugReportsDashboard from '@/components/admin/BugReportsDashboard';
 
 interface UserRow {
   id: string;
@@ -201,6 +202,10 @@ export default function Admin() {
               <Store className="h-3.5 w-3.5" />
               Marketplace Config
             </TabsTrigger>
+            <TabsTrigger value="bugs" className="flex items-center gap-1.5">
+              <Bug className="h-3.5 w-3.5" />
+              Bug Reports
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -321,6 +326,10 @@ export default function Admin() {
 
           <TabsContent value="marketplaces">
             <MarketplaceConfigTab />
+          </TabsContent>
+
+          <TabsContent value="bugs">
+            <BugReportsDashboard />
           </TabsContent>
         </Tabs>
       </div>

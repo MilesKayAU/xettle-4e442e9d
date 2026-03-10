@@ -16,6 +16,7 @@ import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfit
 import SkuComparisonView from '@/components/insights/SkuComparisonView';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard } from 'lucide-react';
@@ -437,6 +438,7 @@ export default function Dashboard() {
       )}
 
       <div className="container-custom py-8">
+        <BugReportNotificationBanner />
         {/* ─── Dashboard (Action Centre Homepage) ────────────────────── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
