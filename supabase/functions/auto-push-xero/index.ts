@@ -85,13 +85,23 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // ─── Get all ready_to_push settlements ────────────────────
-        const { data: settlements, error: settErr } = await supabase
+        // ─── Get ready_to_push + retryable push_failed settlements ──
+        const { data: readySettlements, error: settErr } = await supabase
           .from('settlements')
           .select('*')
           .eq('user_id', userId)
           .eq('status', 'ready_to_push')
           .order('period_start', { ascending: true })
+
+        const { data: failedSettlements } = await supabase
+          .from('settlements')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'push_failed')
+          .lt('push_retry_count', 3)
+          .order('period_start', { ascending: true })
+
+        const settlements = [...(readySettlements || []), ...(failedSettlements || [])]
 
         if (settErr) {
           console.error(`[auto-push-xero] User ${userId}: query error:`, settErr.message)
