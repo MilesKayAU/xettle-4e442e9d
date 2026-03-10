@@ -28,6 +28,8 @@ import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting
 import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
 import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@/utils/reconciliation-engine';
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
+import { useBulkSelect } from '@/hooks/use-bulk-select';
+import BulkDeleteDialog from '@/components/admin/accounting/shared/BulkDeleteDialog';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
@@ -1894,11 +1896,21 @@ type SortDir = 'asc' | 'desc';
 
 function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushToXero }: { settlements: SettlementRecord[]; loading: boolean; onDeleted: () => void; onReview?: (settlementId: string, settlementUuid: string) => void; onPushToXero?: (settlementId: string, settlementUuid: string) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('period');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Shared bulk select hook replaces manual selectedIds / toggleSelect / toggleAll / handleDelete
+  const {
+    selected: selectedIds,
+    toggleSelect,
+    toggleSelectAll: toggleAll,
+    bulkDeleting: deleting,
+    bulkDeleteDialogOpen,
+    syncedSelectedCount,
+    handleBulkDelete,
+    confirmBulkDelete,
+    cancelBulkDelete,
+  } = useBulkSelect({ settlements: settlements as any, onComplete: onDeleted });
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [rollbackConfirm, setRollbackConfirm] = useState<{ settlement: SettlementRecord; scope: 'all' | 'journal_1' | 'journal_2' } | null>(null);
   const [markingSynced, setMarkingSynced] = useState(false);
@@ -2029,57 +2041,6 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     return `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoiceId}`;
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    if (selectedIds.size === settlements.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(settlements.map(s => s.id)));
-    }
-  };
-
-  const handleDelete = async () => {
-    if (selectedIds.size === 0) return;
-    setDeleting(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Get settlement_ids (text) for the selected rows
-      const selectedSettlements = settlements.filter(s => selectedIds.has(s.id));
-      const settlementTextIds = selectedSettlements.map(s => s.settlement_id);
-
-      // Delete related lines and unmapped first, then settlements
-      for (const sid of settlementTextIds) {
-        await supabase.from('settlement_lines').delete().eq('settlement_id', sid).eq('user_id', user.id);
-        await supabase.from('settlement_unmapped').delete().eq('settlement_id', sid).eq('user_id', user.id);
-      }
-
-      // Delete settlement records by UUID
-      const uuids = Array.from(selectedIds);
-      for (const uuid of uuids) {
-        const { error } = await supabase.from('settlements').delete().eq('id', uuid).eq('user_id', user.id);
-        if (error) throw error;
-      }
-
-      toast.success(`Deleted ${selectedIds.size} settlement${selectedIds.size !== 1 ? 's' : ''}`);
-      setSelectedIds(new Set());
-      setConfirmDelete(false);
-      onDeleted();
-    } catch (err: any) {
-      toast.error(`Delete failed: ${err.message}`);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const handleMarkSyncedOne = async (settlement: SettlementRecord) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -2105,7 +2066,6 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
         if (error) throw error;
       }
       toast.success(`Marked ${selectedIds.size} settlement(s) as already in Xero`);
-      setSelectedIds(new Set());
       onDeleted(); // reloads
     } catch (err: any) {
       toast.error(`Failed: ${err.message}`);
@@ -2222,7 +2182,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
               {someSelected && ` ${selectedIds.size} selected.`}
             </CardDescription>
           </div>
-          {someSelected && !confirmDelete && (
+          {someSelected && (
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -2237,39 +2197,23 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => setConfirmDelete(true)}
+                onClick={handleBulkDelete}
+                disabled={deleting}
                 className="gap-1.5"
               >
-                <XCircle className="h-3.5 w-3.5" />
+                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                 Delete {selectedIds.size === settlements.length ? 'All' : selectedIds.size}
               </Button>
             </div>
           )}
-          {confirmDelete && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-destructive font-medium">
-                Delete {selectedIds.size} settlement{selectedIds.size !== 1 ? 's' : ''}?
-              </span>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDelete}
-                disabled={deleting}
-                className="gap-1.5"
-              >
-                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                {deleting ? 'Deleting…' : 'Confirm'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConfirmDelete(false)}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
+          {/* Xero-aware bulk delete confirmation dialog */}
+          <BulkDeleteDialog
+            open={bulkDeleteDialogOpen}
+            selectedCount={selectedIds.size}
+            syncedCount={syncedSelectedCount}
+            onConfirm={confirmBulkDelete}
+            onCancel={cancelBulkDelete}
+          />
         </div>
       </CardHeader>
       <CardContent className="p-0">
