@@ -130,12 +130,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   // Filter settlements
   const filteredSettlements = settlements.filter(s => {
-    if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed';
+    if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
     if (settlementFilter === 'synced') return s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external';
     return true;
   });
 
-  const attentionCount = settlements.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed').length;
+  const attentionCount = settlements.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
   const syncedCount = settlements.filter(s => s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external').length;
 
   return (
