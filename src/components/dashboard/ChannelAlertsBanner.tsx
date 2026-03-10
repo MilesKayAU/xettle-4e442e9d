@@ -34,6 +34,22 @@ function isNumericChannelId(name: string): boolean {
   return /^\d{6,}$/.test(name.trim());
 }
 
+const KNOWN_CONNECTOR_APPS: Record<string, string> = {
+  'cedcommerce': 'Orders managed via CedCommerce — check which marketplace in your CedCommerce dashboard',
+  'codisto': 'Orders managed via Codisto/Linnworks',
+  'm2e pro': 'Orders managed via M2E Pro (eBay/Amazon connector)',
+  'shopify markets': 'International orders via Shopify Markets',
+};
+
+function getConnectorNote(candidateTags: string[]): string | null {
+  if (!candidateTags.length) return null;
+  const joined = candidateTags.join(' ').toLowerCase();
+  for (const [key, note] of Object.entries(KNOWN_CONNECTOR_APPS)) {
+    if (joined.includes(key)) return note;
+  }
+  return null;
+}
+
 /** Get the best display name for an alert */
 function getDisplayName(alert: ChannelAlert): string {
   if (alert.detected_label) return alert.detected_label;
