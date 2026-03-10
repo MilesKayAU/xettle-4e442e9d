@@ -285,7 +285,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
           uncosted_sku_count: profit.uncosted_sku_count,
           uncosted_revenue: profit.uncosted_revenue,
           calculated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,settlement_id' });
+        }, { onConflict: 'user_id,marketplace_code,settlement_id' });
       } catch (e) {
         console.error('[profit-engine] fire-and-forget failed:', e);
       }
