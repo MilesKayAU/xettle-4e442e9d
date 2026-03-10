@@ -77,25 +77,27 @@ export async function calculateReconciliation(
   const settlement_net_received = round2(Number(settlement.net_amount) || 0);
   const actual_commission = round2(Math.abs(Number(settlement.fees_amount) || 0));
 
-  // 3. Expected commission — try fee observations first, else derive
+  // 3. Expected commission — use fee observations if available
   let expected_commission: number;
+  let usedObservedRate = false;
   const observedRate = await getAverageObservedFeeRate(marketplaceCode);
 
   if (observedRate !== null && shopify_order_total > 0) {
     expected_commission = round2(shopify_order_total * observedRate);
+    usedObservedRate = true;
+  } else if (shopify_order_total > 0 && actual_commission > 0) {
+    // Use actual commission from the settlement itself
+    expected_commission = actual_commission;
   } else {
-    // Derive: expected_commission = orders - net received
-    expected_commission = round2(
-      shopify_order_total > 0
-        ? shopify_order_total - settlement_net_received
-        : 0
-    );
+    expected_commission = 0;
   }
 
-  // 4. Difference
-  const difference = round2(
-    settlement_net_received - (shopify_order_total - expected_commission)
-  );
+  // 4. Difference: what we received vs what we expected after fees
+  //    Expected net = orders - fees. Difference = actual net - expected net.
+  const expectedNet = round2(shopify_order_total - expected_commission);
+  const difference = shopify_order_total > 0
+    ? round2(settlement_net_received - expectedNet)
+    : 0;
 
   const difference_percent =
     shopify_order_total > 0
@@ -106,7 +108,7 @@ export async function calculateReconciliation(
   let status: ReconciliationResult['status'];
   if (shopify_order_total === 0) {
     status = 'pending';
-  } else if (Math.abs(difference) === 0) {
+  } else if (Math.abs(difference) <= 1) {
     status = 'matched';
   } else if (Math.abs(difference) < 10) {
     status = 'warning';
@@ -127,12 +129,9 @@ export async function calculateReconciliation(
   if (shopify_order_total === 0) {
     reconciliation_confidence = 0.5;
     reconciliation_confidence_reason = 'No Shopify orders found for comparison';
-  } else if (Math.abs(difference) === 0) {
-    reconciliation_confidence = 1.0;
-    reconciliation_confidence_reason = `Exact match — ${ordersInPeriod.length} orders fully reconciled`;
   } else if (Math.abs(difference) <= 1) {
-    reconciliation_confidence = 0.9;
-    reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} rounding difference — likely GST`;
+    reconciliation_confidence = 1.0;
+    reconciliation_confidence_reason = `Matched within $1 — ${ordersInPeriod.length} orders reconciled`;
   } else if (Math.abs(difference) < 10) {
     reconciliation_confidence = 0.8;
     reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} minor difference — ${ordersInPeriod.length} orders matched`;
@@ -141,15 +140,17 @@ export async function calculateReconciliation(
     reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} gap with ${unmatched_orders.length} unmatched orders`;
   } else {
     reconciliation_confidence = 0.3;
-    reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} gap — possible returns pending`;
+    reconciliation_confidence_reason = `$${Math.abs(difference).toFixed(2)} gap — possible returns pending or date range mismatch`;
   }
 
   // Build notes
   const notesParts: string[] = [];
-  if (observedRate !== null) {
+  if (usedObservedRate && observedRate !== null) {
     notesParts.push(`Using observed fee rate: ${(observedRate * 100).toFixed(1)}%`);
+  } else if (actual_commission > 0) {
+    notesParts.push(`Using actual settlement fees: $${actual_commission.toFixed(2)}`);
   } else {
-    notesParts.push('No fee observations — commission derived from difference');
+    notesParts.push('No fee data available');
   }
   if (unmatched_orders.length > 0) {
     notesParts.push(`${unmatched_orders.length} unmatched order(s)`);
