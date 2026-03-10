@@ -287,35 +287,7 @@ export default function AccountingDashboard() {
     checkTier();
   }, []);
 
-  const loadSettlements = useCallback(async (showLoading = false) => {
-    if (showLoading) setLoadingSettlements(true);
-    try {
-      const { data, error } = await supabase
-        .from('settlements')
-        .select('*')
-        .eq('marketplace', selectedMarketplace)
-        .order('period_end', { ascending: false });
-      if (error) throw error;
-      setSettlements((data || []) as SettlementRecord[]);
-    } catch {
-      // silently fail on load
-    } finally {
-      setLoadingSettlements(false);
-    }
-  }, [selectedMarketplace]);
-
-  useEffect(() => { loadSettlements(true); }, [loadSettlements]);
-
-  // Realtime subscription: auto-refresh settlements list when rows change (insert/delete/update)
-  useEffect(() => {
-    const channel = supabase
-      .channel('settlements-status-refresh')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => {
-        loadSettlements();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadSettlements]);
+  // loadSettlements and realtime are handled by useSettlementManager hook above
 
   // Reload settlements whenever the user switches to the history tab
   useEffect(() => {
