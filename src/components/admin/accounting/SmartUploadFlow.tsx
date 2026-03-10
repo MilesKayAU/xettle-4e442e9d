@@ -22,7 +22,9 @@ import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye, LayoutDashboard,
+  MapPin,
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
 import UnknownEntityDialog from './UnknownEntityDialog';
 import {
@@ -101,6 +103,21 @@ const MARKETPLACE_COLORS: Record<string, string> = {
   ebay_au: 'bg-yellow-500',
   etsy: 'bg-orange-500',
   theiconic: 'bg-pink-600',
+};
+
+const MARKETPLACE_SOURCE_HINTS: Record<string, string> = {
+  amazon_au: 'Seller Central → Reports → Payments → All Statements → Download Flat File V2',
+  shopify_payments: 'Shopify Admin → Finances → Payouts → Export CSV',
+  bigw: 'Provided by Big W via email or marketplace portal',
+  everyday_market: 'Provided by Everyday Market via email or marketplace portal',
+  mydeal: 'Provided by MyDeal via email or marketplace portal',
+  bunnings: 'Bunnings Marketplace portal → Sales Summary PDF',
+  kogan: 'Provided by Kogan via email or marketplace portal',
+  catch: 'Provided by Catch via email or marketplace portal',
+  ebay_au: 'eBay Seller Hub → Payments → Reports → Download CSV',
+  woolworths_marketplus: 'Woolworths MarketPlus portal → Reports → Download CSV',
+  theiconic: 'Provided by THE ICONIC via email or marketplace portal',
+  etsy: 'Etsy Shop Manager → Finances → Payment account → Download CSV',
 };
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -880,25 +897,54 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     {checkedItems.size} of {missingSettlements!.length} uploaded
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {missingSettlements!.map((ms, i) => {
                     const done = checkedItems.has(i);
+                    const pStart = new Date(ms.period_start + 'T00:00:00');
+                    const pEnd = new Date(ms.period_end + 'T00:00:00');
+                    const monthLabel = pStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+                    const dateRange = `${pStart.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} – ${pEnd.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                    const sourceHint = MARKETPLACE_SOURCE_HINTS[ms.marketplace_code] || 'Check your marketplace portal or email';
                     return (
                       <div
                         key={`${ms.marketplace_code}-${ms.period_start}`}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-all ${
+                        className={`flex items-start gap-2 px-3 py-2 rounded-md transition-all ${
                           done
-                            ? 'bg-emerald-100/80 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 line-through opacity-70'
-                            : 'bg-background/80 text-foreground'
+                            ? 'bg-emerald-100/80 dark:bg-emerald-900/30 opacity-70'
+                            : 'bg-background/80'
                         }`}
                       >
                         {done ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
                         ) : (
-                          <XCircle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+                          <XCircle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                         )}
-                        <span className="font-medium">{ms.marketplace_label}</span>
-                        <span className="text-muted-foreground">— {new Date(ms.period_start + 'T00:00:00').toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className={`flex items-center gap-1.5 ${done ? 'line-through' : ''}`}>
+                            <span className="text-xs font-medium text-foreground">{ms.marketplace_label}</span>
+                            <span className="text-xs text-muted-foreground">— {monthLabel}</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button className="text-muted-foreground/60 hover:text-muted-foreground" onClick={e => e.stopPropagation()}>
+                                  <HelpCircle className="h-3 w-3" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p className="font-medium mb-0.5">Where to find this file:</p>
+                                <p>{sourceHint}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          {!done && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {ms.estimated_amount
+                                ? `Est. $${ms.estimated_amount.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                : 'Est. amount unknown'}
+                              {' · '}
+                              {dateRange}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     );
                   })}

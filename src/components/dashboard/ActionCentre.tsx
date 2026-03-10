@@ -52,6 +52,7 @@ export interface MissingSettlement {
   period_label: string;
   period_start: string;
   period_end: string;
+  estimated_amount?: number | null;
 }
 
 interface ActionCentreProps {
@@ -146,6 +147,28 @@ export default function ActionCentre({
   const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
   const allComplete = rows.length > 0 && uploadNeeded.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0;
 
+  // Build a lookup of last known settlement amount per marketplace
+  const lastKnownAmounts = useMemo(() => {
+    const amounts: Record<string, number> = {};
+    for (const r of rows) {
+      if (r.settlement_net && r.settlement_net > 0 && !amounts[r.marketplace_code]) {
+        amounts[r.marketplace_code] = r.settlement_net;
+      }
+    }
+    return amounts;
+  }, [rows]);
+
+  const buildMissingList = useCallback((): MissingSettlement[] => {
+    return uploadNeeded.map(r => ({
+      marketplace_code: r.marketplace_code,
+      marketplace_label: MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code,
+      period_label: r.period_label,
+      period_start: r.period_start,
+      period_end: r.period_end,
+      estimated_amount: lastKnownAmounts[r.marketplace_code] || null,
+    }));
+  }, [uploadNeeded, lastKnownAmounts]);
+
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at) : null;
 
@@ -234,14 +257,7 @@ export default function ActionCentre({
               </p>
             </div>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-amber-300 dark:border-amber-700" onClick={() => {
-              const missing: MissingSettlement[] = uploadNeeded.map(r => ({
-                marketplace_code: r.marketplace_code,
-                marketplace_label: MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code,
-                period_label: r.period_label,
-                period_start: r.period_start,
-                period_end: r.period_end,
-              }));
-              onSwitchToUpload(missing);
+              onSwitchToUpload(buildMissingList());
             }}>
               <Upload className="h-3 w-3" /> Upload now
             </Button>
@@ -287,14 +303,7 @@ export default function ActionCentre({
                   )}
                 </ul>
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
-                  const missing: MissingSettlement[] = uploadNeeded.map(r => ({
-                    marketplace_code: r.marketplace_code,
-                    marketplace_label: MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code,
-                    period_label: r.period_label,
-                    period_start: r.period_start,
-                    period_end: r.period_end,
-                  }));
-                  onSwitchToUpload(missing);
+                  onSwitchToUpload(buildMissingList());
                 }}>
                   <Upload className="h-3 w-3" /> Upload now
                 </Button>
