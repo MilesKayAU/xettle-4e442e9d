@@ -30,6 +30,7 @@ import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
 import { useBulkSelect } from '@/hooks/use-bulk-select';
 import BulkDeleteDialog from '@/components/admin/accounting/shared/BulkDeleteDialog';
+import { useXeroSync } from '@/hooks/use-xero-sync';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
@@ -1913,7 +1914,12 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
   } = useBulkSelect({ settlements: settlements as any, onComplete: onDeleted });
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [rollbackConfirm, setRollbackConfirm] = useState<{ settlement: SettlementRecord; scope: 'all' | 'journal_1' | 'journal_2' } | null>(null);
-  const [markingSynced, setMarkingSynced] = useState(false);
+
+  // Shared Xero sync hook for mark-as-synced (rollback stays Amazon-specific due to split-month scope)
+  const {
+    handleMarkAlreadySynced: xeroMarkSynced,
+    handleBulkMarkSynced: xeroBulkMarkSynced,
+  } = useXeroSync({ loadSettlements: onDeleted });
 
   const handleRollback = async (settlement: SettlementRecord, scope: 'all' | 'journal_1' | 'journal_2' = 'all') => {
     let journalIds: string[] = [];
@@ -2041,37 +2047,11 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     return `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoiceId}`;
   };
 
-  const handleMarkSyncedOne = async (settlement: SettlementRecord) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      const { error } = await supabase.from('settlements').update({ status: 'synced_external' } as any).eq('id', settlement.id).eq('user_id', user.id);
-      if (error) throw error;
-      toast.success(`Marked ${settlement.settlement_id} as already in Xero`);
-      onDeleted(); // reloads
-    } catch (err: any) {
-      toast.error(`Failed: ${err.message}`);
-    }
-  };
+  const handleMarkSyncedOne = (settlement: SettlementRecord) => xeroMarkSynced(settlement.settlement_id);
 
-
-  const handleMarkSyncedBulk = async () => {
-    if (selectedIds.size === 0) return;
-    setMarkingSynced(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      for (const uuid of Array.from(selectedIds)) {
-        const { error } = await supabase.from('settlements').update({ status: 'synced_external' } as any).eq('id', uuid).eq('user_id', user.id);
-        if (error) throw error;
-      }
-      toast.success(`Marked ${selectedIds.size} settlement(s) as already in Xero`);
-      onDeleted(); // reloads
-    } catch (err: any) {
-      toast.error(`Failed: ${err.message}`);
-    } finally {
-      setMarkingSynced(false);
-    }
+  const handleMarkSyncedBulk = () => {
+    const selected = settlements.filter(s => selectedIds.has(s.id));
+    xeroBulkMarkSynced(selected as any);
   };
 
   if (loading) {
@@ -2188,10 +2168,9 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                 variant="outline"
                 size="sm"
                 onClick={handleMarkSyncedBulk}
-                disabled={markingSynced}
                 className="gap-1.5"
               >
-                {markingSynced ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckSquare className="h-3.5 w-3.5" />}
+                <CheckSquare className="h-3.5 w-3.5" />
                 Mark {selectedIds.size} as Synced
               </Button>
               <Button
