@@ -290,10 +290,14 @@ async function sweepUser(adminSupabase: any, userId: string) {
           record.settlement_uploaded_at = settlement.created_at || new Date().toISOString()
         }
 
-        // Step 3: Reconciliation
+        // Step 3: Reconciliation — check reconciliation_checks first, then fall back to settlement's own status
         if (recon) {
           record.reconciliation_status = recon.status || 'pending'
           record.reconciliation_difference = recon.difference || 0
+        } else if (settlement?.reconciliation_status === 'reconciled') {
+          record.reconciliation_status = 'matched'
+          record.reconciliation_difference = 0
+          record.orders_found = true
         }
 
         // Step 4: Xero
