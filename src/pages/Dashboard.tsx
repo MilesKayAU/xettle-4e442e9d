@@ -438,6 +438,7 @@ export default function Dashboard() {
       )}
 
       <div className="container-custom py-8">
+        <BugReportNotificationBanner />
         {/* ─── Dashboard (Action Centre Homepage) ────────────────────── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
