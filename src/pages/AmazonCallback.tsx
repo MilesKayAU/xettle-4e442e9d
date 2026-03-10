@@ -54,7 +54,7 @@ export default function AmazonCallback() {
 
         // Auto-redirect after 3 seconds
         setTimeout(() => {
-          navigate('/admin?tab=settings', { replace: true });
+          navigate('/dashboard?connected=amazon', { replace: true });
         }, 3000);
       } catch (err: any) {
         console.error('Amazon callback error:', err);
@@ -99,8 +99,8 @@ export default function AmazonCallback() {
               <p className="font-medium text-foreground">Connection Failed</p>
               <p className="text-sm text-muted-foreground">{errorMessage}</p>
               <div className="flex gap-2 justify-center">
-                <Button variant="outline" size="sm" onClick={() => navigate('/admin?tab=settings', { replace: true })}>
-                  Back to Settings
+                <Button variant="outline" size="sm" onClick={() => navigate('/dashboard', { replace: true })}>
+                  Back to Dashboard
                 </Button>
                 <Button size="sm" onClick={() => window.location.reload()}>
                   Try Again

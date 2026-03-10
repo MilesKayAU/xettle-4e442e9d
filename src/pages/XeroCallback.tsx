@@ -99,7 +99,7 @@ const XeroCallback = () => {
               </ul>
             </div>
           )}
-          <Button onClick={() => navigate('/dashboard')} className="w-full">
+          <Button onClick={() => navigate('/dashboard?connected=xero')} className="w-full">
             {status === 'success' ? 'Continue to Dashboard' : 'Back to Dashboard'}
           </Button>
         </CardContent>

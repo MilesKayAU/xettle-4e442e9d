@@ -47,7 +47,7 @@ const ShopifyCallback = () => {
         // Trigger validation sweep after Shopify connection
         triggerValidationSweep();
 
-        setTimeout(() => navigate('/dashboard'), 2000);
+        setTimeout(() => navigate('/dashboard?connected=shopify'), 2000);
       } catch (err: any) {
         console.error('Shopify callback error:', err);
         setStatus('error');
