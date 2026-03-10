@@ -46,8 +46,16 @@ interface SystemEvent {
   created_at: string;
 }
 
+export interface MissingSettlement {
+  marketplace_code: string;
+  marketplace_label: string;
+  period_label: string;
+  period_start: string;
+  period_end: string;
+}
+
 interface ActionCentreProps {
-  onSwitchToUpload: () => void;
+  onSwitchToUpload: (missing?: MissingSettlement[]) => void;
   onSwitchToSettlements: () => void;
   userName?: string;
 }
