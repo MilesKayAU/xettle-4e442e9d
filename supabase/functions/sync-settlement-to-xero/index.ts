@@ -109,55 +109,96 @@ async function refreshXeroToken(supabase: any, token: XeroToken): Promise<XeroTo
   };
 }
 
-// Check for existing invoice with same Reference to prevent duplicates
-async function checkExistingInvoice(token: XeroToken, reference: string): Promise<{ exists: boolean; invoiceId?: string; status?: string }> {
+// Extract settlement ID from a Xettle-{id} reference
+function extractSettlementIdFromReference(reference: string): string | null {
+  if (reference.startsWith('Xettle-')) {
+    return reference.slice(7).replace(/-P[12]$/, '');
+  }
+  return null;
+}
+
+// Build all possible legacy reference patterns for a settlement ID
+function getLegacyReferencePrefixes(settlementId: string): string[] {
+  return [
+    `AMZN-${settlementId}`,
+    `LMB-`,  // We'll use StartsWith for LMB since country code varies
+  ];
+}
+
+// Query Xero for a single reference
+async function querySingleReference(token: XeroToken, whereClause: string): Promise<any | null> {
+  try {
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${encodeURIComponent(whereClause)}&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID`;
+    const resp = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token.access_token}`,
+        'Accept': 'application/json',
+        'Xero-tenant-id': token.tenant_id,
+      },
+    });
+    if (!resp.ok) return null;
+    const result = await resp.json();
+    const invoices = result.Invoices || [];
+    // Filter out voided
+    return invoices.find((inv: any) => inv.Status !== 'VOIDED') || null;
+  } catch {
+    return null;
+  }
+}
+
+// Check for existing invoice with same Reference OR legacy formats to prevent duplicates
+async function checkExistingInvoice(token: XeroToken, reference: string): Promise<{ exists: boolean; invoiceId?: string; status?: string; matchedReference?: string }> {
   console.log('Checking for existing invoice with reference:', reference);
 
-  try {
-    const whereClause = `Reference=="${reference}"`;
-    const response = await fetch(
-      `https://api.xero.com/api.xro/2.0/Invoices?where=${encodeURIComponent(whereClause)}`,
-      {
-        method: 'GET',
+  // 1. Check exact reference (Xettle-{id})
+  const exact = await querySingleReference(token, `Reference=="${reference}"`);
+  if (exact) {
+    console.log('Found existing invoice with exact reference:', exact.InvoiceID);
+    return { exists: true, invoiceId: exact.InvoiceID, status: exact.Status, matchedReference: exact.Reference };
+  }
+
+  // 2. Extract settlement ID and check legacy formats
+  const settlementId = extractSettlementIdFromReference(reference);
+  if (settlementId && /^\d+$/.test(settlementId)) {
+    // Check AMZN-{settlement_id}
+    const amzn = await querySingleReference(token, `Reference=="AMZN-${settlementId}"`);
+    if (amzn) {
+      console.log('Found existing LEGACY invoice (AMZN format):', amzn.InvoiceID, amzn.Reference);
+      return { exists: true, invoiceId: amzn.InvoiceID, status: amzn.Status, matchedReference: amzn.Reference };
+    }
+
+    // Check LMB-*-{settlement_id}-* (query all LMB- invoices and filter)
+    const lmbInvoices = await querySingleReference(token, `Reference.StartsWith("LMB-")`);
+    // querySingleReference returns first non-voided, but we need to check all
+    // Re-query properly for LMB
+    try {
+      const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${encodeURIComponent('Reference.StartsWith("LMB-")')}&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID`;
+      const resp = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token.access_token}`,
           'Accept': 'application/json',
-          'Xero-tenant-id': token.tenant_id
+          'Xero-tenant-id': token.tenant_id,
+        },
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        const lmbAll = (result.Invoices || []).filter((inv: any) => inv.Status !== 'VOIDED');
+        for (const inv of lmbAll) {
+          const ref = inv.Reference || '';
+          const match = ref.match(/^LMB-\w+-(\d+)-\d+$/);
+          if (match && match[1] === settlementId) {
+            console.log('Found existing LEGACY invoice (LMB format):', inv.InvoiceID, ref);
+            return { exists: true, invoiceId: inv.InvoiceID, status: inv.Status, matchedReference: ref };
+          }
         }
       }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log('Xero API error when checking existing invoice:', response.status, errorText);
-      return { exists: false };
+    } catch (e) {
+      console.error('LMB legacy check error:', e);
     }
-
-    const result = await response.json();
-
-    if (!result.Invoices || result.Invoices.length === 0) {
-      console.log('No existing invoice found with reference:', reference);
-      return { exists: false };
-    }
-
-    const existing = result.Invoices[0];
-    console.log('Found existing invoice:', existing.InvoiceID, 'Status:', existing.Status);
-
-    // Allow re-creation if existing invoice is voided
-    if (existing.Status === 'VOIDED') {
-      console.log('Existing invoice is voided, allowing new creation');
-      return { exists: false };
-    }
-
-    return {
-      exists: true,
-      invoiceId: existing.InvoiceID,
-      status: existing.Status
-    };
-  } catch (error) {
-    console.error('Error checking for existing invoice:', error);
-    return { exists: false };
   }
+
+  console.log('No existing invoice found for reference:', reference);
+  return { exists: false };
 }
 
 // Void an invoice in Xero
