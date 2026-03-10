@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   const startTime = Date.now();
 
   // Helper to call sibling edge functions
-  async function callFunction(name: string, extraHeaders: Record<string, string> = {}) {
+  async function callFunction(name: string, extraHeaders: Record<string, string> = {}, body: any = { time: new Date().toISOString() }) {
     const url = `${supabaseUrl}/functions/v1/${name}`;
     try {
       const res = await fetch(url, {
@@ -28,41 +28,59 @@ Deno.serve(async (req) => {
           "Authorization": `Bearer ${serviceRoleKey}`,
           ...extraHeaders,
         },
-        body: JSON.stringify({ time: new Date().toISOString() }),
+        body: JSON.stringify(body),
       });
-      const body = await res.json().catch(() => ({ status: res.status }));
-      return { status: res.status, ...body };
+      const respBody = await res.json().catch(() => ({ status: res.status }));
+      return { status: res.status, ...respBody };
     } catch (err) {
       return { error: String(err) };
     }
   }
 
   // 1. Fetch Amazon settlements (multi-user sync)
-  console.log("[scheduled-sync] Starting Amazon fetch...");
+  console.log("[scheduled-sync] Step 1: Amazon fetch...");
   results.amazon = await callFunction("fetch-amazon-settlements", { "x-action": "sync" });
 
   // 2. Fetch Shopify payouts (multi-user sync)
-  console.log("[scheduled-sync] Starting Shopify fetch...");
+  console.log("[scheduled-sync] Step 2: Shopify fetch...");
   results.shopify = await callFunction("fetch-shopify-payouts", { "x-action": "sync" });
 
   // 3. Run validation sweep
-  console.log("[scheduled-sync] Starting validation sweep...");
+  console.log("[scheduled-sync] Step 3: Validation sweep...");
   results.validation = await callFunction("run-validation-sweep");
+
+  // 4. Auto-push ready settlements to Xero
+  console.log("[scheduled-sync] Step 4: Auto-push to Xero...");
+  results.xero_push = await callFunction("auto-push-xero");
+
+  // 5. Sync Xero status back (audit matched invoices)
+  console.log("[scheduled-sync] Step 5: Xero status audit...");
+  // Run for each user who has xero tokens
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const { data: xeroUsers } = await adminClient
+    .from('xero_tokens')
+    .select('user_id');
+  const xeroUserIds = [...new Set((xeroUsers || []).map(t => t.user_id))];
+  results.xero_audit = { users: xeroUserIds.length, results: [] };
+  for (const uid of xeroUserIds) {
+    const auditResult = await callFunction("sync-xero-status", {}, { userId: uid });
+    (results.xero_audit.results as any[]).push({ user_id: uid, ...auditResult });
+  }
 
   const durationMs = Date.now() - startTime;
 
-  // 4. Log to sync_history using a service-role client
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
-
-  // Find all users who had settlements synced to log per-user
-  const totalAmazonSynced = results.amazon?.total_synced || 0;
-  const totalShopifySynced = results.shopify?.total_synced || 0;
+  // ─── Aggregate totals ──────────────────────────────────────────
+  const totalAmazonSynced = results.amazon?.imported || results.amazon?.total_synced || 0;
+  const totalShopifySynced = results.shopify?.imported || results.shopify?.total_synced || 0;
+  const totalXeroPushed = results.xero_push?.pushed || 0;
   const totalSynced = totalAmazonSynced + totalShopifySynced;
 
-  // Get all unique user IDs from the sync results
+  // Get all unique user IDs from all sync results
   const userIds = new Set<string>();
   for (const r of results.amazon?.results || []) userIds.add(r.user_id);
   for (const r of results.shopify?.results || []) userIds.add(r.user_id);
+  for (const r of results.xero_push?.results || []) if (r.userId) userIds.add(r.userId);
+  for (const uid of xeroUserIds) userIds.add(uid);
 
   // Log a sync_history entry per user (so RLS-filtered queries work)
   for (const userId of userIds) {
@@ -70,22 +88,22 @@ Deno.serve(async (req) => {
       user_id: userId,
       event_type: "scheduled_sync",
       status: "success",
-      settlements_affected: totalSynced,
+      settlements_affected: totalSynced + totalXeroPushed,
       details: {
         amazon: results.amazon?.results?.find((r: any) => r.user_id === userId) || null,
         shopify: results.shopify?.results?.find((r: any) => r.user_id === userId) || null,
+        xero_push: results.xero_push?.results?.find((r: any) => r.userId === userId) || null,
+        xero_audit: results.xero_audit?.results?.find((r: any) => r.user_id === userId) || null,
         duration_ms: durationMs,
       },
     } as any);
   }
 
-  // If no users were processed, log a system-level entry with a placeholder
   if (userIds.size === 0) {
-    // No users to sync — skip logging since sync_history requires a real user_id
     console.log("[scheduled-sync] No users with API tokens found. Nothing to sync.");
   }
 
-  console.log(`[scheduled-sync] Complete in ${durationMs}ms. Amazon: ${totalAmazonSynced}, Shopify: ${totalShopifySynced}`);
+  console.log(`[scheduled-sync] Complete in ${durationMs}ms. Amazon: ${totalAmazonSynced}, Shopify: ${totalShopifySynced}, Xero pushed: ${totalXeroPushed}, Xero audited: ${xeroUserIds.length} users`);
 
   return new Response(
     JSON.stringify({
@@ -93,6 +111,8 @@ Deno.serve(async (req) => {
       duration_ms: durationMs,
       amazon_synced: totalAmazonSynced,
       shopify_synced: totalShopifySynced,
+      xero_pushed: totalXeroPushed,
+      xero_audited_users: xeroUserIds.length,
       users_processed: userIds.size,
       results,
     }),
