@@ -90,40 +90,63 @@ export default function MarketplaceProfitCard({ marketplaceCode, userId }: Marke
 
   if (records.length === 0) {
     return (
-      <Card className="border-border bg-gradient-to-br from-muted/30 to-muted/50">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            Marketplace Profit
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pb-5 space-y-3">
-          <p className="text-sm text-foreground font-medium">
-            Add SKU costs to unlock profit insights
-          </p>
-          <ul className="text-xs text-muted-foreground space-y-1.5">
-            <li className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-              Net profit per marketplace
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-              Margin % with trend charts
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-              Best and worst performing SKUs
-            </li>
-          </ul>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs"
-            onClick={() => navigate('/admin?tab=costs')}
-          >
-            Add SKU Costs <ArrowRight className="h-3 w-3" />
-          </Button>
-        </CardContent>
+      <Card className="border-border overflow-hidden">
+        <div className="bg-gradient-to-br from-muted/30 via-muted/50 to-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              Marketplace Profit
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-5 space-y-4">
+            <p className="text-sm text-foreground font-medium">
+              Unlock profit insights by adding SKU costs
+            </p>
+
+            {/* Preview teaser chart */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Top Marketplace</p>
+                <p className="text-sm font-bold text-muted-foreground/40 mt-1">—</p>
+              </div>
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Margin %</p>
+                <p className="text-sm font-bold text-muted-foreground/40 mt-1">—</p>
+              </div>
+              <div className="bg-background/60 rounded-lg p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Fee Leak</p>
+                <p className="text-sm font-bold text-muted-foreground/40 mt-1">—</p>
+              </div>
+            </div>
+
+            <ul className="text-xs text-muted-foreground space-y-1.5">
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                Net profit per marketplace
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                Margin % with trend charts
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                Best &amp; worst performing SKUs
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                Biggest fee leaks identified
+              </li>
+            </ul>
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => navigate('/admin?tab=costs')}
+            >
+              Add SKU Costs <ArrowRight className="h-3 w-3" />
+            </Button>
+          </CardContent>
+        </div>
       </Card>
     );
   }
