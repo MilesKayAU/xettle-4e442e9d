@@ -572,8 +572,48 @@ export default function ActionCentre({
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 function formatPeriod(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+  if (!dateStr || dateStr.length < 10) return dateStr;
+  const [y, m] = dateStr.split('-').map(Number);
+  if (!y || !m || m < 1 || m > 12) return dateStr;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[m - 1]} ${y}`;
+}
+
+function formatPeriodShort(dateStr: string): string {
+  if (!dateStr || dateStr.length < 10) return dateStr;
+  const [, m, d] = dateStr.split('-').map(Number);
+  if (!m || !d || m < 1 || m > 12) return dateStr;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[m - 1]} ${d}`;
+}
+
+interface GroupedRow {
+  key: string;
+  label: string;
+  count: number;
+  total: number;
+}
+
+function groupByMarketplaceMonth(rows: ValidationRow[]): GroupedRow[] {
+  const map = new Map<string, GroupedRow>();
+  for (const r of rows) {
+    const monthLabel = formatPeriod(r.period_start);
+    const mpLabel = MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code;
+    const key = `${r.marketplace_code}_${monthLabel}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.count++;
+      existing.total += (r.settlement_net || 0);
+    } else {
+      map.set(key, {
+        key,
+        label: `${mpLabel} — ${monthLabel}`,
+        count: 1,
+        total: r.settlement_net || 0,
+      });
+    }
+  }
+  return Array.from(map.values());
 }
 
 function formatTimeAgo(date: Date): string {
