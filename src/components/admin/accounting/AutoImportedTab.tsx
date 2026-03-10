@@ -546,32 +546,11 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Mark / Unmark as Already in Xero */}
-                        {!isSynced && !isPreBoundary && (
-                          isMarkedExternal ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs gap-1 text-amber-700 hover:text-amber-800"
-                              onClick={() => handleUnmarkFromXero(s)}
-                              disabled={marking === s.id}
-                            >
-                              {marking === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                              Unmark
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs gap-1"
-                              onClick={() => handleMarkAsInXero(s)}
-                              disabled={marking === s.id}
-                              title="Mark as already entered in Xero — prevents sync"
-                            >
-                              {marking === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                              Already in Xero
-                            </Button>
-                          )
+                        {/* Xero status shown automatically — no manual marking needed */}
+                        {isSynced && (
+                          <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 text-[10px] gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> In Xero
+                          </Badge>
                         )}
 
                         {onViewSettlement && (
