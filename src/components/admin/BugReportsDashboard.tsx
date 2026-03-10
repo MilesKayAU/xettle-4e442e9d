@@ -230,13 +230,19 @@ export default function BugReportsDashboard() {
                       </div>
                     )}
 
-                    {/* Console Errors */}
+                    {/* Console Errors / New Marketplace Data */}
                     {r.console_errors && (r.console_errors as any[]).length > 0 && (
                       <div>
-                        <Label className="text-xs font-semibold text-muted-foreground">Console Errors ({(r.console_errors as any[]).length})</Label>
-                        <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto font-mono">
-                          {JSON.stringify(r.console_errors, null, 2)}
-                        </pre>
+                        <Label className="text-xs font-semibold text-muted-foreground">
+                          {(r.ai_classification === 'New marketplace' || r.ai_classification === 'New marketplace saved') ? 'File Analysis' : `Console Errors (${(r.console_errors as any[]).length})`}
+                        </Label>
+                        {(r.ai_classification === 'New marketplace' || r.ai_classification === 'New marketplace saved') ? (
+                          <NewMarketplaceDetails data={r.console_errors} reportId={r.id} />
+                        ) : (
+                          <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto font-mono">
+                            {JSON.stringify(r.console_errors, null, 2)}
+                          </pre>
+                        )}
                       </div>
                     )}
 
