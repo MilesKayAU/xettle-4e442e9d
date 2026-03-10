@@ -63,14 +63,14 @@ interface ActionCentreProps {
 
 // Status icons for the timeline grid
 const STATUS_ICONS: Record<string, { icon: string; label: string }> = {
-  complete: { icon: '✅', label: 'Complete' },
-  bank_matched: { icon: '✅', label: 'Complete' },
+  complete: { icon: '✅', label: 'Complete — verified in Xero' },
+  bank_matched: { icon: '✅', label: 'Complete — bank matched' },
   ready_to_push: { icon: '🟡', label: 'Ready to push' },
   pushed_to_xero: { icon: '✅', label: 'Synced to Xero' },
   settlement_needed: { icon: '❌', label: 'Missing/needed' },
   missing: { icon: '❌', label: 'Missing/needed' },
   gap_detected: { icon: '⚠️', label: 'Gap detected' },
-  already_recorded: { icon: '✅', label: 'Complete' },
+  already_recorded: { icon: '➖', label: 'Pre-boundary — assumed in Xero (not verified)' },
 };
 
 const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
