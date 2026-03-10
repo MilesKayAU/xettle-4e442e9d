@@ -289,6 +289,11 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       // silent
     }
   }, []);
+  useEffect(() => {
+    loadApiSettlements();
+    loadXeroMatches();
+    loadCooldown();
+  }, [loadApiSettlements, loadXeroMatches, loadCooldown]);
 
   const AUDIT_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
 
