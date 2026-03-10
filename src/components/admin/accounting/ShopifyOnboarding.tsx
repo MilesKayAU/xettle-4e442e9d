@@ -9,6 +9,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import SkuCostManager from './SkuCostManager';
+import UnknownEntityDialog from './UnknownEntityDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,17 +28,20 @@ import {
 } from '@/components/ui/select';
 import {
   Upload, CheckCircle2, ChevronDown, FileText, ShoppingCart,
-  ArrowRight, Loader2, SkipForward, Calendar, Info, Package,
+  ArrowRight, Loader2, SkipForward, Calendar, Info, Package, Zap,
 } from 'lucide-react';
 import { extractUniqueSKUs } from '@/utils/profit-engine';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
   parseShopifyOrdersCSV,
+  buildSettlementsFromGroups,
   type ShopifyOrdersParseResult,
   type MarketplaceGroup,
 } from '@/utils/shopify-orders-parser';
-import { MARKETPLACE_REGISTRY } from '@/utils/marketplace-registry';
+import { MARKETPLACE_REGISTRY, getRegistryEntry } from '@/utils/marketplace-registry';
+import { convertApiOrdersToRows, type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
+import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
 
 interface ShopifyOnboardingProps {
   /** Called when onboarding finishes — passes parsed result to parent dashboard */
@@ -69,6 +73,29 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
   const [dragging, setDragging] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // API fetch state
+  const [apiFetching, setApiFetching] = useState(false);
+  const [shopDomain, setShopDomain] = useState<string | null>(null);
+  const [shopConnected, setShopConnected] = useState(false);
+  const [unknownEntities, setUnknownEntities] = useState<UnknownEntity[]>([]);
+  const [showEntityDialog, setShowEntityDialog] = useState(false);
+
+  // Check if Shopify is connected on mount
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke('shopify-auth', {
+          method: 'GET',
+          headers: { 'x-action': 'status' },
+        });
+        if (data?.connected && data?.shops?.length > 0) {
+          setShopConnected(true);
+          setShopDomain(data.shops[0].shop_domain);
+        }
+      } catch { /* silent */ }
+    })();
+  }, []);
 
   // Detection phase
   const [steps, setSteps] = useState<DetectionStep[]>([
@@ -183,6 +210,167 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
     }
   }
 
+  // ─── API Fetch ─────────────────────────────────────────────────────
+  const handleApiFetch = useCallback(async () => {
+    if (!shopDomain) {
+      toast.error('No Shopify store connected');
+      return;
+    }
+
+    setPhase('detecting');
+    setProgressPct(0);
+    setApiFetching(true);
+
+    try {
+      // Step 1 — Fetching
+      setSteps([
+        { label: 'Fetching orders from Shopify...', done: false },
+        { label: 'Detecting marketplaces...', done: false },
+        { label: 'Found marketplaces', done: false },
+        { label: 'Building your account tabs...', done: false },
+      ]);
+
+      const { data, error } = await supabase.functions.invoke('fetch-shopify-orders', {
+        body: { shopDomain, limit: 250 },
+      });
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Failed to fetch orders');
+      }
+
+      completeStep(0);
+      setProgressPct(25);
+
+      // Step 2 — Detect
+      await tick(400);
+      const apiOrders: ShopifyApiOrder[] = data.orders || [];
+      const { rows, unpaidCount } = convertApiOrdersToRows(apiOrders);
+
+      if (rows.length === 0) {
+        toast.info('No paid orders found in your Shopify store.');
+        setPhase('upload');
+        setApiFetching(false);
+        return;
+      }
+
+      // Group by marketplace
+      const groupMap = new Map<string, typeof rows>();
+      for (const order of rows) {
+        const key = JSON.stringify({ m: order.detectedMarketplace, c: order.currency });
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        groupMap.get(key)!.push(order);
+      }
+
+      const readyGroups: MarketplaceGroup[] = [];
+      const unknownGroups: MarketplaceGroup[] = [];
+      const skippedGroups: MarketplaceGroup[] = [];
+
+      for (const [key, orders] of groupMap) {
+        const { m: mktKey, c: currency } = JSON.parse(key);
+        const entry = getRegistryEntry(mktKey);
+        const dates = orders.map(o => o.paidAt).filter(Boolean).sort();
+        const uniqueNames = new Set(orders.map(o => o.name).filter(Boolean));
+
+        const group: MarketplaceGroup = {
+          marketplaceKey: mktKey,
+          registryEntry: entry,
+          orders,
+          orderCount: uniqueNames.size || orders.length,
+          totalSubtotal: Math.round(orders.reduce((s, o) => s + o.subtotal, 0) * 100) / 100,
+          totalShipping: Math.round(orders.reduce((s, o) => s + o.shipping, 0) * 100) / 100,
+          totalTaxes: Math.round(orders.reduce((s, o) => s + o.taxes, 0) * 100) / 100,
+          totalAmount: Math.round(orders.reduce((s, o) => s + o.total, 0) * 100) / 100,
+          totalDiscounts: Math.round(orders.reduce((s, o) => s + o.discountAmount, 0) * 100) / 100,
+          periodStart: dates[0] || '',
+          periodEnd: dates[dates.length - 1] || '',
+          currency,
+          skipped: !!entry.skip,
+          skipReason: entry.skip_reason || entry.reason,
+          status: entry.skip ? 'skipped' : (mktKey === 'unknown' ? 'unknown' : 'ready'),
+          sampleNoteAttributes: [...new Set(orders.map(o => o.noteAttributes).filter(Boolean))].slice(0, 3),
+          sampleTags: [...new Set(orders.map(o => o.tags).filter(Boolean))].slice(0, 3),
+          statusBreakdown: {
+            paid: orders.filter(o => o.financialStatus === 'paid').length,
+            partially_refunded: orders.filter(o => o.financialStatus === 'partially_refunded').length,
+          },
+        };
+
+        if (entry.skip) skippedGroups.push(group);
+        else if (mktKey === 'unknown') unknownGroups.push(group);
+        else readyGroups.push(group);
+      }
+
+      readyGroups.sort((a, b) => b.orderCount - a.orderCount);
+
+      completeStep(1);
+      setProgressPct(50);
+
+      // Step 3 — Found
+      await tick(400);
+      setSteps(prev => prev.map((s, i) => i === 2 ? { ...s, label: `Found ${readyGroups.length + unknownGroups.length} marketplace${readyGroups.length + unknownGroups.length !== 1 ? 's' : ''}` } : s));
+      completeStep(2);
+      setProgressPct(75);
+
+      // Step 4 — Build tabs
+      await tick(500);
+      await autoCreateConnections(readyGroups);
+      completeStep(3);
+      setProgressPct(100);
+
+      const builtSettlements = buildSettlementsFromGroups(readyGroups);
+      const allDates = rows.map(o => o.paidAt).filter(Boolean).sort();
+
+      const pr: ShopifyOrdersParseResult = {
+        success: true,
+        groups: readyGroups,
+        skippedGroups,
+        unknownGroups,
+        unpaidCount,
+        totalOrderCount: apiOrders.length,
+        paidCount: rows.length,
+        duplicateLineItemCount: 0,
+        settlements: builtSettlements,
+        periodStart: allDates[0] || '',
+        periodEnd: allDates[allDates.length - 1] || '',
+        partialPeriodWarning: false,
+        statusBreakdown: { paid: rows.filter(r => r.financialStatus === 'paid').length, partially_refunded: rows.filter(r => r.financialStatus === 'partially_refunded').length, refunded: 0, other_excluded: 0 },
+      };
+
+      await tick(300);
+      setResult(pr);
+      setPhase('results');
+
+      // Entity detection for unknown tags
+      if (rows.length > 0) {
+        try {
+          const entityResult = await detectUnknownEntities(rows);
+          if (entityResult.unknowns.length > 0) {
+            setUnknownEntities(entityResult.unknowns);
+            setShowEntityDialog(true);
+          }
+        } catch { /* silent */ }
+      }
+
+      // Update last_fetched_at
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('app_settings').upsert({
+            user_id: user.id,
+            key: 'shopify_last_fetched_at',
+            value: new Date().toISOString(),
+          }, { onConflict: 'user_id,key' });
+        }
+      } catch { /* silent */ }
+
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to fetch orders');
+      setPhase('upload');
+    } finally {
+      setApiFetching(false);
+    }
+  }, [shopDomain]);
+
   // ─── Drag & Drop ──────────────────────────────────────────────────
 
   const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragging(true); };
@@ -288,6 +476,25 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
                 />
               </div>
             </div>
+
+            {/* Or fetch via API */}
+            {shopConnected && shopDomain && (
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center"><span className="bg-card px-3 text-xs text-muted-foreground">or</span></div>
+              </div>
+            )}
+            {shopConnected && shopDomain && (
+              <Button
+                onClick={handleApiFetch}
+                disabled={apiFetching}
+                variant="outline"
+                className="w-full gap-2"
+              >
+                {apiFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Fetch orders from {shopDomain} automatically
+              </Button>
+            )}
 
             {/* What Xettle does */}
             <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2">
@@ -531,6 +738,16 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
           <p className="text-xs text-muted-foreground">Takes 2 minutes ⏱</p>
         </CardContent>
       </Card>
+      {/* Unknown Entity Classification Dialog */}
+      <UnknownEntityDialog
+        open={showEntityDialog}
+        onOpenChange={setShowEntityDialog}
+        unknowns={unknownEntities}
+        onClassified={() => {
+          setUnknownEntities([]);
+          onMarketplacesChanged?.();
+        }}
+      />
     </div>
   );
 }
