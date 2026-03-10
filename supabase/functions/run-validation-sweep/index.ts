@@ -132,20 +132,8 @@ async function sweepUser(adminSupabase: any, userId: string) {
     .eq('user_id', userId)
     .gte('posted_date', boundaryDate)
 
-  // Order aggregation
-  const orderAgg = new Map<string, { count: number; total: number }>()
-  for (const line of (orderLines || [])) {
-    if (!line.posted_date || !line.marketplace_name) continue
-    const mk = monthKey(line.posted_date)
-    const key = `${line.marketplace_name}|${mk}`
-    const existing = orderAgg.get(key)
-    if (existing) {
-      existing.count++
-      existing.total += Math.abs(Number(line.amount) || 0)
-    } else {
-      orderAgg.set(key, { count: 1, total: Math.abs(Number(line.amount) || 0) })
-    }
-  }
+  // Order lines kept as flat array — we'll filter per-period below instead of pre-aggregating by month
+  const allOrderLines = (orderLines || []) as Array<{ marketplace_name: string | null; posted_date: string | null; amount: number | null; order_id: string | null }>
 
   const settlementMap = new Map<string, any>()
   for (const s of (settlements || [])) {
