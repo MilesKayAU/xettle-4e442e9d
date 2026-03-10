@@ -100,6 +100,11 @@ Deno.serve(async (req) => {
         .map(b => b.toString(16).padStart(2, '0'))
         .join('')
 
+      console.log('HMAC debug - message:', message)
+      console.log('HMAC debug - computed:', computedHmac)
+      console.log('HMAC debug - received:', hmac)
+      console.log('HMAC debug - params keys:', sortedKeys)
+
       if (computedHmac !== hmac) {
         console.error('HMAC verification failed')
         return new Response(
