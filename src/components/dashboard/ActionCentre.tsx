@@ -110,11 +110,13 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
         supabase.from('settlements').select('marketplace').eq('source', 'api'),
+        supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
+        supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -122,6 +124,14 @@ export default function ActionCentre({
       if (userRes.data?.user?.created_at) setUserCreatedAt(new Date(userRes.data.user.created_at));
       if (apiSettlementsRes.data) {
         setApiSyncedMarketplaces(new Set(apiSettlementsRes.data.map((s: any) => s.marketplace)));
+      }
+      if (boundaryRes.data?.value) {
+        setAccountingBoundary(boundaryRes.data.value);
+      } else if (userRes.data?.user?.created_at) {
+        setAccountingBoundary(userRes.data.user.created_at.substring(0, 10));
+      }
+      if (connectionsRes.data) {
+        setConnectedMarketplaces(connectionsRes.data.map((c: any) => c.marketplace_code));
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
