@@ -5,7 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Marketplace → Xero contact name mapping
 const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
   shopify_payments: 'Shopify',
@@ -34,25 +33,39 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-    // ─── Find all users with Xero tokens (only they can push) ────
+    // ─── Parse request body for dry_run flag ──────────────────────
+    let dryRun = false
+    try {
+      const body = await req.json()
+      dryRun = body?.dry_run === true
+    } catch {
+      // No body or invalid JSON — default to live mode
+    }
+
+    const modeLabel = dryRun ? 'DRY RUN' : 'LIVE'
+    console.log(`[auto-push-xero] Mode: ${modeLabel}`)
+
+    // ─── Find all users with Xero tokens ─────────────────────────
     const { data: xeroTokens, error: xeroErr } = await supabase
       .from('xero_tokens')
       .select('user_id')
 
     if (xeroErr || !xeroTokens?.length) {
       console.log('[auto-push-xero] No Xero-connected users found')
-      return new Response(JSON.stringify({ success: true, pushed: 0, message: 'No Xero-connected users' }), {
+      return new Response(JSON.stringify({ success: true, dry_run: dryRun, pushed: 0, message: 'No Xero-connected users' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
     const uniqueUserIds = [...new Set(xeroTokens.map(t => t.user_id))]
-    console.log(`[auto-push-xero] Processing ${uniqueUserIds.length} user(s)`)
+    console.log(`[auto-push-xero] ${modeLabel}: Processing ${uniqueUserIds.length} user(s)`)
 
     let totalPushed = 0
     let totalSkipped = 0
     let totalErrors = 0
     let totalAmountPushed = 0
+    const allWouldPush: any[] = []
+    const allSkippedItems: any[] = []
     const perUserResults: any[] = []
 
     for (const userId of uniqueUserIds) {
@@ -66,7 +79,7 @@ Deno.serve(async (req) => {
           .maybeSingle()
 
         if (autoPushSetting?.value !== 'true') {
-          console.log(`[auto-push-xero] User ${userId}: auto-push disabled (setting=${autoPushSetting?.value || 'not set'}). Skipping.`)
+          console.log(`[auto-push-xero] ${modeLabel} User ${userId}: auto-push disabled. Skipping.`)
           perUserResults.push({ userId, pushed: 0, skipped: 0, errors: 0, reason: 'auto_push_disabled' })
           continue
         }
@@ -86,12 +99,12 @@ Deno.serve(async (req) => {
         }
 
         if (!settlements || settlements.length === 0) {
-          console.log(`[auto-push-xero] User ${userId}: no ready_to_push settlements`)
+          console.log(`[auto-push-xero] ${modeLabel} User ${userId}: no ready_to_push settlements`)
           perUserResults.push({ userId, pushed: 0, skipped: 0, errors: 0 })
           continue
         }
 
-        console.log(`[auto-push-xero] User ${userId}: ${settlements.length} settlement(s) ready`)
+        console.log(`[auto-push-xero] ${modeLabel} User ${userId}: ${settlements.length} settlement(s) ready`)
 
         // ─── Get user's Xero account codes ────────────────────────
         const { data: accountSettings } = await supabase
@@ -116,11 +129,13 @@ Deno.serve(async (req) => {
         let userSkipped = 0
         let userErrors = 0
         let userAmountPushed = 0
+        const userWouldPush: any[] = []
 
         for (const s of settlements) {
           // ─── Safety check: skip if already has Xero invoice ─────
           if (s.xero_invoice_number) {
             console.log(`[auto-push-xero] Skipping ${s.settlement_id}: already has ${s.xero_invoice_number}`)
+            allSkippedItems.push({ settlement_id: s.settlement_id, reason: 'already_has_invoice', xero_invoice: s.xero_invoice_number })
             userSkipped++
             continue
           }
@@ -128,36 +143,57 @@ Deno.serve(async (req) => {
           // ─── Safety check: skip if already has journal ID ───────
           if (s.xero_journal_id) {
             console.log(`[auto-push-xero] Skipping ${s.settlement_id}: already has journal ${s.xero_journal_id}`)
+            allSkippedItems.push({ settlement_id: s.settlement_id, reason: 'already_has_journal', xero_journal: s.xero_journal_id })
             userSkipped++
             continue
           }
 
-          try {
-            const marketplace = s.marketplace || 'amazon_au'
-            const contactName = MARKETPLACE_CONTACTS[marketplace] || marketplace
-            const reference = `Xettle-${s.settlement_id}`
-            const netAmount = s.bank_deposit || s.net_ex_gst || 0
-            const description = `${contactName} Settlement ${s.period_start} → ${s.period_end}`
+          const marketplace = s.marketplace || 'amazon_au'
+          const contactName = MARKETPLACE_CONTACTS[marketplace] || marketplace
+          const reference = `Xettle-${s.settlement_id}`
+          const netAmount = s.bank_deposit || s.net_ex_gst || 0
+          const description = `${contactName} Settlement ${s.period_start} → ${s.period_end}`
 
-            // Build line items from settlement summary
-            const lineItems = [
-              { Description: `${contactName} Sales`, AccountCode: getCode('Sales'), TaxType: 'OUTPUT', UnitAmount: round2((s.sales_principal || 0) + (s.sales_shipping || 0)), Quantity: 1 },
-              { Description: `${contactName} Promotional Discounts`, AccountCode: getCode('Promotional Discounts'), TaxType: 'OUTPUT', UnitAmount: round2(s.promotional_discounts || 0), Quantity: 1 },
-              { Description: `${contactName} Refunds`, AccountCode: getCode('Refunds'), TaxType: 'OUTPUT', UnitAmount: round2(s.refunds || 0), Quantity: 1 },
-              { Description: `${contactName} Reimbursements`, AccountCode: getCode('Reimbursements'), TaxType: 'NONE', UnitAmount: round2(s.reimbursements || 0), Quantity: 1 },
-              { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: round2(s.seller_fees || 0), Quantity: 1 },
-              { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: round2(s.fba_fees || 0), Quantity: 1 },
-              { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: round2(s.storage_fees || 0), Quantity: 1 },
-              { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: round2(s.other_fees || 0), Quantity: 1 },
-            ].filter(item => Math.abs(item.UnitAmount) > 0.01)
+          // Build line items
+          const lineItems = [
+            { Description: `${contactName} Sales`, AccountCode: getCode('Sales'), TaxType: 'OUTPUT', UnitAmount: round2((s.sales_principal || 0) + (s.sales_shipping || 0)), Quantity: 1 },
+            { Description: `${contactName} Promotional Discounts`, AccountCode: getCode('Promotional Discounts'), TaxType: 'OUTPUT', UnitAmount: round2(s.promotional_discounts || 0), Quantity: 1 },
+            { Description: `${contactName} Refunds`, AccountCode: getCode('Refunds'), TaxType: 'OUTPUT', UnitAmount: round2(s.refunds || 0), Quantity: 1 },
+            { Description: `${contactName} Reimbursements`, AccountCode: getCode('Reimbursements'), TaxType: 'NONE', UnitAmount: round2(s.reimbursements || 0), Quantity: 1 },
+            { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: round2(s.seller_fees || 0), Quantity: 1 },
+            { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: round2(s.fba_fees || 0), Quantity: 1 },
+            { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: round2(s.storage_fees || 0), Quantity: 1 },
+            { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: round2(s.other_fees || 0), Quantity: 1 },
+          ].filter(item => Math.abs(item.UnitAmount) > 0.01)
 
-            if (lineItems.length === 0) {
-              console.log(`[auto-push-xero] Skipping ${s.settlement_id}: no non-zero line items`)
-              userSkipped++
-              continue
+          if (lineItems.length === 0) {
+            console.log(`[auto-push-xero] Skipping ${s.settlement_id}: no non-zero line items`)
+            allSkippedItems.push({ settlement_id: s.settlement_id, reason: 'no_line_items' })
+            userSkipped++
+            continue
+          }
+
+          // ─── DRY RUN: record what would be pushed, skip Xero call ─
+          if (dryRun) {
+            const preview = {
+              settlement_id: s.settlement_id,
+              marketplace,
+              amount: netAmount,
+              xero_reference: reference,
+              contact: contactName,
+              date: s.deposit_date || s.period_end,
+              line_items_count: lineItems.length,
+              period: `${s.period_start} → ${s.period_end}`,
             }
+            userWouldPush.push(preview)
+            allWouldPush.push(preview)
+            userPushed++
+            userAmountPushed += netAmount
+            continue
+          }
 
-            // ─── Call sync-settlement-to-xero ─────────────────────
+          // ─── LIVE: Call sync-settlement-to-xero ─────────────────
+          try {
             const pushUrl = `${supabaseUrl}/functions/v1/sync-settlement-to-xero`
             const pushResponse = await fetch(pushUrl, {
               method: 'POST',
@@ -184,13 +220,11 @@ Deno.serve(async (req) => {
               const errMsg = pushResult.error || `HTTP ${pushResponse.status}`
               console.error(`[auto-push-xero] Failed ${s.settlement_id}: ${errMsg}`)
 
-              // Mark as push_failed so it's visible in the UI
               await supabase
                 .from('settlements')
                 .update({ status: 'push_failed' })
                 .eq('id', s.id)
 
-              // Log the failure
               await supabase.from('system_events').insert({
                 user_id: userId,
                 event_type: 'auto_push_xero',
@@ -216,7 +250,6 @@ Deno.serve(async (req) => {
               })
               .eq('id', s.id)
 
-            // ─── Log success to system_events ─────────────────────
             await supabase.from('system_events').insert({
               user_id: userId,
               event_type: 'auto_push_xero',
@@ -236,7 +269,6 @@ Deno.serve(async (req) => {
             userAmountPushed += netAmount
             console.log(`[auto-push-xero] ✅ ${s.settlement_id} → ${pushResult.invoiceNumber || pushResult.invoiceId}`)
 
-            // Rate-limit: 1 second between pushes to avoid Xero API throttling
             await new Promise(r => setTimeout(r, 1000))
           } catch (pushErr: any) {
             console.error(`[auto-push-xero] Error pushing ${s.settlement_id}:`, pushErr.message)
@@ -244,27 +276,48 @@ Deno.serve(async (req) => {
           }
         }
 
-        // ─── Log sync_history for this user ───────────────────────
-        await supabase.from('sync_history').insert({
-          user_id: userId,
-          event_type: 'xero_auto_push',
-          status: userErrors > 0 ? (userPushed > 0 ? 'partial' : 'error') : 'success',
-          settlements_affected: userPushed,
-          error_message: userErrors > 0 ? `${userErrors} settlement(s) failed` : null,
-          details: {
-            pushed: userPushed,
-            skipped: userSkipped,
-            errors: userErrors,
-            total_amount: round2(userAmountPushed),
-            total_settlements: settlements.length,
-          },
-        })
+        // ─── Log sync_history / dry_run event ─────────────────────
+        if (dryRun) {
+          await supabase.from('system_events').insert({
+            user_id: userId,
+            event_type: 'auto_push_dry_run',
+            severity: 'info',
+            details: {
+              would_push: userWouldPush,
+              skipped: userSkipped,
+              total_amount: round2(userAmountPushed),
+              total_settlements: settlements.length,
+            },
+          })
+        } else {
+          await supabase.from('sync_history').insert({
+            user_id: userId,
+            event_type: 'xero_auto_push',
+            status: userErrors > 0 ? (userPushed > 0 ? 'partial' : 'error') : 'success',
+            settlements_affected: userPushed,
+            error_message: userErrors > 0 ? `${userErrors} settlement(s) failed` : null,
+            details: {
+              pushed: userPushed,
+              skipped: userSkipped,
+              errors: userErrors,
+              total_amount: round2(userAmountPushed),
+              total_settlements: settlements.length,
+            },
+          })
+        }
 
         totalPushed += userPushed
         totalSkipped += userSkipped
         totalErrors += userErrors
         totalAmountPushed += userAmountPushed
-        perUserResults.push({ userId, pushed: userPushed, skipped: userSkipped, errors: userErrors, amount: round2(userAmountPushed) })
+        perUserResults.push({
+          userId,
+          pushed: userPushed,
+          skipped: userSkipped,
+          errors: userErrors,
+          amount: round2(userAmountPushed),
+          ...(dryRun ? { would_push: userWouldPush } : {}),
+        })
       } catch (userErr: any) {
         console.error(`[auto-push-xero] User ${userId} failed:`, userErr.message)
         totalErrors++
@@ -274,15 +327,17 @@ Deno.serve(async (req) => {
 
     const summary = {
       success: true,
+      dry_run: dryRun,
       pushed: totalPushed,
       skipped: totalSkipped,
       errors: totalErrors,
       total_amount_pushed: round2(totalAmountPushed),
       users_processed: uniqueUserIds.length,
       results: perUserResults,
+      ...(dryRun ? { would_push: allWouldPush, skipped_items: allSkippedItems } : {}),
     }
 
-    console.log(`[auto-push-xero] Complete: ${totalPushed} pushed, ${totalSkipped} skipped, ${totalErrors} errors, $${round2(totalAmountPushed)} total`)
+    console.log(`[auto-push-xero] ${modeLabel} Complete: ${totalPushed} ${dryRun ? 'would push' : 'pushed'}, ${totalSkipped} skipped, ${totalErrors} errors, $${round2(totalAmountPushed)} total`)
 
     return new Response(JSON.stringify(summary), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
