@@ -54,6 +54,86 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+// ─── New Marketplace Details (for First Contact reports) ────────────────────
+
+function NewMarketplaceDetails({ data, reportId }: { data: any; reportId: string }) {
+  const [adding, setAdding] = useState(false);
+
+  let parsed: any = null;
+  try {
+    parsed = typeof data === 'string' ? JSON.parse(data) : data;
+  } catch { /* ignore */ }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto font-mono">{JSON.stringify(data, null, 2)}</pre>;
+  }
+
+  const handleAddToDictionary = async () => {
+    if (!parsed.headers || !parsed.marketplace) return;
+    setAdding(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      await supabase.from('marketplace_file_fingerprints').insert({
+        user_id: user.id,
+        marketplace_code: parsed.userMarketplace || parsed.marketplace,
+        column_signature: parsed.headers as any,
+        column_mapping: {} as any,
+        is_multi_marketplace: false,
+        file_pattern: parsed.filename || null,
+      } as any);
+
+      sonnerToast.success(`Added "${parsed.userMarketplace || parsed.marketplace}" to fingerprint dictionary`);
+    } catch (err: any) {
+      sonnerToast.error(err.message || 'Failed to add');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <div className="mt-1 space-y-2">
+      <div className="bg-muted/50 rounded-md p-3 space-y-2 text-xs">
+        <div className="grid grid-cols-2 gap-2">
+          <div><span className="text-muted-foreground">Filename:</span> <span className="font-medium">{parsed.filename || '—'}</span></div>
+          <div><span className="text-muted-foreground">Confidence:</span> <span className="font-medium">{parsed.confidence ?? '—'}%</span></div>
+          <div><span className="text-muted-foreground">Detected as:</span> <span className="font-medium">{parsed.detectedMarketplace || parsed.marketplace || '—'}</span></div>
+          <div><span className="text-muted-foreground">User identified:</span> <span className="font-medium">{parsed.userMarketplace || 'Not specified'}</span></div>
+          <div><span className="text-muted-foreground">User saved:</span> <span className="font-medium">{parsed.userSaved === true ? '✅ Yes' : parsed.userSaved === false ? '❌ No' : '—'}</span></div>
+          <div><span className="text-muted-foreground">Tier:</span> <span className="font-medium">{parsed.confidenceTier || '—'}</span></div>
+        </div>
+        {parsed.headers && (
+          <div>
+            <span className="text-muted-foreground">Columns ({parsed.headers.length}):</span>
+            <p className="font-mono text-[10px] mt-0.5 text-foreground">{parsed.headers.join(', ')}</p>
+          </div>
+        )}
+        {parsed.sampleRows && parsed.sampleRows.length > 0 && (
+          <div>
+            <span className="text-muted-foreground">Sample rows ({parsed.sampleRows.length}):</span>
+            <pre className="font-mono text-[10px] mt-0.5 max-h-20 overflow-auto bg-background/50 p-1.5 rounded">
+              {parsed.sampleRows.map((r: string[], i: number) => `Row ${i + 1}: ${r.join(' | ')}`).join('\n')}
+            </pre>
+          </div>
+        )}
+      </div>
+      {parsed.headers && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-xs gap-1.5"
+          onClick={handleAddToDictionary}
+          disabled={adding}
+        >
+          <Plus className="h-3 w-3" />
+          {adding ? 'Adding...' : 'Add to dictionary'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function BugReportsDashboard() {
   const [reports, setReports] = useState<BugReport[]>([]);
   const [loading, setLoading] = useState(true);
