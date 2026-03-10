@@ -759,11 +759,21 @@ export default function ShopifyOrdersDashboard() {
         } catch { /* silent */ }
       }
 
-      // Run sub-channel detection on raw API orders
+      // Run sub-channel detection on raw API orders (client-side banners)
       try {
         const subChannelResult = await auditSubChannels(apiOrders);
         if (subChannelResult.new_channels.length > 0) {
           setDetectedSubChannels(subChannelResult.new_channels);
+        }
+      } catch { /* silent */ }
+
+      // Also trigger server-side scan to write channel_alerts for Dashboard
+      try {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser) {
+          await supabase.functions.invoke('scan-shopify-channels', {
+            body: { userId: currentUser.id, orders: apiOrders },
+          });
         }
       } catch { /* silent */ }
 
