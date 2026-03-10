@@ -225,17 +225,18 @@ export function detectDateColumn(headers: string[], rows: string[][]): { index: 
   Test cases for parseDate():
 
   1. parseDate('15/03/2026')         → '2026-03-15'   // DD/MM/YYYY — standard AU
-  2. parseDate('04/03/2026')         → '2026-03-04'   // Ambiguous — AU default DD/MM
+  2. parseDate('04/03/2026')         → '2026-03-04'   // Ambiguous — AU default DD/MM (both plausible)
   3. parseDate('2026-02-10')         → '2026-02-10'   // ISO YYYY-MM-DD
   4. parseDate('10 Feb 2026')        → '2026-02-10'   // DD MMM YYYY
   5. parseDate('2026-02-10 14:30:00 +1100') → '2026-02-10'  // ISO with time+tz
   6. parseDate('1772409600')         → '2026-02-28'   // Unix timestamp (approx)
   7. parseDate('not a date')         → null            // Invalid — returns null
-  8. parseDate('01/01/2019')         → null            // Outside range 2020–2030
+  8. parseDate('01/01/2019')         → null            // Outside range 2020
   9. parseDate('28.02.2026')         → '2026-02-28'   // DD.MM.YYYY (Amazon AU)
   10. parseDate('Feb 10, 2026')      → '2026-02-10'   // MMM DD, YYYY
   11. parseDate('')                   → null            // Empty string
   12. parseDate(null)                 → null            // Null input
   13. parseDate('31/13/2025')        → null            // Invalid month 13
   14. parseDate('15-03-2026')        → '2026-03-15'   // DD-MM-YYYY
+  15. parseDate('2/12/2026')         → '2026-02-12'   // DD/MM gives Dec 2 (future) → MM/DD fallback Feb 12
 */
