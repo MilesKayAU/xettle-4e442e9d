@@ -382,7 +382,7 @@ export async function syncSettlementToXero(
     if (fnErr) return { success: false, error: fnErr.message };
     if (!result?.success) return { success: false, error: result?.error || 'Xero push failed' };
 
-    // Update settlement status with invoice number
+    // Update settlement status with invoice number and xero_type
     await supabase
       .from('settlements')
       .update({
@@ -390,6 +390,7 @@ export async function syncSettlementToXero(
         xero_journal_id: result.invoiceId,
         xero_invoice_number: result.invoiceNumber || null,
         xero_status: 'AUTHORISED',
+        xero_type: result.xeroType || 'invoice',
       } as any)
       .eq('settlement_id', settlementId)
       .eq('user_id', user.id);
