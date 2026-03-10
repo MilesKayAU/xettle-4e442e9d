@@ -301,6 +301,35 @@ export default function ActionCentre({
             </Card>
           )}
 
+          {/* Awaiting Bank Match */}
+          {awaitingBank.length > 0 && (
+            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-900/10">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🔵</span>
+                  <h3 className="font-semibold text-sm">Awaiting bank match</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} pending bank match
+                </p>
+                <ul className="space-y-1">
+                  {awaitingBank.slice(0, 3).map(r => (
+                    <li key={r.id} className="text-xs flex items-center gap-1.5">
+                      <span className="text-blue-500">•</span>
+                      {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {r.settlement_net ? formatAUD(r.settlement_net) : ''}
+                    </li>
+                  ))}
+                  {awaitingBank.length > 3 && (
+                    <li className="text-xs text-muted-foreground">+ {awaitingBank.length - 3} more</li>
+                  )}
+                </ul>
+                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
+                  <Search className="h-3 w-3" /> Check bank feed
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {/* All Clear */}
           {complete.length > 0 && (
             <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
