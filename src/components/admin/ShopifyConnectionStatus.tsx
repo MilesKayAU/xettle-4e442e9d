@@ -20,12 +20,6 @@ interface ShopifyStatus {
   shops: Array<{ shop_domain: string; scope: string; installed_at: string }>;
 }
 
-interface DiscoveredMarketplace {
-  code: string;
-  displayName: string;
-  orderCount: number;
-  checked: boolean;
-}
 
 const ShopifyConnectionStatus = () => {
   const [status, setStatus] = useState<ShopifyStatus | null>(null);
