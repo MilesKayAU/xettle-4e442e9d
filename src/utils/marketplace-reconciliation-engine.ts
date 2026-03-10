@@ -218,10 +218,27 @@ export async function saveReconciliationResult(
   }
 }
 
+// ─── Marketplace name lookup for matching ───────────────────────────────────
+
+const MARKETPLACE_NAME_PATTERNS: Record<string, string[]> = {
+  bigw: ['Big W', 'BigW', 'Big W Marketplace'],
+  mydeal: ['MyDeal'],
+  kogan: ['Kogan', 'Kogan.com'],
+  catch: ['Catch', 'Catch.com.au'],
+  everyday_market: ['Everyday Market', 'Woolworths Everyday Market'],
+  bunnings: ['Bunnings', 'Bunnings Marketplace'],
+};
+
+function getMarketplaceNamePatterns(marketplaceCode: string): string[] {
+  return MARKETPLACE_NAME_PATTERNS[marketplaceCode] || [marketplaceCode];
+}
+
 // ─── Auto-trigger helper (called from settlement-engine) ────────────────────
 
 /**
  * Automatically run reconciliation for a settlement if Shopify is connected.
+ * Compares Shopify order totals (from shopify_orders_* settlement lines)
+ * against marketplace settlement payout.
  * Fire-and-forget — errors are logged, not thrown.
  */
 export async function autoReconcileSettlement(
@@ -236,10 +253,10 @@ export async function autoReconcileSettlement(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // For Shopify Payments, reconciliation should only compare against bank verification
-    // NOT against Shopify order totals (which come from a different data source)
-    // Skip auto-reconciliation for shopify_payments — it will be handled by bank matching
+    // Skip Shopify Payments — reconciled via bank matching
     if (marketplace === 'shopify_payments') return;
+    // Skip Amazon — has its own reconciliation via settlement lines
+    if (marketplace === 'amazon_au') return;
 
     // Check if Shopify is connected
     const { data: tokens } = await supabase
@@ -250,40 +267,92 @@ export async function autoReconcileSettlement(
 
     if (!tokens || tokens.length === 0) return; // No Shopify — skip
 
-    // Load Shopify orders for this period from settlements table
-    // (orders are stored as settlements with marketplace like shopify_orders_*)
     const start = new Date(periodStart);
     const end = new Date(periodEnd);
 
-    // IMPORTANT: Filter by marketplace_name to avoid pulling lines from unrelated marketplaces
-    const { data: orderSettlements } = await supabase
-      .from('settlement_lines')
-      .select('order_id, amount, posted_date, marketplace_name')
+    // Strategy 1: Look for shopify_orders_* settlements that overlap this period
+    const shopifyOrdersMarketplace = `shopify_orders_${marketplace}`;
+    const { data: shopifySettlements } = await supabase
+      .from('settlements')
+      .select('settlement_id, sales_principal, bank_deposit, period_start, period_end')
       .eq('user_id', user.id)
-      .gte('posted_date', periodStart)
-      .lte('posted_date', periodEnd)
-      .ilike('marketplace_name', `%${marketplace.replace(/_/g, '%')}%`);
+      .eq('marketplace', shopifyOrdersMarketplace)
+      .gte('period_end', periodStart)
+      .lte('period_start', periodEnd);
 
-    // Build ShopifyOrder-compatible objects from settlement lines
-    // Group by order_id to get order totals
-    const orderMap = new Map<string, ShopifyOrder>();
-    for (const line of orderSettlements || []) {
-      if (!line.order_id) continue;
-      const existing = orderMap.get(line.order_id);
-      if (existing) {
-        existing.total_price += Number(line.amount) || 0;
-      } else {
-        orderMap.set(line.order_id, {
-          id: line.order_id,
-          total_price: Number(line.amount) || 0,
-          created_at: line.posted_date || periodStart,
-          marketplace_code: marketplace,
-        });
+    let orders: ShopifyOrder[] = [];
+
+    if (shopifySettlements && shopifySettlements.length > 0) {
+      // Use Shopify order settlements — each one represents an order batch
+      for (const ss of shopifySettlements) {
+        // Load individual order lines from these settlements
+        const { data: lines } = await supabase
+          .from('settlement_lines')
+          .select('order_id, amount, posted_date')
+          .eq('user_id', user.id)
+          .eq('settlement_id', ss.settlement_id);
+
+        for (const line of lines || []) {
+          if (!line.order_id) continue;
+          const existing = orders.find(o => o.id === line.order_id);
+          if (existing) {
+            existing.total_price += Number(line.amount) || 0;
+          } else {
+            orders.push({
+              id: line.order_id,
+              total_price: Number(line.amount) || 0,
+              created_at: line.posted_date || periodStart,
+              marketplace_code: marketplace,
+            });
+          }
+        }
       }
+    } else {
+      // Strategy 2: Look for settlement_lines with matching marketplace_name
+      // Use known name patterns for the marketplace
+      const namePatterns = getMarketplaceNamePatterns(marketplace);
+      
+      let allLines: any[] = [];
+      for (const pattern of namePatterns) {
+        const { data: lines } = await supabase
+          .from('settlement_lines')
+          .select('order_id, amount, posted_date, marketplace_name, settlement_id')
+          .eq('user_id', user.id)
+          .gte('posted_date', periodStart)
+          .lte('posted_date', periodEnd)
+          .ilike('marketplace_name', `%${pattern}%`);
+        
+        if (lines && lines.length > 0) {
+          // Exclude lines from the SAME settlement (avoid self-comparison)
+          const externalLines = lines.filter(l => l.settlement_id !== settlementId);
+          allLines.push(...externalLines);
+          break; // Use first matching pattern
+        }
+      }
+
+      // Group by order_id
+      const orderMap = new Map<string, ShopifyOrder>();
+      for (const line of allLines) {
+        if (!line.order_id) continue;
+        const existing = orderMap.get(line.order_id);
+        if (existing) {
+          existing.total_price += Number(line.amount) || 0;
+        } else {
+          orderMap.set(line.order_id, {
+            id: line.order_id,
+            total_price: Number(line.amount) || 0,
+            created_at: line.posted_date || periodStart,
+            marketplace_code: marketplace,
+          });
+        }
+      }
+      orders = Array.from(orderMap.values());
     }
 
-    const orders = Array.from(orderMap.values());
-    if (orders.length === 0) return; // No order data to reconcile
+    if (orders.length === 0) {
+      console.log(`[autoReconcile] No Shopify order data found for ${marketplace} (${periodStart} to ${periodEnd}) — skipping`);
+      return; // No order data to reconcile
+    }
 
     const periodLabel = `${periodStart} to ${periodEnd}`;
     const settlement: Settlement = {
