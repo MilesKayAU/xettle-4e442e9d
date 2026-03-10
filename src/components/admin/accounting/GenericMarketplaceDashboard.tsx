@@ -65,9 +65,13 @@ interface SettlementRow {
   bank_verified_by: string | null;
 }
 
+/** Marketplaces that only have CSV data — never cross-referenced with Shopify orders */
+const CSV_ONLY_MARKETPLACES = ['bigw', 'everyday_market', 'mydeal', 'bunnings', 'catch', 'kogan'];
+
 export default function GenericMarketplaceDashboard({ marketplace, onMarketplacesChanged, onSwitchToUpload }: GenericMarketplaceDashboardProps) {
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
   const code = marketplace.marketplace_code;
+  const isCsvOnly = CSV_ONLY_MARKETPLACES.includes(code);
 
   // ── Shared hooks (BaseMarketplaceDashboard pattern) ──────────────────────
   const {
