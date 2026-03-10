@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import ReconciliationStatus from '@/components/shared/ReconciliationStatus';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,6 +96,19 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [bankAmountInput, setBankAmountInput] = useState('');
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
+  const [hasShopify, setHasShopify] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkShopify() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setCurrentUserId(user.id);
+      const { data } = await supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1);
+      setHasShopify(!!(data && data.length > 0));
+    }
+    checkShopify();
+  }, []);
 
 
   const marketplaceName = def?.name || marketplace.marketplace_name;
@@ -680,6 +694,19 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           </div>
         )}
       </div>
+
+      {/* Reconciliation Status */}
+      {hasShopify && currentUserId ? (
+        <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
+      ) : !hasShopify && settlements.length > 0 ? (
+        <Card className="border-dashed border-border">
+          <CardContent className="py-4 text-center">
+            <p className="text-xs text-muted-foreground">
+              Connect Shopify to enable reconciliation →
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Xero-aware bulk delete confirmation dialog */}
       <BulkDeleteDialog

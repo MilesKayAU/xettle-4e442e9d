@@ -12,6 +12,7 @@ import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, M
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
+import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
@@ -509,6 +510,9 @@ export default function InsightsDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Reconciliation Health */}
+        <ReconciliationHealth />
 
         {/* $1 Sale Breakdown — main chart */}
         <Card>
