@@ -36,7 +36,7 @@ export function useBulkSelect({ settlements, onComplete }: UseBulkSelectOptions)
 
   /** Count how many selected settlements are synced to Xero */
   const syncedSelectedCount = settlements.filter(
-    s => selected.has(s.id) && (s.status === 'synced' || s.status === 'pushed_to_xero' || s.xero_journal_id)
+    s => selected.has(s.id) && (s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external' || s.xero_journal_id)
   ).length;
 
   const handleBulkDelete = useCallback(async () => {
