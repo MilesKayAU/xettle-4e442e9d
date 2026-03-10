@@ -7,8 +7,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Copy, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { Copy, ChevronDown, ChevronUp, RefreshCw, Plus } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { toast as sonnerToast } from 'sonner';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 interface BugReport {
@@ -51,6 +52,86 @@ function timeAgo(dateStr: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+// ─── New Marketplace Details (for First Contact reports) ────────────────────
+
+function NewMarketplaceDetails({ data, reportId }: { data: any; reportId: string }) {
+  const [adding, setAdding] = useState(false);
+
+  let parsed: any = null;
+  try {
+    parsed = typeof data === 'string' ? JSON.parse(data) : data;
+  } catch { /* ignore */ }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto font-mono">{JSON.stringify(data, null, 2)}</pre>;
+  }
+
+  const handleAddToDictionary = async () => {
+    if (!parsed.headers || !parsed.marketplace) return;
+    setAdding(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      await supabase.from('marketplace_file_fingerprints').insert({
+        user_id: user.id,
+        marketplace_code: parsed.userMarketplace || parsed.marketplace,
+        column_signature: parsed.headers as any,
+        column_mapping: {} as any,
+        is_multi_marketplace: false,
+        file_pattern: parsed.filename || null,
+      } as any);
+
+      sonnerToast.success(`Added "${parsed.userMarketplace || parsed.marketplace}" to fingerprint dictionary`);
+    } catch (err: any) {
+      sonnerToast.error(err.message || 'Failed to add');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <div className="mt-1 space-y-2">
+      <div className="bg-muted/50 rounded-md p-3 space-y-2 text-xs">
+        <div className="grid grid-cols-2 gap-2">
+          <div><span className="text-muted-foreground">Filename:</span> <span className="font-medium">{parsed.filename || '—'}</span></div>
+          <div><span className="text-muted-foreground">Confidence:</span> <span className="font-medium">{parsed.confidence ?? '—'}%</span></div>
+          <div><span className="text-muted-foreground">Detected as:</span> <span className="font-medium">{parsed.detectedMarketplace || parsed.marketplace || '—'}</span></div>
+          <div><span className="text-muted-foreground">User identified:</span> <span className="font-medium">{parsed.userMarketplace || 'Not specified'}</span></div>
+          <div><span className="text-muted-foreground">User saved:</span> <span className="font-medium">{parsed.userSaved === true ? '✅ Yes' : parsed.userSaved === false ? '❌ No' : '—'}</span></div>
+          <div><span className="text-muted-foreground">Tier:</span> <span className="font-medium">{parsed.confidenceTier || '—'}</span></div>
+        </div>
+        {parsed.headers && (
+          <div>
+            <span className="text-muted-foreground">Columns ({parsed.headers.length}):</span>
+            <p className="font-mono text-[10px] mt-0.5 text-foreground">{parsed.headers.join(', ')}</p>
+          </div>
+        )}
+        {parsed.sampleRows && parsed.sampleRows.length > 0 && (
+          <div>
+            <span className="text-muted-foreground">Sample rows ({parsed.sampleRows.length}):</span>
+            <pre className="font-mono text-[10px] mt-0.5 max-h-20 overflow-auto bg-background/50 p-1.5 rounded">
+              {parsed.sampleRows.map((r: string[], i: number) => `Row ${i + 1}: ${r.join(' | ')}`).join('\n')}
+            </pre>
+          </div>
+        )}
+      </div>
+      {parsed.headers && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-xs gap-1.5"
+          onClick={handleAddToDictionary}
+          disabled={adding}
+        >
+          <Plus className="h-3 w-3" />
+          {adding ? 'Adding...' : 'Add to dictionary'}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 export default function BugReportsDashboard() {
@@ -149,6 +230,8 @@ export default function BugReportsDashboard() {
             <SelectItem value="API bug">API bug</SelectItem>
             <SelectItem value="Logic bug">Logic bug</SelectItem>
             <SelectItem value="Performance">Performance</SelectItem>
+            <SelectItem value="New marketplace">New Marketplace</SelectItem>
+            <SelectItem value="New marketplace saved">New Marketplace (Saved)</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline" size="sm" onClick={loadReports}>
@@ -228,13 +311,19 @@ export default function BugReportsDashboard() {
                       </div>
                     )}
 
-                    {/* Console Errors */}
+                    {/* Console Errors / New Marketplace Data */}
                     {r.console_errors && (r.console_errors as any[]).length > 0 && (
                       <div>
-                        <Label className="text-xs font-semibold text-muted-foreground">Console Errors ({(r.console_errors as any[]).length})</Label>
-                        <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto font-mono">
-                          {JSON.stringify(r.console_errors, null, 2)}
-                        </pre>
+                        <Label className="text-xs font-semibold text-muted-foreground">
+                          {(r.ai_classification === 'New marketplace' || r.ai_classification === 'New marketplace saved') ? 'File Analysis' : `Console Errors (${(r.console_errors as any[]).length})`}
+                        </Label>
+                        {(r.ai_classification === 'New marketplace' || r.ai_classification === 'New marketplace saved') ? (
+                          <NewMarketplaceDetails data={r.console_errors} reportId={r.id} />
+                        ) : (
+                          <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto font-mono">
+                            {JSON.stringify(r.console_errors, null, 2)}
+                          </pre>
+                        )}
                       </div>
                     )}
 

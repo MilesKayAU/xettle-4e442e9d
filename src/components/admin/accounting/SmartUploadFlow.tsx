@@ -23,11 +23,12 @@ import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye, LayoutDashboard,
-  MapPin, RefreshCw, ShoppingBag, Link2,
+  MapPin, RefreshCw, ShoppingBag, Link2, Search,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
 import UnknownEntityDialog from './UnknownEntityDialog';
+import FirstContactModal from './FirstContactModal';
 import {
   Select,
   SelectContent,
@@ -37,7 +38,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { detectFile, extractFileHeaders, MARKETPLACE_LABELS, type FileDetectionResult, type ColumnMapping } from '@/utils/file-fingerprint-engine';
+import { detectFile, extractFileHeaders, MARKETPLACE_LABELS, needsFirstContact, confidenceTier, scrubSampleRows, type FileDetectionResult, type ColumnMapping } from '@/utils/file-fingerprint-engine';
 import type { MissingSettlement } from '@/components/dashboard/ActionCentre';
 import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
@@ -57,7 +58,7 @@ import MultiMarketplaceSplitCard from './MultiMarketplaceSplitCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
+type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'first_contact' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
 
 interface DetectedFile {
   file: File;
@@ -71,6 +72,10 @@ interface DetectedFile {
   splitResult?: MultiMarketplaceSplitResult;
   /** CSV headers for caching fingerprint */
   csvHeaders?: string[];
+  /** Sample rows from file (first 3 data rows) */
+  sampleRows?: string[][];
+  /** Whether this file was low-confidence (for post-save banner) */
+  wasLowConfidence?: boolean;
 }
 
 interface SmartUploadFlowProps {
@@ -145,6 +150,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [hasShopifyConnection, setHasShopifyConnection] = useState(false);
   const [shopifyTokenInvalid, setShopifyTokenInvalid] = useState(false);
   const [shopifyShopDomain, setShopifyShopDomain] = useState<string | null>(null);
+  const [firstContactIdx, setFirstContactIdx] = useState<number | null>(null);
+  const [showNewFormatBanner, setShowNewFormatBanner] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
@@ -355,7 +362,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               const splitResult = detectMultiMarketplace({ headers: parsed.headers, rows: parsed.rows, filename: file.name });
               if (splitResult.isMultiMarketplace && splitResult.groups.length > 1) {
                 // Multi-marketplace detected — return early with split result
-                return { idx, result: null, settlements: [] as StandardSettlement[], dbDupeIds: [] as string[], splitResult, csvHeaders: parsed.headers };
+                return { idx, result: null, settlements: [] as StandardSettlement[], dbDupeIds: [] as string[], splitResult, csvHeaders: parsed.headers, sampleRows: parsed.rows.slice(0, 3).map((r: any) => parsed.headers.map((h: string) => String(r[h] || ''))) };
               }
             }
           } catch { /* Fall through to normal detection */ }
@@ -418,7 +425,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           } catch {}
         }
 
-        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: undefined as string[] | undefined };
+        // Extract sample rows and headers for First Contact
+        let sampleRows: string[][] = [];
+        let fileHeaders: string[] | undefined;
+        try {
+          const extracted = await extractFileHeaders(file);
+          if (extracted) {
+            sampleRows = extracted.sampleRows;
+            fileHeaders = extracted.headers;
+          }
+        } catch {}
+
+        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows };
       })
     );
 
@@ -427,7 +445,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders } = r.value;
+          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
             // If multi-marketplace split detected, show confirmation card
@@ -437,6 +455,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 status: 'multi_split',
                 splitResult,
                 csvHeaders,
+                sampleRows,
                 detection: {
                   marketplace: 'multi_marketplace',
                   marketplaceLabel: `${splitResult.groups.length} Marketplaces`,
@@ -452,8 +471,11 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             const allDupes = settlements.length > 0 && dbDupeIds.length === settlements.length;
             const someDupes = dbDupeIds.length > 0 && !allDupes;
 
+            // Check if First Contact modal should be triggered
+            const isFirstContact = result && result.isSettlementFile && needsFirstContact(result);
+
             let status: FileStatus = result
-              ? (result.isSettlementFile ? 'detected' : 'wrong_file')
+              ? (result.isSettlementFile ? (isFirstContact ? 'first_contact' : 'detected') : 'wrong_file')
               : 'unknown';
 
             let error: string | undefined;
@@ -468,6 +490,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               settlements: settlements.length > 0 ? settlements : undefined,
               status,
               error,
+              csvHeaders: result ? (csvHeaders || undefined) : undefined,
+              sampleRows: sampleRows || undefined,
+              wasLowConfidence: isFirstContact || false,
             };
 
             if (someDupes) {
@@ -914,6 +939,50 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         toast.info(`${label}: All ${dupCount} settlement${dupCount > 1 ? 's' : ''} already exist (duplicates skipped).`);
       }
 
+      // ── Learning loop: save fingerprint for low-confidence files ──
+      if (df.wasLowConfidence && savedCount > 0) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            // Extract headers for fingerprint
+            const extracted = await extractFileHeaders(df.file);
+            if (extracted) {
+              // Save to marketplace_file_fingerprints
+              await supabase.from('marketplace_file_fingerprints').insert({
+                user_id: user.id,
+                marketplace_code: marketplace,
+                column_signature: extracted.headers as any,
+                column_mapping: df.detection?.columnMapping || {} as any,
+                is_multi_marketplace: false,
+                file_pattern: df.file.name.replace(/\d+/g, '*'),
+              } as any);
+
+              // Create bug report for admin visibility
+              const scrubbedSample = scrubSampleRows(extracted.headers, extracted.sampleRows.slice(0, 3));
+              await supabase.from('bug_reports').insert({
+                submitted_by: user.id,
+                ai_classification: 'New marketplace saved',
+                description: `User confirmed new marketplace: ${MARKETPLACE_LABELS[marketplace] || marketplace}. Column signature saved to fingerprints. File: ${df.file.name}. Confidence was ${df.detection?.confidence || 0}%.`,
+                console_errors: JSON.stringify({
+                  type: 'new_marketplace_saved',
+                  filename: df.file.name,
+                  confidence: df.detection?.confidence || 0,
+                  marketplace,
+                  headers: extracted.headers,
+                  sampleRows: scrubbedSample,
+                }),
+                severity: 'low',
+                status: 'open',
+                page_url: window.location.pathname,
+              } as any);
+            }
+          }
+        } catch { /* silent — don't fail save for learning loop */ }
+
+        // Show post-save validation banner
+        setShowNewFormatBanner(true);
+      }
+
       setFiles(prev => {
         const updated = [...prev];
         updated[idx] = { ...updated[idx], status: 'saved', settlements, savedCount };
@@ -1339,6 +1408,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 onAnalyzeAI={analyzeWithAI}
                 onProcess={processFile}
                 onSetStatus={setFileStatus}
+                onFirstContact={(i) => setFirstContactIdx(i)}
               />
             )
           ))}
@@ -1383,6 +1453,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           )}
         </div>
       )}
+      {/* Post-save validation banner for new formats */}
+      {showNewFormatBanner && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
+          <CardContent className="py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                This was a new format for us. If anything looks wrong in your settlements, use the 🐛 Report Issue button — we'll fix it fast.
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => setShowNewFormatBanner(false)}>
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Unknown Entity Classification Dialog */}
       <UnknownEntityDialog
         open={showEntityDialog}
@@ -1400,6 +1487,68 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           setUnknownEntities([]);
         }}
       />
+
+      {/* First Contact Modal for unknown/low-confidence files */}
+      {firstContactIdx !== null && filesRef.current[firstContactIdx] && (() => {
+        const df = filesRef.current[firstContactIdx];
+        const extracted = df.csvHeaders || df.detection?.columnMapping ? Object.keys(df.detection?.columnMapping || {}) : [];
+        const headers = df.csvHeaders || extracted;
+        const sampleRows = df.sampleRows || [];
+        return (
+          <FirstContactModal
+            open={true}
+            onOpenChange={(open) => { if (!open) setFirstContactIdx(null); }}
+            filename={df.file.name}
+            headers={headers}
+            sampleRows={sampleRows}
+            rowCount={df.detection?.recordCount || 0}
+            confidence={df.detection?.confidence || 0}
+            confidenceTier={confidenceTier(df.detection?.confidence || 0)}
+            detectedMarketplace={df.detection?.marketplace || 'unknown'}
+            onConfirm={(code, name) => {
+              // Override marketplace and move to detected
+              setFiles(prev => {
+                const updated = [...prev];
+                if (firstContactIdx < updated.length) {
+                  updated[firstContactIdx] = {
+                    ...updated[firstContactIdx],
+                    overrideMarketplace: code,
+                    status: 'detected',
+                    wasLowConfidence: true,
+                    detection: {
+                      ...(updated[firstContactIdx].detection || {
+                        marketplace: code,
+                        marketplaceLabel: name,
+                        confidence: 100,
+                        isSettlementFile: true,
+                        detectionLevel: 2 as const,
+                      }),
+                      marketplace: code,
+                      marketplaceLabel: name,
+                      isSettlementFile: true,
+                    },
+                  };
+                }
+                return updated;
+              });
+              // Create marketplace tab
+              ensureMarketplaceConnection(code);
+              onMarketplacesChanged?.();
+              setFirstContactIdx(null);
+            }}
+            onCancel={() => {
+              setFiles(prev => {
+                const updated = [...prev];
+                if (firstContactIdx < updated.length) {
+                  updated[firstContactIdx] = { ...updated[firstContactIdx], status: 'unknown' };
+                }
+                return updated;
+              });
+              setFirstContactIdx(null);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -1414,9 +1563,10 @@ interface FileResultCardProps {
   onAnalyzeAI: (idx: number) => void;
   onProcess: (idx: number) => void;
   onSetStatus: (idx: number, status: FileStatus) => void;
+  onFirstContact: (idx: number) => void;
 }
 
-function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess, onSetStatus }: FileResultCardProps) {
+function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess, onSetStatus, onFirstContact }: FileResultCardProps) {
   const { file, status, detection, settlements } = df;
   const marketplace = df.overrideMarketplace || detection?.marketplace;
   const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
@@ -1668,6 +1818,27 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                       </p>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* First Contact — low confidence or unknown marketplace */}
+              {status === 'first_contact' && (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-2">
+                    <Search className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                        New format detected — confidence {detection?.confidence || 0}%
+                      </p>
+                      <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+                        We need your help to classify this file correctly.
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant="default" size="sm" className="gap-1.5 text-xs" onClick={() => onFirstContact(idx)}>
+                    <Search className="h-3.5 w-3.5" />
+                    Identify Marketplace
+                  </Button>
                 </div>
               )}
 
