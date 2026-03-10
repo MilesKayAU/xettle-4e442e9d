@@ -368,6 +368,11 @@ export default function Dashboard() {
                   onSettlementsSaved={loadMarketplaces}
                   onMarketplacesChanged={loadMarketplaces}
                   onViewSettlements={() => switchView('settlements')}
+                  missingSettlements={missingSettlements}
+                  onReturnToDashboard={() => {
+                    setMissingSettlements([]);
+                    switchView('dashboard');
+                  }}
                 />
               </Suspense>
             </div>
