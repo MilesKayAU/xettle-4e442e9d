@@ -170,10 +170,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         </Card>
       )}
 
+      <Separator />
+
       {/* Settlement History */}
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <FileText className="h-4 w-4" />
+        <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
+          <FileText className="h-4 w-4 text-primary" />
           Saved Settlements
           {settlements.length > 0 && (
             <Badge variant="secondary" className="text-[10px]">{settlements.length}</Badge>
