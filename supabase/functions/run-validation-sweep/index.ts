@@ -132,20 +132,8 @@ async function sweepUser(adminSupabase: any, userId: string) {
     .eq('user_id', userId)
     .gte('posted_date', boundaryDate)
 
-  // Order aggregation
-  const orderAgg = new Map<string, { count: number; total: number }>()
-  for (const line of (orderLines || [])) {
-    if (!line.posted_date || !line.marketplace_name) continue
-    const mk = monthKey(line.posted_date)
-    const key = `${line.marketplace_name}|${mk}`
-    const existing = orderAgg.get(key)
-    if (existing) {
-      existing.count++
-      existing.total += Math.abs(Number(line.amount) || 0)
-    } else {
-      orderAgg.set(key, { count: 1, total: Math.abs(Number(line.amount) || 0) })
-    }
-  }
+  // Order lines kept as flat array — we'll filter per-period below instead of pre-aggregating by month
+  const allOrderLines = (orderLines || []) as Array<{ marketplace_name: string | null; posted_date: string | null; amount: number | null; order_id: string | null }>
 
   const settlementMap = new Map<string, any>()
   for (const s of (settlements || [])) {
@@ -212,12 +200,19 @@ async function sweepUser(adminSupabase: any, userId: string) {
     for (const s of (settlements || [])) {
       if (s.marketplace === mc) periodKeys.add(`${s.period_start} → ${s.period_end}`)
     }
-    for (const [aggKey] of orderAgg) {
-      const [mName, mk] = aggKey.split('|')
-      if (mName?.toLowerCase().includes(mc.replace('_', ' ').toLowerCase()) ||
-          mName?.toLowerCase().includes(mc.split('_')[0])) {
-        periodKeys.add(monthLabel(mk))
+    // Also create period keys from order lines that match this marketplace
+    const mcLower = mc.replace('_', ' ').toLowerCase()
+    const mcPrefix = mc.split('_')[0].toLowerCase()
+    const orderMonths = new Set<string>()
+    for (const line of allOrderLines) {
+      if (!line.posted_date || !line.marketplace_name) continue
+      const mLower = line.marketplace_name.toLowerCase()
+      if (mLower.includes(mcLower) || mLower.includes(mcPrefix)) {
+        orderMonths.add(monthKey(line.posted_date))
       }
+    }
+    for (const mk of orderMonths) {
+      periodKeys.add(monthLabel(mk))
     }
     if (periodKeys.size === 0) {
       const now = new Date()
@@ -264,27 +259,27 @@ async function sweepUser(adminSupabase: any, userId: string) {
           processing_error: null,
         }
 
-        // Step 1: Orders — filter by period date range
+        // Step 1: Orders — filter lines by this period's exact date range
         const periodStart = record.period_start
         const periodEnd = record.period_end
-        let orderData: { count: number; total: number } | null = null
-        for (const [aggKey, agg] of orderAgg) {
-          const [mName, mk] = aggKey.split('|')
-          const matchesMarketplace = mName?.toLowerCase().includes(mc.replace('_', ' ').toLowerCase()) ||
-              mName?.toLowerCase().includes(mc.split('_')[0])
-          if (!matchesMarketplace) continue
-          // mk is YYYY-MM — check if it falls within the period
-          const monthStart = `${mk}-01`
-          const monthEnd = `${mk}-28`
-          if (monthEnd < periodStart || monthStart > periodEnd) continue
-          if (!orderData) orderData = { count: 0, total: 0 }
-          orderData.count += agg.count
-          orderData.total += agg.total
+        const mcLowerInner = mc.replace('_', ' ').toLowerCase()
+        const mcPrefixInner = mc.split('_')[0].toLowerCase()
+        const uniqueOrders = new Set<string>()
+        let orderTotal = 0
+        for (const line of allOrderLines) {
+          if (!line.posted_date || !line.marketplace_name) continue
+          const mLower = line.marketplace_name.toLowerCase()
+          if (!(mLower.includes(mcLowerInner) || mLower.includes(mcPrefixInner))) continue
+          // Filter by period date range
+          if (line.posted_date < periodStart || line.posted_date > periodEnd) continue
+          orderTotal += Math.abs(Number(line.amount) || 0)
+          if (line.order_id) uniqueOrders.add(line.order_id)
         }
-        if (orderData) {
+        const orderCount = uniqueOrders.size || (orderTotal > 0 ? 1 : 0)
+        if (orderTotal > 0) {
           record.orders_found = true
-          record.orders_count = orderData.count
-          record.orders_total = orderData.total
+          record.orders_count = orderCount
+          record.orders_total = orderTotal
           record.orders_fetched_at = new Date().toISOString()
         }
 
