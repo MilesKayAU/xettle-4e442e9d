@@ -134,9 +134,19 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         .eq('key', 'accounting_boundary_date')
         .maybeSingle();
       if (boundaryRow?.value) setAccountingBoundary(boundaryRow.value);
+      // Fetch reconciliation type from fingerprints
+      const { data: fpRows } = await supabase
+        .from('marketplace_file_fingerprints')
+        .select('reconciliation_type')
+        .eq('user_id', user.id)
+        .eq('marketplace_code', code)
+        .limit(1) as any;
+      if (fpRows && fpRows.length > 0 && fpRows[0].reconciliation_type && fpRows[0].reconciliation_type !== 'unknown') {
+        setReconType(fpRows[0].reconciliation_type);
+      }
     }
     checkShopifyAndBoundary();
-  }, []);
+  }, [code]);
 
 
   const marketplaceName = def?.name || marketplace.marketplace_name;

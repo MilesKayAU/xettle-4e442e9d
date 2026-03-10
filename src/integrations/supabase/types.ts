@@ -359,6 +359,7 @@ export type Database = {
           id: string
           is_multi_marketplace: boolean | null
           marketplace_code: string
+          reconciliation_type: string | null
           split_column: string | null
           split_mappings: Json | null
           user_id: string
@@ -371,6 +372,7 @@ export type Database = {
           id?: string
           is_multi_marketplace?: boolean | null
           marketplace_code: string
+          reconciliation_type?: string | null
           split_column?: string | null
           split_mappings?: Json | null
           user_id: string
@@ -383,6 +385,7 @@ export type Database = {
           id?: string
           is_multi_marketplace?: boolean | null
           marketplace_code?: string
+          reconciliation_type?: string | null
           split_column?: string | null
           split_mappings?: Json | null
           user_id?: string
