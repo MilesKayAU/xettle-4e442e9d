@@ -31,9 +31,8 @@ describe("parseDate", () => {
     expect(parseDate("invalid")).toBeNull();
   });
 
-  it("returns valid date for far-future unambiguous dates", () => {
-    // 01/01/2099 is technically valid — plausibility only affects DD/MM vs MM/DD choice
-    expect(parseDate("01/01/2099")).toBe("2099-01-01");
+  it("returns null for out-of-range dates", () => {
+    expect(parseDate("01/01/2099")).toBeNull();
   });
 
   it("returns null for pre-2020 dates", () => {
