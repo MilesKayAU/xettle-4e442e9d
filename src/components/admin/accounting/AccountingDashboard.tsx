@@ -2276,7 +2276,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                         {formatAUD(s.bank_deposit || 0)}
                       </td>
                       <td className="py-2 px-4">
-                        {statusBadge(s.status || 'pending')}
+                        {statusBadge(s.status || 'pending', s.xero_status)}
                         {(s as any).is_split_month && <Badge className="bg-purple-100 text-purple-800 text-[10px] ml-1">Split</Badge>}
                       </td>
                       <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
