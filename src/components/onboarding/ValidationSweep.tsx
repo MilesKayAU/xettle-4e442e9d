@@ -447,13 +447,7 @@ export default function ValidationSweep({
 
                   {/* Bank */}
                   <td className="px-4 py-3 text-center">
-                    {row.bank_matched ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
-                    ) : row.xero_pushed ? (
-                      <Search className="h-3.5 w-3.5 text-amber-500 mx-auto" />
-                    ) : (
-                      <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
-                    )}
+                    <BankCell row={row} onConfirmMatch={handleConfirmBankMatch} />
                   </td>
 
                   {/* Status */}
