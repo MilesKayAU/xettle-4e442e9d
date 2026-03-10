@@ -65,11 +65,9 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Fetch recent orders (last 30 days) to scan source_names
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      // Fetch ALL orders to scan source_names (not limited to 30 days)
       const params = new URLSearchParams({
         status: "any",
-        created_at_min: thirtyDaysAgo,
         limit: "250",
         fields: "id,name,source_name,total_price",
       });
