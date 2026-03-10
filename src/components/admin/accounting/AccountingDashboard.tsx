@@ -27,6 +27,8 @@ import { CurrentPlanCard, UpgradeNudgeDialog, incrementManualUploadCount, should
 import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting/SyncComponents';
 import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
 import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@/utils/reconciliation-engine';
+import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
+import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
@@ -34,6 +36,7 @@ const SELECTED_MARKETPLACE = 'amazon_au';
 interface SettlementRecord {
   id: string;
   settlement_id: string;
+  marketplace: string;
   period_start: string;
   period_end: string;
   deposit_date: string;
@@ -53,6 +56,8 @@ interface SettlementRecord {
   gst_on_expenses: number;
   reconciliation_status: string;
   xero_journal_id: string | null;
+  xero_invoice_number: string | null;
+  xero_status: string | null;
   created_at: string;
   is_split_month?: boolean;
   split_month_1_data?: string | null;
@@ -104,8 +109,18 @@ export default function AccountingDashboard() {
   const [transactionFile, setTransactionFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<ParsedSettlement | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
-  const [loadingSettlements, setLoadingSettlements] = useState(true);
+  
+  // ── Shared hook: replaces custom loadSettlements + realtime ──────────
+  const {
+    settlements: sharedSettlements,
+    loading: loadingSettlements,
+    loadSettlements,
+  } = useSettlementManager<SettlementRecord>({
+    marketplaceCode: selectedMarketplace,
+    selectFields: '*',
+  });
+  const settlements = sharedSettlements as unknown as SettlementRecord[];
+  
   const [uploadWarning, setUploadWarning] = useState<{ type: 'duplicate' | 'gap'; message: string; existing?: SettlementRecord } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -272,35 +287,7 @@ export default function AccountingDashboard() {
     checkTier();
   }, []);
 
-  const loadSettlements = useCallback(async (showLoading = false) => {
-    if (showLoading) setLoadingSettlements(true);
-    try {
-      const { data, error } = await supabase
-        .from('settlements')
-        .select('*')
-        .eq('marketplace', selectedMarketplace)
-        .order('period_end', { ascending: false });
-      if (error) throw error;
-      setSettlements((data || []) as SettlementRecord[]);
-    } catch {
-      // silently fail on load
-    } finally {
-      setLoadingSettlements(false);
-    }
-  }, [selectedMarketplace]);
-
-  useEffect(() => { loadSettlements(true); }, [loadSettlements]);
-
-  // Realtime subscription: auto-refresh settlements list when rows change (insert/delete/update)
-  useEffect(() => {
-    const channel = supabase
-      .channel('settlements-status-refresh')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => {
-        loadSettlements();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadSettlements]);
+  // loadSettlements and realtime are handled by useSettlementManager hook above
 
   // Reload settlements whenever the user switches to the history tab
   useEffect(() => {
@@ -570,191 +557,15 @@ export default function AccountingDashboard() {
     }
   }, [parsed, selectedMarketplace, loadSettlements]);
 
-  // ─── Build invoice line items for Xero, marketplace-aware TaxType ─────────
+  // ─── Build invoice line items — delegates to extracted utility ─────────
   const buildInvoiceLineItems = useCallback((
     parsedLines: ParsedSettlement['lines'],
     periodLabel: string,
     settlementId: string,
-    ratio?: number, // optional split month ratio
-    bankDeposit?: number, // optional: for rounding adjustment
+    ratio?: number,
+    bankDeposit?: number,
   ) => {
-    // Split Sales into Principal vs Shipping; aggregate by category + marketplace
-    const INCOME_CATS = new Set(['Sales - Principal', 'Sales - Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
-
-    // Tax sub-line display names (matches Link My Books)
-    const TAX_SUBCAT_MAP: Record<string, string> = {
-      'Tax': 'Tax',
-      'ShippingTax': 'Shipping Tax',
-      'TaxDiscount': 'Tax Discounts',
-      'LowValueGoodsTax-Principal': 'Low Value Goods Tax',
-      'LowValueGoodsTax-Shipping': 'Low Value Goods Tax',
-    };
-
-    const auBuckets: Record<string, number> = {};
-    const intlBuckets: Record<string, number> = {};
-    const expenseBuckets: Record<string, number> = {};
-    const otherBuckets: Record<string, number> = {};
-    const taxSubBuckets: Record<string, number> = {}; // Tax sub-lines by display name
-
-    for (const line of parsedLines) {
-      let cat = line.accountingCategory;
-      // Split Sales into Principal / Shipping sub-lines
-      if (cat === 'Sales') {
-        cat = line.amountDescription === 'Shipping' ? 'Sales - Shipping' : 'Sales - Principal';
-      }
-      // Tax Collected by Amazon → split into sub-lines by amountDescription
-      if (cat === 'Tax Collected by Amazon') {
-        const subName = TAX_SUBCAT_MAP[line.amountDescription] || line.amountDescription;
-        const key = `Amazon Sales Tax - ${subName}`;
-        taxSubBuckets[key] = (taxSubBuckets[key] || 0) + line.amount;
-        continue;
-      }
-      if (INCOME_CATS.has(cat)) {
-        if (line.isAuMarketplace) {
-          auBuckets[cat] = (auBuckets[cat] || 0) + line.amount;
-        } else {
-          intlBuckets[cat] = (intlBuckets[cat] || 0) + line.amount;
-        }
-      } else if (['Seller Fees', 'FBA Fees', 'Storage Fees'].includes(cat)) {
-        expenseBuckets[cat] = (expenseBuckets[cat] || 0) + line.amount;
-      } else {
-        otherBuckets[cat] = (otherBuckets[cat] || 0) + line.amount;
-      }
-    }
-
-    // Determine TaxType per category
-    const getTaxType = (cat: string, marketplace: 'au' | 'intl'): string => {
-      if (cat === 'Reimbursements') return 'OUTPUT'; // GST on Income (account 271)
-      if (marketplace === 'intl') return 'EXEMPTOUTPUT'; // GST Free
-      // AU: Sales, Refunds, Promo Discounts → OUTPUT (GST on Income)
-      return 'OUTPUT';
-    };
-
-    const getAccountCodeForSplit = (cat: string): string => {
-      // Sales - Principal and Sales - Shipping both map to Sales account
-      if (cat === 'Sales - Principal' || cat === 'Sales - Shipping') return getAccountCode('Sales');
-      return getAccountCode(cat);
-    };
-
-    const lineItems: Array<{ Description: string; AccountCode: string; TaxType: string; UnitAmount: number; Quantity: number }> = [];
-
-    // AU income lines — amounts are ex-GST for EXCLUSIVE line amount type
-    // Xero calculates GST on top when LineAmountTypes=Exclusive
-    for (const [category, amount] of Object.entries(auBuckets)) {
-      const appliedAmount = ratio ? round2(amount * ratio) : round2(amount);
-      if (appliedAmount === 0) continue;
-      // For Exclusive invoices, UnitAmount is the ex-GST amount
-      // GST items: divide by 11 to get GST, subtract to get ex-GST
-      const taxType = getTaxType(category, 'au');
-      const isGstItem = taxType === 'OUTPUT' || taxType === 'INPUT';
-      const exGst = isGstItem ? round2(appliedAmount - round2(appliedAmount / 11)) : appliedAmount;
-      lineItems.push({
-        Description: `Amazon ${category === 'Sales - Principal' ? 'Sales - Principal' : category === 'Sales - Shipping' ? 'Sales - Shipping' : category} - Australia ${periodLabel}`,
-        AccountCode: getAccountCodeForSplit(category),
-        TaxType: taxType,
-        UnitAmount: exGst,
-        Quantity: 1,
-      });
-    }
-
-    // International income lines (GST Free — amount IS the ex-GST amount)
-    for (const [category, amount] of Object.entries(intlBuckets)) {
-      const appliedAmount = ratio ? round2(amount * ratio) : round2(amount);
-      if (appliedAmount === 0) continue;
-      lineItems.push({
-        Description: `Amazon ${category === 'Sales - Principal' ? 'Sales - Principal' : category === 'Sales - Shipping' ? 'Sales - Shipping' : category} - Rest of the World ${periodLabel}`,
-        AccountCode: getAccountCodeForSplit(category),
-        TaxType: getTaxType(category, 'intl'),
-        UnitAmount: appliedAmount,
-        Quantity: 1,
-      });
-    }
-
-    // Expense lines → INPUT (amounts include GST, extract ex-GST for Exclusive)
-    for (const [category, amount] of Object.entries(expenseBuckets)) {
-      const appliedAmount = ratio ? round2(amount * ratio) : round2(amount);
-      if (appliedAmount === 0) continue;
-      const exGst = round2(appliedAmount - round2(appliedAmount / 11));
-      lineItems.push({
-        Description: `Amazon ${category} ${periodLabel}`,
-        AccountCode: getAccountCode(category),
-        TaxType: 'INPUT',
-        UnitAmount: exGst,
-        Quantity: 1,
-      });
-    }
-
-    // Other lines (Tax Collected by Amazon etc.) → BASEXCLUDED
-    for (const [category, amount] of Object.entries(otherBuckets)) {
-      const appliedAmount = ratio ? round2(amount * ratio) : round2(amount);
-      if (appliedAmount === 0) continue;
-      lineItems.push({
-        Description: `Amazon ${category} ${periodLabel}`,
-        AccountCode: getAccountCode(category),
-        TaxType: 'BASEXCLUDED',
-        UnitAmount: appliedAmount,
-        Quantity: 1,
-      });
-    }
-
-    // Tax sub-lines (824) — each sub-category as a separate BASEXCLUDED line
-    for (const [description, amount] of Object.entries(taxSubBuckets)) {
-      const appliedAmount = ratio ? round2(amount * ratio) : round2(amount);
-      if (appliedAmount === 0) continue;
-      lineItems.push({
-        Description: `${description} ${periodLabel}`,
-        AccountCode: getAccountCode('Tax Collected by Amazon'),
-        TaxType: 'BASEXCLUDED',
-        UnitAmount: appliedAmount,
-        Quantity: 1,
-      });
-    }
-
-    // ─── Rounding adjustment ───────────────────────────────────────────
-    // Xero calculates invoice total as: sum of (exGst + Xero-computed GST) per line
-    // Due to per-line rounding, the total can differ by 1-2c from bank deposit
-    // Add a tiny BASEXCLUDED adjustment line to correct any difference
-    if (bankDeposit !== undefined && !ratio) {
-      // Compute what Xero will calculate as the invoice total
-      let xeroTotal = 0;
-      for (const item of lineItems) {
-        if (item.TaxType === 'OUTPUT') {
-          // Xero adds 10% GST on top: line total = UnitAmount * 1.1
-          xeroTotal += round2(round2(item.UnitAmount) * 1.1);
-        } else if (item.TaxType === 'INPUT') {
-          // INPUT on ACCREC: Xero adds 10% GST (expense credit)
-          xeroTotal += round2(round2(item.UnitAmount) * 1.1);
-        } else if (item.TaxType === 'EXEMPTOUTPUT') {
-          xeroTotal += round2(item.UnitAmount);
-        } else {
-          // BASEXCLUDED — no GST added
-          xeroTotal += round2(item.UnitAmount);
-        }
-      }
-      xeroTotal = round2(xeroTotal);
-      const diff = round2(bankDeposit - xeroTotal);
-      if (diff !== 0 && Math.abs(diff) <= 0.05) {
-        console.info('[Rounding Adjustment]', { bankDeposit, xeroTotal, diff });
-        lineItems.push({
-          Description: `Rounding adjustment ${periodLabel}`,
-          AccountCode: getAccountCode('Sales'),
-          TaxType: 'BASEXCLUDED',
-          UnitAmount: diff,
-          Quantity: 1,
-        });
-      } else if (diff !== 0 && Math.abs(diff) > 0.05) {
-        // Hard stop — discrepancy too large, block the push
-        console.error('[Rounding BLOCKED]', { bankDeposit, xeroTotal, diff });
-        throw new Error(
-          `Rounding discrepancy of ${formatAUD(Math.abs(diff))} exceeds ±$0.05 tolerance. ` +
-          `Bank deposit: ${formatAUD(bankDeposit)}, Calculated total: ${formatAUD(xeroTotal)}. ` +
-          `This settlement cannot be pushed to Xero until the discrepancy is resolved.`
-        );
-      }
-    }
-
-    // NO clearing line — invoices don't need one
-    return lineItems;
+    return buildAmazonInvoiceLineItems(parsedLines, periodLabel, settlementId, getAccountCode, ratio, bankDeposit);
   }, [getAccountCode]);
 
   // ─── Approve & Push to Xero (as ACCREC Invoice) ────────────────────
@@ -802,23 +613,12 @@ export default function AccountingDashboard() {
 
         // Invoice 1: Month-1 actual lines + balancing 612 line
         const lines1 = buildInvoiceLineItems(month1Lines, `${m1.monthLabel}`, header.settlementId);
-        // Rollover must offset the GST-inclusive Xero total so Invoice 1 nets to $0.00
-        // Xero adds GST on OUTPUT/INPUT lines but not BASEXCLUDED, so we compute the inclusive total
-        let xeroInclusiveTotal = 0;
-        for (const item of lines1) {
-          if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
-            xeroInclusiveTotal += round2(round2(item.UnitAmount) * 1.1);
-          } else {
-            xeroInclusiveTotal += round2(item.UnitAmount);
-          }
-        }
-        const rolloverAmount = round2(xeroInclusiveTotal);
+        const rolloverAmount = computeXeroInclusiveTotal(lines1);
 
         console.info('[Split Month Invoice Rollover]', {
           settlementId: header.settlementId,
           month1: m1.monthLabel,
           month2: m2.monthLabel,
-          xeroInclusiveTotal: round2(xeroInclusiveTotal),
           rolloverAmount,
         });
 
