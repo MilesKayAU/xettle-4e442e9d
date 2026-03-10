@@ -427,9 +427,27 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements, dbDupeIds } = r.value;
+          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
+            // If multi-marketplace split detected, show confirmation card
+            if (splitResult?.isMultiMarketplace) {
+              updated[fileIdx] = {
+                ...updated[fileIdx],
+                status: 'multi_split',
+                splitResult,
+                csvHeaders,
+                detection: {
+                  marketplace: 'multi_marketplace',
+                  marketplaceLabel: `${splitResult.groups.length} Marketplaces`,
+                  confidence: 95,
+                  isSettlementFile: true,
+                  detectionLevel: 1,
+                },
+              };
+              continue;
+            }
+
             // If ALL settlements are already in DB, mark as saved/dupe
             const allDupes = settlements.length > 0 && dbDupeIds.length === settlements.length;
             const someDupes = dbDupeIds.length > 0 && !allDupes;
