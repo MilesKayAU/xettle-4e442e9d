@@ -56,7 +56,7 @@ export default function MarketplaceReturnRatio() {
         const gstOnSales = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
         const totalSales = salesExGst + gstOnSales;
         const totalFees = rows.reduce((sum, r) =>
-          sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
+          sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.max(r.other_fees || 0, 0), 0);
         const totalRefunds = rows.reduce((sum, r) => sum + Math.abs(r.refunds || 0), 0);
         const netPayout = rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
 
