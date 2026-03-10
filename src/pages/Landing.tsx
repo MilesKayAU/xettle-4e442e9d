@@ -336,6 +336,23 @@ export default function Landing() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
+          TRUST BAR
+          ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-10 px-4 bg-muted/30">
+        <div className="container-custom max-w-4xl mx-auto text-center">
+          <p className="text-sm font-medium text-muted-foreground tracking-wide">
+            Trusted by Australian sellers on{' '}
+            <span className="text-foreground font-semibold">Amazon</span> ·{' '}
+            <span className="text-foreground font-semibold">Shopify</span> ·{' '}
+            <span className="text-foreground font-semibold">BigW</span> ·{' '}
+            <span className="text-foreground font-semibold">MyDeal</span> ·{' '}
+            <span className="text-foreground font-semibold">Everyday Market</span> ·{' '}
+            <span className="text-foreground font-semibold">Bunnings</span>
+          </p>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
           PROFIT LEAK
           ════════════════════════════════════════════════════════════════════ */}
       <section className="py-20 px-4">
@@ -345,14 +362,14 @@ export default function Landing() {
               See your real marketplace profit
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              What landed in your bank after every marketplace fee and refund.
+              What landed in your bank after every marketplace fee and refund — across Amazon AU, Shopify, BigW and more.
             </p>
           </div>
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative">
               <img
                 src={profitLeakImg}
-                alt="Profit Leak Breakdown showing fee-by-fee analysis across Bunnings and Amazon AU"
+                alt="Profit Leak Breakdown showing fee-by-fee analysis across Amazon AU, Shopify and BigW"
                 className="rounded-2xl border border-border shadow-xl w-full"
                 loading="lazy"
               />
