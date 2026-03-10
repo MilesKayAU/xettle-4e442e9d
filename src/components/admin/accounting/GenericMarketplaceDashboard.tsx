@@ -194,43 +194,6 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         </div>
       </div>
 
-      {/* Upload prompt — primary action zone */}
-      {onSwitchToUpload && (
-        <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-muted/30 rounded-xl" onClick={onSwitchToUpload}>
-          <CardContent className="py-12 px-8 flex flex-col items-center justify-center text-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <CloudUpload className="h-8 w-8 text-primary" />
-            </div>
-            <div>
-              <p className="text-lg font-bold text-foreground uppercase tracking-wide">
-                Drop your settlement files
-              </p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Xettle recognises the marketplace automatically. No configuration required.
-              </p>
-            </div>
-            <ul className="text-sm text-muted-foreground space-y-1.5 text-left">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                Detect marketplace automatically
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                Parse every transaction &amp; calculate fees
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                Prepare your Xero journal entry
-              </li>
-            </ul>
-            <Button className="gap-2 mt-2">
-              <Upload className="h-4 w-4" />
-              Smart Upload
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       <Separator />
 
@@ -794,6 +757,33 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           </div>
         )}
       </div>
+
+      {/* Upload prompt — below data, not blocking view */}
+      {onSwitchToUpload && (
+        <>
+          <Separator />
+          <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-muted/30 rounded-xl" onClick={onSwitchToUpload}>
+            <CardContent className="py-8 px-8 flex flex-col items-center justify-center text-center gap-3">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <CloudUpload className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-foreground uppercase tracking-wide">
+                  Upload more settlement files
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Xettle recognises the marketplace automatically. No configuration required.
+                </p>
+              </div>
+              <Button size="sm" className="gap-2 mt-1">
+                <Upload className="h-4 w-4" />
+                Smart Upload
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <Separator />
 
