@@ -64,6 +64,11 @@ import {
   type ProductCost,
   type ProfitEngineResult,
 } from '@/utils/profit-engine';
+import {
+  convertApiOrdersToRows,
+  type ShopifyApiOrder,
+} from '@/utils/shopify-api-adapter';
+import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
 
 interface SettlementRecord {
   id: string;
