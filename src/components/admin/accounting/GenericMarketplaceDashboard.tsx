@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
   CheckSquare, Square, Eye, ShieldCheck, ShieldAlert,
-  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, CloudUpload, BarChart3, Scale
+  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CloudUpload, BarChart3, Scale, Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -100,6 +100,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
+  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function checkShopify() {
@@ -114,6 +116,24 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
 
   const marketplaceName = def?.name || marketplace.marketplace_name;
+
+  const toggleCardCollapse = (id: string) => {
+    setCollapsedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  // Filter settlements
+  const filteredSettlements = settlements.filter(s => {
+    if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed';
+    if (settlementFilter === 'synced') return s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external';
+    return true;
+  });
+
+  const attentionCount = settlements.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed').length;
+  const syncedCount = settlements.filter(s => s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external').length;
 
   return (
     <div className="space-y-6">
@@ -146,39 +166,39 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         </div>
       </div>
 
-      {/* Upload prompt — directs to Smart Upload */}
+      {/* Upload prompt — primary action zone */}
       {onSwitchToUpload && (
         <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-muted/30 rounded-xl" onClick={onSwitchToUpload}>
-          <CardContent className="py-10 px-8 flex flex-col items-center justify-center text-center gap-4">
-            <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
-              <CloudUpload className="h-7 w-7 text-primary" />
+          <CardContent className="py-12 px-8 flex flex-col items-center justify-center text-center gap-4">
+            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <CloudUpload className="h-8 w-8 text-primary" />
             </div>
             <div>
-              <p className="text-base font-semibold text-foreground">
-                Upload settlement files
+              <p className="text-lg font-bold text-foreground uppercase tracking-wide">
+                Drop your settlement files
               </p>
-              <p className="text-sm text-muted-foreground mt-1.5">
-                Drag Amazon TSV, Shopify CSV, or Mirakl reports here — or click to upload.
+              <p className="text-sm text-muted-foreground mt-2">
+                Xettle recognises the marketplace automatically. No configuration required.
               </p>
             </div>
-            <ul className="text-xs text-muted-foreground space-y-1 text-left">
+            <ul className="text-sm text-muted-foreground space-y-1.5 text-left">
               <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-                Detects the marketplace automatically
+                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                Detect marketplace automatically
               </li>
               <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-                Parses all transactions &amp; calculates fees
+                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                Parse every transaction &amp; calculate fees
               </li>
               <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-                Prepares the Xero journal entry
+                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                Prepare your Xero journal entry
               </li>
             </ul>
-            <Button size="sm" className="gap-2 mt-1">
+            <Button className="gap-2 mt-2">
               <Upload className="h-4 w-4" />
               Smart Upload
-              <ArrowRight className="h-3 w-3" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </CardContent>
         </Card>
@@ -186,15 +206,68 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
       <Separator />
 
-      {/* Settlement History */}
+      {/* Reconciliation Status — moved above settlement list */}
       <div className="space-y-3">
         <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
-          <FileText className="h-4 w-4 text-primary" />
-          Saved Settlements
-          {settlements.length > 0 && (
-            <Badge variant="secondary" className="text-[10px]">{settlements.length}</Badge>
-          )}
+          <Scale className="h-4 w-4 text-primary" />
+          Reconciliation Health
         </h4>
+        {hasShopify && currentUserId ? (
+          <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
+        ) : !hasShopify && settlements.length > 0 ? (
+          <Card className="border-dashed border-border">
+            <CardContent className="py-4 text-center">
+              <p className="text-xs text-muted-foreground">
+                Connect Shopify to enable reconciliation →
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+
+      <Separator />
+
+      {/* Settlement History */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" />
+            Saved Settlements
+            {settlements.length > 0 && (
+              <Badge variant="secondary" className="text-[10px]">{settlements.length}</Badge>
+            )}
+          </h4>
+
+          {/* Filter tabs */}
+          {settlements.length > 0 && (
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
+              <button
+                onClick={() => setSettlementFilter('all')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  settlementFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                All ({settlements.length})
+              </button>
+              <button
+                onClick={() => setSettlementFilter('attention')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  settlementFilter === 'attention' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Needs Attention {attentionCount > 0 && <span className="ml-1 text-amber-600">({attentionCount})</span>}
+              </button>
+              <button
+                onClick={() => setSettlementFilter('synced')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  settlementFilter === 'synced' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Synced {syncedCount > 0 && <span className="ml-1 text-emerald-600">({syncedCount})</span>}
+              </button>
+            </div>
+          )}
+        </div>
 
         {loading ? (
           <Card className="border-border">
@@ -203,29 +276,20 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             </CardContent>
           </Card>
         ) : settlements.length === 0 && !hasLoadedOnce ? (
-          /* Tab just created — uploads are still being processed */
           <Card className="border-border">
             <CardContent className="py-8 text-center">
               <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-3" />
-              <p className="text-sm font-medium text-foreground">
-                Processing uploads…
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Settlements are being parsed and saved — they'll appear here automatically.
-              </p>
+              <p className="text-sm font-medium text-foreground">Processing uploads…</p>
+              <p className="text-xs text-muted-foreground mt-1">Settlements are being parsed and saved — they'll appear here automatically.</p>
             </CardContent>
           </Card>
         ) : settlements.length === 0 ? (
-          /* Loaded but genuinely empty */
           <Card className="border-border">
             <CardContent className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                No settlements saved yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No settlements saved yet.</p>
               {onSwitchToUpload && (
                 <Button variant="link" size="sm" onClick={onSwitchToUpload} className="mt-2 gap-1">
-                  <Upload className="h-3.5 w-3.5" />
-                  Upload files via Smart Upload
+                  <Upload className="h-3.5 w-3.5" /> Upload files via Smart Upload
                 </Button>
               )}
             </CardContent>
@@ -267,7 +331,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               </div>
             </div>
 
-            {settlements.map((s, idx) => {
+            {filteredSettlements.map((s, idx) => {
               const sales = s.sales_principal || 0;
               const fees = s.seller_fees || 0;
               const net = s.bank_deposit || 0;
@@ -277,8 +341,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               const isPushFailed = s.status === 'push_failed';
               const isSynced = s.status === 'synced' || s.status === 'pushed_to_xero';
 
-              // Gap detection — allow tolerance for daily-payout marketplaces like Shopify
-              const prev = settlements[idx + 1];
+              const prev = filteredSettlements[idx + 1];
+              const isCollapsed = collapsedCards.has(s.id);
               let hasGap = false;
               if (prev && s.period_start > prev.period_end) {
                 const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
@@ -320,58 +384,73 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               {s.marketplace.startsWith('shopify_orders_') && (
                                 <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
                               )}
+                              <span className="font-semibold text-primary text-sm">{formatAUD(net)}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleCardCollapse(s.id); }}
+                                className="text-muted-foreground hover:text-foreground ml-auto"
+                              >
+                                {isCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                              </button>
                             </div>
-                            <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                              ID: {s.settlement_id}
-                              {s.xero_invoice_number && s.xero_status && (
-                                <span className="ml-2 text-primary">{s.xero_invoice_number} · {s.xero_status}</span>
-                              )}
-                            </p>
-                            <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
-                              <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
-                              <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
-                              {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
-                              <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
-                            </div>
-                            {/* Bank verification status */}
-                            {s.bank_verified ? (
-                              <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
-                                <ShieldCheck className="h-3 w-3" />
-                                Bank verified {formatAUD(s.bank_verified_amount || 0)} — {s.bank_verified_at ? new Date(s.bank_verified_at).toLocaleDateString('en-AU') : ''}
-                              </p>
-                            ) : isSyncable ? (
-                              <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
-                                <ShieldAlert className="h-3 w-3" />
-                                Bank not verified
-                              </p>
-                            ) : null}
-                            {/* Inline reconciliation toggle */}
-                            <button
-                              onClick={() => toggleReconCheck(s)}
-                              className="text-[10px] text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 cursor-pointer"
-                            >
-                              {expandedRecon === s.settlement_id ? <ChevronDown className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
-                              {reconResults[s.settlement_id]
-                                ? `Recon: ${reconResults[s.settlement_id].overallStatus === 'pass' ? '✅ Pass' : reconResults[s.settlement_id].overallStatus === 'warn' ? '⚠️ Warnings' : '❌ Fail'}`
-                                : 'Run recon checks'
-                              }
-                            </button>
-                            {/* Inline reconciliation results */}
-                            {expandedRecon === s.settlement_id && reconResults[s.settlement_id] && (
-                              <div className="mt-1.5 space-y-1 bg-muted/30 rounded-md px-3 py-2">
-                                {reconResults[s.settlement_id].checks.map((check) => (
-                                  <div key={check.id} className="flex items-center gap-2 text-[10px]">
-                                    <span>
-                                      {check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️' : '❌'}
-                                    </span>
-                                    <span className="font-medium text-foreground">{check.label}</span>
-                                    <span className="text-muted-foreground">— {check.detail}</span>
+                            {!isCollapsed && (
+                              <>
+                                <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                                  ID: {s.settlement_id}
+                                  {s.xero_invoice_number && s.xero_status && (
+                                    <span className="ml-2 text-primary">{s.xero_invoice_number} · {s.xero_status}</span>
+                                  )}
+                                </p>
+                                <div className="flex gap-4 mt-1.5 text-xs text-muted-foreground">
+                                  <span>Sales: <span className="font-medium text-foreground">{formatAUD(sales)}</span></span>
+                                  <span>Fees: <span className="font-medium text-foreground">{formatAUD(fees)}</span></span>
+                                  {gstIncome > 0 && <span>GST: <span className="font-medium text-foreground">{formatAUD(gstIncome)}</span></span>}
+                                  <span>Net: <span className="font-semibold text-primary">{formatAUD(net)}</span></span>
+                                </div>
+                              </>
+                            )}
+                            {!isCollapsed && (
+                              <>
+                                {/* Bank verification status */}
+                                {s.bank_verified ? (
+                                  <p className="text-[10px] text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Bank verified {formatAUD(s.bank_verified_amount || 0)} — {s.bank_verified_at ? new Date(s.bank_verified_at).toLocaleDateString('en-AU') : ''}
+                                  </p>
+                                ) : isSyncable ? (
+                                  <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
+                                    <ShieldAlert className="h-3 w-3" />
+                                    Bank not verified
+                                  </p>
+                                ) : null}
+                                {/* Inline reconciliation toggle */}
+                                <button
+                                  onClick={() => toggleReconCheck(s)}
+                                  className="text-[10px] text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 cursor-pointer"
+                                >
+                                  {expandedRecon === s.settlement_id ? <ChevronDown className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                                  {reconResults[s.settlement_id]
+                                    ? `Recon: ${reconResults[s.settlement_id].overallStatus === 'pass' ? '✅ Pass' : reconResults[s.settlement_id].overallStatus === 'warn' ? '⚠️ Warnings' : '❌ Fail'}`
+                                    : 'Run recon checks'
+                                  }
+                                </button>
+                                {/* Inline reconciliation results */}
+                                {expandedRecon === s.settlement_id && reconResults[s.settlement_id] && (
+                                  <div className="mt-1.5 space-y-1 bg-muted/30 rounded-md px-3 py-2">
+                                    {reconResults[s.settlement_id].checks.map((check) => (
+                                      <div key={check.id} className="flex items-center gap-2 text-[10px]">
+                                        <span>
+                                          {check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️' : '❌'}
+                                        </span>
+                                        <span className="font-medium text-foreground">{check.label}</span>
+                                        <span className="text-muted-foreground">— {check.detail}</span>
+                                      </div>
+                                    ))}
+                                    {!reconResults[s.settlement_id].canSync && (
+                                      <p className="text-[10px] font-medium text-destructive mt-1">⛔ Xero push blocked — resolve critical issues first</p>
+                                    )}
                                   </div>
-                                ))}
-                                {!reconResults[s.settlement_id].canSync && (
-                                  <p className="text-[10px] font-medium text-destructive mt-1">⛔ Xero push blocked — resolve critical issues first</p>
                                 )}
-                              </div>
+                              </>
                             )}
                           </div>
                         </div>
@@ -712,27 +791,6 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             })}
           </div>
         )}
-      </div>
-
-      <Separator />
-
-      {/* Reconciliation Status */}
-      <div className="space-y-3">
-        <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
-          <Scale className="h-4 w-4 text-primary" />
-          Reconciliation
-        </h4>
-        {hasShopify && currentUserId ? (
-          <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
-        ) : !hasShopify && settlements.length > 0 ? (
-          <Card className="border-dashed border-border">
-            <CardContent className="py-4 text-center">
-              <p className="text-xs text-muted-foreground">
-                Connect Shopify to enable reconciliation →
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
       </div>
 
       <Separator />
