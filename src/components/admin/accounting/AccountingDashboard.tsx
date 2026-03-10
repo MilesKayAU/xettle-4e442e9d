@@ -554,137 +554,23 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
     }
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { header, summary, lines, unmapped } = parsed;
-
-      // Duplicate check before saving: overwrite existing record with fresh parse
-      const { data: existingData } = await supabase
-        .from('settlements')
-        .select('id')
-        .eq('settlement_id', header.settlementId)
-        .eq('user_id', user.id)
-        .limit(1);
-
-      const isOverwrite = !!(existingData && existingData.length > 0);
-      if (isOverwrite) {
-        await removeExistingSettlementForUser(user.id, header.settlementId, selectedMarketplace);
-        toast.warning(`Settlement ${header.settlementId} already saved. Overwriting with freshly parsed data.`);
-      }
-
-      // 1. Insert into settlements table
-      const splitMonth = parsed.splitMonth;
-
-      if (splitMonth.isSplitMonth) {
-        const salesTotal = round2(summary.salesPrincipal + summary.salesShipping + summary.promotionalDiscounts);
-        const feesTotal = round2(summary.sellerFees + summary.fbaFees + summary.storageFees);
-        const refundsTotal = round2(summary.refunds);
-        const reimbursementsTotal = round2(summary.reimbursements);
-        const journalOneNet = round2(salesTotal + feesTotal + refundsTotal + reimbursementsTotal);
-
-        console.info('[Split Month Rollover Debug]', {
-          settlementId: header.settlementId,
-          salesTotal,
-          feesTotal,
-          refundsTotal,
-          reimbursementsTotal,
-          journalOneNet,
-          parserRolloverAmount: splitMonth.rolloverAmount,
-        });
-      }
-      
-      const { error: settError } = await supabase.from('settlements').insert({
-        user_id: user.id,
-        settlement_id: header.settlementId,
+      const result = await saveAmazonSettlement({
+        parsed,
         marketplace: selectedMarketplace,
-        period_start: header.periodStart,
-        period_end: header.periodEnd,
-        deposit_date: header.depositDate,
-        sales_principal: summary.salesPrincipal,
-        sales_shipping: summary.salesShipping,
-        promotional_discounts: summary.promotionalDiscounts,
-        seller_fees: summary.sellerFees,
-        fba_fees: summary.fbaFees,
-        storage_fees: summary.storageFees,
-        refunds: summary.refunds,
-        reimbursements: summary.reimbursements,
-        other_fees: summary.otherFees,
-        net_ex_gst: summary.netExGst,
-        gst_on_income: summary.gstOnIncome,
-        gst_on_expenses: summary.gstOnExpenses,
-        bank_deposit: summary.bankDeposit,
-        reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
-        status: 'saved',
-        is_split_month: splitMonth.isSplitMonth,
-        split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
-        split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-        parser_version: PARSER_VERSION,
-      } as any);
-      if (settError) throw settError;
-
-      // Fire-and-forget: extract fee observations for intelligence engine
-      import('@/utils/fee-observation-engine').then(({ extractAmazonFeeObservations }) => {
-        extractAmazonFeeObservations({
-          settlement_id: header.settlementId,
-          marketplace: selectedMarketplace,
-          period_start: header.periodStart,
-          period_end: header.periodEnd,
-          sales_principal: summary.salesPrincipal,
-          seller_fees: summary.sellerFees,
-          fba_fees: summary.fbaFees,
-          storage_fees: summary.storageFees,
-          refunds: summary.refunds,
-        }, user.id).catch(console.error);
+        extractFees: true,
       });
-
-      // 2. Insert settlement_lines (batch in chunks of 500)
-      if (lines.length > 0) {
-        const lineRows = lines.map(l => ({
-          user_id: user.id,
-          settlement_id: header.settlementId,
-          transaction_type: l.transactionType,
-          amount_type: l.amountType,
-          amount_description: l.amountDescription,
-          accounting_category: l.accountingCategory,
-          amount: l.amount,
-          order_id: l.orderId || null,
-          sku: l.sku || null,
-          posted_date: l.postedDate || null,
-          marketplace_name: l.marketplaceName || null,
-        }));
-        for (let i = 0; i < lineRows.length; i += 500) {
-          const chunk = lineRows.slice(i, i + 500);
-          const { error: lineErr } = await supabase.from('settlement_lines').insert(chunk);
-          if (lineErr) throw lineErr;
-        }
+      if (!result.success) throw new Error(result.error);
+      if (result.overwritten) {
+        toast.warning(`Settlement ${parsed.header.settlementId} already saved. Overwriting with freshly parsed data.`);
       }
-
-      // 3. Insert settlement_unmapped
-      if (unmapped.length > 0) {
-        const unmappedRows = unmapped.map(u => ({
-          user_id: user.id,
-          settlement_id: header.settlementId,
-          transaction_type: u.transactionType,
-          amount_type: u.amountType,
-          amount_description: u.amountDescription,
-          amount: u.amount,
-          raw_row: u.rawRow,
-        }));
-        const { error: unmappedErr } = await supabase.from('settlement_unmapped').insert(unmappedRows);
-        if (unmappedErr) throw unmappedErr;
-      }
-
       setSaved(true);
       const newCount = incrementManualUploadCount();
-      toast.success(`Settlement ${header.settlementId} ${isOverwrite ? 'overwritten' : 'saved'} successfully`);
+      toast.success(`Settlement ${parsed.header.settlementId} ${result.overwritten ? 'overwritten' : 'saved'} successfully`);
       if (!isPaidUser && shouldShowUpgradeNudge()) {
         setNudgeUploadCount(newCount);
         setShowUpgradeNudge(true);
       }
       await loadSettlements();
-      // Stay on review tab so user can Push to Xero — don't clear parsed state
-      // clearSettlementFiles() would set parsed=null, breaking Push to Xero
     } catch (err: any) {
       toast.error(`Save failed: ${err.message}`);
     } finally {
