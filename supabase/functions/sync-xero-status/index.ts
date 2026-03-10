@@ -155,13 +155,11 @@ serve(async (req) => {
     let token = tokens[0] as XeroToken;
     token = await refreshToken(supabase, token);
 
-    // ─── METHOD 1: Exact reference match ───────
-    const [newFormatInvoices, oldFormatInvoices, amznFormatInvoices, lmbFormatInvoices] = await Promise.all([
-      queryXeroInvoices(token, 'Reference.StartsWith("Xettle-")'),
-      queryXeroInvoices(token, 'Reference.Contains("Settlement")'),
-      queryXeroInvoices(token, 'Reference.StartsWith("AMZN-")'),
-      queryXeroInvoices(token, 'Reference.StartsWith("LMB-")'),
-    ]);
+    // ─── METHOD 1: Exact reference match (sequential to avoid Xero rate limits) ───────
+    const newFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("Xettle-")');
+    const oldFormatInvoices = await queryXeroInvoices(token, 'Reference.Contains("Settlement")');
+    const amznFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("AMZN-")');
+    const lmbFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("LMB-")');
 
     const allInvoices = [...newFormatInvoices, ...oldFormatInvoices, ...amznFormatInvoices, ...lmbFormatInvoices];
     const seen = new Map<string, any>();
