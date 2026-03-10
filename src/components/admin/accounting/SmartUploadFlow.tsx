@@ -995,6 +995,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           )}
         </div>
       )}
+      {/* Unknown Entity Classification Dialog */}
+      <UnknownEntityDialog
+        open={showEntityDialog}
+        onOpenChange={setShowEntityDialog}
+        unknowns={unknownEntities}
+        onClassified={(results) => {
+          // If any were classified as marketplace, trigger marketplace tab creation
+          const newMarketplaces = results.filter(r => r.type === 'marketplace');
+          if (newMarketplaces.length > 0) {
+            for (const mp of newMarketplaces) {
+              ensureMarketplaceConnection(mp.name.toLowerCase().replace(/\s+/g, '_'));
+            }
+            onMarketplacesChanged?.();
+          }
+          setUnknownEntities([]);
+        }}
+      />
     </div>
   );
 }
