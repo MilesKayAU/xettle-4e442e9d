@@ -1,0 +1,1 @@
+ALTER TABLE public.settlements ADD COLUMN IF NOT EXISTS push_retry_count integer NOT NULL DEFAULT 0;
