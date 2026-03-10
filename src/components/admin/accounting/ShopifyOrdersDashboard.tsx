@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { detectMarketplaceFromOrder, detectAllMarketplaces, classifyUnknownTag, type OrderDetectionResult } from '@/utils/shopify-order-detector';
 import ShopifyOnboarding from './ShopifyOnboarding';
 import UnknownEntityDialog from './UnknownEntityDialog';
 import SkuCostManager from './SkuCostManager';
