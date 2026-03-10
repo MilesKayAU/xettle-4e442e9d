@@ -148,22 +148,20 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
       {/* Upload prompt — directs to Smart Upload */}
       {onSwitchToUpload && (
-        <Card className="border-dashed border-2 border-primary/20 hover:border-primary/40 transition-colors cursor-pointer" onClick={onSwitchToUpload}>
-          <CardContent className="py-5 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Upload className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  Upload {marketplaceName} files
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Use Smart Upload to drop files — auto-detects, previews, and saves
-                </p>
-              </div>
+        <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-primary/[0.02]" onClick={onSwitchToUpload}>
+          <CardContent className="py-8 flex flex-col items-center justify-center text-center gap-3">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <CloudUpload className="h-6 w-6 text-primary" />
             </div>
-            <Button variant="outline" size="sm" className="gap-2">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Drag settlement files here or click to upload
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Auto-detects marketplace, previews data, and saves — no configuration needed
+              </p>
+            </div>
+            <Button size="sm" className="gap-2 mt-1">
               <Upload className="h-4 w-4" />
               Smart Upload
               <ArrowRight className="h-3 w-3" />
