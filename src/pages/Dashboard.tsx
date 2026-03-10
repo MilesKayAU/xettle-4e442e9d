@@ -327,6 +327,50 @@ export default function Dashboard() {
       )}
 
       <div className="container-custom py-8">
+        {/* ─── Dashboard (Action Centre Homepage) ────────────────────── */}
+        {activeView === 'dashboard' && (
+          <ErrorBoundary>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
+                <p className="text-muted-foreground mt-1">
+                  Your settlement status at a glance.
+                </p>
+              </div>
+
+              {/* Financial Summary Strip */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <SettlementsSummaryStrip userMarketplaceCount={userMarketplaces.length} />
+              )}
+
+              {/* Action Control Panel */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <ActionControlPanel
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                />
+              )}
+
+              {/* Next Expected Settlements */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <NextExpectedSettlements userMarketplaces={userMarketplaces} />
+              )}
+
+              {/* Monthly Reconciliation Status */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <MonthlyReconciliationStatus
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                  onSelectMarketplace={(code) => {
+                    setSelectedMarketplace(code);
+                    switchView('settlements');
+                  }}
+                />
+              )}
+            </div>
+          </ErrorBoundary>
+        )}
+
         {/* ─── Smart Upload ──────────────────────────────────────────── */}
         {activeView === 'smart_upload' && (
           <ErrorBoundary>
