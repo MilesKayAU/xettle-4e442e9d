@@ -13,11 +13,13 @@ import AccountingBoundarySetup from '@/components/onboarding/AccountingBoundaryS
 interface AccountingBoundarySettingsProps {
   xeroConnected: boolean;
   onConnectXero?: () => void;
+  onGoToUpload?: () => void;
 }
 
 export default function AccountingBoundarySettings({
   xeroConnected,
   onConnectXero,
+  onGoToUpload,
 }: AccountingBoundarySettingsProps) {
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [boundarySource, setBoundarySource] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export default function AccountingBoundarySettings({
       <AccountingBoundarySetup
         xeroConnected={xeroConnected}
         onConnectXero={onConnectXero}
+        onGoToUpload={onGoToUpload}
         onComplete={() => {
           setShowSetup(false);
           loadBoundary();

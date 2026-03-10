@@ -25,7 +25,6 @@ function matchesMarketplace(name: string): string | null {
   const lower = name.toLowerCase().trim()
   for (const pattern of MARKETPLACE_CONTACT_PATTERNS) {
     if (lower.includes(pattern)) {
-      // Normalise to a marketplace key
       if (lower.includes('amazon')) return 'amazon_au'
       if (lower.includes('kogan')) return 'kogan'
       if (lower.includes('big w') || lower.includes('bigw')) return 'bigw'
@@ -59,13 +58,11 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
 
   if (error || !tokenRow) return null
 
-  // Check if token is expired
   const expiresAt = new Date(tokenRow.expires_at)
   if (expiresAt > new Date(Date.now() + 60000)) {
-    return tokenRow // Still valid
+    return tokenRow
   }
 
-  // Refresh the token
   const res = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: {
@@ -110,6 +107,23 @@ async function xeroGet(url: string, accessToken: string, tenantId: string) {
   return res.json()
 }
 
+function parseXeroDate(dateField: string | null | undefined): string | null {
+  if (!dateField) return null
+  const raw = dateField.replace('/Date(', '').replace(')/', '').split('+')[0]
+  const ts = parseInt(raw)
+  if (!isNaN(ts)) return new Date(ts).toISOString().split('T')[0]
+  return raw.split('T')[0]
+}
+
+interface DetectedSettlement {
+  marketplace: string
+  last_recorded_date: string
+  last_amount: number
+  source: 'invoice' | 'bank_transaction' | 'journal'
+  reference: string
+  xero_id: string
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -139,7 +153,6 @@ Deno.serve(async (req) => {
 
     const userId = claimsData.claims.sub as string
 
-    // 1. Get Xero tokens
     const clientId = Deno.env.get('XERO_CLIENT_ID')!
     const clientSecret = Deno.env.get('XERO_CLIENT_SECRET')!
     const tokenRow = await refreshXeroToken(supabase, userId, clientId, clientSecret)
@@ -152,19 +165,12 @@ Deno.serve(async (req) => {
 
     const { access_token: accessToken, tenant_id: tenantId } = tokenRow
 
-    interface DetectedSettlement {
-      marketplace: string
-      last_recorded_date: string
-      last_amount: number
-      source: 'invoice' | 'bank_transaction'
-    }
-
     const detectedMap = new Map<string, DetectedSettlement>()
     let hasXettlePrefix = false
     let hasMarketplaceContacts = false
     let hasBankPatterns = false
 
-    // 2. Scan Invoices (ACCREC = Sales Invoices)
+    // 1. Scan Invoices
     try {
       const invoiceData = await xeroGet(
         `https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED,PAID&order=Date DESC&pageSize=100`,
@@ -174,32 +180,21 @@ Deno.serve(async (req) => {
       for (const inv of (invoiceData.Invoices || [])) {
         const contactName = inv.Contact?.Name || ''
         const reference = inv.Reference || ''
-        const invoiceDate = inv.Date ? inv.Date.replace('/Date(', '').replace(')/', '').split('+')[0] : null
-        const amount = inv.Total || 0
+        const invoiceNumber = inv.InvoiceNumber || ''
+        const invoiceId = inv.InvoiceID || ''
 
-        // Check for Xettle prefix
         if (reference.toLowerCase().startsWith('xettle-')) {
           hasXettlePrefix = true
         }
 
-        // Match by contact name or reference
         const marketplace = matchesMarketplace(contactName)
         const refMatches = referenceMatchesMarketplace(reference)
 
         if (marketplace || refMatches) {
           if (marketplace) hasMarketplaceContacts = true
           const key = marketplace || 'unknown'
-          
-          let dateStr: string | null = null
-          if (invoiceDate) {
-            // Xero returns dates as /Date(timestamp)/ or ISO
-            const ts = parseInt(invoiceDate)
-            if (!isNaN(ts)) {
-              dateStr = new Date(ts).toISOString().split('T')[0]
-            } else {
-              dateStr = invoiceDate.split('T')[0]
-            }
-          }
+          const dateStr = parseXeroDate(inv.Date)
+          const amount = inv.Total || 0
 
           if (dateStr) {
             const existing = detectedMap.get(key)
@@ -209,6 +204,8 @@ Deno.serve(async (req) => {
                 last_recorded_date: dateStr,
                 last_amount: amount,
                 source: 'invoice',
+                reference: invoiceNumber || reference || '',
+                xero_id: invoiceId,
               })
             }
           }
@@ -218,7 +215,7 @@ Deno.serve(async (req) => {
       console.error('Invoice scan error:', e)
     }
 
-    // 3. Scan Bank Transactions
+    // 2. Scan Bank Transactions
     try {
       const bankData = await xeroGet(
         `https://api.xero.com/api.xro/2.0/BankTransactions?order=Date DESC&pageSize=100`,
@@ -231,22 +228,14 @@ Deno.serve(async (req) => {
         const contactName = txn.Contact?.Name || ''
         const reference = txn.Reference || ''
         const narration = txn.LineItems?.[0]?.Description || ''
-        const txnDate = txn.Date ? txn.Date.replace('/Date(', '').replace(')/', '').split('+')[0] : null
+        const txnId = txn.BankTransactionID || ''
         const amount = txn.Total || 0
 
         const marketplace = matchesMarketplace(contactName) || matchesMarketplace(narration) || matchesMarketplace(reference)
 
         if (marketplace) {
           hasBankPatterns = true
-          let dateStr: string | null = null
-          if (txnDate) {
-            const ts = parseInt(txnDate)
-            if (!isNaN(ts)) {
-              dateStr = new Date(ts).toISOString().split('T')[0]
-            } else {
-              dateStr = txnDate.split('T')[0]
-            }
-          }
+          const dateStr = parseXeroDate(txn.Date)
 
           if (dateStr) {
             const existing = detectedMap.get(marketplace)
@@ -257,6 +246,8 @@ Deno.serve(async (req) => {
                 last_amount: amount,
                 source: existing?.source === 'invoice' && existing.last_recorded_date >= dateStr
                   ? 'invoice' : 'bank_transaction',
+                reference: reference || narration || contactName,
+                xero_id: txnId,
               })
             }
           }
@@ -266,7 +257,7 @@ Deno.serve(async (req) => {
       console.error('Bank transaction scan error:', e)
     }
 
-    // 4. Determine boundary
+    // 3. Determine boundary
     const detected_settlements = Array.from(detectedMap.values())
     let accounting_boundary_date: string | null = null
 
@@ -275,13 +266,12 @@ Deno.serve(async (req) => {
         s.last_recorded_date > latest ? s.last_recorded_date : latest,
         detected_settlements[0].last_recorded_date
       )
-      // Boundary = latest date + 1 day
       const d = new Date(latestDate)
       d.setDate(d.getDate() + 1)
       accounting_boundary_date = d.toISOString().split('T')[0]
     }
 
-    // 5. Confidence
+    // 4. Confidence
     let confidence: 'high' | 'medium' | 'low' = 'low'
     let confidence_reason = ''
 
