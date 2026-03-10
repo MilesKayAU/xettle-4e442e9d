@@ -50,8 +50,6 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
       sales,
       fees,
       refunds,
-      gstIncome,
-      gstExpenses,
       bankDeposit,
       calculatedNet,
       diff,
