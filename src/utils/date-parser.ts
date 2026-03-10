@@ -146,10 +146,9 @@ const parseUnixTimestamp: FormatParser = (input) => {
 
 const FORMAT_CHAIN: FormatParser[] = [
   parseISO,
-  parseDDslashMMslashYYYY,
-  parseDDdashMMdashYYYY,
+  parseSlashDate,       // DD/MM with plausibility-aware MM/DD fallback
+  parseDashDate,        // DD-MM with same fallback
   parseDDdotMMdotYYYY,
-  parseMMslashDDslashYYYY,  // fallback if DD/MM failed (day was > 12 as month)
   parseDDMMMYYYY,
   parseMMMDDYYYY,
   parseUnixTimestamp,
