@@ -152,6 +152,34 @@ Deno.serve(async (req) => {
       page++;
     } while (nextCursor && page < MAX_PAGES);
 
+    // 4. Persist orders locally for channel scanning & analytics
+    if (allOrders.length > 0) {
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
+      const rows = allOrders.map((o) => ({
+        user_id: resolvedUserId,
+        shopify_order_id: o.id,
+        order_name: o.name,
+        source_name: o.source_name || null,
+        gateway: o.gateway || null,
+        tags: o.tags || null,
+        total_price: parseFloat(o.total_price || "0") || 0,
+        financial_status: o.financial_status || null,
+        created_at_shopify: o.created_at || null,
+        synced_at: new Date().toISOString(),
+      }));
+
+      // Batch upsert in chunks of 500
+      for (let i = 0; i < rows.length; i += 500) {
+        await adminClient
+          .from("shopify_orders")
+          .upsert(rows.slice(i, i + 500), { onConflict: "user_id,shopify_order_id" });
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, orders: allOrders, count: allOrders.length, shop: shopDomain }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

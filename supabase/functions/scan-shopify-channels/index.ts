@@ -20,15 +20,10 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Support both service-role calls (from scheduled-sync) and user JWT calls
-    const authHeader = req.headers.get("Authorization") || "";
-    const isServiceRole = authHeader.includes(serviceRoleKey);
-
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const body = await req.json().catch(() => ({}));
-    const { userId, orders } = body;
+    const { userId } = body;
 
     if (!userId) {
       return new Response(JSON.stringify({ error: "userId required" }), {
@@ -37,78 +32,36 @@ Deno.serve(async (req) => {
       });
     }
 
-    // If orders are provided (from client-side), analyze them directly
-    // Otherwise, fetch from Shopify API
-    let sourceNameCounts: Record<string, { count: number; revenue: number }> = {};
+    // ─── Query local shopify_orders table — zero API calls ───────
+    const { data: channelRows, error: queryError } = await adminClient
+      .from("shopify_orders")
+      .select("source_name")
+      .eq("user_id", userId)
+      .not("source_name", "is", null);
 
-    if (orders && Array.isArray(orders)) {
-      for (const order of orders) {
-        const src = (order.source_name || "").toLowerCase().trim();
-        if (!src || IGNORED_SOURCES.has(src)) continue;
-        if (!sourceNameCounts[src]) sourceNameCounts[src] = { count: 0, revenue: 0 };
-        sourceNameCounts[src].count++;
-        sourceNameCounts[src].revenue += parseFloat(order.total_price || "0") || 0;
-      }
-    } else {
-      // Fetch orders from Shopify directly for scheduled scan
-      const { data: tokenRow } = await adminClient
-        .from("shopify_tokens")
-        .select("access_token, shop_domain")
-        .eq("user_id", userId)
-        .limit(1)
-        .maybeSingle();
-
-      if (!tokenRow) {
-        return new Response(
-          JSON.stringify({ success: true, new_channels: 0, message: "No Shopify token" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Fetch ALL orders to scan source_names (not limited to 30 days)
-      const params = new URLSearchParams({
-        status: "any",
-        limit: "250",
-        fields: "id,name,source_name,total_price",
+    if (queryError) {
+      return new Response(JSON.stringify({ error: queryError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
 
-      let allOrders: any[] = [];
-      let nextCursor: string | undefined;
-      let page = 0;
+    // Aggregate locally (supabase JS client doesn't support GROUP BY)
+    const sourceNameCounts: Record<string, { count: number; revenue: number }> = {};
 
-      do {
-        const url = nextCursor
-          ? `https://${tokenRow.shop_domain}/admin/api/2026-01/orders.json?limit=250&fields=id,name,source_name,total_price&page_info=${nextCursor}`
-          : `https://${tokenRow.shop_domain}/admin/api/2026-01/orders.json?${params.toString()}`;
+    // We need revenue too, so fetch with total_price
+    const { data: orderRows } = await adminClient
+      .from("shopify_orders")
+      .select("source_name, total_price")
+      .eq("user_id", userId)
+      .not("source_name", "is", null);
 
-        const res = await fetch(url, {
-          headers: {
-            "X-Shopify-Access-Token": tokenRow.access_token,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!res.ok) break;
-
-        const data = await res.json();
-        allOrders.push(...(data.orders || []));
-
-        nextCursor = undefined;
-        const linkHeader = res.headers.get("Link");
-        if (linkHeader) {
-          const nextMatch = linkHeader.match(/<[^>]*page_info=([^>&]*)[^>]*>;\s*rel="next"/);
-          if (nextMatch) nextCursor = nextMatch[1];
-        }
-        page++;
-      } while (nextCursor && page < 40);
-
-      for (const order of allOrders) {
-        const src = (order.source_name || "").toLowerCase().trim();
-        if (!src || IGNORED_SOURCES.has(src)) continue;
-        if (!sourceNameCounts[src]) sourceNameCounts[src] = { count: 0, revenue: 0 };
-        sourceNameCounts[src].count++;
-        sourceNameCounts[src].revenue += parseFloat(order.total_price || "0") || 0;
-      }
+    for (const row of orderRows || []) {
+      const src = (row.source_name || "").toLowerCase().trim();
+      if (!src || IGNORED_SOURCES.has(src)) continue;
+      if (!sourceNameCounts[src]) sourceNameCounts[src] = { count: 0, revenue: 0 };
+      sourceNameCounts[src].count++;
+      sourceNameCounts[src].revenue += parseFloat(row.total_price || "0") || 0;
     }
 
     const sourceNames = Object.keys(sourceNameCounts);
