@@ -31,6 +31,7 @@ const ShopifyConnectionStatus = () => {
   const [manualToken, setManualToken] = useState('');
   const [manualDomain, setManualDomain] = useState('');
   const [savingToken, setSavingToken] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
 
   // Discovery modal state
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
