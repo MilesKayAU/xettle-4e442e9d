@@ -1214,19 +1214,19 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                                 <span className="text-muted-foreground">GST on Fees</span>
                                 <span className="font-medium text-foreground">{formatAUD(s.gst_on_fees)}</span>
                               </div>
-                              {meta.refundsExGst && meta.refundsExGst !== 0 && (
+                              {!!meta.refundsExGst && meta.refundsExGst !== 0 && (
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Refunds</span>
                                   <span className="font-medium text-foreground">{formatAUD(meta.refundsExGst)}</span>
                                 </div>
                               )}
-                              {meta.shippingExGst && meta.shippingExGst !== 0 && (
+                              {!!meta.shippingExGst && meta.shippingExGst !== 0 && (
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Shipping</span>
                                   <span className="font-medium text-foreground">{formatAUD(meta.shippingExGst)}</span>
                                 </div>
                               )}
-                              {meta.subscriptionAmount && meta.subscriptionAmount !== 0 && (
+                              {!!meta.subscriptionAmount && meta.subscriptionAmount !== 0 && (
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Subscription</span>
                                   <span className="font-medium text-foreground">{formatAUD(meta.subscriptionAmount)}</span>
