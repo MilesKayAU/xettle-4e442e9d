@@ -580,8 +580,23 @@ function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch:
     );
   }
 
+  // If not pushed to Xero at all, show dash
   if (!row.xero_pushed) {
     return <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />;
+  }
+
+  // For synced_external / legacy records without a Xero invoice ID, bank matching isn't applicable
+  if (!row.xero_invoice_id) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs text-muted-foreground">—</span>
+          </TooltipTrigger>
+          <TooltipContent>Legacy Xero record — bank matching via Xero bank feed</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   }
 
   // Check if < 3 days since push
