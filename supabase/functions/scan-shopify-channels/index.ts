@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
           if (nextMatch) nextCursor = nextMatch[1];
         }
         page++;
-      } while (nextCursor && page < 10);
+      } while (nextCursor && page < 40);
 
       for (const order of allOrders) {
         const src = (order.source_name || "").toLowerCase().trim();
