@@ -759,6 +759,14 @@ export default function ShopifyOrdersDashboard() {
         } catch { /* silent */ }
       }
 
+      // Run sub-channel detection on raw API orders
+      try {
+        const subChannelResult = await auditSubChannels(apiOrders);
+        if (subChannelResult.new_channels.length > 0) {
+          setDetectedSubChannels(subChannelResult.new_channels);
+        }
+      } catch { /* silent */ }
+
       // Update last_fetched_at
       try {
         const { data: { user } } = await supabase.auth.getUser();
