@@ -122,16 +122,39 @@ async function syncPayoutsForUser(
   } while (nextPageUrl && page < MAX_PAGES);
 
   // ─── Dedup: filter out already-imported payouts ────────────────────
+  // Check by exact settlement_id match
   const payoutIds = allPayouts.map((p) => String(p.id));
   const { data: existingSettlements } = await supabase
     .from("settlements")
-    .select("settlement_id")
+    .select("settlement_id, bank_deposit, period_end")
     .eq("user_id", userId)
     .eq("marketplace", "shopify_payments")
     .in("settlement_id", payoutIds);
 
   const existingIds = new Set((existingSettlements || []).map((e: any) => e.settlement_id));
-  const newPayouts = allPayouts.filter((p) => !existingIds.has(String(p.id)));
+
+  // Also check for CSV-uploaded duplicates (Shopify-* prefix) with same amount + date
+  // Build a fingerprint set from ALL existing shopify settlements
+  const { data: allExistingShopify } = await supabase
+    .from("settlements")
+    .select("settlement_id, bank_deposit, period_end")
+    .eq("user_id", userId)
+    .eq("marketplace", "shopify_payments");
+
+  const existingFingerprints = new Set(
+    (allExistingShopify || []).map((e: any) => `${parseFloat(e.bank_deposit).toFixed(2)}|${e.period_end}`)
+  );
+
+  const newPayouts = allPayouts.filter((p) => {
+    if (existingIds.has(String(p.id))) return false;
+    // Check if a CSV-uploaded version with same amount+date already exists
+    const fp = `${parseFloat(p.amount).toFixed(2)}|${p.date}`;
+    if (existingFingerprints.has(fp)) {
+      console.log(`[fetch-shopify-payouts] Skipping payout ${p.id}: duplicate exists with same amount+date (${fp})`);
+      return false;
+    }
+    return true;
+  });
 
   if (newPayouts.length === 0) {
     await upsertSetting(supabase, userId, "shopify_payout_last_sync", new Date().toISOString());
