@@ -127,13 +127,6 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   const marketplaceName = def?.name || marketplace.marketplace_name;
 
-  const toggleCardCollapse = (id: string) => {
-    setCollapsedCards(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
 
   // Filter settlements
   const filteredSettlements = settlements.filter(s => {
