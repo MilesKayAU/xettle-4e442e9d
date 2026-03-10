@@ -535,51 +535,20 @@ const ShopifyConnectionStatus = () => {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl">
-              We found your sales channels! 🎉
+              Sales Channel Discovery
             </DialogTitle>
             <DialogDescription>
               Select which marketplaces to create tabs for. Each checked channel will get its own dashboard.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2 py-2">
-            {discoveredMarketplaces.map((mp, idx) => (
-              <label
-                key={mp.code}
-                className={`flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
-                  mp.checked ? 'border-primary bg-primary/5' : 'border-border'
-                }`}
-                onClick={() => toggleMarketplace(idx)}
-              >
-                <Checkbox checked={mp.checked} onCheckedChange={() => toggleMarketplace(idx)} />
-                <div className="flex-1">
-                  <span className="text-sm font-medium">{mp.displayName}</span>
-                </div>
-                <Badge variant="secondary" className="text-xs">
-                  {mp.orderCount} order{mp.orderCount !== 1 ? 's' : ''}
-                </Badge>
-              </label>
-            ))}
-          </div>
-
-          <DialogFooter>
-            <Button
-              onClick={handleCreateTabs}
-              disabled={creatingTabs || discoveredMarketplaces.filter(m => m.checked).length === 0}
-              className="w-full gap-2"
-            >
-              {creatingTabs ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  Create marketplace tabs →
-                </>
-              )}
-            </Button>
-          </DialogFooter>
+          {discoveryResult && (
+            <MarketplaceDiscovery
+              detectionResult={discoveryResult}
+              onConfirm={handleCreateTabs}
+              onClassifyUnknown={handleClassifyUnknown}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </>
