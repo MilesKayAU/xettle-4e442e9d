@@ -115,31 +115,33 @@ export default function ValidationSweep({
 
   const loadData = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('marketplace_validation')
-        .select('*')
-        .order('marketplace_code')
-        .order('period_start', { ascending: false });
+      const [valRes, boundaryRes, userRes] = await Promise.all([
+        supabase
+          .from('marketplace_validation')
+          .select('*')
+          .order('marketplace_code')
+          .order('period_start', { ascending: false }),
+        supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'accounting_boundary_date')
+          .maybeSingle(),
+        supabase.auth.getUser(),
+      ]);
 
-      if (error) throw error;
-      setRows((data || []) as ValidationRow[]);
+      if (valRes.error) throw valRes.error;
+      setRows((valRes.data || []) as ValidationRow[]);
+      
+      if (boundaryRes.data?.value) {
+        setBoundaryDate(boundaryRes.data.value);
+      } else if (userRes.data?.user?.created_at) {
+        setBoundaryDate(userRes.data.user.created_at.substring(0, 10));
+      }
     } catch (err) {
       console.error('Failed to load validation data:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  // Load boundary date
-  useEffect(() => {
-    supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'accounting_boundary_date')
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.value) setBoundaryDate(data.value);
-      });
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
