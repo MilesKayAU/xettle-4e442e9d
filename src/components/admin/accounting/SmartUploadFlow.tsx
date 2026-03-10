@@ -1342,8 +1342,6 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               />
             )
           ))}
-            />
-          ))}
 
           {savedCount > 0 && confirmedCount === 0 && onViewSettlements && (
             <Card className="border-green-400/50 bg-green-50/30 dark:bg-green-950/10">
