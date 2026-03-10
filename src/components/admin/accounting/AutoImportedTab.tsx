@@ -911,6 +911,8 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
           </CardContent>
         </Card>
       )}
+      </>
+      )}
     </div>
   );
 }
