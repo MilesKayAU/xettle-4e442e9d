@@ -412,14 +412,18 @@ export default function ActionCentre({
                   {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} pending bank match
                 </p>
                 <ul className="space-y-1">
-                  {awaitingBank.slice(0, 3).map(r => (
+                  {(expandedCards['bank'] ? awaitingBank : awaitingBank.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-blue-500">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {r.settlement_net ? formatAUD(r.settlement_net) : ''}
                     </li>
                   ))}
                   {awaitingBank.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {awaitingBank.length - 3} more</li>
+                    <li>
+                      <button onClick={() => setExpandedCards(prev => ({ ...prev, bank: !prev.bank }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {expandedCards['bank'] ? '− Show less' : `+ ${awaitingBank.length - 3} more`}
+                      </button>
+                    </li>
                   )}
                 </ul>
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
