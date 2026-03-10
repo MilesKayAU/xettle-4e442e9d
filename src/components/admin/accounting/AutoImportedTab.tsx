@@ -398,6 +398,12 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       }
 
       await Promise.all([loadApiSettlements(), loadXeroMatches()]);
+
+      // Save audit timestamp to sessionStorage for cooldown
+      const cacheKey = `xettle_last_audit_${user.id}`;
+      const now = Date.now();
+      sessionStorage.setItem(cacheKey, String(now));
+      setLastAuditTime(new Date(now).toISOString());
     } catch (err: any) {
       console.error('[Audit] Failed:', err);
       toast.error(`Audit failed: ${err.message}`);
