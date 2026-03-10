@@ -2,19 +2,22 @@ import { useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers, Users, ClipboardCheck, Ban } from 'lucide-react';
+import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers, Users, ClipboardCheck, Ban, FileText, DollarSign, Scale } from 'lucide-react';
 import profitLeakImg from '@/assets/profit-leak-preview.png';
 import feeAlertsImg from '@/assets/fee-alerts-preview.png';
 import PublicDemoUpload from '@/components/PublicDemoUpload';
 import { supabase } from '@/integrations/supabase/client';
 
-const marketplaces = [
-  { name: 'Amazon', icon: '📦', status: 'live' as const },
-  { name: 'Bunnings', icon: '🔨', status: 'live' as const },
-  { name: 'Shopify', icon: '💳', status: 'live' as const },
-  { name: 'Kogan', icon: '🛒', status: 'soon' as const },
-  { name: 'MyDeal', icon: '🏷️', status: 'soon' as const },
-  { name: 'Woolworths', icon: '🛍️', status: 'soon' as const },
+const marketplaceLogos = [
+  { name: 'Amazon AU', icon: '📦' },
+  { name: 'Shopify', icon: '💳' },
+  { name: 'BigW', icon: '🏬' },
+  { name: 'MyDeal', icon: '🏷️' },
+  { name: 'Everyday Market', icon: '🛒' },
+  { name: 'Bunnings', icon: '🔨' },
+  { name: 'Catch', icon: '🎯' },
+  { name: 'Kogan', icon: '📱' },
+  { name: 'eBay AU', icon: '🏪' },
 ];
 
 export default function Landing() {
@@ -29,7 +32,6 @@ export default function Landing() {
     const code = searchParams.get('code');
 
     if (shop && hmac && host && !code) {
-      // Shopify app redirect without auth code — route user appropriately
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session) {
           navigate('/dashboard', { replace: true });
@@ -50,7 +52,7 @@ export default function Landing() {
               <span className="text-primary">Xe</span><span className="text-foreground">ttle</span>
             </span>
             <span className="hidden sm:inline text-xs text-muted-foreground border-l border-border pl-2">
-              Amazon, Shopify & marketplace settlements → Xero
+              Marketplace settlements → Xero, automatically
             </span>
           </Link>
           <div className="flex items-center gap-3">
@@ -62,7 +64,7 @@ export default function Landing() {
             </Button>
             <Button asChild>
               <Link to="/auth?tab=signup">
-                Get Started Free <ArrowRight className="ml-2 h-4 w-4" />
+                Start free <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
           </div>
@@ -70,25 +72,38 @@ export default function Landing() {
       </nav>
 
       {/* ════════════════════════════════════════════════════════════════════
-          HERO — Challenge + Upload + Instant Xero Preview
+          HERO
           ════════════════════════════════════════════════════════════════════ */}
       <section className="pt-32 pb-12 px-4">
         <div className="container-custom text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-bold mb-6 tracking-wide">
             <Zap className="h-4 w-4" />
-            ⚡ THE XETTLE CHALLENGE
+            MARKETPLACE ACCOUNTING, SOLVED
           </div>
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6">
-            Drop any settlement file.
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
+            You sell on 4 marketplaces.
             <br />
-            <span className="text-primary">It's in Xero in seconds.</span>
+            <span className="text-primary">Your accountant is losing their mind.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Drop any marketplace file. We'll recognise it, parse it, and show you your Xero invoice before you finish your coffee.
+            Xettle automatically pulls every settlement from Amazon, Shopify, BigW, MyDeal, Everyday Market and more — reconciles the fees, and pushes clean invoices to Xero. No spreadsheets. No Sunday nights.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
-            No account needed · No setup · No configuration
+            No card needed · Works in minutes · Australian GST built in
           </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+            <Button size="lg" className="text-lg px-8 py-6" asChild>
+              <Link to="/auth?tab=signup">
+                Start free — no card needed <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" className="text-lg px-8 py-6" onClick={() => {
+              document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+            }}>
+              See how it works
+            </Button>
+          </div>
 
           {/* Public Demo Upload */}
           <PublicDemoUpload />
@@ -96,7 +111,7 @@ export default function Landing() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
-          STATIC "WOW" PREVIEW — Shows what happens BEFORE they upload
+          STATIC "WOW" PREVIEW
           ════════════════════════════════════════════════════════════════════ */}
       <section className="pb-16 px-4">
         <div className="container-custom max-w-3xl mx-auto">
@@ -130,7 +145,7 @@ export default function Landing() {
             {/* Xero invoice preview */}
             <div className="rounded-2xl border border-border bg-card p-5">
               <div className="flex items-center gap-2 mb-4">
-                <div className="h-7 w-7 rounded-lg bg-[hsl(var(--primary))]/10 flex items-center justify-center">
+                <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
                   <span className="text-xs font-bold text-primary">X</span>
                 </div>
                 <p className="text-sm font-semibold text-foreground">Xero Invoice — Ready to post</p>
@@ -152,95 +167,58 @@ export default function Landing() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
-          MARKETPLACE STRIP + CTAs
-          ════════════════════════════════════════════════════════════════════ */}
-      <section className="pb-16 px-4">
-        <div className="container-custom max-w-4xl mx-auto text-center">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-4">Works with files other tools can't handle</p>
-          <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
-            {marketplaces.map((m) => (
-              <span
-                key={m.name}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border ${
-                  m.status === 'live'
-                    ? 'bg-primary/10 text-primary border-primary/20'
-                    : 'bg-background text-muted-foreground border-border/60'
-                }`}
-              >
-                <span>{m.icon}</span>
-                {m.name}
-                {m.status === 'soon' && <span className="text-[10px] opacity-60">soon</span>}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="text-lg px-8 py-6" asChild>
-              <Link to="/auth?tab=signup">
-                Start Free <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
-            </Button>
-            <Button size="lg" variant="outline" className="text-lg px-8 py-6" asChild>
-              <Link to="/pricing">See Plans</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* ════════════════════════════════════════════════════════════════════
-          ZERO CONFIG — The biggest differentiator
+          PAIN SECTION
           ════════════════════════════════════════════════════════════════════ */}
       <section className="py-20 px-4 bg-card border-y border-border">
         <div className="container-custom max-w-4xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
-                No integrations.<br />
-                No setup.<br />
-                No mapping.
-              </h2>
-              <p className="text-lg text-muted-foreground mb-6">
-                Most tools force you to connect your store, map accounts, configure fees, then import data. Xettle skips all of that.
-              </p>
-              <p className="text-lg font-semibold text-foreground">
-                Just drop your settlement file. Done.
+          <div className="text-center mb-14">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              Most Australian marketplace sellers have the same problem.
+            </h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="p-6 rounded-2xl border border-border bg-background">
+              <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center mb-4">
+                <FileText className="h-6 w-6 text-destructive" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">5 different settlement formats</h3>
+              <p className="text-sm text-muted-foreground">
+                Amazon TSV, Shopify CSV, BigW remittance, MyDeal payout, Everyday Market report. All different. All manual.
               </p>
             </div>
-            <div className="space-y-4">
-              {[
-                { icon: Ban, label: 'No store connection required', desc: 'Upload any file from any marketplace — no API keys or store access needed.' },
-                { icon: Layers, label: 'Auto-detect marketplace', desc: 'Our fingerprint engine identifies Amazon, Shopify, Bunnings and more from the file structure alone.' },
-                { icon: CheckCircle, label: 'Instant Xero-ready output', desc: 'Every line categorised, GST handled, reconciliation verified — ready to push.' },
-              ].map((item) => (
-                <div key={item.label} className="flex items-start gap-3 p-4 rounded-xl border border-border bg-background">
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <item.icon className="h-4.5 w-4.5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                    <p className="text-sm text-muted-foreground">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="p-6 rounded-2xl border border-border bg-background">
+              <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center mb-4">
+                <DollarSign className="h-6 w-6 text-destructive" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Fees that don't add up</h3>
+              <p className="text-sm text-muted-foreground">
+                Commission, FBA, transaction fees, monthly subscriptions. By the time you calculate net profit, you've lost an hour.
+              </p>
+            </div>
+            <div className="p-6 rounded-2xl border border-border bg-background">
+              <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center mb-4">
+                <Scale className="h-6 w-6 text-destructive" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Xero that never matches the bank</h3>
+              <p className="text-sm text-muted-foreground">
+                Every settlement hits your bank as one lump sum. Reconciling it manually takes forever and still feels wrong.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
-          BULK UPLOAD — Drop 50 files
+          SOLUTION SECTION
           ════════════════════════════════════════════════════════════════════ */}
-      <section className="py-20 px-4">
+      <section className="py-20 px-4" id="how-it-works">
         <div className="container-custom max-w-6xl mx-auto">
           <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold mb-4">
-              <FolderUp className="h-3.5 w-3.5" />
-              Smart Bulk Upload
-            </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Drop 50 files. We sort them for you.
+              Xettle handles every Australian marketplace.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Mix Amazon TSVs, Shopify CSVs, and Bunnings PDFs in a single upload. Xettle detects each marketplace, creates the tabs, and sorts every settlement into the right place.
+              Drop any file — or connect your API. Xettle auto-detects the format, splits mixed files by marketplace, calculates every fee, and creates the right Xero invoice automatically.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -248,72 +226,87 @@ export default function Landing() {
               <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <Layers className="h-7 w-7 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Auto-detect marketplace</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Auto-detect any format</h3>
               <p className="text-muted-foreground text-sm">
-                Recognises Amazon, Shopify, Bunnings, Kogan and more — from the file structure alone. No manual labelling.
+                Amazon TSV, Shopify CSV, Bunnings PDF, BigW remittance, or anything new. If we haven't seen it before, we'll figure it out and remember it.
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-card">
               <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <Table className="h-7 w-7 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Sorted settlement table</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Split mixed marketplace files</h3>
               <p className="text-muted-foreground text-sm">
-                Every settlement lands in a clean table under its marketplace tab — period, deposit, reconciliation, and Xero sync status at a glance.
+                One payment from Woolworths MarketPlus covering BigW, MyDeal and Everyday Market? We split it into three separate settlements automatically.
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-card">
               <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <Settings2 className="h-7 w-7 text-primary" />
+                <CheckCircle className="h-7 w-7 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Approve & sync your way</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Push to Xero, correctly</h3>
               <p className="text-muted-foreground text-sm">
-                Review each settlement before syncing to Xero manually — or upgrade to Pro and let Xettle auto-push on a schedule.
+                Sales, refunds, fees and GST mapped to the right accounts. Your bookkeeper will actually enjoy month-end.
               </p>
             </div>
-          </div>
-          <div className="text-center mt-10">
-            <Button size="lg" asChild>
-              <Link to="/auth?tab=signup">
-                Try Bulk Upload Free <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
           </div>
         </div>
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
-          WHAT XETTLE DOES — Simplified feature list
+          MARKETPLACE LOGOS
           ════════════════════════════════════════════════════════════════════ */}
-      <section className="py-20 px-4 bg-card border-y border-border">
+      <section className="py-16 px-4 bg-card border-y border-border">
+        <div className="container-custom max-w-4xl mx-auto text-center">
+          <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-8">
+            Works with every marketplace Australians actually sell on.
+          </h2>
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+            {marketplaceLogos.map((m) => (
+              <span
+                key={m.name}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-medium border bg-background text-foreground border-border"
+              >
+                <span>{m.icon}</span>
+                {m.name}
+              </span>
+            ))}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Selling somewhere else? Drop the file — we'll figure it out.
+          </p>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
+          SOCIAL PROOF / STATS
+          ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-4">
         <div className="container-custom max-w-4xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              What Xettle does automatically
+              Built for sellers with more than one marketplace.
             </h2>
-            <p className="text-lg text-muted-foreground max-w-xl mx-auto">
-              No bloat. No complexity. Just the things that matter.
-            </p>
           </div>
-          <div className="grid sm:grid-cols-2 gap-6">
-            {[
-              { icon: FileSpreadsheet, title: 'Detect settlements', desc: 'Recognise marketplace, parse every line, categorise transactions.' },
-              { icon: ClipboardCheck, title: 'Create accounting entries', desc: 'Sales, fees, refunds, GST — all mapped to the right Xero accounts.' },
-              { icon: RefreshCw, title: 'Sync to Xero', desc: 'One click to push. Or auto-sync on a schedule with Pro.' },
-              { icon: ScanSearch, title: 'Highlight fee changes', desc: 'Spot commission rate shifts, new fees, or refund spikes before they hit your books.' },
-              { icon: BarChart3, title: 'Show real profit', desc: 'See what you actually kept after every marketplace fee and refund.' },
-              { icon: Store, title: 'Multi-marketplace', desc: 'Amazon, Bunnings, Shopify today. Kogan, MyDeal, Woolworths coming soon.' },
-            ].map((item) => (
-              <div key={item.title} className="flex items-start gap-4 p-4 rounded-xl">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <item.icon className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-foreground mb-0.5">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground">{item.desc}</p>
-                </div>
-              </div>
-            ))}
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center p-6 rounded-2xl border border-border bg-card">
+              <p className="text-4xl font-bold text-primary mb-3">4+</p>
+              <p className="text-sm text-muted-foreground">
+                The average Xettle user sells on 4+ marketplaces
+              </p>
+            </div>
+            <div className="text-center p-6 rounded-2xl border border-border bg-card">
+              <p className="text-4xl font-bold text-primary mb-3">3 min</p>
+              <p className="text-sm text-muted-foreground">
+                Settlement reconciliation that used to take 3 hours now takes 3 minutes
+              </p>
+            </div>
+            <div className="text-center p-6 rounded-2xl border border-border bg-card">
+              <p className="text-4xl font-bold text-primary mb-3">100%</p>
+              <p className="text-sm text-muted-foreground">
+                Australian — GST, ATO reporting, and Xero built in from day one
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -321,16 +314,16 @@ export default function Landing() {
       {/* ════════════════════════════════════════════════════════════════════
           THREE STEPS
           ════════════════════════════════════════════════════════════════════ */}
-      <section className="py-20 px-4">
+      <section className="py-20 px-4 bg-card border-y border-border">
         <div className="container-custom max-w-4xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold text-center text-foreground mb-16">
             Three steps. Xettled.
           </h2>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { step: '01', title: 'Connect Xero', desc: 'Securely link your Xero organisation with one click. Tokens are encrypted per-user.' },
-              { step: '02', title: 'Upload or Auto-Sync', desc: 'Drop all your settlement files at once — Amazon, Shopify, Bunnings, anything. Or let Pro auto-fetch.' },
-              { step: '03', title: 'Xettle It', desc: 'Review settlements sorted by marketplace, approve, and push to Xero. Individually or in bulk.' },
+              { step: '01', title: 'Connect your marketplaces', desc: 'Amazon and Shopify connect via API. BigW, MyDeal and others just need a file upload.' },
+              { step: '02', title: 'We handle everything', desc: 'Xettle auto-syncs, parses every format, splits mixed files, and calculates the real net after every fee.' },
+              { step: '03', title: 'Xero stays clean', desc: 'Every settlement becomes a correctly coded invoice. Your bank reconciles. Your accountant relaxes.' },
             ].map((item) => (
               <div key={item.step} className="text-center">
                 <div className="text-5xl font-bold text-primary/20 mb-4">{item.step}</div>
@@ -345,7 +338,7 @@ export default function Landing() {
       {/* ════════════════════════════════════════════════════════════════════
           PROFIT LEAK
           ════════════════════════════════════════════════════════════════════ */}
-      <section className="py-20 px-4 bg-card border-y border-border">
+      <section className="py-20 px-4">
         <div className="container-custom max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
@@ -405,7 +398,7 @@ export default function Landing() {
       {/* ════════════════════════════════════════════════════════════════════
           FEE CHANGE ALERTS
           ════════════════════════════════════════════════════════════════════ */}
-      <section className="py-20 px-4">
+      <section className="py-20 px-4 bg-card border-y border-border">
         <div className="container-custom max-w-6xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="order-2 lg:order-1 space-y-6">
@@ -449,7 +442,7 @@ export default function Landing() {
       {/* ════════════════════════════════════════════════════════════════════
           BUILT FOR ACCOUNTANTS
           ════════════════════════════════════════════════════════════════════ */}
-      <section className="py-16 px-4 bg-card border-y border-border">
+      <section className="py-16 px-4">
         <div className="container-custom max-w-4xl mx-auto">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
@@ -477,7 +470,7 @@ export default function Landing() {
                 ))}
               </ul>
             </div>
-            <div className="bg-background rounded-2xl border border-border p-6 space-y-4">
+            <div className="bg-card rounded-2xl border border-border p-6 space-y-4">
               <p className="text-sm font-semibold text-foreground mb-2">Demo it to a client in 60 seconds:</p>
               <div className="space-y-3">
                 {[
@@ -498,55 +491,24 @@ export default function Landing() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
-          TRUST SIGNALS — File compatibility
-          ════════════════════════════════════════════════════════════════════ */}
-      <section className="py-16 px-4">
-        <div className="container-custom max-w-3xl mx-auto">
-          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12">
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-8">
-              Works with files other tools can't handle
-            </h2>
-            <div className="grid sm:grid-cols-2 gap-4 mb-6">
-              {[
-                'Amazon settlement TSV (any region)',
-                'Shopify Payments payouts CSV',
-                'Bunnings / Mirakl invoice PDF',
-                'Most marketplace CSV exports',
-                'Australian GST handled correctly',
-                'Your data stays in your own Xero',
-              ].map((signal) => (
-                <div key={signal} className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
-                  <span className="text-foreground font-medium text-sm">{signal}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground/70 text-center italic">
-              Manual settlement uploads are free forever. No credit card required.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ════════════════════════════════════════════════════════════════════
           FINAL CTA
           ════════════════════════════════════════════════════════════════════ */}
-      <section className="py-20 px-4">
+      <section className="py-20 px-4 bg-card border-y border-border">
         <div className="container-custom max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
             See the result first. Sign up second.
           </h2>
           <p className="text-lg text-muted-foreground mb-8">
-            Most tools make you sign up before you see anything. Xettle shows you the Xero invoice from your own file — no account needed.
+            Upload a real settlement file before you create an account. See exactly what Xettle does with your data — no commitment, no card.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="text-lg px-10 py-6" asChild>
-              <Link to="/auth?tab=signup">
-                Create Free Account <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
+            <Button size="lg" className="text-lg px-10 py-6" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              Try with your own data <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
-            <Button size="lg" variant="outline" className="text-lg px-8 py-6" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-              ↑ Try the challenge
+            <Button size="lg" variant="outline" className="text-lg px-8 py-6" asChild>
+              <Link to="/auth?tab=signup">
+                Create Free Account
+              </Link>
             </Button>
           </div>
         </div>
