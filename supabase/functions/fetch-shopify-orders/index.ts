@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
         financial_status: "paid",
         limit: String(effectiveLimit),
         fields:
-          "id,name,created_at,processed_at,financial_status,gateway,note_attributes,tags,subtotal_price,total_shipping_price_set,total_tax,total_price,line_items,payment_gateway_names",
+          "id,name,created_at,processed_at,financial_status,gateway,note_attributes,tags,subtotal_price,total_shipping_price_set,total_tax,total_price,total_discounts,line_items,payment_gateway_names,source_name",
       });
       if (effectiveDateFrom) params.set("created_at_min", effectiveDateFrom);
       if (dateTo) params.set("created_at_max", dateTo);
