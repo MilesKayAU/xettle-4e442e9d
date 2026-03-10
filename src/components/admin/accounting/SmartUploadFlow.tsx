@@ -130,14 +130,24 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [showEntityDialog, setShowEntityDialog] = useState(false);
   const [shopifySyncing, setShopifySyncing] = useState(false);
   const [hasShopifyConnection, setHasShopifyConnection] = useState(false);
+  const [shopifyTokenInvalid, setShopifyTokenInvalid] = useState(false);
+  const [shopifyShopDomain, setShopifyShopDomain] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
 
-  // Check if Shopify is connected
+  // Check if Shopify is connected and whether token needs re-auth
   useEffect(() => {
-    supabase.from('shopify_tokens').select('id').limit(1)
-      .then(({ data }) => setHasShopifyConnection(!!(data && data.length > 0)));
+    supabase.from('shopify_tokens').select('id, scope, shop_domain').limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setHasShopifyConnection(true);
+          setShopifyShopDomain((data[0] as any).shop_domain || null);
+          if ((data[0] as any).scope === 'custom_app') {
+            setShopifyTokenInvalid(true);
+          }
+        }
+      });
   }, []);
 
   const handleShopifySync = useCallback(async () => {
