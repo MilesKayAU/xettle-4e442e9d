@@ -119,14 +119,22 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   }, [hasLoadedOnce, settlements.length, hasAutoAudited, refreshingXero, handleRefreshXero, code]);
 
   useEffect(() => {
-    async function checkShopify() {
+    async function checkShopifyAndBoundary() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setCurrentUserId(user.id);
       const { data } = await supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1);
       setHasShopify(!!(data && data.length > 0));
+      // Fetch accounting boundary
+      const { data: boundaryRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'accounting_boundary_date')
+        .maybeSingle();
+      if (boundaryRow?.value) setAccountingBoundary(boundaryRow.value);
     }
-    checkShopify();
+    checkShopifyAndBoundary();
   }, []);
 
 
