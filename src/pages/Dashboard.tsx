@@ -341,55 +341,14 @@ export default function Dashboard() {
         {/* ─── Dashboard (Action Centre Homepage) ────────────────────── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
-                <p className="text-muted-foreground mt-1">
-                  Your settlement status at a glance.
-                </p>
-              </div>
-
-              {/* Financial Summary Strip */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <SettlementsSummaryStrip userMarketplaceCount={userMarketplaces.length} />
-              )}
-
-              {/* Action Control Panel */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <ActionControlPanel
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                />
-              )}
-
-              {/* Next Expected Settlements */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <NextExpectedSettlements userMarketplaces={userMarketplaces} />
-              )}
-
-              {/* Monthly Reconciliation Status */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <MonthlyReconciliationStatus
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                  onSelectMarketplace={(code) => {
-                    setSelectedMarketplace(code);
-                    switchView('settlements');
-                  }}
-                />
-              )}
-
-              {/* Accounting Boundary Settings */}
-              <AccountingBoundarySettings
-                xeroConnected={xeroConnected}
-                onConnectXero={() => {
-                  switchView('settlements');
-                  setSelectedMarketplace('amazon_au');
-                  setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
-                }}
-                onGoToUpload={() => switchView('smart_upload')}
-              />
-            </div>
+            <ActionCentre
+              onSwitchToUpload={() => switchView('smart_upload')}
+              onSwitchToSettlements={() => {
+                switchView('settlements');
+                switchSettlementsSubTab('overview');
+              }}
+              userName={user?.email?.split('@')[0]}
+            />
           </ErrorBoundary>
         )}
 
