@@ -130,7 +130,7 @@ function parseCSVRow(line: string): string[] {
 
 const ORDER_SOURCE_MAP: Record<string, { code: string; display: string; contact: string }> = {
   bigw:            { code: 'bigw',             display: 'Big W Marketplace',  contact: 'Big W Marketplace' },
-  everydaymarket:  { code: 'woolworths',       display: 'Everyday Market',    contact: 'Everyday Market' },
+  everydaymarket:  { code: 'everyday_market',  display: 'Everyday Market',    contact: 'Everyday Market' },
   mydeal:          { code: 'mydeal',           display: 'MyDeal',             contact: 'MyDeal' },
 };
 
