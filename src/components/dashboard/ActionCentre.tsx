@@ -174,7 +174,7 @@ export default function ActionCentre({
     setRefreshing(true);
     try {
       await triggerValidationSweep();
-      toast.success('Validation sweep started');
+      toast.success('Status refresh started');
       setTimeout(() => loadData(), 3000);
     } catch {
       toast.error('Sweep failed');
