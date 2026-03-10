@@ -448,6 +448,7 @@ serve(async (req) => {
       success: true,
       invoiceId,
       invoiceNumber,
+      xeroType: isNegativeSettlement ? 'bill' : 'invoice',
       // Legacy compat — journalId maps to invoiceId
       journalId: invoiceId,
       reference,

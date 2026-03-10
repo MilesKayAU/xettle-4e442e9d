@@ -9,15 +9,18 @@ import { Badge } from '@/components/ui/badge';
 interface SettlementStatusBadgeProps {
   status: string | null;
   xeroInvoiceNumber?: string | null;
+  xeroType?: string | null;
 }
 
-export default function SettlementStatusBadge({ status, xeroInvoiceNumber }: SettlementStatusBadgeProps) {
+export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroType }: SettlementStatusBadgeProps) {
+  const typeLabel = xeroType === 'bill' ? 'Bill' : 'Invoice';
+
   switch (status) {
     case 'synced':
     case 'pushed_to_xero':
       return xeroInvoiceNumber
-        ? <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">In Xero ({xeroInvoiceNumber}) ✓</Badge>
-        : <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Pushed to Xero ✓</Badge>;
+        ? <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">In Xero ({typeLabel}: {xeroInvoiceNumber}) ✓</Badge>
+        : <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Pushed to Xero ({typeLabel}) ✓</Badge>;
     case 'synced_external':
       return <Badge variant="outline" className="border-muted-foreground/40 text-[10px]">Already in Xero</Badge>;
     case 'push_failed':
