@@ -177,7 +177,7 @@ export default function ActionCentre({
   }, [rows]);
 
   const buildMissingList = useCallback((): MissingSettlement[] => {
-    return uploadNeeded.map(r => ({
+    return uploadNeededManual.map(r => ({
       marketplace_code: r.marketplace_code,
       marketplace_label: MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code,
       period_label: r.period_label,
@@ -185,7 +185,7 @@ export default function ActionCentre({
       period_end: r.period_end,
       estimated_amount: lastKnownAmounts[r.marketplace_code] || null,
     }));
-  }, [uploadNeeded, lastKnownAmounts]);
+  }, [uploadNeededManual, lastKnownAmounts]);
 
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at) : null;
