@@ -593,7 +593,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
               Found {syncResult.synced} new settlement{syncResult.synced !== 1 ? 's' : ''} totalling {formatAUD(syncResult.total_deposit)}
             </p>
             <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
-              Run "Audit" to check which are already in Xero.
+              Xero audit ran automatically — statuses updated below.
             </p>
           </div>
           <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => setSyncResult(null)}>Dismiss</Button>
