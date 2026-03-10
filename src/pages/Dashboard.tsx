@@ -31,7 +31,7 @@ export default function Dashboard() {
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeView, setActiveView] = useState<DashboardView>(() => {
-    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'smart_upload';
+    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
   });
   const [settlementsSubTab, setSettlementsSubTab] = useState<SettlementsSubTab>(() => {
     return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'all';
