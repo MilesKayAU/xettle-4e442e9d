@@ -123,10 +123,20 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
     try {
       const result = await syncXeroStatus();
       if (result.success) {
-        toast.success(`Xero status refreshed — ${result.updated || 0} record${(result.updated || 0) !== 1 ? 's' : ''} updated`);
+        const total = (result.updated || 0) + (result.fuzzy_matched || 0);
+        if (total > 0) {
+          toast.success(`Xero audit: ${result.updated || 0} exact match${(result.updated || 0) !== 1 ? 'es' : ''}, ${result.fuzzy_matched || 0} fuzzy match${(result.fuzzy_matched || 0) !== 1 ? 'es' : ''}`);
+        } else {
+          toast.info('Xero audit complete — no new matches found');
+        }
         loadSettlements();
       } else {
-        toast.error(result.error || 'Failed to refresh from Xero');
+        if (result.error?.includes('No Xero connection')) {
+          // Silent — no Xero connected, don't show error
+          console.log('[XeroSync] No Xero connection — skipping audit');
+        } else {
+          toast.error(result.error || 'Failed to refresh from Xero');
+        }
       }
     } catch (err: any) {
       toast.error(`Refresh failed: ${err.message}`);
