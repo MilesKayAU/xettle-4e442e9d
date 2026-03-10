@@ -106,7 +106,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [hasShopify, setHasShopify] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
-  
+  const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
