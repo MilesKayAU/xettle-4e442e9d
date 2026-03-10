@@ -1,0 +1,1 @@
+UPDATE settlements SET status = 'already_recorded' WHERE source = 'api' AND marketplace = 'shopify_payments' AND user_id = '9d34d250-7de4-48e5-9566-11fa7a79852f' AND period_end < '2026-03-08'
