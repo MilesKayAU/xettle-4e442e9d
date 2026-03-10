@@ -11,7 +11,9 @@ import {
 } from '@/components/ui/dialog';
 import { Loader2, Link2, Unlink, CheckCircle, RefreshCw, ShoppingBag, ChevronDown, Key, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { convertApiOrdersToRows, type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
+import { type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
+import { detectAllMarketplaces, classifyUnknownTag, type BatchDetectionResult } from '@/utils/shopify-order-detector';
+import MarketplaceDiscovery from '@/components/shopify/MarketplaceDiscovery';
 
 interface ShopifyStatus {
   connected: boolean;
