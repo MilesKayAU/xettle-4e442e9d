@@ -15,6 +15,7 @@ import type { ShopifyApiOrder } from './shopify-api-adapter';
 const IGNORED_SOURCE_NAMES = new Set([
   'web', 'shopify', 'pos', 'online_store', 'iphone', 'android',
   'shopify_draft_order', 'draft_orders', '', 'buy_button',
+  'checkout', 'subscription_contract_checkout_one',
 ]);
 
 export interface DetectedSubChannel {
@@ -22,7 +23,10 @@ export interface DetectedSubChannel {
   order_count: number;
   total_revenue: number;
   sample_order_names: string[];
-  is_new: boolean; // true if not yet in shopify_sub_channels table
+  is_new: boolean;
+  suggested_label?: string;
+  suggested_code?: string;
+  is_numeric_id?: boolean;
 }
 
 export interface SubChannelAuditResult {

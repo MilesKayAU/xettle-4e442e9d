@@ -1,6 +1,7 @@
 /**
  * SubChannelSetupModal — Setup flow for a detected Shopify sub-channel.
  * Lets user name the channel, select type, and choose settlement method.
+ * Pre-fills known marketplaces and handles numeric channel IDs.
  */
 
 import { useState } from 'react';
@@ -15,7 +16,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2, CheckCircle } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 import { saveSubChannel, formatSubChannelRevenue } from '@/utils/sub-channel-detection';
 import { toast } from 'sonner';
@@ -28,7 +29,13 @@ interface SubChannelSetupModalProps {
 }
 
 const MARKETPLACE_TYPES = [
+  { value: 'mydeal', label: 'MyDeal' },
+  { value: 'bunnings', label: 'Bunnings' },
+  { value: 'bigw', label: 'Big W' },
+  { value: 'everyday_market', label: 'Everyday Market' },
+  { value: 'catch', label: 'Catch' },
   { value: 'ebay_au', label: 'eBay AU' },
+  { value: 'kogan', label: 'Kogan' },
   { value: 'tiktok_shop', label: 'TikTok Shop' },
   { value: 'facebook', label: 'Facebook / Instagram' },
   { value: 'etsy', label: 'Etsy' },
@@ -36,12 +43,22 @@ const MARKETPLACE_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+function isNumericChannelId(name: string): boolean {
+  return /^\d{6,}$/.test(name.trim());
+}
+
 export default function SubChannelSetupModal({
   channel, open, onClose, onComplete,
 }: SubChannelSetupModalProps) {
-  const defaultLabel = channel.source_name.charAt(0).toUpperCase() + channel.source_name.slice(1);
+  const isNumeric = channel.is_numeric_id || isNumericChannelId(channel.source_name);
+
+  // Pre-fill from suggested values or derive from source_name
+  const defaultLabel = channel.suggested_label
+    || (isNumeric ? '' : channel.source_name.charAt(0).toUpperCase() + channel.source_name.slice(1));
+  const defaultType = channel.suggested_code || '';
+
   const [label, setLabel] = useState(defaultLabel);
-  const [marketplaceType, setMarketplaceType] = useState('');
+  const [marketplaceType, setMarketplaceType] = useState(defaultType);
   const [settlementType, setSettlementType] = useState<'separate_file' | 'shopify_payments'>('shopify_payments');
   const [saving, setSaving] = useState(false);
 
@@ -79,12 +96,16 @@ export default function SubChannelSetupModal({
     }
   };
 
+  const displaySourceName = isNumeric
+    ? `Channel ID: ${channel.source_name}`
+    : channel.source_name;
+
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Set up {channel.source_name} tracking
+            Set up {channel.suggested_label || displaySourceName} tracking
           </DialogTitle>
           <DialogDescription>
             {channel.order_count} order{channel.order_count !== 1 ? 's' : ''} found
@@ -93,6 +114,26 @@ export default function SubChannelSetupModal({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Numeric ID helper */}
+          {isNumeric && (
+            <div className="flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 p-3">
+              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                This source name is a Shopify channel ID. Select the matching marketplace below,
+                or check your{' '}
+                <a
+                  href="https://admin.shopify.com/settings/sales_channels"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline"
+                >
+                  Shopify Sales Channels settings
+                </a>
+                {' '}to identify it.
+              </p>
+            </div>
+          )}
+
           {/* Channel name */}
           <div className="space-y-2">
             <Label htmlFor="channel-name">Channel name</Label>
@@ -100,14 +141,21 @@ export default function SubChannelSetupModal({
               id="channel-name"
               value={label}
               onChange={e => setLabel(e.target.value)}
-              placeholder="e.g. eBay AU"
+              placeholder={isNumeric ? 'e.g. Big W, Everyday Market' : 'e.g. eBay AU'}
             />
           </div>
 
           {/* Marketplace type */}
           <div className="space-y-2">
             <Label>Marketplace type</Label>
-            <Select value={marketplaceType} onValueChange={setMarketplaceType}>
+            <Select value={marketplaceType} onValueChange={(v) => {
+              setMarketplaceType(v);
+              // Auto-fill label from marketplace selection
+              const match = MARKETPLACE_TYPES.find(t => t.value === v);
+              if (match && (!label || isNumeric)) {
+                setLabel(match.label);
+              }
+            }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select type..." />
               </SelectTrigger>
