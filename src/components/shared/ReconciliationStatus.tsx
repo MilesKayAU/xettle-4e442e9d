@@ -74,6 +74,8 @@ export default function ReconciliationStatus({ marketplaceCode, userId }: Reconc
   const [checks, setChecks] = useState<ReconciliationCheck[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [unmatchedModalCheck, setUnmatchedModalCheck] = useState<ReconciliationCheck | null>(null);
+  const [unmatchedOrders, setUnmatchedOrders] = useState<UnmatchedOrder[]>([]);
 
   useEffect(() => {
     loadChecks();
