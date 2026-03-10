@@ -254,12 +254,43 @@ export default function ActionCentre({
       }
     }
 
-    const row = rows.find(r => {
-      const d = new Date(r.period_start);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      return r.marketplace_code === marketplace && key === monthKey;
+    // Find ALL validation rows for this marketplace + month
+    const matchingRows = rows.filter(r => {
+      const rowMonth = r.period_start?.substring(0, 7); // YYYY-MM from YYYY-MM-DD
+      return r.marketplace_code === marketplace && rowMonth === monthKey;
     });
-    return row?.overall_status || 'missing';
+
+    if (matchingRows.length === 0) return 'missing';
+
+    // Derive the aggregate status — priority: best status wins
+    // Status priority (best → worst): complete > pushed_to_xero > ready_to_push > settlement_needed > gap_detected > missing
+    const STATUS_PRIORITY: Record<string, number> = {
+      complete: 6,
+      bank_matched: 6,
+      pushed_to_xero: 5,
+      already_recorded: 5,
+      ready_to_push: 4,
+      settlement_needed: 3,
+      gap_detected: 2,
+      missing: 1,
+    };
+
+    // If ALL rows are complete/pushed, show complete/pushed
+    // If ANY row is settlement_needed while others are pushed, show the pushed status (partial progress)
+    const statuses = matchingRows.map(r => r.overall_status || 'missing');
+    const bestStatus = statuses.reduce((best, s) => {
+      return (STATUS_PRIORITY[s] || 0) > (STATUS_PRIORITY[best] || 0) ? s : best;
+    }, 'missing');
+    const worstStatus = statuses.reduce((worst, s) => {
+      return (STATUS_PRIORITY[s] || 0) < (STATUS_PRIORITY[worst] || 0) ? s : worst;
+    }, 'complete');
+
+    // If majority (>50%) are pushed/complete, show the best status
+    const goodCount = statuses.filter(s => (STATUS_PRIORITY[s] || 0) >= 4).length;
+    if (goodCount > statuses.length / 2) return bestStatus;
+
+    // Otherwise show the worst status
+    return worstStatus;
   };
 
   const formatMonthLabel = (key: string): string => {
