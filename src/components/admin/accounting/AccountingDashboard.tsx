@@ -935,11 +935,6 @@ export default function AccountingDashboard() {
 
       {(() => (
         <>
-          <SettlementGuidancePanel
-            lastSettlement={lastSettlement}
-            nextExpectedStart={nextExpectedStart}
-            loading={loadingSettlements}
-          />
 
           {uploadWarning && (
             <Card className={`border-2 ${uploadWarning.type === 'duplicate' ? 'border-amber-400 bg-amber-50/50' : 'border-orange-400 bg-orange-50/50'}`}>
