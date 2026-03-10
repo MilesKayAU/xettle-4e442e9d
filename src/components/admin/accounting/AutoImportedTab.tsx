@@ -57,7 +57,7 @@ interface XeroMatch {
 
 interface AutoImportedTabProps {
   onViewSettlement?: (settlementId: string) => void;
-  onSyncToXero?: (settlementId: string) => void;
+  onSyncToXero?: (settlementId: string) => void | Promise<void>;
   existingSettlementIds: Set<string>;
 }
 
