@@ -1025,6 +1025,66 @@ export type Database = {
         }
         Relationships: []
       }
+      xero_accounting_matches: {
+        Row: {
+          confidence: number
+          created_at: string
+          id: string
+          marketplace_code: string
+          match_method: string
+          matched_amount: number | null
+          matched_contact: string | null
+          matched_date: string | null
+          matched_reference: string | null
+          notes: string | null
+          settlement_id: string
+          updated_at: string
+          user_id: string
+          xero_invoice_id: string | null
+          xero_invoice_number: string | null
+          xero_status: string | null
+          xero_type: string | null
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          id?: string
+          marketplace_code: string
+          match_method?: string
+          matched_amount?: number | null
+          matched_contact?: string | null
+          matched_date?: string | null
+          matched_reference?: string | null
+          notes?: string | null
+          settlement_id: string
+          updated_at?: string
+          user_id: string
+          xero_invoice_id?: string | null
+          xero_invoice_number?: string | null
+          xero_status?: string | null
+          xero_type?: string | null
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          id?: string
+          marketplace_code?: string
+          match_method?: string
+          matched_amount?: number | null
+          matched_contact?: string | null
+          matched_date?: string | null
+          matched_reference?: string | null
+          notes?: string | null
+          settlement_id?: string
+          updated_at?: string
+          user_id?: string
+          xero_invoice_id?: string | null
+          xero_invoice_number?: string | null
+          xero_status?: string | null
+          xero_type?: string | null
+        }
+        Relationships: []
+      }
       xero_tokens: {
         Row: {
           access_token: string
