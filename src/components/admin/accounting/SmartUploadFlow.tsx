@@ -136,18 +136,42 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
 
-  // Check if Shopify is connected and whether token needs re-auth
+  // Check if Shopify is connected and validate the token
   useEffect(() => {
-    supabase.from('shopify_tokens').select('id, scope, shop_domain').limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0) {
+    (async () => {
+      const { data } = await supabase.from('shopify_tokens').select('id, scope, shop_domain').limit(1);
+      if (!data || data.length === 0) {
+        setHasShopifyConnection(false);
+        return;
+      }
+      const token = data[0] as any;
+      setShopifyShopDomain(token.shop_domain || null);
+      
+      // If scope is 'custom_app', it's a manual token that needs OAuth re-auth
+      if (token.scope === 'custom_app') {
+        setHasShopifyConnection(true);
+        setShopifyTokenInvalid(true);
+        return;
+      }
+
+      // Validate the token actually works by calling the edge function with a dry-run
+      try {
+        const { data: result } = await supabase.functions.invoke('fetch-shopify-payouts', {
+          body: { dryRun: true },
+        });
+        if (result?.error === 'Shopify token invalid or expired') {
           setHasShopifyConnection(true);
-          setShopifyShopDomain((data[0] as any).shop_domain || null);
-          if ((data[0] as any).scope === 'custom_app') {
-            setShopifyTokenInvalid(true);
-          }
+          setShopifyTokenInvalid(true);
+        } else {
+          setHasShopifyConnection(true);
+          setShopifyTokenInvalid(false);
         }
-      });
+      } catch {
+        // If validation fails, still show connected but mark as potentially invalid
+        setHasShopifyConnection(true);
+        setShopifyTokenInvalid(true);
+      }
+    })();
   }, []);
 
   const handleShopifySync = useCallback(async () => {
