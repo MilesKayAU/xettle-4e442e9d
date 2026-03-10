@@ -137,6 +137,7 @@ export default function ShopifyOrdersDashboard() {
   const [apiFetching, setApiFetching] = useState(false);
   const [unknownEntities, setUnknownEntities] = useState<UnknownEntity[]>([]);
   const [showEntityDialog, setShowEntityDialog] = useState(false);
+  const [detectedSubChannels, setDetectedSubChannels] = useState<DetectedSubChannel[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
