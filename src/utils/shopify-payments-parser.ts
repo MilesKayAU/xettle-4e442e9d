@@ -77,38 +77,8 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/**
- * Parse a date from Shopify's format: "2026-02-28 17:14:54 +1000"
- * Returns YYYY-MM-DD.
- */
-function normaliseDate(raw: string): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-
-  // YYYY-MM-DD HH:MM:SS +ZZZZ or YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-    return trimmed.substring(0, 10);
-  }
-
-  // DD/MM/YYYY
-  const slashParts = trimmed.split('/');
-  if (slashParts.length === 3) {
-    const [a, b, c] = slashParts;
-    if (parseInt(a) > 12) {
-      return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-    }
-    return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-  }
-
-  try {
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) {
-      return d.toISOString().substring(0, 10);
-    }
-  } catch { /* fall through */ }
-
-  return trimmed;
-}
+/** @deprecated Use parseDateOrEmpty from date-parser.ts */
+const normaliseDate = parseDateOrEmpty;
 
 function parseAmount(raw: string): number {
   if (!raw) return 0;
