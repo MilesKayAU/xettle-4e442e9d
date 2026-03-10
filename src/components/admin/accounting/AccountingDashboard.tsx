@@ -1894,11 +1894,21 @@ type SortDir = 'asc' | 'desc';
 
 function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushToXero }: { settlements: SettlementRecord[]; loading: boolean; onDeleted: () => void; onReview?: (settlementId: string, settlementUuid: string) => void; onPushToXero?: (settlementId: string, settlementUuid: string) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('period');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Shared bulk select hook replaces manual selectedIds / toggleSelect / toggleAll / handleDelete
+  const {
+    selected: selectedIds,
+    toggleSelect,
+    toggleSelectAll: toggleAll,
+    bulkDeleting: deleting,
+    bulkDeleteDialogOpen,
+    syncedSelectedCount,
+    handleBulkDelete,
+    confirmBulkDelete,
+    cancelBulkDelete,
+  } = useBulkSelect({ settlements: settlements as any, onComplete: onDeleted });
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [rollbackConfirm, setRollbackConfirm] = useState<{ settlement: SettlementRecord; scope: 'all' | 'journal_1' | 'journal_2' } | null>(null);
   const [markingSynced, setMarkingSynced] = useState(false);

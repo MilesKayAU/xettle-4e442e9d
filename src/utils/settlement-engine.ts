@@ -564,6 +564,12 @@ export async function rollbackSettlementFromXero(
 
 export async function deleteSettlement(id: string): Promise<{ success: boolean; error?: string }> {
   try {
+    // Look up the settlement_id (text) so we can clean related tables
+    const { data: row } = await supabase.from('settlements').select('settlement_id, user_id').eq('id', id).single();
+    if (row) {
+      await supabase.from('settlement_lines').delete().eq('settlement_id', row.settlement_id).eq('user_id', row.user_id);
+      await supabase.from('settlement_unmapped').delete().eq('settlement_id', row.settlement_id).eq('user_id', row.user_id);
+    }
     const { error } = await supabase.from('settlements').delete().eq('id', id);
     if (error) return { success: false, error: error.message };
     return { success: true };
