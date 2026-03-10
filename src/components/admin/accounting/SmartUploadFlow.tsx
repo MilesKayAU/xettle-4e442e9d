@@ -62,6 +62,8 @@ interface SmartUploadFlowProps {
   onSettlementsSaved?: () => void;
   onMarketplacesChanged?: () => void;
   onViewSettlements?: () => void;
+  missingSettlements?: MissingSettlement[];
+  onReturnToDashboard?: () => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
