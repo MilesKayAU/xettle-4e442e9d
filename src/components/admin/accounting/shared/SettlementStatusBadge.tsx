@@ -71,6 +71,9 @@ export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroT
     case 'push_failed':
       return <Badge variant="destructive" className="text-[10px]">Push failed</Badge>;
 
+    case 'push_failed_permanent':
+      return <Badge variant="destructive" className="text-[10px]">Push failed (permanent)</Badge>;
+
     case 'ready_to_push':
       return (
         <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">
