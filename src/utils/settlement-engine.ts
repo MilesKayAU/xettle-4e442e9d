@@ -224,6 +224,18 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       extractFeeObservations(settlement, user.id).catch(console.error);
     });
 
+    // Fire-and-forget: auto-reconcile if Shopify is connected
+    import('./marketplace-reconciliation-engine').then(({ autoReconcileSettlement }) => {
+      autoReconcileSettlement(
+        settlement.marketplace,
+        settlement.settlement_id,
+        settlement.period_start,
+        settlement.period_end,
+        settlement.net_payout,
+        settlement.fees_ex_gst
+      ).catch(console.error);
+    });
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Unknown error' };
