@@ -50,6 +50,7 @@ export default function Dashboard() {
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
+  const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
