@@ -329,9 +329,9 @@ export default function ValidationSweep({
           <p className="text-sm text-muted-foreground">
             Connect Shopify and upload settlements to see your validation pipeline.
           </p>
-          <Button variant="outline" onClick={handleRefresh} className="mt-2">
-            <RefreshCw className="h-4 w-4 mr-2" /> Run validation sweep
-          </Button>
+           <Button variant="outline" onClick={handleRefresh} className="mt-2">
+             <RefreshCw className="h-4 w-4 mr-2" /> Refresh Status
+           </Button>
         </CardContent>
       </Card>
     );
