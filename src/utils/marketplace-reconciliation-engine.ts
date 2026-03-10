@@ -308,45 +308,57 @@ export async function autoReconcileSettlement(
         }
       }
     } else {
-      // Strategy 2: Look for settlement_lines with matching marketplace_name
-      // Use known name patterns for the marketplace
+      // Strategy 2: Look for settlement_lines from Shopify order settlements
+      // that have matching marketplace_name.
+      // IMPORTANT: Only use lines from shopify_orders_* or shopify_payments settlements,
+      // NOT from other CSV settlements of the same marketplace (that would be self-comparison).
       const namePatterns = getMarketplaceNamePatterns(marketplace);
       
-      let allLines: any[] = [];
-      for (const pattern of namePatterns) {
-        const { data: lines } = await supabase
-          .from('settlement_lines')
-          .select('order_id, amount, posted_date, marketplace_name, settlement_id')
-          .eq('user_id', user.id)
-          .gte('posted_date', periodStart)
-          .lte('posted_date', periodEnd)
-          .ilike('marketplace_name', `%${pattern}%`);
-        
-        if (lines && lines.length > 0) {
-          // Exclude lines from the SAME settlement (avoid self-comparison)
-          const externalLines = lines.filter(l => l.settlement_id !== settlementId);
-          allLines.push(...externalLines);
-          break; // Use first matching pattern
-        }
-      }
+      // First, find shopify order settlement IDs that overlap this period
+      const { data: shopifySettlementIds } = await supabase
+        .from('settlements')
+        .select('settlement_id')
+        .eq('user_id', user.id)
+        .like('marketplace', 'shopify_orders_%')
+        .gte('period_end', periodStart)
+        .lte('period_start', periodEnd);
 
-      // Group by order_id
-      const orderMap = new Map<string, ShopifyOrder>();
-      for (const line of allLines) {
-        if (!line.order_id) continue;
-        const existing = orderMap.get(line.order_id);
-        if (existing) {
-          existing.total_price += Number(line.amount) || 0;
-        } else {
-          orderMap.set(line.order_id, {
-            id: line.order_id,
-            total_price: Number(line.amount) || 0,
-            created_at: line.posted_date || periodStart,
-            marketplace_code: marketplace,
-          });
+      if (shopifySettlementIds && shopifySettlementIds.length > 0) {
+        const validIds = shopifySettlementIds.map(s => s.settlement_id);
+        
+        let allLines: any[] = [];
+        for (const pattern of namePatterns) {
+          const { data: lines } = await supabase
+            .from('settlement_lines')
+            .select('order_id, amount, posted_date, marketplace_name, settlement_id')
+            .eq('user_id', user.id)
+            .in('settlement_id', validIds)
+            .ilike('marketplace_name', `%${pattern}%`);
+          
+          if (lines && lines.length > 0) {
+            allLines.push(...lines);
+            break;
+          }
         }
+
+        // Group by order_id
+        const orderMap = new Map<string, ShopifyOrder>();
+        for (const line of allLines) {
+          if (!line.order_id) continue;
+          const existing = orderMap.get(line.order_id);
+          if (existing) {
+            existing.total_price += Number(line.amount) || 0;
+          } else {
+            orderMap.set(line.order_id, {
+              id: line.order_id,
+              total_price: Number(line.amount) || 0,
+              created_at: line.posted_date || periodStart,
+              marketplace_code: marketplace,
+            });
+          }
+        }
+        orders = Array.from(orderMap.values());
       }
-      orders = Array.from(orderMap.values());
     }
 
     if (orders.length === 0) {
