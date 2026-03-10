@@ -9,6 +9,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import SkuCostManager from './SkuCostManager';
+import UnknownEntityDialog from './UnknownEntityDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,17 +28,20 @@ import {
 } from '@/components/ui/select';
 import {
   Upload, CheckCircle2, ChevronDown, FileText, ShoppingCart,
-  ArrowRight, Loader2, SkipForward, Calendar, Info, Package,
+  ArrowRight, Loader2, SkipForward, Calendar, Info, Package, Zap,
 } from 'lucide-react';
 import { extractUniqueSKUs } from '@/utils/profit-engine';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
   parseShopifyOrdersCSV,
+  buildSettlementsFromGroups,
   type ShopifyOrdersParseResult,
   type MarketplaceGroup,
 } from '@/utils/shopify-orders-parser';
-import { MARKETPLACE_REGISTRY } from '@/utils/marketplace-registry';
+import { MARKETPLACE_REGISTRY, getRegistryEntry } from '@/utils/marketplace-registry';
+import { convertApiOrdersToRows, type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
+import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
 
 interface ShopifyOnboardingProps {
   /** Called when onboarding finishes — passes parsed result to parent dashboard */
