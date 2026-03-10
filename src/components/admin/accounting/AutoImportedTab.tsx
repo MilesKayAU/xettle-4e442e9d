@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import {
   CheckCircle2, XCircle, Loader2, Eye, ExternalLink, Trash2, RefreshCw,
   CloudDownload, ShieldCheck, AlertTriangle, CheckSquare, Square, Zap, Clock,
-  Search, Banknote, FileCheck, HelpCircle
+  Search, Banknote, FileCheck, HelpCircle, ChevronDown, ChevronRight
 } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
 
 interface AutoImportedSettlement {
   id: string;
@@ -56,7 +57,7 @@ interface XeroMatch {
 
 interface AutoImportedTabProps {
   onViewSettlement?: (settlementId: string) => void;
-  onSyncToXero?: (settlementId: string) => void;
+  onSyncToXero?: (settlementId: string) => void | Promise<void>;
   existingSettlementIds: Set<string>;
 }
 
@@ -216,6 +217,9 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const [marking, setMarking] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [auditing, setAuditing] = useState(false);
+
+  // Transaction drill-down
+  const { expandedLines, lineItems, loadingLines, loadLineItems } = useTransactionDrilldown();
 
   // Smart sync state
   const [smartSyncing, setSmartSyncing] = useState(false);
@@ -490,7 +494,12 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
     setSyncing(settlement.id);
     try {
-      onSyncToXero?.(settlement.settlement_id);
+      if (onSyncToXero) {
+        await onSyncToXero(settlement.settlement_id);
+      }
+      await loadApiSettlements();
+    } catch (err: any) {
+      toast.error(`Push failed: ${err.message}`);
     } finally {
       setSyncing(null);
     }
@@ -697,33 +706,49 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                 const canPush = auditStatus === 'ready_to_push' || auditStatus === 'unknown';
                 const canMarkExternal = auditStatus === 'ready_to_push' || auditStatus === 'unknown' || auditStatus === 'review';
 
+                const isExpanded = expandedLines === s.settlement_id;
+                const lines = lineItems[s.settlement_id] || [];
+                const isLoadingLines = loadingLines === s.settlement_id;
+
                 return (
                   <div
                     key={s.id}
-                    className={`border rounded-lg p-2.5 transition-colors ${
+                    className={`border rounded-lg transition-colors ${
                       isPreBoundary ? 'opacity-40 bg-muted/20 border-muted' :
                       auditStatus === 'complete' ? 'bg-emerald-50/30 dark:bg-emerald-950/10 border-emerald-200/50 dark:border-emerald-800/30' :
                       auditStatus === 'review' ? 'bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-800/30' :
                       'hover:bg-muted/20'
                     }`}
                   >
-                    <div className="sm:grid sm:grid-cols-[auto_1fr_80px_80px_120px_auto] gap-2 items-center">
+                    <div className="p-2.5 sm:grid sm:grid-cols-[auto_1fr_80px_80px_120px_auto] gap-2 items-center">
                       {/* Checkbox */}
                       <button className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground" onClick={() => toggleSelect(s.id)}>
                         {selected.has(s.id) ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
                       </button>
 
-                      {/* Settlement info */}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
-                          {s.is_split_month && <Badge variant="outline" className="text-[10px]">Split Month</Badge>}
+                      {/* Settlement info — clickable to expand */}
+                      <button
+                        className="min-w-0 text-left cursor-pointer hover:opacity-80 flex items-center gap-2"
+                        onClick={() => loadLineItems(s.settlement_id)}
+                      >
+                        {isLoadingLines ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+                        ) : isExpanded ? (
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
+                            {s.is_split_month && <Badge variant="outline" className="text-[10px]">Split Month</Badge>}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                            <span>{formatShortDate(s.period_start)} → {formatShortDate(s.period_end)}</span>
+                            <span className="font-medium text-foreground">{formatAUD(s.bank_deposit)}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                          <span>{formatShortDate(s.period_start)} → {formatShortDate(s.period_end)}</span>
-                          <span className="font-medium text-foreground">{formatAUD(s.bank_deposit)}</span>
-                        </div>
-                      </div>
+                      </button>
 
                       {/* Xero indicator */}
                       <div className="flex justify-center">
@@ -745,12 +770,6 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
 
                       {/* Actions */}
                       <div className="flex items-center gap-1 justify-end">
-                        {onViewSettlement && (
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={() => onViewSettlement(s.settlement_id)}>
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                        )}
-
                         {canMarkExternal && (
                           <TooltipProvider>
                             <Tooltip>
@@ -793,6 +812,58 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                         </Button>
                       </div>
                     </div>
+
+                    {/* ─── Transaction Drill-down ─────────────────── */}
+                    {isExpanded && (
+                      <div className="border-t border-border px-3 py-2 bg-muted/30">
+                        {lines.length === 0 ? (
+                          <p className="text-xs text-muted-foreground py-2 text-center">No transaction lines found for this settlement.</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                  <th className="text-left py-1 pr-2">Order ID</th>
+                                  <th className="text-left py-1 pr-2">SKU</th>
+                                  <th className="text-left py-1 pr-2">Type</th>
+                                  <th className="text-left py-1 pr-2">Description</th>
+                                  <th className="text-right py-1">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {lines.map((line, idx) => {
+                                  const isRefund = line.transaction_type?.toLowerCase().includes('refund');
+                                  const isFee = (line.amount || 0) < 0 && !isRefund;
+                                  return (
+                                    <tr
+                                      key={idx}
+                                      className={`border-t border-border/50 ${
+                                        isRefund ? 'text-destructive' :
+                                        isFee ? 'text-amber-600 dark:text-amber-400' :
+                                        ''
+                                      }`}
+                                    >
+                                      <td className="py-1 pr-2 font-mono">{line.order_id || '—'}</td>
+                                      <td className="py-1 pr-2">{line.sku || '—'}</td>
+                                      <td className="py-1 pr-2">{line.transaction_type || '—'}</td>
+                                      <td className="py-1 pr-2 max-w-[200px] truncate">{line.amount_description || '—'}</td>
+                                      <td className="py-1 text-right font-mono font-medium">{formatAUD(line.amount || 0)}</td>
+                                    </tr>
+                                  );
+                                })}
+                                {/* Totals row */}
+                                <tr className="border-t-2 border-border font-semibold">
+                                  <td colSpan={4} className="py-1.5 pr-2">Total ({lines.length} lines)</td>
+                                  <td className="py-1.5 text-right font-mono">
+                                    {formatAUD(lines.reduce((sum, l) => sum + (l.amount || 0), 0))}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

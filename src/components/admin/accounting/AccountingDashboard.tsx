@@ -1243,9 +1243,26 @@ export default function AccountingDashboard() {
             <TabsContent value="auto-imported">
               <AutoImportedTab
                 existingSettlementIds={new Set(settlements.filter(s => (s as any).source !== 'api').map(s => s.settlement_id))}
-                onSyncToXero={(settlementId) => {
-                  // TODO: Implement sync-to-Xero from auto-imported
-                  toast.info(`Sync to Xero for ${settlementId} — coming soon`);
+                onSyncToXero={async (settlementId) => {
+                  // Find the settlement to get its marketplace
+                  const { data: sett } = await supabase
+                    .from('settlements')
+                    .select('marketplace')
+                    .eq('settlement_id', settlementId)
+                    .maybeSingle();
+                  const marketplace = sett?.marketplace || 'amazon_au';
+                  const { syncSettlementToXero } = await import('@/utils/settlement-engine');
+                  const result = await syncSettlementToXero(settlementId, marketplace);
+                  if (result.success) {
+                    toast.success(`Invoice created in Xero for ${settlementId}`);
+                    loadSettlements();
+                  } else {
+                    if (result.error?.includes('already exists in Xero')) {
+                      toast.error('Duplicate invoice detected — void the existing one in Xero first.', { duration: 8000 });
+                    } else {
+                      toast.error(result.error || 'Failed to push to Xero');
+                    }
+                  }
                 }}
               />
             </TabsContent>
