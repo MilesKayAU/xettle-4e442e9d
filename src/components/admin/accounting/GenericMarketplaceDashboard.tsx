@@ -65,9 +65,13 @@ interface SettlementRow {
   bank_verified_by: string | null;
 }
 
+/** Marketplaces that only have CSV data — never cross-referenced with Shopify orders */
+const CSV_ONLY_MARKETPLACES = ['bigw', 'everyday_market', 'mydeal', 'bunnings', 'catch', 'kogan'];
+
 export default function GenericMarketplaceDashboard({ marketplace, onMarketplacesChanged, onSwitchToUpload }: GenericMarketplaceDashboardProps) {
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
   const code = marketplace.marketplace_code;
+  const isCsvOnly = CSV_ONLY_MARKETPLACES.includes(code);
 
   // ── Shared hooks (BaseMarketplaceDashboard pattern) ──────────────────────
   const {
@@ -102,7 +106,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [hasShopify, setHasShopify] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
-  
+  const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
@@ -115,14 +119,22 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   }, [hasLoadedOnce, settlements.length, hasAutoAudited, refreshingXero, handleRefreshXero, code]);
 
   useEffect(() => {
-    async function checkShopify() {
+    async function checkShopifyAndBoundary() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setCurrentUserId(user.id);
       const { data } = await supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1);
       setHasShopify(!!(data && data.length > 0));
+      // Fetch accounting boundary
+      const { data: boundaryRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'accounting_boundary_date')
+        .maybeSingle();
+      if (boundaryRow?.value) setAccountingBoundary(boundaryRow.value);
     }
-    checkShopify();
+    checkShopifyAndBoundary();
   }, []);
 
 
@@ -214,9 +226,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       <div className="space-y-3">
         <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
           <Scale className="h-4 w-4 text-primary" />
-          {hasShopify ? 'Reconciliation Health' : 'File Reconciliation'}
+          {hasShopify && !isCsvOnly ? 'Reconciliation Health' : 'File Reconciliation'}
         </h4>
-        {hasShopify && currentUserId ? (
+        {hasShopify && !isCsvOnly && currentUserId ? (
           <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
         ) : settlements.length > 0 ? (
           <FileReconciliationStatus settlements={settlements} />
@@ -378,11 +390,17 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const prev = filteredSettlements[idx + 1];
                     let hasGap = false;
                     if (prev && s.period_start > prev.period_end) {
-                      const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
-                      const gapDays = gapMs / (1000 * 60 * 60 * 24);
-                      const isShopify = (s.marketplace || '').toLowerCase().includes('shopify');
-                      const tolerance = isShopify ? 7 : 1;
-                      hasGap = gapDays > tolerance;
+                      // Suppress gap warnings for pre-boundary settlements
+                      const bothPreBoundary = accountingBoundary &&
+                        new Date(s.period_end) < new Date(accountingBoundary) &&
+                        new Date(prev.period_end) < new Date(accountingBoundary);
+                      if (!bothPreBoundary) {
+                        const gapMs = new Date(s.period_start).getTime() - new Date(prev.period_end).getTime();
+                        const gapDays = gapMs / (1000 * 60 * 60 * 24);
+                        const isShopify = (s.marketplace || '').toLowerCase().includes('shopify');
+                        const tolerance = isShopify ? 7 : 1;
+                        hasGap = gapDays > tolerance;
+                      }
                     }
 
                     const isExpanded = expandedLines === s.settlement_id;
