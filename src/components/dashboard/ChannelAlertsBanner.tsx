@@ -1,12 +1,13 @@
 /**
  * ChannelAlertsBanner — Shows pending channel alerts on the Dashboard.
  * Queries channel_alerts where status = 'pending' and shows actionable banners.
+ * If shopify_orders is empty, shows a one-time "Sync now" prompt.
  */
 
 import { useState, useEffect } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { supabase } from '@/integrations/supabase/client';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
@@ -30,6 +31,9 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(true);
   const [setupChannel, setSetupChannel] = useState<DetectedSubChannel | null>(null);
+  const [needsInitialSync, setNeedsInitialSync] = useState(false);
+  const [syncDismissed, setSyncDismissed] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const loadAlerts = async () => {
     try {
@@ -43,6 +47,26 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       const alertsData = (data || []) as unknown as ChannelAlert[];
       setAlerts(alertsData);
       onAlertCountChange?.(alertsData.length);
+
+      // If no alerts, check if shopify_orders is empty (needs initial sync)
+      if (alertsData.length === 0) {
+        // Check if user has a Shopify token
+        const { data: tokens } = await supabase
+          .from('shopify_tokens')
+          .select('id')
+          .limit(1);
+
+        if (tokens && tokens.length > 0) {
+          // Has Shopify connected — check if orders table is populated
+          const { count } = await supabase
+            .from('shopify_orders' as any)
+            .select('id', { count: 'exact', head: true }) as any;
+
+          if (count === 0 || count === null) {
+            setNeedsInitialSync(true);
+          }
+        }
+      }
     } catch {
       // silent
     } finally {
@@ -54,14 +78,61 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     loadAlerts();
   }, []);
 
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    try {
+      // Get user's Shopify token to find shop domain
+      const { data: tokenRow } = await supabase
+        .from('shopify_tokens')
+        .select('shop_domain')
+        .limit(1)
+        .maybeSingle();
+
+      if (!tokenRow?.shop_domain) {
+        toast.error('No Shopify store connected.');
+        return;
+      }
+
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        toast.error('Please log in first.');
+        return;
+      }
+
+      toast.info('Syncing Shopify orders — this may take a moment...');
+
+      const { data, error } = await supabase.functions.invoke('fetch-shopify-orders', {
+        body: { shopDomain: tokenRow.shop_domain },
+      });
+
+      if (error) throw error;
+
+      toast.success(`Synced ${data?.count || 0} orders. Scanning for channels...`);
+      setNeedsInitialSync(false);
+
+      // Now trigger a channel scan
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.functions.invoke('scan-shopify-channels', {
+          body: { userId: user.id },
+        });
+      }
+
+      // Reload alerts
+      await loadAlerts();
+    } catch (err: any) {
+      toast.error(`Sync failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleIgnore = async (alert: ChannelAlert) => {
-    // Update channel_alerts status
     await supabase
       .from('channel_alerts' as any)
       .update({ status: 'ignored', actioned_at: new Date().toISOString() } as any)
       .eq('id', alert.id);
 
-    // Also save to shopify_sub_channels as ignored
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from('shopify_sub_channels' as any).upsert({
@@ -90,7 +161,6 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
   const handleSetupComplete = async () => {
     if (setupChannel) {
-      // Mark alert as actioned
       await supabase
         .from('channel_alerts' as any)
         .update({ status: 'actioned', actioned_at: new Date().toISOString() } as any)
@@ -102,10 +172,40 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     setSetupChannel(null);
   };
 
-  if (loading || alerts.length === 0) return null;
+  if (loading) return null;
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(amount);
+
+  // Show "needs initial sync" prompt
+  if (needsInitialSync && !syncDismissed && alerts.length === 0) {
+    return (
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="flex items-center gap-3 p-4">
+          <Search className="h-5 w-5 text-primary shrink-0" />
+          <div className="flex-1 text-sm">
+            <p className="font-medium text-foreground">
+              🔍 To detect sales channels, sync your Shopify orders once.
+            </p>
+            <p className="text-muted-foreground mt-0.5">
+              We'll scan for eBay, TikTok Shop, Facebook, and other channels automatically.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button size="sm" variant="ghost" onClick={() => setSyncDismissed(true)}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="sm" onClick={handleSyncNow} disabled={syncing} className="gap-1">
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync now'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (alerts.length === 0) return null;
 
   // Collapsed view when 3+ alerts
   if (alerts.length >= 3 && !expanded) {
