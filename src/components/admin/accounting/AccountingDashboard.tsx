@@ -2168,10 +2168,9 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                 variant="outline"
                 size="sm"
                 onClick={handleMarkSyncedBulk}
-                disabled={markingSynced}
                 className="gap-1.5"
               >
-                {markingSynced ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckSquare className="h-3.5 w-3.5" />}
+                <CheckSquare className="h-3.5 w-3.5" />
                 Mark {selectedIds.size} as Synced
               </Button>
               <Button
