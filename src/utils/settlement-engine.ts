@@ -493,6 +493,16 @@ export async function syncSettlementToXero(
     // Fire-and-forget: trigger validation sweep after Xero push
     triggerValidationSweep();
 
+    // Fire-and-forget: log Xero push event
+    supabase.from('system_events' as any).insert({
+      user_id: user.id,
+      event_type: 'xero_push_success',
+      marketplace_code: marketplace,
+      settlement_id: settlementId,
+      details: { invoice_id: result.invoiceId, invoice_number: result.invoiceNumber },
+      severity: 'info',
+    } as any).catch(console.error);
+
     return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
   } catch (err: any) {
     // Mark push_failed in DB
