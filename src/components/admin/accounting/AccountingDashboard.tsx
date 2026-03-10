@@ -2054,6 +2054,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
       toast.error(`Delete failed: ${err.message}`);
     }
   };
+  const handleMarkSyncedOne = async (settlement: SettlementRecord) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
