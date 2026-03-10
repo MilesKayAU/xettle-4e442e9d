@@ -253,7 +253,7 @@ export default function ValidationSweep({
     actionableRows.forEach(r => {
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') c.complete++;
       else if (r.overall_status === 'ready_to_push') c.ready_to_push++;
-      else if (r.overall_status === 'pushed_to_xero') c.complete++;
+      else if (r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external') c.complete++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') c.settlement_needed++;
       else if (r.overall_status === 'gap_detected') c.gap_detected++;
     });
@@ -262,7 +262,7 @@ export default function ValidationSweep({
 
   const filteredRows = useMemo(() => {
     if (filter === 'all') return actionableRows;
-    if (filter === 'complete') return actionableRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
+    if (filter === 'complete') return actionableRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
     if (filter === 'ready_to_push') return actionableRows.filter(r => r.overall_status === 'ready_to_push');
     if (filter === 'settlement_needed') return actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
     if (filter === 'gap_detected') return actionableRows.filter(r => r.overall_status === 'gap_detected');
@@ -599,21 +599,30 @@ function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch:
     );
   }
 
-  // Check if < 3 days since push
+  // Check if < 3 days since push — show "Searching..." but with a 30-minute cooldown to prevent constant animation
   if (row.xero_pushed_at) {
     const pushDate = new Date(row.xero_pushed_at);
     const daysSincePush = (Date.now() - pushDate.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSincePush < 3) {
+      // Check cooldown — only show animated "Searching" for 30 min after last check
+      const cooldownKey = `bank_search_${row.settlement_id}`;
+      const lastSearch = sessionStorage.getItem(cooldownKey);
+      const cooldownExpired = !lastSearch || (Date.now() - parseInt(lastSearch, 10)) > 30 * 60 * 1000;
+
       return (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex items-center gap-1">
-                <Search className="h-3.5 w-3.5 text-muted-foreground animate-pulse" />
-                <span className="text-[10px] text-muted-foreground">Searching...</span>
+                {cooldownExpired ? (
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <Search className="h-3.5 w-3.5 text-muted-foreground animate-pulse" />
+                )}
+                <span className="text-[10px] text-muted-foreground">Pending</span>
               </span>
             </TooltipTrigger>
-            <TooltipContent>Waiting for bank deposit — usually appears within 3 days</TooltipContent>
+            <TooltipContent>Waiting for bank deposit — usually appears within 3 business days</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       );

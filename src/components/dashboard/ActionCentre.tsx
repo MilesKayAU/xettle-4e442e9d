@@ -65,8 +65,9 @@ interface ActionCentreProps {
 const STATUS_ICONS: Record<string, { icon: string; label: string }> = {
   complete: { icon: '✅', label: 'Complete — verified in Xero + bank matched' },
   bank_matched: { icon: '✅', label: 'Bank matched' },
-  pushed_to_xero: { icon: '✅', label: 'Pushed to Xero — awaiting bank match' },
+  pushed_to_xero: { icon: '✅', label: 'In Xero — awaiting bank match' },
   synced_external: { icon: '✅', label: 'Already in Xero (legacy)' },
+  partial: { icon: '🟡', label: 'Partial — some settlements still pending' },
   ready_to_push: { icon: '🟡', label: 'Ready to push to Xero' },
   settlement_needed: { icon: '❌', label: 'Settlement needed' },
   missing: { icon: '❌', label: 'Missing/needed' },
@@ -193,9 +194,9 @@ export default function ActionCentre({
   const awaitingBank = rows.filter(r =>
     r.settlement_id &&
     r.overall_status !== 'already_recorded' &&
-    (r.overall_status === 'pushed_to_xero' || (r.xero_pushed && !r.bank_matched))
+    (r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || (r.xero_pushed && !r.bank_matched))
   );
-  const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
+  const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
   const preBoundary = rows.filter(r => r.overall_status === 'already_recorded');
   const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
   const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && (complete.length > 0);
@@ -246,12 +247,12 @@ export default function ActionCentre({
     return { months, marketplaces };
   }, [rows, connectedMarketplaces]);
 
-  const getStatusForCell = (marketplace: string, monthKey: string): string => {
+  const getStatusForCell = (marketplace: string, monthKey: string): { status: string; tooltip: string } => {
     // Before accounting boundary — don't assume, just mark as not tracked
     if (accountingBoundary) {
       const boundaryMonth = accountingBoundary.substring(0, 7); // YYYY-MM
       if (monthKey < boundaryMonth) {
-        return 'not_tracked';
+        return { status: 'not_tracked', tooltip: 'Before accounting boundary' };
       }
     }
 
@@ -261,37 +262,41 @@ export default function ActionCentre({
       return r.marketplace_code === marketplace && rowMonth === monthKey;
     });
 
-    if (matchingRows.length === 0) return 'missing';
+    if (matchingRows.length === 0) return { status: 'missing', tooltip: 'No data for this period' };
 
-    // Derive the aggregate status — priority: best status wins
-    // Status priority (best → worst): complete > pushed_to_xero > ready_to_push > settlement_needed > gap_detected > missing
-    const STATUS_PRIORITY: Record<string, number> = {
-      complete: 6,
-      bank_matched: 6,
-      pushed_to_xero: 5,
-      already_recorded: 5,
-      ready_to_push: 4,
-      settlement_needed: 3,
-      gap_detected: 2,
-      missing: 1,
-    };
-
-    // If ALL rows are complete/pushed, show complete/pushed
-    // If ANY row is settlement_needed while others are pushed, show the pushed status (partial progress)
+    // Count statuses
     const statuses = matchingRows.map(r => r.overall_status || 'missing');
-    const bestStatus = statuses.reduce((best, s) => {
-      return (STATUS_PRIORITY[s] || 0) > (STATUS_PRIORITY[best] || 0) ? s : best;
-    }, 'missing');
-    const worstStatus = statuses.reduce((worst, s) => {
-      return (STATUS_PRIORITY[s] || 0) < (STATUS_PRIORITY[worst] || 0) ? s : worst;
-    }, 'complete');
+    const isInXero = (s: string) => s === 'complete' || s === 'bank_matched' || s === 'pushed_to_xero' || s === 'synced_external';
+    const isReady = (s: string) => s === 'ready_to_push';
+    const isMissing = (s: string) => s === 'settlement_needed' || s === 'missing';
+    const isPreBoundary = (s: string) => s === 'already_recorded';
 
-    // If majority (>50%) are pushed/complete, show the best status
-    const goodCount = statuses.filter(s => (STATUS_PRIORITY[s] || 0) >= 4).length;
-    if (goodCount > statuses.length / 2) return bestStatus;
+    const inXeroCount = statuses.filter(isInXero).length;
+    const readyCount = statuses.filter(isReady).length;
+    const missingCount = statuses.filter(isMissing).length;
+    const preBoundaryCount = statuses.filter(isPreBoundary).length;
+    const gapCount = statuses.filter(s => s === 'gap_detected').length;
+    const total = statuses.length;
 
-    // Otherwise show the worst status
-    return worstStatus;
+    // Build tooltip breakdown
+    const parts: string[] = [];
+    if (inXeroCount > 0) parts.push(`${inXeroCount} in Xero`);
+    if (readyCount > 0) parts.push(`${readyCount} ready to push`);
+    if (missingCount > 0) parts.push(`${missingCount} missing`);
+    if (gapCount > 0) parts.push(`${gapCount} gap detected`);
+    if (preBoundaryCount > 0) parts.push(`${preBoundaryCount} pre-boundary`);
+    const tooltip = parts.join(' · ') || 'No data';
+
+    // Priority cascade — exact rules, no majority logic
+    if (preBoundaryCount === total) return { status: 'not_tracked', tooltip };
+    if (gapCount > 0) return { status: 'gap_detected', tooltip };
+    if (inXeroCount === total) return { status: 'pushed_to_xero', tooltip };
+    if (inXeroCount > 0 && (readyCount > 0 || missingCount > 0)) return { status: 'partial', tooltip };
+    if (missingCount > 0 && !matchingRows.some(r => r.settlement_uploaded)) return { status: 'missing', tooltip };
+    if (readyCount > 0) return { status: 'ready_to_push', tooltip };
+    if (missingCount > 0) return { status: 'settlement_needed', tooltip };
+
+    return { status: 'missing', tooltip };
   };
 
   const formatMonthLabel = (key: string): string => {
@@ -545,7 +550,7 @@ export default function ActionCentre({
                       {MARKETPLACE_LABELS[mp] || mp}
                     </td>
                     {timelineData.months.map(m => {
-                      const status = getStatusForCell(mp, m);
+                      const { status, tooltip } = getStatusForCell(mp, m);
                       const config = STATUS_ICONS[status] || STATUS_ICONS.missing;
                       return (
                         <td key={m} className="text-center py-2.5 px-3">
@@ -554,7 +559,7 @@ export default function ActionCentre({
                               <TooltipTrigger asChild>
                                 <span className="text-base cursor-default">{config.icon}</span>
                               </TooltipTrigger>
-                              <TooltipContent>{config.label}</TooltipContent>
+                              <TooltipContent className="text-xs">{tooltip}</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </td>
