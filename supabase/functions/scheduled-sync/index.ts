@@ -68,7 +68,6 @@ Deno.serve(async (req) => {
   // 5. Sync Xero status back (audit matched invoices)
   console.log("[scheduled-sync] Step 5: Xero status audit...");
   // Run for each user who has xero tokens
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
   const { data: xeroUsers } = await adminClient
     .from('xero_tokens')
     .select('user_id');
