@@ -1089,6 +1089,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         </CardContent>
       </Card>
 
+      {/* Shopify Sync Banner — always visible when Shopify is connected */}
+      {hasShopifyConnection && (
+        <ShopifySyncBanner
+          onSync={handleShopifySync}
+          syncing={shopifySyncing}
+        />
+      )}
+
       {/* Where to find your files — collapsible guide, auto-collapses when files uploaded */}
       <FileGuide forceCollapsed={hasFiles} />
 
@@ -1716,6 +1724,67 @@ function FileGuide({ forceCollapsed }: { forceCollapsed?: boolean }) {
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+// ─── Shopify Sync Banner ────────────────────────────────────────────────────
+
+function ShopifySyncBanner({ onSync, syncing }: { onSync: () => void; syncing: boolean }) {
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from('system_events')
+      .select('created_at')
+      .eq('event_type', 'shopify_payout_synced')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setLastSynced(data[0].created_at);
+        }
+      });
+  }, [syncing]);
+
+  const timeAgo = useMemo(() => {
+    if (!lastSynced) return null;
+    const diff = Date.now() - new Date(lastSynced).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }, [lastSynced]);
+
+  return (
+    <Card className="border-l-4 border-l-emerald-500 border-border bg-card">
+      <CardContent className="py-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Shopify Connected</p>
+            <p className="text-xs text-muted-foreground">
+              Auto-pull payouts directly from Shopify API — no CSV needed.
+              {timeAgo && <span className="ml-2 text-muted-foreground/70">Last synced: {timeAgo}</span>}
+            </p>
+          </div>
+        </div>
+        <Button
+          onClick={onSync}
+          disabled={syncing}
+          size="sm"
+          className="gap-2 shrink-0"
+        >
+          {syncing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {syncing ? 'Syncing…' : 'Sync Shopify Payouts'}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
