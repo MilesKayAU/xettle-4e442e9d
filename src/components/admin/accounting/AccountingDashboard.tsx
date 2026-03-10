@@ -2249,7 +2249,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                   <React.Fragment key={s.id}>
                     <tr
                       className={`border-b hover:bg-muted/30 cursor-pointer transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
-                      onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                      onClick={() => toggleExpand(s.id)}
                     >
                       <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
                         <input
