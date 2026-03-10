@@ -384,9 +384,15 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       gst_on_expenses: settlement.gst_on_fees,
       bank_deposit: settlement.net_payout,
       source: settlement.source,
+      source_reference: meta.sourceReference || null,
       status: 'saved',
       reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
     } as any);
+
+    // Register aliases after successful insert
+    if (!error) {
+      registerAliases(settlement.settlement_id, user.id, settlement.source, meta.sourceReference);
+    }
 
     if (error) return { success: false, error: error.message };
 

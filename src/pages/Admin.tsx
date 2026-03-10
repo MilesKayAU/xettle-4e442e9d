@@ -336,6 +336,10 @@ export default function Admin() {
           <TabsContent value="bugs">
             <BugReportsDashboard />
           </TabsContent>
+
+          <TabsContent value="integrity">
+            <DataIntegrityDashboard />
+          </TabsContent>
         </Tabs>
       </div>
 

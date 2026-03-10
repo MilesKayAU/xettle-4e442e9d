@@ -493,6 +493,14 @@ async function sweepUser(adminSupabase: any, userId: string) {
     console.error('Bank matching step error:', e)
   }
 
+  // P2: Run duplicate detection pass after main sweep
+  try {
+    summary.duplicates_suppressed = await dedupPass(adminSupabase, userId);
+  } catch (e) {
+    console.error('[validation-sweep] dedup pass error:', e);
+    await logEvent(adminSupabase, userId, 'dedup_pass_error', { error: String(e) }, 'error');
+  }
+
   // Log sweep completion
   await logEvent(adminSupabase, userId, 'validation_sweep_complete', summary, 'info')
 

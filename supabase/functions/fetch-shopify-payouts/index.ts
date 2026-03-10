@@ -286,6 +286,7 @@ async function syncPayoutsForUser(
         settlement_id: String(payout.id),
         marketplace: "shopify_payments",
         source: "api",
+        source_reference: (payout as any).bank_reference || null,
         status: settlementStatus,
         period_start: payoutDate,
         period_end: payoutDate,
@@ -305,6 +306,18 @@ async function syncPayoutsForUser(
         bank_deposit: netPayout,
         raw_payload: { payout, transactions },
       } as any);
+
+      // Register aliases after successful insert
+      if (!insertError) {
+        const bankRef = (payout as any).bank_reference;
+        const aliasRows: any[] = [
+          { canonical_settlement_id: String(payout.id), alias_id: String(payout.id), user_id: userId, source: "api" },
+        ];
+        if (bankRef && bankRef !== String(payout.id)) {
+          aliasRows.push({ canonical_settlement_id: String(payout.id), alias_id: bankRef, user_id: userId, source: "api" });
+        }
+        await supabase.from("settlement_id_aliases").upsert(aliasRows, { onConflict: "alias_id,user_id" });
+      }
 
       if (insertError) {
         errors.push(`Payout ${payout.id}: ${insertError.message}`);
