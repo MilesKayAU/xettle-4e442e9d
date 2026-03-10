@@ -57,6 +57,20 @@ Deno.serve(async (req) => {
 
     for (const userId of uniqueUserIds) {
       try {
+        // ─── Check if user has auto-push enabled ──────────────────
+        const { data: autoPushSetting } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', userId)
+          .eq('key', 'automation_xero_auto_push')
+          .maybeSingle()
+
+        if (autoPushSetting?.value !== 'true') {
+          console.log(`[auto-push-xero] User ${userId}: auto-push disabled (setting=${autoPushSetting?.value || 'not set'}). Skipping.`)
+          perUserResults.push({ userId, pushed: 0, skipped: 0, errors: 0, reason: 'auto_push_disabled' })
+          continue
+        }
+
         // ─── Get all ready_to_push settlements ────────────────────
         const { data: settlements, error: settErr } = await supabase
           .from('settlements')
