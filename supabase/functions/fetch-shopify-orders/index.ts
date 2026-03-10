@@ -56,6 +56,22 @@ Deno.serve(async (req) => {
     const resolvedUserId = userId || claimsData.claims.sub;
     const effectiveLimit = Math.min(limit || 250, 250);
 
+    // ─── Enforce accounting boundary ────────────────────────────────
+    let effectiveDateFrom = dateFrom;
+    const { data: boundarySetting } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "accounting_boundary_date")
+      .eq("user_id", resolvedUserId)
+      .maybeSingle();
+
+    if (boundarySetting?.value) {
+      const boundaryDate = boundarySetting.value;
+      if (!effectiveDateFrom || effectiveDateFrom < boundaryDate) {
+        effectiveDateFrom = boundaryDate + "T00:00:00Z";
+      }
+    }
+
     // 1. Get access token from shopify_tokens
     const { data: tokenRow, error: tokenError } = await supabase
       .from("shopify_tokens")
