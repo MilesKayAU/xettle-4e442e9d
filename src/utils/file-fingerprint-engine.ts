@@ -539,6 +539,52 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
   return result;
 }
 
+// ─── Confidence Tier Helper ─────────────────────────────────────────────────
+
+export type ConfidenceTier = 'exact' | 'high' | 'medium' | 'low';
+
+/** Maps a numeric confidence score (0–100) to a named tier */
+export function confidenceTier(score: number): ConfidenceTier {
+  if (score >= 100) return 'exact';
+  if (score >= 75) return 'high';
+  if (score >= 50) return 'medium';
+  return 'low';
+}
+
+/** Returns true if the file needs the First Contact modal */
+export function needsFirstContact(detection: FileDetectionResult | null): boolean {
+  if (!detection) return true;
+  if (!detection.isSettlementFile) return false;
+  if (detection.marketplace === 'unknown') return true;
+  const tier = confidenceTier(detection.confidence);
+  return tier === 'low' || tier === 'medium';
+}
+
+// ─── PII Scrubbing Helper ───────────────────────────────────────────────────
+
+const PII_PATTERNS = [
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/, // email
+  /^\+?\d[\d\s\-]{8,}$/,        // phone
+];
+
+const PII_HEADER_KEYWORDS = ['name', 'email', 'phone', 'address', 'street', 'suburb', 'postcode', 'zip', 'customer', 'buyer', 'recipient'];
+
+/** Scrub PII from sample rows based on header names and cell patterns */
+export function scrubSampleRows(headers: string[], rows: string[][]): string[][] {
+  const piiColumns = new Set<number>();
+  headers.forEach((h, i) => {
+    const lower = h.toLowerCase();
+    if (PII_HEADER_KEYWORDS.some(kw => lower.includes(kw))) piiColumns.add(i);
+  });
+  return rows.map(row =>
+    row.map((cell, i) => {
+      if (piiColumns.has(i)) return '[scrubbed]';
+      if (PII_PATTERNS.some(p => p.test(cell))) return '[scrubbed]';
+      return cell;
+    })
+  );
+}
+
 // ─── Marketplace Labels ─────────────────────────────────────────────────────
 
 export const MARKETPLACE_LABELS: Record<string, string> = {
@@ -552,5 +598,9 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   mydeal: 'MyDeal',
   woolworths: 'Woolworths',
   woolworths_marketplus: 'Woolworths MarketPlus',
+  everyday_market: 'Everyday Market',
+  ebay_au: 'eBay AU',
+  theiconic: 'THE ICONIC',
+  etsy: 'Etsy',
   unknown: 'Unknown Marketplace',
 };
