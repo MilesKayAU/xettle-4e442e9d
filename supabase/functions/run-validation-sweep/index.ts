@@ -275,7 +275,11 @@ async function sweepUser(adminSupabase: any, userId: string) {
           if (!(mLower.includes(mcLowerInner) || mLower.includes(mcPrefixInner))) continue
           // Filter by period date range
           if (line.posted_date < periodStart || line.posted_date > periodEnd) continue
-          orderTotal += Math.abs(Number(line.amount) || 0)
+          // Only count ItemPrice lines as revenue (skip fees, promotions, chargebacks)
+          const amt = Number(line.amount) || 0
+          if (line.amount_type === 'ItemPrice' && amt > 0) {
+            orderTotal += amt
+          }
           if (line.order_id) uniqueOrders.add(line.order_id)
         }
         const orderCount = uniqueOrders.size || (orderTotal > 0 ? 1 : 0)
