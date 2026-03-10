@@ -163,7 +163,7 @@ export default function ActionCentre({
   const awaitingBank = rows.filter(r => r.overall_status === 'pushed_to_xero' || (r.xero_pushed && !r.bank_matched));
   const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded');
   const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
-  const allComplete = rows.length > 0 && uploadNeeded.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0;
+  const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0;
 
   // Build a lookup of last known settlement amount per marketplace
   const lastKnownAmounts = useMemo(() => {
