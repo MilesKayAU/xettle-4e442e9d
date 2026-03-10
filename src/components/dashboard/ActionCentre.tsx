@@ -135,6 +135,9 @@ export default function ActionCentre({
       if (connectionsRes.data) {
         setConnectedMarketplaces(connectionsRes.data.map((c: any) => c.marketplace_code));
       }
+      if (lastSyncRes.data?.created_at) {
+        setLastAutoSync(new Date(lastSyncRes.data.created_at));
+      }
     } catch (err) {
       console.error('ActionCentre load error:', err);
     } finally {
