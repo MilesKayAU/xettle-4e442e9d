@@ -1406,6 +1406,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 onAnalyzeAI={analyzeWithAI}
                 onProcess={processFile}
                 onSetStatus={setFileStatus}
+                onFirstContact={(i) => setFirstContactIdx(i)}
               />
             )
           ))}
