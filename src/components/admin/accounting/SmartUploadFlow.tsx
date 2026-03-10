@@ -136,10 +136,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   filesRef.current = files;
 
   // Check if Shopify is connected
-  useState(() => {
+  useEffect(() => {
     supabase.from('shopify_tokens').select('id').limit(1)
       .then(({ data }) => setHasShopifyConnection(!!(data && data.length > 0)));
-  });
+  }, []);
 
   const handleShopifySync = useCallback(async () => {
     setShopifySyncing(true);
