@@ -101,6 +101,7 @@ export default function ActionCentre({
   const [apiSyncedMarketplaces, setApiSyncedMarketplaces] = useState<Set<string>>(new Set());
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
+  const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
