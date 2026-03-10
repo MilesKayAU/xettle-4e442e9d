@@ -130,12 +130,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   // Filter settlements
   const filteredSettlements = settlements.filter(s => {
-    if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed';
+    if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
     if (settlementFilter === 'synced') return s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external';
     return true;
   });
 
-  const attentionCount = settlements.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed').length;
+  const attentionCount = settlements.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
   const syncedCount = settlements.filter(s => s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external').length;
 
   return (
@@ -325,6 +325,29 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {settlements.some(s => s.status === 'push_failed' || s.status === 'push_failed_permanent') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={async () => {
+                      const failed = settlements.filter(s => s.status === 'push_failed' || s.status === 'push_failed_permanent');
+                      if (failed.length === 0) return;
+                      try {
+                        for (const s of failed) {
+                          await supabase.from('settlements').update({ status: 'ready_to_push', push_retry_count: 0 }).eq('id', s.id);
+                        }
+                        toast.success(`Reset ${failed.length} failed settlement(s) — ready to retry`);
+                        loadSettlements(true);
+                      } catch (err: any) {
+                        toast.error(err.message || 'Failed to reset');
+                      }
+                    }}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Retry {settlements.filter(s => s.status === 'push_failed' || s.status === 'push_failed_permanent').length} Failed
+                  </Button>
+                )}
                 {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleBulkMarkSynced(settlements)}>
                     <SkipForward className="h-3.5 w-3.5 mr-1" />
