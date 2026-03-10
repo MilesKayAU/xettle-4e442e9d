@@ -159,7 +159,7 @@ export async function saveReconciliationResult(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated' };
 
-    const row = {
+    const row: Record<string, any> = {
       user_id: user.id,
       marketplace_code: result.marketplace_code,
       period_label: result.period_label,
@@ -172,6 +172,7 @@ export async function saveReconciliationResult(
       difference: result.difference,
       status: result.status,
       notes: result.notes,
+      unmatched_orders: result.unmatched_orders,
       updated_at: new Date().toISOString(),
     };
 
