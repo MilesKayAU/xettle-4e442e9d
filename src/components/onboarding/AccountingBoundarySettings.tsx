@@ -19,6 +19,7 @@ interface AccountingBoundarySettingsProps {
 export default function AccountingBoundarySettings({
   xeroConnected,
   onConnectXero,
+  onGoToUpload,
 }: AccountingBoundarySettingsProps) {
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [boundarySource, setBoundarySource] = useState<string | null>(null);
