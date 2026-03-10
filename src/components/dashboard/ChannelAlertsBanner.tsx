@@ -275,7 +275,16 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     );
   }
 
-  if (alerts.length === 0) return null;
+  if (alerts.length === 0) {
+    return (
+      <div className="flex items-center justify-end">
+        <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1.5 text-xs text-muted-foreground">
+          {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          {syncing ? 'Rescanning...' : 'Rescan channels'}
+        </Button>
+      </div>
+    );
+  }
 
   // Collapsed view when 3+ alerts
   if (alerts.length >= 3 && !expanded) {
