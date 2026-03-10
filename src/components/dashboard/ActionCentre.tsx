@@ -190,16 +190,7 @@ export default function ActionCentre({
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at) : null;
 
-  // Overdue: settlement_needed for > 30 days, but only for periods AFTER user account creation
-  const overdueRows = uploadNeeded.filter(r => {
-    const periodEnd = new Date(r.period_end);
-    const isOldEnough = Date.now() - periodEnd.getTime() > 30 * 24 * 60 * 60 * 1000;
-    // Don't show overdue for periods before user signed up (historical backfill)
-    const isAfterSignup = userCreatedAt ? periodEnd >= userCreatedAt : true;
-    // Don't show overdue for marketplaces that sync via API (they backfill automatically)
-    const isApiSynced = apiSyncedMarketplaces.has(r.marketplace_code);
-    return isOldEnough && isAfterSignup && !isApiSynced;
-  });
+  // Overdue alerts removed — they were creating noise with historical backfill data
 
   // 3-month timeline
   const timelineData = useMemo(() => {
@@ -268,25 +259,7 @@ export default function ActionCentre({
         </div>
       </div>
 
-      {/* Overdue alerts */}
-      {overdueRows.map(r => (
-        <Card key={r.id} className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
-          <CardContent className="py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-              <p className="text-sm">
-                <span className="font-medium">{MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code}</span> settlement is {Math.floor((Date.now() - new Date(r.period_end).getTime()) / (24 * 60 * 60 * 1000))} days overdue.
-                <span className="text-muted-foreground"> Settlements are usually received within 14 days of period end.</span>
-              </p>
-            </div>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-amber-300 dark:border-amber-700" onClick={() => {
-              onSwitchToUpload(buildMissingList());
-            }}>
-              <Upload className="h-3 w-3" /> Upload now
-            </Button>
-          </CardContent>
-        </Card>
-      ))}
+      {/* Overdue alerts removed — historical backfill was creating false alerts */}
 
       {/* All-complete banner OR 3 status cards */}
       {allComplete ? (

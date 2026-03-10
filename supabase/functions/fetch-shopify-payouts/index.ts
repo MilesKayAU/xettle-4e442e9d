@@ -106,6 +106,7 @@ Deno.serve(async (req) => {
     }
 
     // ─── Enforce accounting boundary ──────────────────────────────────
+    // Use explicit boundary if set, otherwise use user creation date as fallback
     let dateMin: string | undefined;
     const { data: boundarySetting } = await supabase
       .from("app_settings")
@@ -116,6 +117,12 @@ Deno.serve(async (req) => {
 
     if (boundarySetting?.value) {
       dateMin = boundarySetting.value;
+    } else {
+      // Fallback: use the user's account creation date as the boundary
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user?.created_at) {
+        dateMin = userData.user.created_at.substring(0, 10); // YYYY-MM-DD
+      }
     }
 
     // ─── Fetch paid payouts from Shopify ──────────────────────────────
@@ -262,13 +269,17 @@ Deno.serve(async (req) => {
         const feesExGst = Math.abs(totalFees) - gstOnExpenses;
         const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
+        // Determine if this payout falls before the accounting boundary
+        const isBeforeBoundary = dateMin && payoutDate < dateMin;
+        const settlementStatus = isBeforeBoundary ? "already_recorded" : "ready_to_push";
+
         // ─── Insert settlement ───────────────────────────────────
         const { error: insertError } = await supabase.from("settlements").insert({
           user_id: userId,
           settlement_id: String(payout.id),
           marketplace: "shopify_payments",
           source: "api",
-          status: "ready_to_push",
+          status: settlementStatus,
           period_start: payoutDate,
           period_end: payoutDate,
           deposit_date: payoutDate,
@@ -348,7 +359,7 @@ Deno.serve(async (req) => {
               settlement_uploaded_at: new Date().toISOString(),
               settlement_id: String(payout.id),
               settlement_net: (existingVal.settlement_net || 0) + netPayout,
-              overall_status: "ready_to_push",
+              overall_status: isBeforeBoundary ? "already_recorded" : "ready_to_push",
             })
             .eq("id", existingVal.id);
         } else {
@@ -362,7 +373,7 @@ Deno.serve(async (req) => {
             settlement_uploaded_at: new Date().toISOString(),
             settlement_id: String(payout.id),
             settlement_net: netPayout,
-            overall_status: "ready_to_push",
+            overall_status: isBeforeBoundary ? "already_recorded" : "ready_to_push",
           } as any);
         }
 

@@ -1,0 +1,1 @@
+UPDATE marketplace_validation SET overall_status = 'already_recorded' WHERE marketplace_code = 'shopify_payments' AND user_id = '9d34d250-7de4-48e5-9566-11fa7a79852f' AND period_end < '2026-03-01'
