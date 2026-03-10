@@ -882,25 +882,54 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     {checkedItems.size} of {missingSettlements!.length} uploaded
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {missingSettlements!.map((ms, i) => {
                     const done = checkedItems.has(i);
+                    const pStart = new Date(ms.period_start + 'T00:00:00');
+                    const pEnd = new Date(ms.period_end + 'T00:00:00');
+                    const monthLabel = pStart.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+                    const dateRange = `${pStart.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} – ${pEnd.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+                    const sourceHint = MARKETPLACE_SOURCE_HINTS[ms.marketplace_code] || 'Check your marketplace portal or email';
                     return (
                       <div
                         key={`${ms.marketplace_code}-${ms.period_start}`}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-all ${
+                        className={`flex items-start gap-2 px-3 py-2 rounded-md transition-all ${
                           done
-                            ? 'bg-emerald-100/80 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 line-through opacity-70'
-                            : 'bg-background/80 text-foreground'
+                            ? 'bg-emerald-100/80 dark:bg-emerald-900/30 opacity-70'
+                            : 'bg-background/80'
                         }`}
                       >
                         {done ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
                         ) : (
-                          <XCircle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+                          <XCircle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                         )}
-                        <span className="font-medium">{ms.marketplace_label}</span>
-                        <span className="text-muted-foreground">— {new Date(ms.period_start + 'T00:00:00').toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className={`flex items-center gap-1.5 ${done ? 'line-through' : ''}`}>
+                            <span className="text-xs font-medium text-foreground">{ms.marketplace_label}</span>
+                            <span className="text-xs text-muted-foreground">— {monthLabel}</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button className="text-muted-foreground/60 hover:text-muted-foreground" onClick={e => e.stopPropagation()}>
+                                  <HelpCircle className="h-3 w-3" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p className="font-medium mb-0.5">Where to find this file:</p>
+                                <p>{sourceHint}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          {!done && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {ms.estimated_amount
+                                ? `Est. $${ms.estimated_amount.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                : 'Est. amount unknown'}
+                              {' · '}
+                              {dateRange}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
