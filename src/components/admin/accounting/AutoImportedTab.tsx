@@ -561,19 +561,17 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   });
   const readyToPushTotal = readyToPush.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
 
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center">
-          <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground mt-2">Loading auto-imported settlements...</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-h-[400px]">
+      {loading && (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground ml-2">Loading auto-imported settlements...</p>
+        </div>
+      )}
+
+      {!loading && (
+        <>
       {/* ─── Sync + Audit Controls ─────────────────────────── */}
       <div className="grid gap-3 sm:grid-cols-2">
         <Card className="border-primary/20">
