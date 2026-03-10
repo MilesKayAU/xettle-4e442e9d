@@ -18,6 +18,29 @@ Deno.serve(async (req) => {
   const results: Record<string, any> = {};
   const startTime = Date.now();
 
+  // ─── Collect all user IDs early for interim records ─────────────
+  const { data: amazonTokens } = await adminClient.from('amazon_tokens').select('user_id');
+  const { data: shopifyTokens } = await adminClient.from('shopify_tokens').select('user_id');
+  const { data: xeroTokens } = await adminClient.from('xero_tokens').select('user_id');
+
+  const allUserIds = new Set<string>();
+  for (const t of amazonTokens || []) allUserIds.add(t.user_id);
+  for (const t of shopifyTokens || []) allUserIds.add(t.user_id);
+  for (const t of xeroTokens || []) allUserIds.add(t.user_id);
+
+  // ─── Write interim "running" sync_history per user ─────────────
+  const interimIds: Record<string, string> = {};
+  for (const userId of allUserIds) {
+    const { data } = await adminClient.from("sync_history").insert({
+      user_id: userId,
+      event_type: "scheduled_sync",
+      status: "running",
+      settlements_affected: 0,
+      details: { started_at: new Date().toISOString() },
+    } as any).select('id').single();
+    if (data?.id) interimIds[userId] = data.id;
+  }
+
   // Helper to call sibling edge functions
   async function callFunction(name: string, extraHeaders: Record<string, string> = {}, body: any = { time: new Date().toISOString() }) {
     const url = `${supabaseUrl}/functions/v1/${name}`;
@@ -32,26 +55,34 @@ Deno.serve(async (req) => {
         body: JSON.stringify(body),
       });
       const respBody = await res.json().catch(() => ({ status: res.status }));
+      if (!res.ok) {
+        return { error: respBody?.error || `HTTP ${res.status}`, ...respBody };
+      }
       return { status: res.status, ...respBody };
     } catch (err) {
       return { error: String(err) };
     }
   }
 
-  // 1. Fetch Amazon settlements (multi-user sync)
+  // Track which steps errored
+  const stepErrors: string[] = [];
+
+  // 1. Fetch Amazon settlements
   console.log("[scheduled-sync] Step 1: Amazon fetch...");
   results.amazon = await callFunction("fetch-amazon-settlements", { "x-action": "sync" });
+  if (results.amazon?.error) stepErrors.push('amazon');
 
-  // 2. Fetch Shopify payouts (multi-user sync)
+  // 2. Fetch Shopify payouts
   console.log("[scheduled-sync] Step 2: Shopify fetch...");
   results.shopify = await callFunction("fetch-shopify-payouts", { "x-action": "sync" });
+  if (results.shopify?.error) stepErrors.push('shopify');
 
   // 3. Run validation sweep
   console.log("[scheduled-sync] Step 3: Validation sweep...");
   results.validation = await callFunction("run-validation-sweep");
+  if (results.validation?.error) stepErrors.push('validation');
 
   // 4. Auto-push ready settlements to Xero
-  //    Defaults to dry_run unless admin has set auto_push_live_mode=true in app_settings
   console.log("[scheduled-sync] Step 4: Auto-push to Xero (checking live mode)...");
   let autoPushLive = false;
   const { data: liveModeSettings } = await adminClient
@@ -64,18 +95,16 @@ Deno.serve(async (req) => {
   }
   console.log(`[scheduled-sync] Auto-push mode: ${autoPushLive ? 'LIVE' : 'DRY RUN'}`);
   results.xero_push = await callFunction("auto-push-xero", {}, { dry_run: !autoPushLive });
+  if (results.xero_push?.error || (results.xero_push?.errors && results.xero_push.errors > 0)) stepErrors.push('xero_push');
 
-  // 5. Sync Xero status back (audit matched invoices)
+  // 5. Sync Xero status back
   console.log("[scheduled-sync] Step 5: Xero status audit...");
-  // Run for each user who has xero tokens
-  const { data: xeroUsers } = await adminClient
-    .from('xero_tokens')
-    .select('user_id');
-  const xeroUserIds = [...new Set((xeroUsers || []).map(t => t.user_id))];
+  const xeroUserIds = [...new Set((xeroTokens || []).map(t => t.user_id))];
   results.xero_audit = { users: xeroUserIds.length, results: [] };
   for (const uid of xeroUserIds) {
     const auditResult = await callFunction("sync-xero-status", {}, { userId: uid });
     (results.xero_audit.results as any[]).push({ user_id: uid, ...auditResult });
+    if (auditResult?.error) stepErrors.push('xero_audit');
   }
 
   const durationMs = Date.now() - startTime;
@@ -86,45 +115,69 @@ Deno.serve(async (req) => {
   const totalXeroPushed = results.xero_push?.pushed || 0;
   const totalSynced = totalAmazonSynced + totalShopifySynced;
 
-  // Get all unique user IDs from all sync results
-  const userIds = new Set<string>();
-  for (const r of results.amazon?.results || []) userIds.add(r.user_id);
-  for (const r of results.shopify?.results || []) userIds.add(r.user_id);
-  for (const r of results.xero_push?.results || []) if (r.userId) userIds.add(r.userId);
-  for (const uid of xeroUserIds) userIds.add(uid);
-
-  // Log a sync_history entry per user (so RLS-filtered queries work)
-  for (const userId of userIds) {
-    await adminClient.from("sync_history").insert({
-      user_id: userId,
-      event_type: "scheduled_sync",
-      status: "success",
-      settlements_affected: totalSynced + totalXeroPushed,
-      details: {
-        amazon: results.amazon?.results?.find((r: any) => r.user_id === userId) || null,
-        shopify: results.shopify?.results?.find((r: any) => r.user_id === userId) || null,
-        xero_push: results.xero_push?.results?.find((r: any) => r.userId === userId) || null,
-        xero_audit: results.xero_audit?.results?.find((r: any) => r.user_id === userId) || null,
-        duration_ms: durationMs,
-      },
-    } as any);
+  // ─── Determine overall status ─────────────────────────────────
+  const totalSteps = 5;
+  const uniqueStepErrors = [...new Set(stepErrors)];
+  let overallStatus: string;
+  if (uniqueStepErrors.length === 0) {
+    overallStatus = 'success';
+  } else if (uniqueStepErrors.length >= totalSteps) {
+    overallStatus = 'error';
+  } else {
+    overallStatus = 'partial';
   }
 
-  if (userIds.size === 0) {
+  // ─── Update interim sync_history records with final status ─────
+  for (const userId of allUserIds) {
+    const interimId = interimIds[userId];
+    const details = {
+      amazon: results.amazon?.results?.find((r: any) => r.user_id === userId) || (results.amazon?.error ? { error: results.amazon.error } : null),
+      shopify: results.shopify?.results?.find((r: any) => r.user_id === userId) || (results.shopify?.error ? { error: results.shopify.error } : null),
+      xero_push: results.xero_push?.results?.find((r: any) => r.userId === userId) || null,
+      xero_audit: results.xero_audit?.results?.find((r: any) => r.user_id === userId) || null,
+      duration_ms: durationMs,
+      step_errors: uniqueStepErrors.length > 0 ? uniqueStepErrors : undefined,
+    };
+
+    if (interimId) {
+      await adminClient.from("sync_history")
+        .update({
+          status: overallStatus,
+          settlements_affected: totalSynced + totalXeroPushed,
+          error_message: uniqueStepErrors.length > 0 ? `Steps failed: ${uniqueStepErrors.join(', ')}` : null,
+          details,
+        } as any)
+        .eq('id', interimId);
+    } else {
+      // Fallback insert if interim wasn't created
+      await adminClient.from("sync_history").insert({
+        user_id: userId,
+        event_type: "scheduled_sync",
+        status: overallStatus,
+        settlements_affected: totalSynced + totalXeroPushed,
+        error_message: uniqueStepErrors.length > 0 ? `Steps failed: ${uniqueStepErrors.join(', ')}` : null,
+        details,
+      } as any);
+    }
+  }
+
+  if (allUserIds.size === 0) {
     console.log("[scheduled-sync] No users with API tokens found. Nothing to sync.");
   }
 
-  console.log(`[scheduled-sync] Complete in ${durationMs}ms. Amazon: ${totalAmazonSynced}, Shopify: ${totalShopifySynced}, Xero pushed: ${totalXeroPushed}, Xero audited: ${xeroUserIds.length} users`);
+  console.log(`[scheduled-sync] Complete (${overallStatus}) in ${durationMs}ms. Amazon: ${totalAmazonSynced}, Shopify: ${totalShopifySynced}, Xero pushed: ${totalXeroPushed}, Xero audited: ${xeroUserIds.length} users. Errors: ${uniqueStepErrors.length > 0 ? uniqueStepErrors.join(', ') : 'none'}`);
 
   return new Response(
     JSON.stringify({
-      success: true,
+      success: overallStatus !== 'error',
+      status: overallStatus,
       duration_ms: durationMs,
       amazon_synced: totalAmazonSynced,
       shopify_synced: totalShopifySynced,
       xero_pushed: totalXeroPushed,
       xero_audited_users: xeroUserIds.length,
-      users_processed: userIds.size,
+      users_processed: allUserIds.size,
+      step_errors: uniqueStepErrors,
       results,
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
