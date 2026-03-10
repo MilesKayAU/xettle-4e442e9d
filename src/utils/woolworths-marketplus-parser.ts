@@ -88,10 +88,10 @@ function parseAmount(raw: string): number {
 function normaliseDate(raw: string): string {
   if (!raw) return '';
   const trimmed = raw.trim();
-  // MM/DD/YYYY HH:MM:SS format from Woolworths
+  // DD/MM/YYYY HH:MM:SS format from Woolworths (Australian date format)
   const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (match) {
-    const [, month, day, year] = match;
+    const [, day, month, year] = match;
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
   if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.substring(0, 10);
