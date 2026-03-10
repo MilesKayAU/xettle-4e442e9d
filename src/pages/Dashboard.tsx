@@ -9,6 +9,7 @@ import SettlementsOverview from '@/components/admin/accounting/SettlementsOvervi
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -209,6 +210,11 @@ export default function Dashboard() {
                 </Link>
               </Button>
             )}
+            <ConnectionStatusBar onNavigateToSettings={() => {
+              switchView('settlements');
+              setSelectedMarketplace('amazon_au');
+              setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
+            }} />
             <span className="text-sm text-muted-foreground hidden sm:inline">
               {user?.email}
             </span>
