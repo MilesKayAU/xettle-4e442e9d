@@ -144,7 +144,7 @@ export default function InsightsDashboard() {
         const totalGstOnSales = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
         const totalSales = totalSalesExGst + totalGstOnSales; // Gross sales inc GST
         const totalFees = rows.reduce((sum, r) =>
-          sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
+          sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.max(r.other_fees || 0, 0), 0);
         const totalRefunds = rows.reduce((sum, r) => sum + Math.abs(r.refunds || 0), 0);
         // Check if ANY rows in this group came from shopify_orders (clearing invoices with $0 bank_deposit)
         const hasShopifyOrdersRows = rows.some(r => (r.marketplace || '').startsWith('shopify_orders_'));
@@ -169,7 +169,7 @@ export default function InsightsDashboard() {
           : null;
         const fbaTotal = Math.abs(rows.reduce((sum, r) => sum + (r.fba_fees || 0), 0));
         const storageTotal = Math.abs(rows.reduce((sum, r) => sum + (r.storage_fees || 0), 0));
-        const otherFeesTotal = Math.abs(rows.reduce((sum, r) => sum + (r.other_fees || 0), 0));
+        const otherFeesTotal = rows.reduce((sum, r) => sum + Math.max(r.other_fees || 0, 0), 0);
 
         const adSpend = adSpendByMp[mp] || 0;
         const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
@@ -752,7 +752,7 @@ export default function InsightsDashboard() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{formatCurrency(s.totalSales)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.feeLoad)} of sales</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalFees)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.avgCommission)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalRefunds)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
