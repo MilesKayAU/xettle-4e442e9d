@@ -499,5 +499,4 @@ function formatEventLabel(event: SystemEvent): string {
     case 'settlement_detected': return `Settlement detected: ${mp} ${period}`;
     default: return event.event_type.replace(/_/g, ' ');
   }
-  }
 }
