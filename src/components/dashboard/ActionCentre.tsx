@@ -172,7 +172,12 @@ export default function ActionCentre({
   // Filter out API-synced marketplaces from the "needs upload" list — they sync automatically
   const uploadNeededManual = uploadNeeded.filter(r => !apiSyncedMarketplaces.has(r.marketplace_code));
   const readyToPush = rows.filter(r => r.overall_status === 'ready_to_push');
-  const awaitingBank = rows.filter(r => r.overall_status === 'pushed_to_xero' || (r.xero_pushed && !r.bank_matched));
+  // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
+  const awaitingBank = rows.filter(r =>
+    r.settlement_id &&
+    r.overall_status !== 'already_recorded' &&
+    (r.overall_status === 'pushed_to_xero' || (r.xero_pushed && !r.bank_matched))
+  );
   const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero');
   const preBoundary = rows.filter(r => r.overall_status === 'already_recorded');
   const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
