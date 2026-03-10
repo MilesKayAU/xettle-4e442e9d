@@ -442,17 +442,29 @@ export default function Dashboard() {
         {/* ─── Dashboard (Action Centre Homepage) ────────────────────── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
-            <ActionCentre
-              onSwitchToUpload={(missing) => {
-                if (missing) setMissingSettlements(missing);
-                switchView('smart_upload');
-              }}
-              onSwitchToSettlements={() => {
-                switchView('settlements');
-                switchSettlementsSubTab('overview');
-              }}
-              userName={user?.email?.split('@')[0]}
-            />
+            <div className="space-y-6">
+              <ActionCentre
+                onSwitchToUpload={(missing) => {
+                  if (missing) setMissingSettlements(missing);
+                  switchView('smart_upload');
+                }}
+                onSwitchToSettlements={() => {
+                  switchView('settlements');
+                  switchSettlementsSubTab('overview');
+                }}
+                userName={user?.email?.split('@')[0]}
+              />
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <SettlementsOverview
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                  onSelectMarketplace={(code) => {
+                    setSelectedMarketplace(code);
+                    switchView('settlements');
+                  }}
+                />
+              )}
+            </div>
           </ErrorBoundary>
         )}
 
