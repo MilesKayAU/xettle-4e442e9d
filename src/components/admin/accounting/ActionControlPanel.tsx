@@ -90,7 +90,7 @@ export default function ActionControlPanel({ userMarketplaces, onSwitchToUpload,
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Action Centre</h3>
+      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">What needs your attention</h3>
 
       {allClear ? (
         <Card className="bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 rounded-xl shadow-sm">
