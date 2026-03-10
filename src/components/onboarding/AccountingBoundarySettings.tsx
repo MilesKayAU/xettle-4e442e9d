@@ -99,6 +99,7 @@ export default function AccountingBoundarySettings({
       <AccountingBoundarySetup
         xeroConnected={xeroConnected}
         onConnectXero={onConnectXero}
+        onGoToUpload={onGoToUpload}
         onComplete={() => {
           setShowSetup(false);
           loadBoundary();
