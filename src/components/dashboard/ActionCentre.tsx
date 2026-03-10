@@ -65,8 +65,9 @@ interface ActionCentreProps {
 const STATUS_ICONS: Record<string, { icon: string; label: string }> = {
   complete: { icon: '✅', label: 'Complete — verified in Xero + bank matched' },
   bank_matched: { icon: '✅', label: 'Bank matched' },
-  pushed_to_xero: { icon: '✅', label: 'Pushed to Xero — awaiting bank match' },
+  pushed_to_xero: { icon: '✅', label: 'In Xero — awaiting bank match' },
   synced_external: { icon: '✅', label: 'Already in Xero (legacy)' },
+  partial: { icon: '🟡', label: 'Partial — some settlements still pending' },
   ready_to_push: { icon: '🟡', label: 'Ready to push to Xero' },
   settlement_needed: { icon: '❌', label: 'Settlement needed' },
   missing: { icon: '❌', label: 'Missing/needed' },
