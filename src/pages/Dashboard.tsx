@@ -7,7 +7,7 @@ import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/ac
 import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyReconciliationStatus';
 import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
-import ActionCentre from '@/components/dashboard/ActionCentre';
+import ActionCentre, { type MissingSettlement } from '@/components/dashboard/ActionCentre';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
