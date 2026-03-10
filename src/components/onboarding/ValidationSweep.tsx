@@ -187,7 +187,7 @@ export default function ValidationSweep({
       await triggerValidationSweep();
       // Animation will complete and then loadData
     } catch {
-      toast.error('Sweep failed');
+      toast.error('Status refresh failed');
       setSweeping(false);
     }
   };
@@ -329,9 +329,9 @@ export default function ValidationSweep({
           <p className="text-sm text-muted-foreground">
             Connect Shopify and upload settlements to see your validation pipeline.
           </p>
-          <Button variant="outline" onClick={handleRefresh} className="mt-2">
-            <RefreshCw className="h-4 w-4 mr-2" /> Run validation sweep
-          </Button>
+           <Button variant="outline" onClick={handleRefresh} className="mt-2">
+             <RefreshCw className="h-4 w-4 mr-2" /> Refresh Status
+           </Button>
         </CardContent>
       </Card>
     );
@@ -358,7 +358,7 @@ export default function ValidationSweep({
             </span>
           )}
           <Button variant="ghost" size="sm" onClick={handleRefresh} className="h-7 px-2 gap-1.5">
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh Status
           </Button>
         </div>
       </div>

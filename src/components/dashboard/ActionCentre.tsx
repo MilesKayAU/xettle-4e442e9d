@@ -174,7 +174,7 @@ export default function ActionCentre({
     setRefreshing(true);
     try {
       await triggerValidationSweep();
-      toast.success('Validation sweep started');
+      toast.success('Status refresh started');
       setTimeout(() => loadData(), 3000);
     } catch {
       toast.error('Sweep failed');
@@ -338,7 +338,7 @@ export default function ActionCentre({
           {lastChecked && <span>Updated {formatTimeAgo(lastChecked)}</span>}
           <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="h-7 px-2 gap-1.5">
             {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Refresh
+            Refresh Status
           </Button>
         </div>
       </div>
@@ -677,7 +677,7 @@ function formatEventLabel(event: SystemEvent): string {
   const period = event.period_label || '';
 
   switch (event.event_type) {
-    case 'validation_sweep_complete': return 'Validation sweep completed';
+    case 'validation_sweep_complete': return 'Status refresh completed';
     case 'settlement_saved': return `Settlement saved: ${mp} ${period}`;
     case 'xero_push_success': return `Pushed to Xero: ${mp} ${period}`;
     case 'xero_push_failed': return `Xero push failed: ${mp} ${period}`;
