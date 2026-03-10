@@ -417,16 +417,9 @@ export default function Dashboard() {
         {activeView === 'settlements' && settlementsSubTab === 'overview' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <SettlementsOverview
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                  onSelectMarketplace={(code) => {
-                    setSelectedMarketplace(code);
-                    switchSettlementsSubTab('all');
-                  }}
-                />
-              )}
+              <ValidationSweep
+                onSwitchToUpload={() => switchView('smart_upload')}
+              />
             </div>
           </ErrorBoundary>
         )}
