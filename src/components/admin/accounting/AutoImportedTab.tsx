@@ -322,18 +322,29 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       if (!user) throw new Error('Not authenticated');
 
       // Run sync-xero-status (now includes fuzzy matching)
+      console.log('[Audit] Starting Xero status sync...');
       const { data: xeroResult, error: xeroErr } = await supabase.functions.invoke('sync-xero-status', {
         body: { userId: user.id },
       });
 
-      if (xeroErr) console.error('Xero sync error:', xeroErr);
+      if (xeroErr) {
+        console.error('[Audit] Xero sync error:', xeroErr);
+        toast.error(`Xero audit failed: ${xeroErr.message}`);
+      } else {
+        console.log('[Audit] Xero result:', xeroResult);
+      }
 
       // Run bank deposit matching
+      console.log('[Audit] Starting bank deposit matching...');
       const { data: bankResult, error: bankErr } = await supabase.functions.invoke('match-bank-deposits', {
         body: {},
       });
 
-      if (bankErr) console.error('Bank match error:', bankErr);
+      if (bankErr) {
+        console.error('[Audit] Bank match error:', bankErr);
+      } else {
+        console.log('[Audit] Bank result:', bankResult);
+      }
 
       const xeroUpdated = xeroResult?.updated || 0;
       const fuzzyMatched = xeroResult?.fuzzy_matched || 0;
@@ -341,14 +352,16 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
 
       if (xeroUpdated + fuzzyMatched + bankMatched > 0) {
         toast.success(
-          `Audit complete: ${xeroUpdated} Xero matches, ${fuzzyMatched} possible matches, ${bankMatched} bank matches`
+          `Audit complete: ${xeroUpdated} Xero matches, ${fuzzyMatched} possible matches, ${bankMatched} bank matches`,
+          { duration: 6000 }
         );
       } else {
-        toast.info('Audit complete — no new matches found');
+        toast.info('Audit complete — no new matches found. All settlements are already categorised.', { duration: 5000 });
       }
 
       await Promise.all([loadApiSettlements(), loadXeroMatches()]);
     } catch (err: any) {
+      console.error('[Audit] Failed:', err);
       toast.error(`Audit failed: ${err.message}`);
     } finally {
       setAuditing(false);
@@ -382,6 +395,10 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         setSyncResult({ synced, total_deposit, settlements: syncedSettlements });
         toast.success(`Found ${synced} new settlement${synced !== 1 ? 's' : ''} totalling ${formatAUD(total_deposit)}`);
         await loadApiSettlements();
+        
+        // Auto-run Xero audit to check which settlements already exist in Xero
+        toast.info('Running accounting audit to detect existing Xero records...');
+        await handleRunAudit();
       } else {
         toast.info('All Amazon settlements already imported — nothing new to sync.');
       }
@@ -576,7 +593,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
               Found {syncResult.synced} new settlement{syncResult.synced !== 1 ? 's' : ''} totalling {formatAUD(syncResult.total_deposit)}
             </p>
             <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
-              Run "Audit" to check which are already in Xero.
+              Xero audit ran automatically — statuses updated below.
             </p>
           </div>
           <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => setSyncResult(null)}>Dismiss</Button>
