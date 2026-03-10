@@ -46,10 +46,18 @@ import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, type StandardSettlement } from '@/utils/settlement-engine';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
+import {
+  detectMultiMarketplace,
+  parseCSVForSplitDetection,
+  saveSplitFingerprint,
+  type MultiMarketplaceSplitResult,
+  type MarketplaceGroup,
+} from '@/utils/multi-marketplace-splitter';
+import MultiMarketplaceSplitCard from './MultiMarketplaceSplitCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error';
+type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
 
 interface DetectedFile {
   file: File;
@@ -59,6 +67,10 @@ interface DetectedFile {
   settlements?: StandardSettlement[];
   error?: string;
   savedCount?: number;
+  /** Multi-marketplace split detection result */
+  splitResult?: MultiMarketplaceSplitResult;
+  /** CSV headers for caching fingerprint */
+  csvHeaders?: string[];
 }
 
 interface SmartUploadFlowProps {
