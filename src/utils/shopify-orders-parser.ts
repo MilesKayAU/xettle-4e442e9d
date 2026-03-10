@@ -13,6 +13,7 @@
  */
 
 import type { StandardSettlement } from './settlement-engine';
+import { parseDateOrEmpty } from './date-parser';
 import {
   MARKETPLACE_REGISTRY,
   detectMarketplaceFromRow,
@@ -133,21 +134,8 @@ function parseAmount(raw: string): number {
   return isNaN(val) ? 0 : val;
 }
 
-function normaliseDate(raw: string): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.substring(0, 10);
-  const slashParts = trimmed.split(/[\/ ]/)[0]?.split('/');
-  if (slashParts && slashParts.length === 3) {
-    const [a, b, c] = slashParts;
-    if (parseInt(c) > 100) return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-  }
-  try {
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
-  } catch { /* fall through */ }
-  return trimmed;
-}
+/** @deprecated Use parseDateOrEmpty from date-parser.ts */
+const normaliseDate = parseDateOrEmpty;
 
 /**
  * Normalise a SKU for consistent matching:
@@ -223,12 +211,11 @@ function parseCSVRow(line: string): string[] {
 }
 
 function monthYear(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
-  } catch {
-    return dateStr;
-  }
+  if (!dateStr || dateStr.length < 7) return dateStr;
+  const [y, m] = dateStr.split('-').map(Number);
+  if (!y || !m || m < 1 || m > 12) return dateStr;
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${months[m - 1]} ${y}`;
 }
 
 // ─── Column Matching ────────────────────────────────────────────────────────
@@ -493,7 +480,9 @@ export function parseShopifyOrdersCSV(
     const lastDate = allDates[allDates.length - 1] || '';
     let partialPeriodWarning = false;
     if (lastDate) {
-      const endMs = new Date(lastDate + 'T23:59:59').getTime();
+      // Parse YYYY-MM-DD manually to avoid new Date() US format issues
+      const [ey, em, ed] = lastDate.split('-').map(Number);
+      const endMs = Date.UTC(ey, em - 1, ed, 23, 59, 59);
       const nowMs = Date.now();
       const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
       partialPeriodWarning = (nowMs - endMs) < threeDaysMs;

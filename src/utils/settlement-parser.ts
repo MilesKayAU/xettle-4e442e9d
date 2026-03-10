@@ -1,5 +1,6 @@
 /** Parser version — bump manually when parser logic changes */
-export const PARSER_VERSION = 'v1.7.0';
+export const PARSER_VERSION = 'v1.7.1';
+import { parseDateOrEmpty } from './date-parser';
 /**
  * Amazon Settlement Report (TSV) Parser
  * Parses the primary settlement data source and categorizes transactions
@@ -181,17 +182,8 @@ export interface ParsedSettlement {
   splitMonth: SplitMonthInfo;
 }
 
-/**
- * Parse date in format "DD.MM.YYYY HH:mm:ss UTC" or "DD.MM.YYYY"
- */
-function parseSettlementDate(dateStr: string): string {
-  if (!dateStr) return '';
-  const parts = dateStr.trim().split(' ')[0].split('.');
-  if (parts.length === 3) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
-  }
-  return dateStr;
-}
+/** @deprecated Use parseDateOrEmpty from date-parser.ts */
+const parseSettlementDate = parseDateOrEmpty;
 
 /**
  * Rule 1 — Settlement header row detection

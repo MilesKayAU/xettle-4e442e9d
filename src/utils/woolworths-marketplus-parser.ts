@@ -14,6 +14,7 @@
  */
 
 import type { StandardSettlement } from './settlement-engine';
+import { parseDateOrEmpty } from './date-parser';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -85,22 +86,8 @@ function parseAmount(raw: string): number {
   return isNaN(val) ? 0 : val;
 }
 
-function normaliseDate(raw: string): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  // DD/MM/YYYY HH:MM:SS format from Woolworths (Australian date format)
-  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (match) {
-    const [, day, month, year] = match;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.substring(0, 10);
-  try {
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
-  } catch { /* fall through */ }
-  return trimmed;
-}
+/** @deprecated Use parseDateOrEmpty from date-parser.ts */
+const normaliseDate = parseDateOrEmpty;
 
 function parseCSVRow(line: string): string[] {
   const result: string[] = [];

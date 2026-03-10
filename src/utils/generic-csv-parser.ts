@@ -9,6 +9,7 @@
 
 import type { StandardSettlement } from './settlement-engine';
 import type { ColumnMapping } from './file-fingerprint-engine';
+import { parseDateOrEmpty, detectDateColumn } from './date-parser';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -45,34 +46,8 @@ function parseAmount(raw: string | number | undefined | null): number {
   return isNaN(val) ? 0 : val;
 }
 
-function normaliseDate(raw: string | undefined): string {
-  if (!raw) return '';
-  const trimmed = String(raw).trim();
-
-  // YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.substring(0, 10);
-
-  // DD/MM/YYYY
-  const slashParts = trimmed.split('/');
-  if (slashParts.length === 3) {
-    const [a, b, c] = slashParts;
-    if (c.length === 4) return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-  }
-
-  // DD.MM.YYYY
-  const dotParts = trimmed.split('.');
-  if (dotParts.length === 3) {
-    const [a, b, c] = dotParts;
-    if (c.length === 4) return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
-  }
-
-  try {
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) return d.toISOString().substring(0, 10);
-  } catch { /* fall through */ }
-
-  return trimmed;
-}
+/** @deprecated Use parseDateOrEmpty from date-parser.ts */
+const normaliseDate = (raw: string | undefined) => parseDateOrEmpty(raw);
 
 // ─── CSV Row Parser ─────────────────────────────────────────────────────────
 
@@ -277,7 +252,8 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
     }
 
     // Use today as fallback date
-    const today = new Date().toISOString().substring(0, 10);
+    const now = new Date();
+    const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
 
     settlements.push({
       marketplace,

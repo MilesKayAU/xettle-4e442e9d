@@ -6,6 +6,7 @@
  */
 
 import type { MarketplaceGroup, ShopifyOrderRow } from './shopify-orders-parser';
+import { MARKETPLACE_LABELS } from './settlement-engine';
 
 export interface ProductCost {
   sku: string;
@@ -183,7 +184,7 @@ export function calculateMarketplaceProfit(
   settlementLines: SettlementLineForProfit[],
   productCosts: ProductCost[]
 ): MarketplaceProfit {
-  const { MARKETPLACE_LABELS } = require('./settlement-engine');
+  // MARKETPLACE_LABELS imported at top level
   const marketplaceName = MARKETPLACE_LABELS[marketplaceCode] || marketplaceCode;
 
   // Build cost lookup
@@ -282,7 +283,7 @@ export function compareSkuAcrossMarketplaces(
   allLines: SettlementLineForProfit[],
   productCosts: ProductCost[]
 ): SkuMarketplaceComparison {
-  const { MARKETPLACE_LABELS } = require('./settlement-engine');
+  // MARKETPLACE_LABELS imported at top level
   const normalised = normalizeSku(sku);
 
   // Find cost
