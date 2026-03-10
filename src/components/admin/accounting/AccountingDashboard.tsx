@@ -1813,7 +1813,9 @@ function SettlementGuidancePanel({
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case 'pushed_to_xero': return <Badge className="bg-green-100 text-green-800 text-[10px]">Posted to Xero ✓</Badge>;
+      case 'pushed_to_xero':
+      case 'synced':
+        return <Badge className="bg-green-100 text-green-800 text-[10px]">Posted to Xero ✓</Badge>;
       case 'saved': return <Badge variant="secondary" className="text-[10px]">Saved</Badge>;
       case 'pending': return <Badge variant="outline" className="text-[10px]">Pending</Badge>;
       default: return <Badge variant="outline" className="text-[10px]">{status}</Badge>;
