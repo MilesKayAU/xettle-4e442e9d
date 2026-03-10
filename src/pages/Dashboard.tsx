@@ -10,6 +10,7 @@ import SettlementsSummaryStrip from '@/components/admin/accounting/SettlementsSu
 import ActionControlPanel from '@/components/admin/accounting/ActionControlPanel';
 import NextExpectedSettlements from '@/components/admin/accounting/NextExpectedSettlements';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
+import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
 import SkuComparisonView from '@/components/insights/SkuComparisonView';
@@ -368,6 +369,16 @@ export default function Dashboard() {
                   }}
                 />
               )}
+
+              {/* Accounting Boundary Settings */}
+              <AccountingBoundarySettings
+                xeroConnected={false}
+                onConnectXero={() => {
+                  switchView('settlements');
+                  setSelectedMarketplace('amazon_au');
+                  setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
+                }}
+              />
             </div>
           </ErrorBoundary>
         )}
