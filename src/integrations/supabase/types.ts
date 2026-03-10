@@ -357,7 +357,10 @@ export type Database = {
           created_at: string
           file_pattern: string | null
           id: string
+          is_multi_marketplace: boolean | null
           marketplace_code: string
+          split_column: string | null
+          split_mappings: Json | null
           user_id: string
         }
         Insert: {
@@ -366,7 +369,10 @@ export type Database = {
           created_at?: string
           file_pattern?: string | null
           id?: string
+          is_multi_marketplace?: boolean | null
           marketplace_code: string
+          split_column?: string | null
+          split_mappings?: Json | null
           user_id: string
         }
         Update: {
@@ -375,7 +381,10 @@ export type Database = {
           created_at?: string
           file_pattern?: string | null
           id?: string
+          is_multi_marketplace?: boolean | null
           marketplace_code?: string
+          split_column?: string | null
+          split_mappings?: Json | null
           user_id?: string
         }
         Relationships: []

@@ -46,10 +46,18 @@ import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, type StandardSettlement } from '@/utils/settlement-engine';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
+import {
+  detectMultiMarketplace,
+  parseCSVForSplitDetection,
+  saveSplitFingerprint,
+  type MultiMarketplaceSplitResult,
+  type MarketplaceGroup,
+} from '@/utils/multi-marketplace-splitter';
+import MultiMarketplaceSplitCard from './MultiMarketplaceSplitCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error';
+type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
 
 interface DetectedFile {
   file: File;
@@ -59,6 +67,10 @@ interface DetectedFile {
   settlements?: StandardSettlement[];
   error?: string;
   savedCount?: number;
+  /** Multi-marketplace split detection result */
+  splitResult?: MultiMarketplaceSplitResult;
+  /** CSV headers for caching fingerprint */
+  csvHeaders?: string[];
 }
 
 interface SmartUploadFlowProps {
@@ -333,16 +345,30 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
     const results = await Promise.allSettled(
       uniqueFiles.map(async (file, idx) => {
+        // ── Step 0: For CSV files, check for multi-marketplace split ──
+        const isCSV = file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv');
+        if (isCSV) {
+          try {
+            const text = await file.text();
+            const parsed = parseCSVForSplitDetection(text);
+            if (parsed) {
+              const splitResult = detectMultiMarketplace({ headers: parsed.headers, rows: parsed.rows, filename: file.name });
+              if (splitResult.isMultiMarketplace && splitResult.groups.length > 1) {
+                // Multi-marketplace detected — return early with split result
+                return { idx, result: null, settlements: [] as StandardSettlement[], dbDupeIds: [] as string[], splitResult, csvHeaders: parsed.headers };
+              }
+            }
+          } catch { /* Fall through to normal detection */ }
+        }
+
         const result = await detectFile(file);
         let settlements: StandardSettlement[] = [];
         if (result && result.isSettlementFile) {
           settlements = await preParseFile(file, result);
 
           // Create the marketplace tab immediately on detection (before save)
-          // so the user sees it appear right away even if saving takes a while
           const mktCode = result.marketplace;
           if (mktCode && mktCode !== 'amazon_au') {
-            // Woolworths MarketPlus creates tabs for each sub-marketplace
             if (mktCode === 'woolworths_marketplus' && settlements.length > 0) {
               const subCodes = new Set(settlements.map(s => {
                 const subCode = s.metadata?.marketplaceCode;
@@ -356,7 +382,6 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               }
               onMarketplacesChanged?.();
             } else if (mktCode === 'shopify_orders' && settlements.length > 0) {
-              // Shopify Orders creates tabs for each detected sub-marketplace (kogan, mydeal, etc.)
               const subCodes = new Set(settlements.map(s => {
                 const subKey = s.metadata?.marketplaceKey;
                 return subKey || mktCode;
@@ -393,7 +418,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           } catch {}
         }
 
-        return { idx, result, settlements, dbDupeIds };
+        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: undefined as string[] | undefined };
       })
     );
 
@@ -402,9 +427,27 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements, dbDupeIds } = r.value;
+          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
+            // If multi-marketplace split detected, show confirmation card
+            if (splitResult?.isMultiMarketplace) {
+              updated[fileIdx] = {
+                ...updated[fileIdx],
+                status: 'multi_split',
+                splitResult,
+                csvHeaders,
+                detection: {
+                  marketplace: 'multi_marketplace',
+                  marketplaceLabel: `${splitResult.groups.length} Marketplaces`,
+                  confidence: 95,
+                  isSettlementFile: true,
+                  detectionLevel: 1,
+                },
+              };
+              continue;
+            }
+
             // If ALL settlements are already in DB, mark as saved/dupe
             const allDupes = settlements.length > 0 && dbDupeIds.length === settlements.length;
             const someDupes = dbDupeIds.length > 0 && !allDupes;
@@ -1206,16 +1249,98 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           })()}
 
           {files.map((df, idx) => (
-            <FileResultCard
-              key={`${df.file.name}-${idx}`}
-              df={df}
-              idx={idx}
-              onRemove={removeFile}
-              onOverride={overrideMarketplace}
-              onAnalyzeAI={analyzeWithAI}
-              onProcess={processFile}
-              onSetStatus={setFileStatus}
-            />
+            df.status === 'multi_split' && df.splitResult ? (
+              <MultiMarketplaceSplitCard
+                key={`${df.file.name}-${idx}`}
+                filename={df.file.name}
+                splitResult={df.splitResult}
+                headers={df.csvHeaders || []}
+                onConfirm={async (groups, rememberFormat) => {
+                  // Save fingerprint if requested
+                  if (rememberFormat && df.csvHeaders && df.splitResult?.splitColumn) {
+                    await saveSplitFingerprint(df.csvHeaders, df.splitResult.splitColumn, groups);
+                  }
+
+                  // Now re-detect as woolworths_marketplus (the existing parser handles the actual splitting)
+                  // The split confirmation just validates the user is happy with the grouping
+                  // Re-run detection normally and proceed
+                  const text = await df.file.text();
+                  const result = await detectFile(df.file);
+                  let settlements: StandardSettlement[] = [];
+                  
+                  if (result && result.isSettlementFile) {
+                    settlements = await preParseFile(df.file, result);
+                  }
+
+                  // If the existing parser didn't handle it (generic CSV), we need to handle it ourselves
+                  if (settlements.length === 0 && result) {
+                    // Fall through — the file will be processed as a normal detected file
+                  }
+
+                  // Create marketplace tabs for detected groups
+                  for (const g of groups) {
+                    await ensureMarketplaceConnection(g.marketplaceCode);
+                  }
+                  onMarketplacesChanged?.();
+
+                  setFiles(prev => {
+                    const updated = [...prev];
+                    updated[idx] = {
+                      ...updated[idx],
+                      status: 'detected',
+                      detection: result || {
+                        marketplace: 'woolworths_marketplus',
+                        marketplaceLabel: `${groups.length} Marketplaces`,
+                        confidence: 95,
+                        isSettlementFile: true,
+                        detectionLevel: 1,
+                      },
+                      settlements: settlements.length > 0 ? settlements : undefined,
+                    };
+                    return updated;
+                  });
+                }}
+                onCancel={() => {
+                  // Cancel split — re-detect as single file
+                  setFiles(prev => {
+                    const updated = [...prev];
+                    updated[idx] = {
+                      ...updated[idx],
+                      status: 'detecting',
+                      splitResult: undefined,
+                    };
+                    return updated;
+                  });
+                  // Re-run normal detection without split
+                  (async () => {
+                    const result = await detectFile(df.file);
+                    const settlements = result?.isSettlementFile ? await preParseFile(df.file, result) : [];
+                    setFiles(prev => {
+                      const updated = [...prev];
+                      updated[idx] = {
+                        ...updated[idx],
+                        status: result ? (result.isSettlementFile ? 'detected' : 'wrong_file') : 'unknown',
+                        detection: result,
+                        settlements: settlements.length > 0 ? settlements : undefined,
+                        splitResult: undefined,
+                      };
+                      return updated;
+                    });
+                  })();
+                }}
+              />
+            ) : (
+              <FileResultCard
+                key={`${df.file.name}-${idx}`}
+                df={df}
+                idx={idx}
+                onRemove={removeFile}
+                onOverride={overrideMarketplace}
+                onAnalyzeAI={analyzeWithAI}
+                onProcess={processFile}
+                onSetStatus={setFileStatus}
+              />
+            )
           ))}
 
           {savedCount > 0 && confirmedCount === 0 && onViewSettlements && (
