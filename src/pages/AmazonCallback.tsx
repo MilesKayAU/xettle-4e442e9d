@@ -54,7 +54,7 @@ export default function AmazonCallback() {
 
         // Auto-redirect after 3 seconds
         setTimeout(() => {
-          navigate('/admin?tab=settings', { replace: true });
+          navigate('/dashboard?connected=amazon', { replace: true });
         }, 3000);
       } catch (err: any) {
         console.error('Amazon callback error:', err);
