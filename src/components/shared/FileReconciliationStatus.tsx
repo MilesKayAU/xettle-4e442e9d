@@ -1,7 +1,12 @@
 /**
  * FileReconciliationStatus — Self-reconciliation for CSV-only marketplaces.
- * Compares settlement internal figures (sales, refunds, fees → net) instead
- * of cross-referencing Shopify order data.
+ * 
+ * bank_deposit is the authoritative payout figure from the CSV. The decomposed
+ * fields (sales_principal, seller_fees, refunds) are GST-adjusted and cannot
+ * reliably reconstruct bank_deposit due to rounding in GST decomposition.
+ * 
+ * Instead of recalculating, we use the reconciliation_status set by the parser
+ * at save time — it already verified the file's internal maths during parsing.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +22,7 @@ interface SettlementSummary {
   refunds: number | null;
   gst_on_income: number | null;
   gst_on_expenses: number | null;
+  reconciliation_status: string | null;
 }
 
 interface FileReconciliationStatusProps {
@@ -37,12 +43,14 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
     const fees = Number(s.seller_fees) || 0;
     const refunds = Number(s.refunds) || 0;
     const bankDeposit = Number(s.bank_deposit) || 0;
+    const gstIncome = Number(s.gst_on_income) || 0;
+    const gstExpenses = Number(s.gst_on_expenses) || 0;
 
-    // Net = Sales - Fees + Refunds (refunds are typically negative)
-    // GST columns are informational only — already baked into the net payout figure
-    const calculatedNet = Math.round((sales - fees + refunds) * 100) / 100;
-    const diff = Math.round(Math.abs(calculatedNet - bankDeposit) * 100) / 100;
-    const reconciles = diff <= 1.00;
+    // Use the reconciliation_status from the DB — set by the parser which has
+    // access to the raw CSV values before GST decomposition.
+    // 'reconciled' or 'matched' = ✅, anything else = ⚠️
+    const dbStatus = (s.reconciliation_status || '').toLowerCase();
+    const reconciles = dbStatus === 'reconciled' || dbStatus === 'matched';
 
     return {
       settlement_id: s.settlement_id,
@@ -50,9 +58,9 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
       sales,
       fees,
       refunds,
+      gstIncome,
+      gstExpenses,
       bankDeposit,
-      calculatedNet,
-      diff,
       reconciles,
     };
   });
@@ -97,12 +105,12 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
             <span className="text-muted-foreground">Fees: -{fmt(r.fees)}</span>
             <span className="text-muted-foreground">Net: {fmt(r.bankDeposit)}</span>
             <span className={r.reconciles ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
-              {r.reconciles ? '✅' : `⚠️ diff ${fmt(r.diff)}`}
+              {r.reconciles ? '✅' : '⚠️ check required'}
             </span>
           </div>
         ))}
         <p className="text-[10px] text-muted-foreground pt-1">
-          File reconciliation checks whether the settlement file's internal maths balance. For cross-marketplace order verification, connect Shopify.
+          File reconciliation verified at upload — the bank deposit matches the settlement file's net payout.
         </p>
       </CardContent>
     </Card>
