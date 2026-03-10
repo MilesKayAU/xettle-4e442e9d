@@ -477,6 +477,9 @@ export async function syncSettlementToXero(
       });
     }
 
+    // Fire-and-forget: trigger validation sweep after Xero push
+    triggerValidationSweep();
+
     return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
   } catch (err: any) {
     // Mark push_failed in DB
