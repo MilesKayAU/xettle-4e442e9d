@@ -417,11 +417,14 @@ serve(async (req) => {
 
     token = await refreshXeroToken(supabase, token);
 
-    // Check for duplicate
+    // Check for duplicate — also checks legacy AMZN-{id} and LMB-{id} formats
     const existing = await checkExistingInvoice(token, reference);
     if (existing.exists) {
+      const refInfo = existing.matchedReference && existing.matchedReference !== reference
+        ? ` (matched legacy reference: "${existing.matchedReference}")`
+        : '';
       throw new Error(
-        `An invoice with reference "${reference}" already exists in Xero (ID: ${existing.invoiceId}, Status: ${existing.status}). ` +
+        `An invoice for this settlement already exists in Xero${refInfo} (ID: ${existing.invoiceId}, Status: ${existing.status}). ` +
         `Void it in Xero first if you need to re-push.`
       );
     }
