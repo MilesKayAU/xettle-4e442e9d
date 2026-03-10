@@ -96,6 +96,13 @@ export default function ActionCentre({
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshingUploads, setRefreshingUploads] = useState(false);
+
+  const handleRefreshUploads = async () => {
+    setRefreshingUploads(true);
+    await loadData();
+    setRefreshingUploads(false);
+  };
 
   const loadData = useCallback(async () => {
     try {
