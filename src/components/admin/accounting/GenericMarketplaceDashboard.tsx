@@ -148,19 +148,33 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
       {/* Upload prompt — directs to Smart Upload */}
       {onSwitchToUpload && (
-        <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-primary/[0.02]" onClick={onSwitchToUpload}>
-          <CardContent className="py-8 flex flex-col items-center justify-center text-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <CloudUpload className="h-6 w-6 text-primary" />
+        <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-muted/30 rounded-xl" onClick={onSwitchToUpload}>
+          <CardContent className="py-10 px-8 flex flex-col items-center justify-center text-center gap-4">
+            <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+              <CloudUpload className="h-7 w-7 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">
-                Drag settlement files here or click to upload
+              <p className="text-base font-semibold text-foreground">
+                Upload settlement files
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Auto-detects marketplace, previews data, and saves — no configuration needed
+              <p className="text-sm text-muted-foreground mt-1.5">
+                Drag Amazon TSV, Shopify CSV, or Mirakl reports here — or click to upload.
               </p>
             </div>
+            <ul className="text-xs text-muted-foreground space-y-1 text-left">
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                Detects the marketplace automatically
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                Parses all transactions &amp; calculates fees
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                Prepares the Xero journal entry
+              </li>
+            </ul>
             <Button size="sm" className="gap-2 mt-1">
               <Upload className="h-4 w-4" />
               Smart Upload

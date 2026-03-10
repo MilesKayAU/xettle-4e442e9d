@@ -115,7 +115,7 @@ export default function SettlementsSummaryStrip({ userMarketplaceCount }: Settle
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Wallet className="h-3.5 w-3.5" />
-              Net Payout
+              Paid To You
             </div>
             <p className="text-2xl font-bold text-primary">{formatAUD(data.net)}</p>
           </div>
