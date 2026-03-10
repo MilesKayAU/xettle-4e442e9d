@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.scheduled-sync]
 verify_jwt = false
+
+[functions.ai-bug-triage]
+verify_jwt = false

@@ -58,6 +58,7 @@ function App() {
                 </Routes>
               </Suspense>
             </PinGate>
+            <BugReportButton />
             <Toaster />
           </BrowserRouter>
         </TooltipProvider>

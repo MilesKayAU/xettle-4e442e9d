@@ -327,6 +327,10 @@ export default function Admin() {
           <TabsContent value="marketplaces">
             <MarketplaceConfigTab />
           </TabsContent>
+
+          <TabsContent value="bugs">
+            <BugReportsDashboard />
+          </TabsContent>
         </Tabs>
       </div>
 
