@@ -296,23 +296,13 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
       groupMap.get(src)!.push(row);
     }
 
-    // Calculate a reasonable date ceiling: bankPaymentDate + 60 days, or today + 30 days
-    const now = new Date();
-    const bpDate = bankPaymentDate ? new Date(bankPaymentDate + 'T00:00:00') : null;
-    const dateCeiling = bpDate && !isNaN(bpDate.getTime())
-      ? new Date(bpDate.getTime() + 60 * 24 * 60 * 60 * 1000) // payment + 60 days
-      : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);   // today + 30 days
-    const dateFloor = new Date('2020-01-01T00:00:00');
-    const ceilingStr = dateCeiling.toISOString().substring(0, 10);
-    const floorStr = dateFloor.toISOString().substring(0, 10);
-
     const groups: WoolworthsMarketplaceGroup[] = [];
     for (const [source, rows] of groupMap) {
       const resolved = resolveOrderSource(source);
-      // Only use Ordered Date values that are real dates within a reasonable range
+      // Use Ordered Date values — parseDate now handles plausibility internally
       const dates = rows
         .map(r => r.orderedDate)
-        .filter(d => d && d >= floorStr && d <= ceilingStr)
+        .filter(d => d && d >= '2020-01-01')
         .sort();
 
       groups.push({

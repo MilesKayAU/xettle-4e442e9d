@@ -26,16 +26,25 @@ const MONTH_NAMES: Record<string, number> = {
 // ─── Range validation ───────────────────────────────────────────────────────
 
 const MIN_YEAR = 2020;
-const MAX_YEAR = 2030;
+
+/** Plausibility ceiling: current month + 3 months */
+function getMaxPlausibleDate(): string {
+  const now = new Date();
+  const ceiling = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate());
+  return `${ceiling.getFullYear()}-${String(ceiling.getMonth() + 1).padStart(2, '0')}-${String(ceiling.getDate()).padStart(2, '0')}`;
+}
 
 function isValidDate(year: number, month: number, day: number): boolean {
-  if (year < MIN_YEAR || year > MAX_YEAR) return false;
+  if (year < MIN_YEAR || year > 2099) return false;
   if (month < 1 || month > 12) return false;
   if (day < 1 || day > 31) return false;
-  // Check actual days in month
   const daysInMonth = [0, 31, (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 29 : 28,
     31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   return day <= daysInMonth[month];
+}
+
+function isPlausible(dateStr: string): boolean {
+  return dateStr >= '2020-01-01' && dateStr <= getMaxPlausibleDate();
 }
 
 function formatDate(year: number, month: number, day: number): string {
@@ -54,20 +63,40 @@ const parseISO: FormatParser = (input) => {
   return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
 };
 
-/** 2. DD/MM/YYYY (Australian default for slash dates) */
-const parseDDslashMMslashYYYY: FormatParser = (input) => {
+/**
+ * 2. DD/MM/YYYY with plausibility-aware MM/DD fallback.
+ * Prefers DD/MM (Australian). If DD/MM is valid but implausible (future date beyond
+ * current month + 3), and MM/DD would be plausible, uses MM/DD instead.
+ */
+const parseSlashDate: FormatParser = (input) => {
   const m = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (!m) return null;
-  const [, d, mo, y] = m.map(Number);
-  return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
+  const a = parseInt(m[1]), b = parseInt(m[2]), y = parseInt(m[3]);
+
+  // Try DD/MM first (Australian default)
+  const ddmm = isValidDate(y, b, a) ? formatDate(y, b, a) : null;
+  // Try MM/DD as alternative
+  const mmdd = isValidDate(y, a, b) ? formatDate(y, a, b) : null;
+
+  if (ddmm && isPlausible(ddmm)) return ddmm;        // DD/MM is plausible → use it
+  if (ddmm && !mmdd) return ddmm;                     // DD/MM is only valid option
+  if (!ddmm && mmdd) return mmdd;                      // Only MM/DD is valid
+  if (ddmm && mmdd && isPlausible(mmdd)) return mmdd;  // DD/MM implausible, MM/DD plausible → use MM/DD
+  return ddmm ?? mmdd ?? null;                         // Both implausible — return whichever is valid
 };
 
-/** 3. DD-MM-YYYY */
-const parseDDdashMMdashYYYY: FormatParser = (input) => {
+/** 3. DD-MM-YYYY with same plausibility fallback */
+const parseDashDate: FormatParser = (input) => {
   const m = input.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
   if (!m) return null;
-  const [, d, mo, y] = m.map(Number);
-  return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
+  const a = parseInt(m[1]), b = parseInt(m[2]), y = parseInt(m[3]);
+  const ddmm = isValidDate(y, b, a) ? formatDate(y, b, a) : null;
+  const mmdd = isValidDate(y, a, b) ? formatDate(y, a, b) : null;
+  if (ddmm && isPlausible(ddmm)) return ddmm;
+  if (ddmm && !mmdd) return ddmm;
+  if (!ddmm && mmdd) return mmdd;
+  if (ddmm && mmdd && isPlausible(mmdd)) return mmdd;
+  return ddmm ?? mmdd ?? null;
 };
 
 /** 4. DD.MM.YYYY (Amazon AU settlement format, with optional time) */
@@ -75,14 +104,6 @@ const parseDDdotMMdotYYYY: FormatParser = (input) => {
   const m = input.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
   if (!m) return null;
   const [, d, mo, y] = m.map(Number);
-  return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
-};
-
-/** 5. MM/DD/YYYY fallback — only if DD/MM/YYYY failed (i.e. day > 12 made it invalid) */
-const parseMMslashDDslashYYYY: FormatParser = (input) => {
-  const m = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (!m) return null;
-  const [, mo, d, y] = m.map(Number);
   return isValidDate(y, mo, d) ? formatDate(y, mo, d) : null;
 };
 
@@ -125,10 +146,9 @@ const parseUnixTimestamp: FormatParser = (input) => {
 
 const FORMAT_CHAIN: FormatParser[] = [
   parseISO,
-  parseDDslashMMslashYYYY,
-  parseDDdashMMdashYYYY,
+  parseSlashDate,       // DD/MM with plausibility-aware MM/DD fallback
+  parseDashDate,        // DD-MM with same fallback
   parseDDdotMMdotYYYY,
-  parseMMslashDDslashYYYY,  // fallback if DD/MM failed (day was > 12 as month)
   parseDDMMMYYYY,
   parseMMMDDYYYY,
   parseUnixTimestamp,
@@ -205,17 +225,18 @@ export function detectDateColumn(headers: string[], rows: string[][]): { index: 
   Test cases for parseDate():
 
   1. parseDate('15/03/2026')         → '2026-03-15'   // DD/MM/YYYY — standard AU
-  2. parseDate('04/03/2026')         → '2026-03-04'   // Ambiguous — AU default DD/MM
+  2. parseDate('04/03/2026')         → '2026-03-04'   // Ambiguous — AU default DD/MM (both plausible)
   3. parseDate('2026-02-10')         → '2026-02-10'   // ISO YYYY-MM-DD
   4. parseDate('10 Feb 2026')        → '2026-02-10'   // DD MMM YYYY
   5. parseDate('2026-02-10 14:30:00 +1100') → '2026-02-10'  // ISO with time+tz
   6. parseDate('1772409600')         → '2026-02-28'   // Unix timestamp (approx)
   7. parseDate('not a date')         → null            // Invalid — returns null
-  8. parseDate('01/01/2019')         → null            // Outside range 2020–2030
+  8. parseDate('01/01/2019')         → null            // Outside range 2020
   9. parseDate('28.02.2026')         → '2026-02-28'   // DD.MM.YYYY (Amazon AU)
   10. parseDate('Feb 10, 2026')      → '2026-02-10'   // MMM DD, YYYY
   11. parseDate('')                   → null            // Empty string
   12. parseDate(null)                 → null            // Null input
   13. parseDate('31/13/2025')        → null            // Invalid month 13
   14. parseDate('15-03-2026')        → '2026-03-15'   // DD-MM-YYYY
+  15. parseDate('2/12/2026')         → '2026-02-12'   // DD/MM gives Dec 2 (future) → MM/DD fallback Feb 12
 */
