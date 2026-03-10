@@ -37,11 +37,8 @@ export type BunningsParseResult =
   | { success: true; settlement: StandardSettlement; extra: BunningsParseExtra }
   | { success: false; error: string; rawText?: string };
 
-function parseDDMMYYYY(dateStr: string): string {
-  const parts = dateStr.trim().split('/');
-  if (parts.length !== 3) return dateStr;
-  return `${parts[2]}-${parts[1]}-${parts[0]}`;
-}
+/** @deprecated Use parseDateOrEmpty from date-parser.ts */
+const parseDDMMYYYY = parseDateOrEmpty;
 
 function extractAmount(text: string): number | null {
   const match = text.match(/-?\d[\d,]*\.?\d*/);

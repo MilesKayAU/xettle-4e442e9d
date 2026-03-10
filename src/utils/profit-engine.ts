@@ -283,7 +283,7 @@ export function compareSkuAcrossMarketplaces(
   allLines: SettlementLineForProfit[],
   productCosts: ProductCost[]
 ): SkuMarketplaceComparison {
-  const { MARKETPLACE_LABELS } = require('./settlement-engine');
+  // MARKETPLACE_LABELS imported at top level
   const normalised = normalizeSku(sku);
 
   // Find cost

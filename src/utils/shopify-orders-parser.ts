@@ -480,7 +480,9 @@ export function parseShopifyOrdersCSV(
     const lastDate = allDates[allDates.length - 1] || '';
     let partialPeriodWarning = false;
     if (lastDate) {
-      const endMs = new Date(lastDate + 'T23:59:59').getTime();
+      // Parse YYYY-MM-DD manually to avoid new Date() US format issues
+      const [ey, em, ed] = lastDate.split('-').map(Number);
+      const endMs = Date.UTC(ey, em - 1, ed, 23, 59, 59);
       const nowMs = Date.now();
       const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
       partialPeriodWarning = (nowMs - endMs) < threeDaysMs;

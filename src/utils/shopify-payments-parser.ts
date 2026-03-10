@@ -480,7 +480,8 @@ function parseTransactionLevelCSV(headers: string[], lines: string[]): ShopifyPa
 
   for (const group of groups.values()) {
     const sortedDates = group.transactionDates.filter(d => d).sort();
-    const periodStart = sortedDates[0] || normaliseDate(group.payoutDate) || new Date().toISOString().substring(0, 10);
+    const today = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}-${String(new Date().getUTCDate()).padStart(2, '0')}`;
+    const periodStart = sortedDates[0] || normaliseDate(group.payoutDate) || today;
     const periodEnd = sortedDates[sortedDates.length - 1] || periodStart;
 
     const grossSales = Math.abs(group.charges);

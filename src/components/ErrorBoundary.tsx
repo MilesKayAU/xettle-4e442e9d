@@ -47,7 +47,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
               <AlertTitle className="text-destructive">Something went wrong</AlertTitle>
               <AlertDescription className="mt-2">
                 An unexpected error occurred. Please try refreshing the page.
-                {process.env.NODE_ENV === 'development' && this.state.error && (
+                {import.meta.env.DEV && this.state.error && (
                   <details className="mt-2 text-xs">
                     <summary>Error details</summary>
                     <pre className="mt-1 whitespace-pre-wrap">{this.state.error.message}</pre>

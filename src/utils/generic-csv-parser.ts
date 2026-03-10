@@ -252,7 +252,8 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
     }
 
     // Use today as fallback date
-    const today = new Date().toISOString().substring(0, 10);
+    const now = new Date();
+    const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
 
     settlements.push({
       marketplace,
