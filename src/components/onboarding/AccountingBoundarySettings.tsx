@@ -183,7 +183,7 @@ export default function AccountingBoundarySettings({
               ) : (
                 <Zap className="h-3 w-3" />
               )}
-              {sweepRunning ? 'Running...' : 'Run validation sweep'}
+              {sweepRunning ? 'Refreshing...' : 'Refresh Status'}
             </Button>
             {xeroConnected && (
               <Button

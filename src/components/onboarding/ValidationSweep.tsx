@@ -358,7 +358,7 @@ export default function ValidationSweep({
             </span>
           )}
           <Button variant="ghost" size="sm" onClick={handleRefresh} className="h-7 px-2 gap-1.5">
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh Status
           </Button>
         </div>
       </div>

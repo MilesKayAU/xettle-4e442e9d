@@ -677,7 +677,7 @@ function formatEventLabel(event: SystemEvent): string {
   const period = event.period_label || '';
 
   switch (event.event_type) {
-    case 'validation_sweep_complete': return 'Validation sweep completed';
+    case 'validation_sweep_complete': return 'Status refresh completed';
     case 'settlement_saved': return `Settlement saved: ${mp} ${period}`;
     case 'xero_push_success': return `Pushed to Xero: ${mp} ${period}`;
     case 'xero_push_failed': return `Xero push failed: ${mp} ${period}`;
