@@ -340,7 +340,10 @@ export default function Dashboard() {
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <ActionCentre
-              onSwitchToUpload={() => switchView('smart_upload')}
+              onSwitchToUpload={(missing) => {
+                if (missing) setMissingSettlements(missing);
+                switchView('smart_upload');
+              }}
               onSwitchToSettlements={() => {
                 switchView('settlements');
                 switchSettlementsSubTab('overview');
