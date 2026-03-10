@@ -425,16 +425,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           } catch {}
         }
 
-        // Extract sample rows for First Contact
+        // Extract sample rows and headers for First Contact
         let sampleRows: string[][] = [];
+        let fileHeaders: string[] | undefined;
         try {
           const extracted = await extractFileHeaders(file);
           if (extracted) {
             sampleRows = extracted.sampleRows;
+            fileHeaders = extracted.headers;
           }
         } catch {}
 
-        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: undefined as string[] | undefined, sampleRows };
+        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows };
       })
     );
 
