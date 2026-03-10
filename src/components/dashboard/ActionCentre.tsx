@@ -157,6 +157,8 @@ export default function ActionCentre({
 
   // ─── Computed ──────────────────────────────────────────────────────
   const uploadNeeded = rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+  // Filter out API-synced marketplaces from the "needs upload" list — they sync automatically
+  const uploadNeededManual = uploadNeeded.filter(r => !apiSyncedMarketplaces.has(r.marketplace_code));
   const readyToPush = rows.filter(r => r.overall_status === 'ready_to_push');
   const awaitingBank = rows.filter(r => r.overall_status === 'pushed_to_xero' || (r.xero_pushed && !r.bank_matched));
   const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded');
