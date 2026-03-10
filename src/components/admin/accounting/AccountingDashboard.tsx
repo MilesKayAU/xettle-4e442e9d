@@ -902,7 +902,7 @@ export default function AccountingDashboard() {
 
       setParsed({ header, lines: reconstructedLines, unmapped: reconstructedUnmapped, summary, splitMonth });
       setSaved(true);
-      setPushed(s.status === 'pushed_to_xero');
+      setPushed(s.status === 'pushed_to_xero' || s.status === 'synced');
       setActiveTab('review');
       toast.success(`Loaded settlement ${settlementTextId} for review`);
     } catch (err: any) {
