@@ -42,6 +42,8 @@ export interface ReconciliationResult {
   status: 'matched' | 'warning' | 'alert' | 'pending';
   unmatched_orders: string[];
   notes: string;
+  reconciliation_confidence: number;
+  reconciliation_confidence_reason: string;
 }
 
 // ─── Core Calculation ───────────────────────────────────────────────────────
