@@ -244,7 +244,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       period_end: settlement.period_end,
       sales_principal: settlement.sales_ex_gst,
       sales_shipping: meta.shippingExGst || 0,
-      seller_fees: settlement.fees_ex_gst,
+      seller_fees: Math.abs(settlement.fees_ex_gst),
       refunds: meta.refundsExGst || 0,
       reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
       other_fees: (meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0),
