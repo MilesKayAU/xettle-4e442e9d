@@ -5,7 +5,7 @@ import SetupWizard from '@/components/onboarding/SetupWizard';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
-import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyReconciliationStatus';
+
 import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
 import ActionCentre, { type MissingSettlement } from '@/components/dashboard/ActionCentre';
@@ -492,14 +492,6 @@ export default function Dashboard() {
           <ErrorBoundary>
             <div className="space-y-6">
 
-              {/* Monthly Reconciliation Status */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <MonthlyReconciliationStatus
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                  onSelectMarketplace={setSelectedMarketplace}
-                />
-              )}
 
               {/* Marketplace Switcher */}
               <div>

@@ -935,11 +935,6 @@ export default function AccountingDashboard() {
 
       {(() => (
         <>
-          <SettlementGuidancePanel
-            lastSettlement={lastSettlement}
-            nextExpectedStart={nextExpectedStart}
-            loading={loadingSettlements}
-          />
 
           {uploadWarning && (
             <Card className={`border-2 ${uploadWarning.type === 'duplicate' ? 'border-amber-400 bg-amber-50/50' : 'border-orange-400 bg-orange-50/50'}`}>
@@ -977,32 +972,6 @@ export default function AccountingDashboard() {
             </div>
           )}
 
-          {/* ─── Prominent Sync Amazon Button ─────────────────────── */}
-          <Card className="border-primary/20 bg-primary/5 mb-4">
-            <CardContent className="py-3">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <CloudDownload className="h-4 w-4 text-primary" />
-                    Sync Amazon Settlements
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Fetch missing settlements from Amazon SP-API — auto-detects what's needed
-                  </p>
-                </div>
-                <Button
-                  onClick={() => {
-                    setActiveTab('auto-imported');
-                  }}
-                  className="gap-1.5"
-                  size="sm"
-                >
-                  <CloudDownload className="h-3.5 w-3.5" />
-                  Open Sync
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
 
           <Tabs value={activeTab} onValueChange={(tab) => {
             if (activeTab === 'upload' && tab !== 'upload' && bulkProcessing) {
