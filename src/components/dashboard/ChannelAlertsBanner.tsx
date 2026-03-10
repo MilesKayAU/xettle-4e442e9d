@@ -275,7 +275,16 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     );
   }
 
-  if (alerts.length === 0) return null;
+  if (alerts.length === 0) {
+    return (
+      <div className="flex items-center justify-end">
+        <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1.5 text-xs text-muted-foreground">
+          {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          {syncing ? 'Rescanning...' : 'Rescan channels'}
+        </Button>
+      </div>
+    );
+  }
 
   // Collapsed view when 3+ alerts
   if (alerts.length >= 3 && !expanded) {
@@ -299,13 +308,17 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   return (
     <>
       <div className="space-y-2">
-        {alerts.length >= 3 && (
-          <div className="flex justify-end">
+        <div className="flex justify-end gap-1">
+          <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1 text-xs text-muted-foreground">
+            {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            {syncing ? 'Rescanning...' : 'Rescan'}
+          </Button>
+          {alerts.length >= 3 && (
             <Button size="sm" variant="ghost" onClick={() => setExpanded(false)} className="gap-1 text-xs">
               Collapse <ChevronUp className="h-3 w-3" />
             </Button>
-          </div>
-        )}
+          )}
+        </div>
         {alerts.map(alert => {
           const displayName = getDisplayName(alert);
           const isUnknown = alert.detection_method === 'unknown' || (!alert.detected_label && isNumericChannelId(alert.source_name));
