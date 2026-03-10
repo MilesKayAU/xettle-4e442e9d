@@ -2,9 +2,12 @@
  * File Fingerprint Engine — 3-level intelligent file detection
  * 
  * Level 1: Instant fingerprint matching against known column patterns
+ * Level 1.5: Database fingerprint lookup (learned from First Contact saves)
  * Level 2: Heuristic column mapping with confidence scoring
  * Level 3: AI fallback (calls edge function — handled by SmartUploadFlow)
  */
+
+import { supabase } from '@/integrations/supabase/client';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -499,14 +502,13 @@ function parseRow(line: string, delimiter: string): string[] {
 }
 
 /**
- * Full file detection pipeline — extracts headers and runs Level 1+2.
+ * Full file detection pipeline — extracts headers and runs Level 1 → 1.5 (DB) → 2.
  */
 export async function detectFile(file: File): Promise<FileDetectionResult | null> {
   const name = file.name.toLowerCase();
 
   // PDF: use content-based detection (Bunnings)
   if (name.endsWith('.pdf')) {
-    // Check filename first
     if (name.includes('bunnings') || name.includes('summary-of-transactions') || name.includes('mirakl')) {
       return {
         marketplace: 'bunnings',
@@ -517,7 +519,6 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
         fileFormat: 'pdf',
       };
     }
-    // PDF on a marketplace tool = likely Bunnings (Amazon uses TSV)
     return {
       marketplace: 'bunnings',
       marketplaceLabel: 'Bunnings',
@@ -531,12 +532,89 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
   const extracted = await extractFileHeaders(file);
   if (!extracted) return null;
 
-  const result = detectFromHeaders(extracted.headers);
-  if (result) {
-    result.recordCount = extracted.rowCount;
-    result.fileFormat = name.endsWith('.tsv') || name.endsWith('.txt') ? 'tsv' : name.endsWith('.xlsx') || name.endsWith('.xls') ? 'xlsx' : 'csv';
+  const fileFormat = name.endsWith('.tsv') || name.endsWith('.txt') ? 'tsv' : name.endsWith('.xlsx') || name.endsWith('.xls') ? 'xlsx' : 'csv';
+
+  // Level 1: Hardcoded fingerprint only (not heuristic)
+  const fp = detectByFingerprint(extracted.headers);
+  if (fp) {
+    fp.recordCount = extracted.rowCount;
+    fp.fileFormat = fileFormat;
+    return fp;
   }
-  return result;
+
+  // Level 1.5: Database fingerprint lookup (learned from First Contact)
+  const dbResult = await detectFromDbFingerprints(extracted.headers);
+  if (dbResult) {
+    dbResult.recordCount = extracted.rowCount;
+    dbResult.fileFormat = fileFormat;
+    return dbResult;
+  }
+
+  // Level 2: Heuristic (returned from detectFromHeaders which already tried L1)
+  const heuristic = detectByHeuristic(extracted.headers);
+  if (heuristic && heuristic.confidence >= 40) {
+    return {
+      marketplace: 'unknown',
+      marketplaceLabel: 'Unknown Marketplace',
+      confidence: heuristic.confidence,
+      confidenceReason: `Matched heuristic fields: ${heuristic.matchedFields.join(', ')}`,
+      isSettlementFile: true,
+      columnMapping: heuristic.mapping,
+      detectionLevel: 2,
+      recordCount: extracted.rowCount,
+      fileFormat,
+    };
+  }
+
+  return null;
+}
+
+// ─── Level 1.5: Database Fingerprint Lookup ─────────────────────────────────
+
+/**
+ * Check marketplace_file_fingerprints table for a matching column signature.
+ * If the uploaded file's headers match a saved signature, return 100% confidence.
+ */
+async function detectFromDbFingerprints(headers: string[]): Promise<FileDetectionResult | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data: fingerprints } = await supabase
+      .from('marketplace_file_fingerprints')
+      .select('marketplace_code, column_signature, column_mapping')
+      .eq('user_id', user.id) as any;
+
+    if (!fingerprints || fingerprints.length === 0) return null;
+
+    const normHeaders = new Set(headers.map(h => h.toLowerCase().trim()));
+
+    for (const fp of fingerprints) {
+      const sig: string[] = Array.isArray(fp.column_signature) ? fp.column_signature : [];
+      if (sig.length === 0) continue;
+
+      // Check if all signature columns exist in file headers
+      const normSig = sig.map((s: string) => s.toLowerCase().trim());
+      const allMatch = normSig.every((col: string) => normHeaders.has(col));
+
+      if (allMatch && normSig.length >= 3) {
+        const label = MARKETPLACE_LABELS[fp.marketplace_code] || fp.marketplace_code;
+        return {
+          marketplace: fp.marketplace_code,
+          marketplaceLabel: label,
+          confidence: 100,
+          confidenceReason: 'Matched saved column signature from previous upload',
+          isSettlementFile: true,
+          columnMapping: fp.column_mapping || {},
+          detectionLevel: 1,
+        };
+      }
+    }
+
+    return null;
+  } catch {
+    return null; // Silent fail — fall through to heuristic
+  }
 }
 
 // ─── Confidence Tier Helper ─────────────────────────────────────────────────
