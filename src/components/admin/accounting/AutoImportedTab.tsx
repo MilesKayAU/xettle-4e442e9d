@@ -289,11 +289,22 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     }
   }, []);
 
+  const [hasAutoAudited, setHasAutoAudited] = useState(false);
+
   useEffect(() => {
     loadApiSettlements();
     loadXeroMatches();
     loadCooldown();
   }, [loadApiSettlements, loadXeroMatches, loadCooldown]);
+
+  // Auto-audit Xero status on first load when settlements exist
+  useEffect(() => {
+    if (!loading && settlements.length > 0 && !hasAutoAudited && !auditing) {
+      setHasAutoAudited(true);
+      console.log(`[AutoImported] Auto-auditing Xero status for ${settlements.length} settlements`);
+      handleRunAudit();
+    }
+  }, [loading, settlements.length, hasAutoAudited, auditing]);
 
   // Cooldown timer
   useEffect(() => {
