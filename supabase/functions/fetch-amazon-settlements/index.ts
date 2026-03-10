@@ -16,7 +16,8 @@ const SP_API_ENDPOINTS: Record<string, string> = {
 // EMBEDDED SETTLEMENT PARSER (mirrors src/utils/settlement-parser.ts)
 // ═══════════════════════════════════════════════════════════════
 
-const PARSER_VERSION = 'v1.7.0';
+// MUST match src/utils/settlement-parser.ts PARSER_VERSION
+const PARSER_VERSION = 'v1.7.1';
 
 const CATEGORY_MAP: Record<string, string> = {
   'Order|ItemPrice|Principal': 'Sales',

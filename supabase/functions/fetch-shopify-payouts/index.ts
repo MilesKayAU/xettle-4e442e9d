@@ -122,7 +122,7 @@ async function syncPayoutsForUser(
   } while (nextPageUrl && page < MAX_PAGES);
 
   // ─── Dedup: filter out already-imported payouts ────────────────────
-  // Check by exact settlement_id match
+  // Check by exact settlement_id match (numeric payout ID)
   const payoutIds = allPayouts.map((p) => String(p.id));
   const { data: existingSettlements } = await supabase
     .from("settlements")
@@ -133,26 +133,79 @@ async function syncPayoutsForUser(
 
   const existingIds = new Set((existingSettlements || []).map((e: any) => e.settlement_id));
 
-  // Also check for CSV-uploaded duplicates (Shopify-* prefix) with same amount + date
-  // Build a fingerprint set from ALL existing shopify settlements
+  // Also check alias registry for cross-format matches (bank_ref → numeric ID)
+  const { data: aliasMatches } = await supabase
+    .from("settlement_id_aliases")
+    .select("alias_id, canonical_settlement_id")
+    .eq("user_id", userId)
+    .in("alias_id", payoutIds);
+
+  const aliasedIds = new Set((aliasMatches || []).map((a: any) => a.alias_id));
+
+  // Build fingerprint list from ALL existing shopify settlements for ±$0.05 tolerance
   const { data: allExistingShopify } = await supabase
     .from("settlements")
     .select("settlement_id, bank_deposit, period_end")
     .eq("user_id", userId)
     .eq("marketplace", "shopify_payments");
 
-  const existingFingerprints = new Set(
-    (allExistingShopify || []).map((e: any) => `${parseFloat(e.bank_deposit).toFixed(2)}|${e.period_end}`)
-  );
+  const existingShopifyList = (allExistingShopify || []).map((e: any) => ({
+    settlement_id: e.settlement_id,
+    bank_deposit: parseFloat(e.bank_deposit) || 0,
+    period_end: e.period_end,
+  }));
 
   const newPayouts = allPayouts.filter((p) => {
-    if (existingIds.has(String(p.id))) return false;
-    // Check if a CSV-uploaded version with same amount+date already exists
-    const fp = `${parseFloat(p.amount).toFixed(2)}|${p.date}`;
-    if (existingFingerprints.has(fp)) {
-      console.log(`[fetch-shopify-payouts] Skipping payout ${p.id}: duplicate exists with same amount+date (${fp})`);
+    const numericId = String(p.id);
+    if (existingIds.has(numericId)) return false;
+    if (aliasedIds.has(numericId)) return false;
+
+    // P0: Check if a CSV-uploaded version exists with bank_reference as settlement_id
+    // and normalize it to the numeric payout ID
+    const bankRef = (p as any).bank_reference;
+    if (bankRef) {
+      const csvByBankRef = existingShopifyList.find((e: any) => e.settlement_id === bankRef);
+      if (csvByBankRef) {
+        // Normalize: update the existing CSV record to use the numeric payout ID
+        console.log(`[fetch-shopify-payouts] Normalizing CSV settlement ${bankRef} → ${numericId}`);
+        supabase.from("settlements")
+          .update({ settlement_id: numericId, source_reference: bankRef } as any)
+          .eq("settlement_id", bankRef)
+          .eq("user_id", userId)
+          .eq("marketplace", "shopify_payments")
+          .then(({ error }) => {
+            if (error) console.error(`[fetch-shopify-payouts] Normalize error:`, error);
+          });
+        // Register alias
+        supabase.from("settlement_id_aliases")
+          .upsert([
+            { canonical_settlement_id: numericId, alias_id: bankRef, user_id: userId, source: "api_normalize" },
+            { canonical_settlement_id: numericId, alias_id: numericId, user_id: userId, source: "api" },
+          ] as any, { onConflict: "alias_id,user_id" })
+          .then(({ error }) => {
+            if (error) console.error(`[fetch-shopify-payouts] Alias error:`, error);
+          });
+        return false; // skip insert — existing CSV record was normalized
+      }
+    }
+
+    // P3: Fingerprint match with ±$0.05 tolerance (handles CSV rounding vs API precision)
+    const payoutAmount = parseFloat(p.amount) || 0;
+    const payoutDate = p.date;
+    const fingerprintMatch = existingShopifyList.find(
+      (e) => e.period_end === payoutDate && Math.abs(e.bank_deposit - payoutAmount) <= 0.05
+    );
+    if (fingerprintMatch) {
+      console.log(`[fetch-shopify-payouts] Skipping payout ${p.id}: fingerprint match with ${fingerprintMatch.settlement_id} (±$0.05 tolerance)`);
+      // Register alias for future lookups
+      supabase.from("settlement_id_aliases")
+        .upsert({ canonical_settlement_id: fingerprintMatch.settlement_id, alias_id: numericId, user_id: userId, source: "fingerprint_match" } as any, { onConflict: "alias_id,user_id" })
+        .then(({ error }) => {
+          if (error) console.error(`[fetch-shopify-payouts] Alias error:`, error);
+        });
       return false;
     }
+
     return true;
   });
 
@@ -233,6 +286,7 @@ async function syncPayoutsForUser(
         settlement_id: String(payout.id),
         marketplace: "shopify_payments",
         source: "api",
+        source_reference: (payout as any).bank_reference || null,
         status: settlementStatus,
         period_start: payoutDate,
         period_end: payoutDate,
@@ -252,6 +306,18 @@ async function syncPayoutsForUser(
         bank_deposit: netPayout,
         raw_payload: { payout, transactions },
       } as any);
+
+      // Register aliases after successful insert
+      if (!insertError) {
+        const bankRef = (payout as any).bank_reference;
+        const aliasRows: any[] = [
+          { canonical_settlement_id: String(payout.id), alias_id: String(payout.id), user_id: userId, source: "api" },
+        ];
+        if (bankRef && bankRef !== String(payout.id)) {
+          aliasRows.push({ canonical_settlement_id: String(payout.id), alias_id: bankRef, user_id: userId, source: "api" });
+        }
+        await supabase.from("settlement_id_aliases").upsert(aliasRows, { onConflict: "alias_id,user_id" });
+      }
 
       if (insertError) {
         errors.push(`Payout ${payout.id}: ${insertError.message}`);

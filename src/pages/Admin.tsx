@@ -27,10 +27,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
 import BugReportsDashboard from '@/components/admin/BugReportsDashboard';
+import DataIntegrityDashboard from '@/components/admin/DataIntegrityDashboard';
 
 interface UserRow {
   id: string;
@@ -206,6 +207,10 @@ export default function Admin() {
               <Bug className="h-3.5 w-3.5" />
               Bug Reports
             </TabsTrigger>
+            <TabsTrigger value="integrity" className="flex items-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Data Integrity
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -330,6 +335,10 @@ export default function Admin() {
 
           <TabsContent value="bugs">
             <BugReportsDashboard />
+          </TabsContent>
+
+          <TabsContent value="integrity">
+            <DataIntegrityDashboard />
           </TabsContent>
         </Tabs>
       </div>

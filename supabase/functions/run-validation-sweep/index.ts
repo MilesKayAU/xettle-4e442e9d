@@ -87,7 +87,91 @@ async function logEvent(adminSupabase: any, userId: string, eventType: string, d
   }
 }
 
+// ─── Parser version drift detection (Addition 1) ───────────────────
+const CLIENT_PARSER_VERSION = 'v1.7.1';
+const EDGE_PARSER_VERSION = 'v1.7.1'; // MUST match CLIENT_PARSER_VERSION above
+
+async function checkParserVersionDrift(adminSupabase: any, userId: string) {
+  if (CLIENT_PARSER_VERSION !== EDGE_PARSER_VERSION) {
+    await logEvent(adminSupabase, userId, 'parser_version_drift', {
+      client: CLIENT_PARSER_VERSION,
+      edge: EDGE_PARSER_VERSION,
+      message: 'Parser versions have drifted — settlements parsed by different paths may produce different accounting results.',
+    }, 'warning');
+  }
+}
+
+// ─── P2: Duplicate detection pass ───────────────────────────────────
+async function dedupPass(adminSupabase: any, userId: string) {
+  const { data: allSettlements } = await adminSupabase
+    .from('settlements')
+    .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, source, created_at')
+    .eq('user_id', userId)
+    .neq('status', 'duplicate_suppressed');
+
+  if (!allSettlements || allSettlements.length < 2) return 0;
+
+  // Group by marketplace + period_start + period_end
+  const groups = new Map<string, any[]>();
+  for (const s of allSettlements) {
+    const key = `${s.marketplace}|${s.period_start}|${s.period_end}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(s);
+  }
+
+  let suppressed = 0;
+
+  for (const [, group] of groups) {
+    if (group.length < 2) continue;
+
+    // Check for amount matches within ±$0.05
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i], b = group[j];
+        if (a.status === 'duplicate_suppressed' || b.status === 'duplicate_suppressed') continue;
+
+        const amountA = parseFloat(a.bank_deposit) || 0;
+        const amountB = parseFloat(b.bank_deposit) || 0;
+        if (Math.abs(amountA - amountB) > 0.05) continue;
+
+        // Duplicate found — keep the one with numeric settlement_id, suppress the other
+        const aIsNumeric = /^\d+$/.test(a.settlement_id);
+        const bIsNumeric = /^\d+$/.test(b.settlement_id);
+        const keep = aIsNumeric && !bIsNumeric ? a : !aIsNumeric && bIsNumeric ? b : (a.created_at < b.created_at ? a : b);
+        const suppress = keep === a ? b : a;
+
+        await adminSupabase.from('settlements')
+          .update({ status: 'duplicate_suppressed' })
+          .eq('id', suppress.id);
+
+        // Register alias so future lookups resolve correctly
+        await adminSupabase.from('settlement_id_aliases')
+          .upsert({
+            canonical_settlement_id: keep.settlement_id,
+            alias_id: suppress.settlement_id,
+            user_id: userId,
+            source: 'dedup_sweep',
+          }, { onConflict: 'alias_id,user_id' });
+
+        await logEvent(adminSupabase, userId, 'duplicate_detected', {
+          kept: { id: keep.id, settlement_id: keep.settlement_id, source: keep.source },
+          suppressed: { id: suppress.id, settlement_id: suppress.settlement_id, source: suppress.source },
+          amount_diff: Math.abs(amountA - amountB),
+        }, 'warning', group[0].marketplace, suppress.settlement_id);
+
+        suppressed++;
+        suppress.status = 'duplicate_suppressed'; // prevent re-processing in inner loop
+      }
+    }
+  }
+
+  return suppressed;
+}
+
 async function sweepUser(adminSupabase: any, userId: string) {
+  // Addition 1: Check parser version drift at start of every sweep
+  await checkParserVersionDrift(adminSupabase, userId);
+
   const summary = {
     marketplaces_checked: 0,
     complete: 0,
@@ -97,6 +181,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
     gap_detected: 0,
     missing: 0,
     already_recorded: 0,
+    duplicates_suppressed: 0,
   }
 
   const { data: boundarySetting } = await adminSupabase
@@ -406,6 +491,14 @@ async function sweepUser(adminSupabase: any, userId: string) {
     }
   } catch (e) {
     console.error('Bank matching step error:', e)
+  }
+
+  // P2: Run duplicate detection pass after main sweep
+  try {
+    summary.duplicates_suppressed = await dedupPass(adminSupabase, userId);
+  } catch (e) {
+    console.error('[validation-sweep] dedup pass error:', e);
+    await logEvent(adminSupabase, userId, 'dedup_pass_error', { error: String(e) }, 'error');
   }
 
   // Log sweep completion
