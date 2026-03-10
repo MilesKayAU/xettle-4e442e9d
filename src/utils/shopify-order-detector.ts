@@ -50,6 +50,7 @@ export interface OrderDetectionResult {
   detection_method: DetectionMethod;
   unknown_tags: string[];
   mcf_fulfillment?: boolean;
+  needs_classification?: boolean;
 }
 
 export interface ShopifyOrderInput {
