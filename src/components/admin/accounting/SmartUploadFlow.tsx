@@ -1819,6 +1819,27 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                 </div>
               )}
 
+              {/* First Contact — low confidence or unknown marketplace */}
+              {status === 'first_contact' && (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-2">
+                    <Search className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                        New format detected — confidence {detection?.confidence || 0}%
+                      </p>
+                      <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+                        We need your help to classify this file correctly.
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant="default" size="sm" className="gap-1.5 text-xs" onClick={() => onFirstContact(idx)}>
+                    <Search className="h-3.5 w-3.5" />
+                    Identify Marketplace
+                  </Button>
+                </div>
+              )}
+
               {/* Unknown — offer AI analysis */}
               {status === 'unknown' && (
                 <div className="flex items-center gap-2 flex-wrap">
