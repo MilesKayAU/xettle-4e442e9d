@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.run-validation-sweep]
 verify_jwt = false
+
+[functions.fetch-shopify-payouts]
+verify_jwt = false
