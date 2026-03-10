@@ -150,6 +150,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [hasShopifyConnection, setHasShopifyConnection] = useState(false);
   const [shopifyTokenInvalid, setShopifyTokenInvalid] = useState(false);
   const [shopifyShopDomain, setShopifyShopDomain] = useState<string | null>(null);
+  const [firstContactIdx, setFirstContactIdx] = useState<number | null>(null);
+  const [showNewFormatBanner, setShowNewFormatBanner] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
