@@ -253,7 +253,7 @@ export default function ValidationSweep({
     actionableRows.forEach(r => {
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') c.complete++;
       else if (r.overall_status === 'ready_to_push') c.ready_to_push++;
-      else if (r.overall_status === 'pushed_to_xero') c.complete++;
+      else if (r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external') c.complete++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') c.settlement_needed++;
       else if (r.overall_status === 'gap_detected') c.gap_detected++;
     });
