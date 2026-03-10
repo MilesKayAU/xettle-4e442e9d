@@ -392,6 +392,96 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_validation: {
+        Row: {
+          bank_amount: number | null
+          bank_matched: boolean | null
+          bank_matched_at: string | null
+          bank_reference: string | null
+          created_at: string | null
+          id: string
+          last_checked_at: string | null
+          marketplace_code: string
+          orders_count: number | null
+          orders_fetched_at: string | null
+          orders_found: boolean | null
+          orders_total: number | null
+          overall_status: string | null
+          period_end: string
+          period_label: string
+          period_start: string
+          reconciliation_difference: number | null
+          reconciliation_status: string | null
+          settlement_id: string | null
+          settlement_net: number | null
+          settlement_uploaded: boolean | null
+          settlement_uploaded_at: string | null
+          updated_at: string | null
+          user_id: string
+          xero_invoice_id: string | null
+          xero_pushed: boolean | null
+          xero_pushed_at: string | null
+        }
+        Insert: {
+          bank_amount?: number | null
+          bank_matched?: boolean | null
+          bank_matched_at?: string | null
+          bank_reference?: string | null
+          created_at?: string | null
+          id?: string
+          last_checked_at?: string | null
+          marketplace_code: string
+          orders_count?: number | null
+          orders_fetched_at?: string | null
+          orders_found?: boolean | null
+          orders_total?: number | null
+          overall_status?: string | null
+          period_end: string
+          period_label: string
+          period_start: string
+          reconciliation_difference?: number | null
+          reconciliation_status?: string | null
+          settlement_id?: string | null
+          settlement_net?: number | null
+          settlement_uploaded?: boolean | null
+          settlement_uploaded_at?: string | null
+          updated_at?: string | null
+          user_id: string
+          xero_invoice_id?: string | null
+          xero_pushed?: boolean | null
+          xero_pushed_at?: string | null
+        }
+        Update: {
+          bank_amount?: number | null
+          bank_matched?: boolean | null
+          bank_matched_at?: string | null
+          bank_reference?: string | null
+          created_at?: string | null
+          id?: string
+          last_checked_at?: string | null
+          marketplace_code?: string
+          orders_count?: number | null
+          orders_fetched_at?: string | null
+          orders_found?: boolean | null
+          orders_total?: number | null
+          overall_status?: string | null
+          period_end?: string
+          period_label?: string
+          period_start?: string
+          reconciliation_difference?: number | null
+          reconciliation_status?: string | null
+          settlement_id?: string | null
+          settlement_net?: number | null
+          settlement_uploaded?: boolean | null
+          settlement_uploaded_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+          xero_invoice_id?: string | null
+          xero_pushed?: boolean | null
+          xero_pushed_at?: string | null
+        }
+        Relationships: []
+      }
       marketplaces: {
         Row: {
           created_at: string
