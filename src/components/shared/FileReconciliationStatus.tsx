@@ -95,9 +95,6 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
               <span className="text-muted-foreground">Refunds: {fmt(r.refunds)}</span>
             )}
             <span className="text-muted-foreground">Fees: -{fmt(r.fees)}</span>
-            {(r.gstIncome !== 0 || r.gstExpenses !== 0) && (
-              <span className="text-muted-foreground">GST: {fmt(r.gstIncome - r.gstExpenses)}</span>
-            )}
             <span className="text-muted-foreground">Net: {fmt(r.bankDeposit)}</span>
             <span className={r.reconciles ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
               {r.reconciles ? '✅' : `⚠️ diff ${fmt(r.diff)}`}
