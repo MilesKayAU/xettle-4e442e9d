@@ -265,6 +265,15 @@ export default function Dashboard() {
         {activeView === 'settlements' ? (
           <ErrorBoundary>
             <div className="space-y-6">
+              {/* Settlements Overview — at-a-glance marketplace status */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <SettlementsOverview
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                  onSelectMarketplace={setSelectedMarketplace}
+                />
+              )}
+
               {/* Monthly Reconciliation Status */}
               {!marketplacesLoading && userMarketplaces.length > 0 && (
                 <MonthlyReconciliationStatus
