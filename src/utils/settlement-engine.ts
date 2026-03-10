@@ -449,6 +449,31 @@ export async function syncSettlementToXero(
       .eq('settlement_id', settlementId)
       .eq('user_id', user.id);
 
+    // Fire-and-forget: update marketplace_validation with Xero push
+    const { data: settlementRow } = await supabase
+      .from('settlements')
+      .select('period_start, period_end, marketplace')
+      .eq('settlement_id', settlementId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (settlementRow) {
+      const s2 = settlementRow as any;
+      const periodLabel = `${s2.period_start} → ${s2.period_end}`;
+      supabase.from('marketplace_validation' as any).upsert({
+        user_id: user.id,
+        marketplace_code: marketplace,
+        period_label: periodLabel,
+        period_start: s2.period_start,
+        period_end: s2.period_end,
+        xero_pushed: true,
+        xero_invoice_id: result.invoiceId,
+        xero_pushed_at: new Date().toISOString(),
+      } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
+        if (valErr) console.error('[marketplace_validation] xero upsert error:', valErr);
+      });
+    }
+
     return { success: true, invoiceId: result.invoiceId, invoiceNumber: result.invoiceNumber };
   } catch (err: any) {
     // Mark push_failed in DB
