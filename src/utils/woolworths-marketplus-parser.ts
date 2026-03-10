@@ -354,7 +354,7 @@ function buildWoolworthsSettlements(
     const clearingAmount = -round2(g.netAmount + g.gst);
 
     const settlementId = `${bankPaymentRef}_${g.orderSource}`;
-    const marketplaceCode = `woolworths_marketplus_${g.marketplaceCode}`;
+    const marketplaceCode = g.marketplaceCode;
 
     return {
       marketplace: marketplaceCode,
