@@ -443,7 +443,9 @@ export default function ActionCentre({
           )}
 
           {/* All Clear */}
-          {complete.length > 0 && (
+          {complete.length > 0 && (() => {
+            const grouped = groupByMarketplaceMonth(complete);
+            return (
             <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
@@ -454,23 +456,27 @@ export default function ActionCentre({
                   {complete.length} settlement{complete.length > 1 ? 's' : ''} synced
                 </p>
                 <ul className="space-y-1">
-                  {(expandedCards['complete'] ? complete : complete.slice(0, 3)).map(r => (
-                    <li key={r.id} className="text-xs flex items-center gap-1.5">
+                  {(expandedCards['complete'] ? grouped : grouped.slice(0, 3)).map(g => (
+                    <li key={g.key} className="text-xs flex items-center gap-1.5">
                       <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                      {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
+                      <span>{g.label}</span>
+                      {g.count > 1 && (
+                        <span className="text-muted-foreground">· {g.count} settlements{g.total ? ` · ${formatAUD(g.total)}` : ''}</span>
+                      )}
                     </li>
                   ))}
-                  {complete.length > 3 && (
+                  {grouped.length > 3 && (
                     <li>
                       <button onClick={() => setExpandedCards(prev => ({ ...prev, complete: !prev.complete }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                        {expandedCards['complete'] ? '− Show less' : `+ ${complete.length - 3} more`}
+                        {expandedCards['complete'] ? '− Show less' : `+ ${grouped.length - 3} more`}
                       </button>
                     </li>
                   )}
                 </ul>
               </CardContent>
             </Card>
-          )}
+            );
+          })()}
         </div>
       )}
 
