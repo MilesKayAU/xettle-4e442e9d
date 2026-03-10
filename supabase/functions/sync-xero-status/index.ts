@@ -175,9 +175,18 @@ serve(async (req) => {
     // Update settlements + cache matches for exact reference hits
     let updated = 0;
     for (const [settlementId, inv] of seen.entries()) {
-      // PAID or AUTHORISED → pushed_to_xero (matches AccountingDashboard badge)
-      // DRAFT or SUBMITTED → synced (still in progress at Xero)
-      const derivedStatus = (inv.Status === 'PAID' || inv.Status === 'AUTHORISED') ? 'pushed_to_xero' : 'synced';
+      const ref = inv.Reference || '';
+      const isXettleFormat = ref.startsWith('Xettle-');
+
+      // Xettle-pushed: use granular Xero status
+      // Legacy (AMZN-/LMB-/old Settlement): always synced_external
+      let derivedStatus: string;
+      if (isXettleFormat) {
+        derivedStatus = (inv.Status === 'PAID' || inv.Status === 'AUTHORISED') ? 'pushed_to_xero' : 'synced';
+      } else {
+        derivedStatus = 'synced_external';
+      }
+
       const { error } = await supabase
         .from('settlements')
         .update({
@@ -200,7 +209,7 @@ serve(async (req) => {
           xero_invoice_number: inv.InvoiceNumber || null,
           xero_status: inv.Status || null,
           xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
-          match_method: 'reference',
+          match_method: isXettleFormat ? 'reference' : 'legacy_reference',
           confidence: 1.0,
           matched_amount: inv.Total || null,
           matched_date: parseXeroDate(inv.Date),

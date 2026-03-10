@@ -390,7 +390,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               <span className="text-sm font-semibold text-foreground">
                                 {formatSettlementDate(s.period_start)} – {formatSettlementDate(s.period_end)}
                               </span>
-                              <SettlementStatusBadge status={s.status} xeroInvoiceNumber={s.xero_invoice_number} xeroType={(s as any).xero_type} />
+                              <SettlementStatusBadge status={s.status} xeroInvoiceNumber={s.xero_invoice_number} xeroType={(s as any).xero_type} xeroStatus={s.xero_status} />
                               {s.marketplace.startsWith('shopify_orders_') && (
                                 <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
                               )}
