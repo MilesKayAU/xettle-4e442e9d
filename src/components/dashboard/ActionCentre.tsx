@@ -257,14 +257,7 @@ export default function ActionCentre({
               </p>
             </div>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-amber-300 dark:border-amber-700" onClick={() => {
-              const missing: MissingSettlement[] = uploadNeeded.map(r => ({
-                marketplace_code: r.marketplace_code,
-                marketplace_label: MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code,
-                period_label: r.period_label,
-                period_start: r.period_start,
-                period_end: r.period_end,
-              }));
-              onSwitchToUpload(missing);
+              onSwitchToUpload(buildMissingList());
             }}>
               <Upload className="h-3 w-3" /> Upload now
             </Button>
