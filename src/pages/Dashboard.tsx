@@ -357,6 +357,14 @@ export default function Dashboard() {
                 <SettlementsSummaryStrip userMarketplaceCount={userMarketplaces.length} />
               )}
 
+              {/* Action Control Panel */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <ActionControlPanel
+                  userMarketplaces={userMarketplaces}
+                  onSwitchToUpload={() => switchView('smart_upload')}
+                />
+              )}
+
               {/* Monthly Reconciliation Status */}
               {!marketplacesLoading && userMarketplaces.length > 0 && (
                 <MonthlyReconciliationStatus
