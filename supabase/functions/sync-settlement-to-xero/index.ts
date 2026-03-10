@@ -360,9 +360,13 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { reference, description, date, dueDate, lineItems, country, contactName } = body;
+    const { reference, description, date, dueDate, lineItems, country, contactName, netAmount } = body;
 
-    console.log('Create invoice request:', { userId, reference, date, country, contactName, lineItemCount: lineItems?.length });
+    // Determine if this is a negative (fee-only) settlement → create a Bill (ACCPAY)
+    const isNegativeSettlement = typeof netAmount === 'number' && netAmount < 0;
+    const invoiceType = isNegativeSettlement ? "ACCPAY" : "ACCREC";
+
+    console.log('Create request:', { userId, reference, date, country, contactName, lineItemCount: lineItems?.length, netAmount, invoiceType });
     if (!reference) throw new Error('Missing reference');
     if (!date) throw new Error('Missing date');
     if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
@@ -381,9 +385,9 @@ serve(async (req) => {
       );
     }
 
-    // Build the Invoice payload (ACCREC = Sales Invoice)
+    // Build the payload — ACCPAY (Bill) for negative, ACCREC (Invoice) for positive
     const invoiceData: Record<string, any> = {
-      Type: "ACCREC",
+      Type: invoiceType,
       Contact: { Name: contactName || "Amazon.com.au" },
       Date: date,
       DueDate: dueDate || date,
@@ -391,13 +395,21 @@ serve(async (req) => {
       Status: "AUTHORISED",
       LineAmountTypes: "Exclusive",
       Reference: reference,
-      LineItems: lineItems.map(item => ({
-        Description: item.Description,
-        AccountCode: item.AccountCode,
-        TaxType: item.TaxType,
-        UnitAmount: Math.round(item.UnitAmount * 100) / 100,
-        Quantity: item.Quantity || 1,
-      }))
+      LineItems: isNegativeSettlement
+        ? [{
+            Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
+            AccountCode: "405",
+            TaxType: "OUTPUT",
+            UnitAmount: Math.round(Math.abs(netAmount) * 100) / 100,
+            Quantity: 1,
+          }]
+        : lineItems.map(item => ({
+            Description: item.Description,
+            AccountCode: item.AccountCode,
+            TaxType: item.TaxType,
+            UnitAmount: Math.round(item.UnitAmount * 100) / 100,
+            Quantity: item.Quantity || 1,
+          }))
     };
 
     // Add human-readable description if provided (Xettle-{id} reference format)
