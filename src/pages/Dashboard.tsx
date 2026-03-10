@@ -32,6 +32,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [xeroConnected, setXeroConnected] = useState(false);
+
+  useEffect(() => {
+    supabase.from('xero_tokens').select('id').limit(1)
+      .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
+  }, []);
   const [activeView, setActiveView] = useState<DashboardView>(() => {
     return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
   });
@@ -372,7 +378,7 @@ export default function Dashboard() {
 
               {/* Accounting Boundary Settings */}
               <AccountingBoundarySettings
-                xeroConnected={false}
+                xeroConnected={xeroConnected}
                 onConnectXero={() => {
                   switchView('settlements');
                   setSelectedMarketplace('amazon_au');
