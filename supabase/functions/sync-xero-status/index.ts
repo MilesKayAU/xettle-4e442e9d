@@ -71,9 +71,23 @@ function extractSettlementId(reference: string): string | null {
     const rest = reference.slice(7);
     return rest.replace(/-P[12]$/, '');
   }
-  // Old format: ... (settlement_id) or ... Part 1/2
-  const match = reference.match(/\(([^)]+)\)/);
-  return match ? match[1] : null;
+  // Old format: "Amazon AU Settlement 12284044573 - Part 2 (March)"
+  // Extract the numeric settlement ID, NOT the month in parentheses
+  // Look for a long numeric ID (8+ digits) in the reference
+  const numericMatch = reference.match(/\b(\d{8,})\b/);
+  if (numericMatch) return numericMatch[1];
+  // Shopify format: "Shopify Payout Shopify-ABC123"
+  const shopifyMatch = reference.match(/(Shopify-[\w]+)/);
+  if (shopifyMatch) return shopifyMatch[1];
+  // Generic: look for settlement ID patterns like 290994_BigW
+  const genericMatch = reference.match(/(\d+_\w+)/);
+  if (genericMatch) return genericMatch[1];
+  // Last resort: try parentheses but only if it looks like an ID (not a month)
+  const parenMatch = reference.match(/\(([^)]+)\)/);
+  if (parenMatch && /\d/.test(parenMatch[1]) && parenMatch[1].length > 3) {
+    return parenMatch[1];
+  }
+  return null;
 }
 
 function parseXeroDate(dateField: string | null | undefined): string | null {
