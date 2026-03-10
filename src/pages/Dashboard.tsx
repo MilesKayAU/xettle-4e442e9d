@@ -48,6 +48,14 @@ export default function Dashboard() {
   // ─── Setup wizard pre-check ───────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+    const isTestMode = searchParams.get('test_wizard') === 'true';
+    if (isTestMode) {
+      const connected = searchParams.get('connected');
+      if (connected === 'amazon' || connected === 'shopify') setWizardInitialStep(2);
+      else if (connected === 'xero') setWizardInitialStep(3);
+      setShowWizard(true);
+      return;
+    }
     const checkWizard = async () => {
       try {
         const [settRes, amazonRes, shopifyRes, wizardRes] = await Promise.all([
