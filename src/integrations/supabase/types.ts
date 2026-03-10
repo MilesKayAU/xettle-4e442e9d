@@ -749,6 +749,33 @@ export type Database = {
         }
         Relationships: []
       }
+      settlement_id_aliases: {
+        Row: {
+          alias_id: string
+          canonical_settlement_id: string
+          created_at: string | null
+          id: string
+          source: string | null
+          user_id: string
+        }
+        Insert: {
+          alias_id: string
+          canonical_settlement_id: string
+          created_at?: string | null
+          id?: string
+          source?: string | null
+          user_id: string
+        }
+        Update: {
+          alias_id?: string
+          canonical_settlement_id?: string
+          created_at?: string | null
+          id?: string
+          source?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       settlement_lines: {
         Row: {
           accounting_category: string | null
@@ -921,6 +948,7 @@ export type Database = {
           seller_fees: number | null
           settlement_id: string
           source: string
+          source_reference: string | null
           split_month_1_data: Json | null
           split_month_2_data: Json | null
           status: string | null
@@ -964,6 +992,7 @@ export type Database = {
           seller_fees?: number | null
           settlement_id: string
           source?: string
+          source_reference?: string | null
           split_month_1_data?: Json | null
           split_month_2_data?: Json | null
           status?: string | null
@@ -1007,6 +1036,7 @@ export type Database = {
           seller_fees?: number | null
           settlement_id?: string
           source?: string
+          source_reference?: string | null
           split_month_1_data?: Json | null
           split_month_2_data?: Json | null
           status?: string | null
