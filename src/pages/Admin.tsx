@@ -202,6 +202,10 @@ export default function Admin() {
               <Store className="h-3.5 w-3.5" />
               Marketplace Config
             </TabsTrigger>
+            <TabsTrigger value="bugs" className="flex items-center gap-1.5">
+              <Bug className="h-3.5 w-3.5" />
+              Bug Reports
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
