@@ -71,6 +71,13 @@ function extractSettlementId(reference: string): string | null {
     const rest = reference.slice(7);
     return rest.replace(/-P[12]$/, '');
   }
+  // Legacy format: AMZN-{settlement_id}
+  if (reference.startsWith('AMZN-')) {
+    return reference.slice(5);
+  }
+  // Split-month format: LMB-AU-{settlement_id}-1 or LMB-AU-{settlement_id}-2
+  const lmbMatch = reference.match(/^LMB-\w+-(\d+)-\d+$/);
+  if (lmbMatch) return lmbMatch[1];
   // Old format: "Amazon AU Settlement 12284044573 - Part 2 (March)"
   // Extract the numeric settlement ID, NOT the month in parentheses
   // Look for a long numeric ID (8+ digits) in the reference
@@ -148,13 +155,13 @@ serve(async (req) => {
     let token = tokens[0] as XeroToken;
     token = await refreshToken(supabase, token);
 
-    // ─── METHOD 1: Exact reference match (Xettle-prefixed) ───────
-    const [newFormatInvoices, oldFormatInvoices] = await Promise.all([
-      queryXeroInvoices(token, 'Reference.StartsWith("Xettle-")'),
-      queryXeroInvoices(token, 'Reference.Contains("Settlement")'),
-    ]);
+    // ─── METHOD 1: Exact reference match (sequential to avoid Xero rate limits) ───────
+    const newFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("Xettle-")');
+    const oldFormatInvoices = await queryXeroInvoices(token, 'Reference.Contains("Settlement")');
+    const amznFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("AMZN-")');
+    const lmbFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("LMB-")');
 
-    const allInvoices = [...newFormatInvoices, ...oldFormatInvoices];
+    const allInvoices = [...newFormatInvoices, ...oldFormatInvoices, ...amznFormatInvoices, ...lmbFormatInvoices];
     const seen = new Map<string, any>();
 
     for (const inv of allInvoices) {
