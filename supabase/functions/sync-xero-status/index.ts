@@ -168,13 +168,16 @@ serve(async (req) => {
     // Update settlements + cache matches for exact reference hits
     let updated = 0;
     for (const [settlementId, inv] of seen.entries()) {
+      // PAID or AUTHORISED → pushed_to_xero (matches AccountingDashboard badge)
+      // DRAFT or SUBMITTED → synced (still in progress at Xero)
+      const derivedStatus = (inv.Status === 'PAID' || inv.Status === 'AUTHORISED') ? 'pushed_to_xero' : 'synced';
       const { error } = await supabase
         .from('settlements')
         .update({
           xero_invoice_number: inv.InvoiceNumber || null,
           xero_status: inv.Status || null,
           xero_journal_id: inv.InvoiceID,
-          status: 'synced',
+          status: derivedStatus,
         })
         .eq('settlement_id', settlementId)
         .eq('user_id', userId);
