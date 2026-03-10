@@ -46,8 +46,16 @@ interface SystemEvent {
   created_at: string;
 }
 
+export interface MissingSettlement {
+  marketplace_code: string;
+  marketplace_label: string;
+  period_label: string;
+  period_start: string;
+  period_end: string;
+}
+
 interface ActionCentreProps {
-  onSwitchToUpload: () => void;
+  onSwitchToUpload: (missing?: MissingSettlement[]) => void;
   onSwitchToSettlements: () => void;
   userName?: string;
 }
@@ -225,7 +233,16 @@ export default function ActionCentre({
                 <span className="text-muted-foreground"> Settlements are usually received within 14 days of period end.</span>
               </p>
             </div>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-amber-300 dark:border-amber-700" onClick={onSwitchToUpload}>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-amber-300 dark:border-amber-700" onClick={() => {
+              const missing: MissingSettlement[] = uploadNeeded.map(r => ({
+                marketplace_code: r.marketplace_code,
+                marketplace_label: MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code,
+                period_label: r.period_label,
+                period_start: r.period_start,
+                period_end: r.period_end,
+              }));
+              onSwitchToUpload(missing);
+            }}>
               <Upload className="h-3 w-3" /> Upload now
             </Button>
           </CardContent>
@@ -269,7 +286,16 @@ export default function ActionCentre({
                     <li className="text-xs text-muted-foreground">+ {uploadNeeded.length - 3} more</li>
                   )}
                 </ul>
-                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={onSwitchToUpload}>
+                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
+                  const missing: MissingSettlement[] = uploadNeeded.map(r => ({
+                    marketplace_code: r.marketplace_code,
+                    marketplace_label: MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code,
+                    period_label: r.period_label,
+                    period_start: r.period_start,
+                    period_end: r.period_end,
+                  }));
+                  onSwitchToUpload(missing);
+                }}>
                   <Upload className="h-3 w-3" /> Upload now
                 </Button>
               </CardContent>
@@ -448,7 +474,7 @@ export default function ActionCentre({
       {/* Floating upload button */}
       <div className="fixed bottom-6 right-6 z-40">
         <Button
-          onClick={onSwitchToUpload}
+          onClick={() => onSwitchToUpload()}
           className="h-12 px-5 gap-2 shadow-lg rounded-full"
         >
           <Plus className="h-4 w-4" /> Upload settlement

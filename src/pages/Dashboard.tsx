@@ -7,7 +7,7 @@ import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/ac
 import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyReconciliationStatus';
 import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
-import ActionCentre from '@/components/dashboard/ActionCentre';
+import ActionCentre, { type MissingSettlement } from '@/components/dashboard/ActionCentre';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
@@ -50,6 +50,7 @@ export default function Dashboard() {
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
+  const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -339,7 +340,10 @@ export default function Dashboard() {
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <ActionCentre
-              onSwitchToUpload={() => switchView('smart_upload')}
+              onSwitchToUpload={(missing) => {
+                if (missing) setMissingSettlements(missing);
+                switchView('smart_upload');
+              }}
               onSwitchToSettlements={() => {
                 switchView('settlements');
                 switchSettlementsSubTab('overview');
@@ -364,6 +368,11 @@ export default function Dashboard() {
                   onSettlementsSaved={loadMarketplaces}
                   onMarketplacesChanged={loadMarketplaces}
                   onViewSettlements={() => switchView('settlements')}
+                  missingSettlements={missingSettlements}
+                  onReturnToDashboard={() => {
+                    setMissingSettlements([]);
+                    switchView('dashboard');
+                  }}
                 />
               </Suspense>
             </div>
