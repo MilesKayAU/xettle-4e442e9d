@@ -50,6 +50,7 @@ export interface OrderDetectionResult {
   detection_method: DetectionMethod;
   unknown_tags: string[];
   mcf_fulfillment?: boolean;
+  needs_classification?: boolean;
 }
 
 export interface ShopifyOrderInput {
@@ -160,7 +161,14 @@ export function detectMarketplaceFromOrder(order: ShopifyOrderInput): OrderDetec
     }
   }
 
-  // ── Step 5: Source Name ───────────────────────────────────────────
+  // ── Guard: aggregators present but no marketplace → don't guess source_name
+  if (aggregators.length > 0) {
+    const result = buildResult(null, null, aggregators, 0, 'unknown', unknown_tags);
+    result.needs_classification = true;
+    return result;
+  }
+
+  // ── Step 5: Source Name (only if no aggregators) ───────────────────
   if (order.source_name) {
     const srcLower = order.source_name.toLowerCase().trim();
     if (srcLower === 'web') {
@@ -258,7 +266,14 @@ export async function detectMarketplaceFromOrderAsync(
     }
   }
 
-  // ── Step 5: Source Name ───────────────────────────────────────────
+  // ── Guard: aggregators present but no marketplace → don't guess source_name
+  if (aggregators.length > 0) {
+    const result = buildResult(null, null, aggregators, 0, 'unknown', unknown_tags);
+    result.needs_classification = true;
+    return result;
+  }
+
+  // ── Step 5: Source Name (only if no aggregators) ───────────────────
   if (order.source_name) {
     const srcLower = order.source_name.toLowerCase().trim();
     if (srcLower === 'web') {
