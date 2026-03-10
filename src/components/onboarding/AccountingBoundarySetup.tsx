@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
+import { MARKETPLACE_LABELS, triggerValidationSweep } from '@/utils/settlement-engine';
 
 interface DetectedSettlement {
   marketplace: string;
