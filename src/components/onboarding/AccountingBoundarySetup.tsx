@@ -213,6 +213,9 @@ export default function AccountingBoundarySetup({
       setState('confirmed');
       toast.success(`Accounting boundary set to ${format(new Date(boundaryDate), 'dd MMM yyyy')}`);
 
+      // Fire-and-forget: trigger validation sweep
+      triggerValidationSweep();
+
       // Load marketplace statuses for next step
       await loadMarketplaceStatuses();
 
