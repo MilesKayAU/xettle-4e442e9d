@@ -52,6 +52,7 @@ export interface MissingSettlement {
   period_label: string;
   period_start: string;
   period_end: string;
+  estimated_amount?: number | null;
 }
 
 interface ActionCentreProps {
