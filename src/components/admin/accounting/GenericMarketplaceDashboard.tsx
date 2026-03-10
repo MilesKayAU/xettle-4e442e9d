@@ -403,7 +403,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               </TooltipProvider>
                               <Button
                                 size="sm"
-                                variant="outline"
+                                variant="ghost"
+                                className="text-muted-foreground"
                                 onClick={() => handleMarkAlreadySynced(s.settlement_id)}
                               >
                                 <SkipForward className="h-3.5 w-3.5 mr-1" />
