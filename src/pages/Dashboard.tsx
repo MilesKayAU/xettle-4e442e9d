@@ -396,18 +396,6 @@ export default function Dashboard() {
         {activeView === 'settlements' && settlementsSubTab === 'all' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              {/* Financial Summary Strip */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <SettlementsSummaryStrip userMarketplaceCount={userMarketplaces.length} />
-              )}
-
-              {/* Action Control Panel */}
-              {!marketplacesLoading && userMarketplaces.length > 0 && (
-                <ActionControlPanel
-                  userMarketplaces={userMarketplaces}
-                  onSwitchToUpload={() => switchView('smart_upload')}
-                />
-              )}
 
               {/* Monthly Reconciliation Status */}
               {!marketplacesLoading && userMarketplaces.length > 0 && (
