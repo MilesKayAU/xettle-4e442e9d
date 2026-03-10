@@ -372,7 +372,7 @@ export default function Dashboard() {
 
               {/* Accounting Boundary Settings */}
               <AccountingBoundarySettings
-                xeroConnected={false}
+                xeroConnected={xeroConnected}
                 onConnectXero={() => {
                   switchView('settlements');
                   setSelectedMarketplace('amazon_au');
