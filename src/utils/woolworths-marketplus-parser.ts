@@ -14,6 +14,7 @@
  */
 
 import type { StandardSettlement } from './settlement-engine';
+import { parseDateOrEmpty } from './date-parser';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
