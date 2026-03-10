@@ -249,30 +249,30 @@ export default function MonthlyReconciliationStatus({
 
             {/* Summary stats */}
             {settlements.length > 0 && (
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                {readyToPush > 0 && (
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-amber-400" />
-                    {readyToPush} ready to push
-                  </span>
-                )}
+              <div className="flex items-center gap-3 flex-wrap">
                 {pushed > 0 && (
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
                     {pushed} in Xero
-                  </span>
+                  </Badge>
+                )}
+                {readyToPush > 0 && (
+                  <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs font-medium">
+                    <span className="h-2 w-2 rounded-full bg-amber-500 mr-1.5" />
+                    {readyToPush} ready to push
+                  </Badge>
                 )}
                 {failed > 0 && (
-                  <span className="flex items-center gap-1">
-                    <XCircle className="h-3 w-3 text-destructive" />
+                  <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium">
+                    <XCircle className="h-3 w-3 mr-1" />
                     {failed} failed
-                  </span>
+                  </Badge>
                 )}
                 {missingCodes.length > 0 && (
-                  <span className="flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-amber-500" />
+                  <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
                     {missingCodes.length} missing
-                  </span>
+                  </Badge>
                 )}
               </div>
             )}

@@ -172,7 +172,9 @@ const XeroConnectionStatus = () => {
           </div>
           <Badge 
             variant={status?.connected ? (status.isExpired ? 'destructive' : 'default') : 'secondary'}
+            className={status?.connected && !status.isExpired ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200' : ''}
           >
+            {status?.connected && !status.isExpired && <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />}
             {status?.connected 
               ? (status.isExpired ? 'Token Expired' : 'Connected') 
               : 'Not Connected'

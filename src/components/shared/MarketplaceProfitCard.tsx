@@ -90,17 +90,39 @@ export default function MarketplaceProfitCard({ marketplaceCode, userId }: Marke
 
   if (records.length === 0) {
     return (
-      <Card className="border-border">
+      <Card className="border-border bg-gradient-to-br from-muted/30 to-muted/50">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            Profit Summary
+            <TrendingUp className="h-4 w-4 text-primary" />
+            Marketplace Profit
           </CardTitle>
         </CardHeader>
-        <CardContent className="pb-4">
-          <p className="text-xs text-muted-foreground">
-            No profit data yet. Add SKU costs and upload settlements to calculate.
+        <CardContent className="pb-5 space-y-3">
+          <p className="text-sm text-foreground font-medium">
+            Add SKU costs to unlock profit insights
           </p>
+          <ul className="text-xs text-muted-foreground space-y-1.5">
+            <li className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+              Net profit per marketplace
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+              Margin % with trend charts
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+              Best and worst performing SKUs
+            </li>
+          </ul>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={() => navigate('/admin?tab=costs')}
+          >
+            Add SKU Costs <ArrowRight className="h-3 w-3" />
+          </Button>
         </CardContent>
       </Card>
     );

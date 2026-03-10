@@ -6,6 +6,7 @@ import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMa
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import MonthlyReconciliationStatus from '@/components/admin/accounting/MonthlyReconciliationStatus';
 import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
+import SettlementsSummaryStrip from '@/components/admin/accounting/SettlementsSummaryStrip';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
@@ -257,40 +258,30 @@ export default function Dashboard() {
       {/* Primary tab bar */}
       <div className="border-b border-border bg-card/50">
         <div className="container-custom">
-          <nav className="flex gap-1 -mb-px">
-            <button
-              onClick={() => switchView('smart_upload')}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeView === 'smart_upload'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-              }`}
-            >
-              <Upload className="h-4 w-4" />
-              Smart Upload
-            </button>
-            <button
-              onClick={() => switchView('settlements')}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeView === 'settlements'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-              }`}
-            >
-              <FileText className="h-4 w-4" />
-              Settlements
-            </button>
-            <button
-              onClick={() => switchView('insights')}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeView === 'insights'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-              }`}
-            >
-              <BarChart3 className="h-4 w-4" />
-              Insights
-            </button>
+          <nav className="flex gap-1 py-2">
+            {([
+              { key: 'smart_upload' as DashboardView, label: 'Smart Upload', icon: Upload, step: '①' },
+              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, step: '②' },
+              { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3, step: '③' },
+            ]).map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeView === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => switchView(tab.key)}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  <span className="text-xs opacity-60">{tab.step}</span>
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
           </nav>
         </div>
       </div>
@@ -360,6 +351,11 @@ export default function Dashboard() {
         {activeView === 'settlements' && settlementsSubTab === 'all' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              {/* Financial Summary Strip */}
+              {!marketplacesLoading && userMarketplaces.length > 0 && (
+                <SettlementsSummaryStrip userMarketplaceCount={userMarketplaces.length} />
+              )}
+
               {/* Monthly Reconciliation Status */}
               {!marketplacesLoading && userMarketplaces.length > 0 && (
                 <MonthlyReconciliationStatus

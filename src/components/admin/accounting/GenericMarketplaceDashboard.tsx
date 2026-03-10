@@ -8,10 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
   CheckSquare, Square, Eye, ShieldCheck, ShieldAlert,
-  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown
+  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, CloudUpload, BarChart3, Scale
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -147,22 +148,20 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
       {/* Upload prompt — directs to Smart Upload */}
       {onSwitchToUpload && (
-        <Card className="border-dashed border-2 border-primary/20 hover:border-primary/40 transition-colors cursor-pointer" onClick={onSwitchToUpload}>
-          <CardContent className="py-5 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Upload className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  Upload {marketplaceName} files
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Use Smart Upload to drop files — auto-detects, previews, and saves
-                </p>
-              </div>
+        <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-primary/[0.02]" onClick={onSwitchToUpload}>
+          <CardContent className="py-8 flex flex-col items-center justify-center text-center gap-3">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <CloudUpload className="h-6 w-6 text-primary" />
             </div>
-            <Button variant="outline" size="sm" className="gap-2">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Drag settlement files here or click to upload
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Auto-detects marketplace, previews data, and saves — no configuration needed
+              </p>
+            </div>
+            <Button size="sm" className="gap-2 mt-1">
               <Upload className="h-4 w-4" />
               Smart Upload
               <ArrowRight className="h-3 w-3" />
@@ -171,10 +170,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         </Card>
       )}
 
+      <Separator />
+
       {/* Settlement History */}
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <FileText className="h-4 w-4" />
+        <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
+          <FileText className="h-4 w-4 text-primary" />
           Saved Settlements
           {settlements.length > 0 && (
             <Badge variant="secondary" className="text-[10px]">{settlements.length}</Badge>
@@ -284,7 +285,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                       </p>
                     </div>
                   )}
-                  <Card className={`border-border hover:border-primary/20 transition-colors ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}>
+                  <Card className={`shadow-sm border-border/80 hover:border-primary/20 transition-colors border-l-4 ${
+                    isSynced ? 'border-l-emerald-500' : isPushFailed ? 'border-l-red-400' : 'border-l-amber-400'
+                  } ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}>
                     <CardContent className="py-3 px-4">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -400,7 +403,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               </TooltipProvider>
                               <Button
                                 size="sm"
-                                variant="outline"
+                                variant="ghost"
+                                className="text-muted-foreground"
                                 onClick={() => handleMarkAlreadySynced(s.settlement_id)}
                               >
                                 <SkipForward className="h-3.5 w-3.5 mr-1" />
@@ -696,23 +700,39 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         )}
       </div>
 
+      <Separator />
+
       {/* Reconciliation Status */}
-      {hasShopify && currentUserId ? (
-        <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
-      ) : !hasShopify && settlements.length > 0 ? (
-        <Card className="border-dashed border-border">
-          <CardContent className="py-4 text-center">
-            <p className="text-xs text-muted-foreground">
-              Connect Shopify to enable reconciliation →
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+      <div className="space-y-3">
+        <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
+          <Scale className="h-4 w-4 text-primary" />
+          Reconciliation
+        </h4>
+        {hasShopify && currentUserId ? (
+          <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
+        ) : !hasShopify && settlements.length > 0 ? (
+          <Card className="border-dashed border-border">
+            <CardContent className="py-4 text-center">
+              <p className="text-xs text-muted-foreground">
+                Connect Shopify to enable reconciliation →
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+
+      <Separator />
 
       {/* Profit Summary */}
-      {currentUserId && (
-        <MarketplaceProfitCard marketplaceCode={code} userId={currentUserId} />
-      )}
+      <div className="space-y-3">
+        <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-primary" />
+          Profit Analysis
+        </h4>
+        {currentUserId && (
+          <MarketplaceProfitCard marketplaceCode={code} userId={currentUserId} />
+        )}
+      </div>
 
       {/* Xero-aware bulk delete confirmation dialog */}
       <BulkDeleteDialog
