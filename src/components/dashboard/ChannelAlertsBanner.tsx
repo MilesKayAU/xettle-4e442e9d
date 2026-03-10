@@ -340,6 +340,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           const isUnknown = alert.detection_method === 'unknown' || (!alert.detected_label && isNumericChannelId(alert.source_name));
           const isTagDetected = alert.detection_method === 'tag';
           const candidateTags = alert.candidate_tags || [];
+          const connectorNote = getConnectorNote(candidateTags);
           const isNaming = namingAlertId === alert.id;
 
           return (
