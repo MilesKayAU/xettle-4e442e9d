@@ -74,6 +74,29 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
   const [guideOpen, setGuideOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // API fetch state
+  const [apiFetching, setApiFetching] = useState(false);
+  const [shopDomain, setShopDomain] = useState<string | null>(null);
+  const [shopConnected, setShopConnected] = useState(false);
+  const [unknownEntities, setUnknownEntities] = useState<UnknownEntity[]>([]);
+  const [showEntityDialog, setShowEntityDialog] = useState(false);
+
+  // Check if Shopify is connected on mount
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke('shopify-auth', {
+          method: 'GET',
+          headers: { 'x-action': 'status' },
+        });
+        if (data?.connected && data?.shops?.length > 0) {
+          setShopConnected(true);
+          setShopDomain(data.shops[0].shop_domain);
+        }
+      } catch { /* silent */ }
+    })();
+  }, []);
+
   // Detection phase
   const [steps, setSteps] = useState<DetectionStep[]>([
     { label: 'Reading your file...', done: false },
