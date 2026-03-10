@@ -13,6 +13,7 @@ import AccountingBoundarySetup from '@/components/onboarding/AccountingBoundaryS
 interface AccountingBoundarySettingsProps {
   xeroConnected: boolean;
   onConnectXero?: () => void;
+  onGoToUpload?: () => void;
 }
 
 export default function AccountingBoundarySettings({
