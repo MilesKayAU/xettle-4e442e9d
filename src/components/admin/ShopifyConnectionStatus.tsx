@@ -121,34 +121,24 @@ const ShopifyConnectionStatus = () => {
         return;
       }
 
-      const { rows } = convertApiOrdersToRows(apiOrders);
+      // Use new detector
+      const result = await detectAllMarketplaces(
+        apiOrders.map(o => ({
+          name: o.name,
+          tags: o.tags || '',
+          note_attributes: o.note_attributes || [],
+          gateway: o.payment_gateway_names?.[0] || o.gateway || '',
+          source_name: (o as any).source_name || '',
+        }))
+      );
 
-      // Group by detected marketplace
-      const countMap = new Map<string, number>();
-      for (const row of rows) {
-        const mp = row.detectedMarketplace || 'unknown';
-        countMap.set(mp, (countMap.get(mp) || 0) + 1);
-      }
-
-      // Build display list (exclude unknown, include everything else)
-      const discovered: DiscoveredMarketplace[] = [];
-      for (const [code, count] of countMap) {
-        if (code === 'unknown') continue;
-        const displayName = code
-          .replace(/_/g, ' ')
-          .replace(/\b\w/g, c => c.toUpperCase());
-        discovered.push({ code, displayName, orderCount: count, checked: true });
-      }
-
-      discovered.sort((a, b) => b.orderCount - a.orderCount);
-
-      if (discovered.length === 0) {
+      if (result.marketplaces.length === 0) {
         toast.info('No marketplace channels detected. Orders may all be direct Shopify sales.');
         setDiscovering(false);
         return;
       }
 
-      setDiscoveredMarketplaces(discovered);
+      setDiscoveryResult(result);
       setDiscoveryOpen(true);
     } catch (err: any) {
       console.error('Discovery error:', err);
@@ -158,32 +148,26 @@ const ShopifyConnectionStatus = () => {
     }
   };
 
-  const toggleMarketplace = (idx: number) => {
-    setDiscoveredMarketplaces(prev =>
-      prev.map((m, i) => i === idx ? { ...m, checked: !m.checked } : m)
-    );
-  };
-
-  const handleCreateTabs = async () => {
+  const handleCreateTabs = async (selectedCodes: string[]) => {
     setCreatingTabs(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const checked = discoveredMarketplaces.filter(m => m.checked);
       const { data: existing } = await supabase
         .from('marketplace_connections')
         .select('marketplace_code');
       const existingCodes = new Set((existing || []).map((e: any) => e.marketplace_code));
 
       let created = 0;
-      for (const mp of checked) {
-        const code = `shopify_orders_${mp.code}`;
-        if (existingCodes.has(code)) continue;
+      for (const code of selectedCodes) {
+        const mpCode = `shopify_orders_${code}`;
+        if (existingCodes.has(mpCode)) continue;
+        const mp = discoveryResult?.marketplaces.find(m => m.code === code);
         await supabase.from('marketplace_connections').insert({
           user_id: user.id,
-          marketplace_code: code,
-          marketplace_name: mp.displayName,
+          marketplace_code: mpCode,
+          marketplace_name: mp?.name || code,
           country_code: 'AU',
           connection_type: 'auto_detected',
           connection_status: 'active',
@@ -191,7 +175,7 @@ const ShopifyConnectionStatus = () => {
         created++;
       }
 
-      toast.success(`${created > 0 ? created : checked.length} marketplace tab${created !== 1 ? 's' : ''} created`);
+      toast.success(`${created > 0 ? created : selectedCodes.length} marketplace tab${created !== 1 ? 's' : ''} created`);
       setDiscoveryOpen(false);
 
       // Update last_fetched_at
@@ -206,6 +190,10 @@ const ShopifyConnectionStatus = () => {
     } finally {
       setCreatingTabs(false);
     }
+  };
+
+  const handleClassifyUnknown = async (tag: string, type: string) => {
+    await classifyUnknownTag(tag, type);
   };
 
   // ─── Connection handlers ──────────────────────────────────────────
