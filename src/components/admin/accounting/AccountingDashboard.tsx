@@ -106,7 +106,137 @@ async function removeExistingSettlementForUser(userId: string, settlementId: str
   if (settlementError) throw settlementError;
 }
 
-export default function AccountingDashboard() {
+/**
+ * saveAmazonSettlement — shared save utility for all Amazon settlement save paths.
+ * Handles dedup check, overwrite, insert settlement + lines + unmapped, and optional fee extraction.
+ */
+interface SaveAmazonSettlementOptions {
+  parsed: ParsedSettlement;
+  marketplace: string;
+  /** Fire-and-forget fee observation extraction (only for single-upload flow) */
+  extractFees?: boolean;
+}
+
+async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }: SaveAmazonSettlementOptions): Promise<{ success: boolean; overwritten?: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Not authenticated' };
+
+  const { header, summary, lines, unmapped } = parsed;
+  const splitMonth = parsed.splitMonth;
+
+  // Duplicate check: overwrite existing with fresh parse
+  const { data: existingData } = await supabase
+    .from('settlements')
+    .select('id')
+    .eq('settlement_id', header.settlementId)
+    .eq('user_id', user.id)
+    .limit(1);
+
+  const isOverwrite = !!(existingData && existingData.length > 0);
+  if (isOverwrite) {
+    await removeExistingSettlementForUser(user.id, header.settlementId, marketplace);
+  }
+
+  // Split-month rollover debug logging
+  if (splitMonth.isSplitMonth) {
+    const salesTotal = round2(summary.salesPrincipal + summary.salesShipping + summary.promotionalDiscounts);
+    const feesTotal = round2(summary.sellerFees + summary.fbaFees + summary.storageFees);
+    const refundsTotal = round2(summary.refunds);
+    const reimbursementsTotal = round2(summary.reimbursements);
+    const journalOneNet = round2(salesTotal + feesTotal + refundsTotal + reimbursementsTotal);
+    console.info('[Split Month Rollover Debug]', {
+      settlementId: header.settlementId, salesTotal, feesTotal, refundsTotal, reimbursementsTotal, journalOneNet,
+      parserRolloverAmount: splitMonth.rolloverAmount,
+    });
+  }
+
+  // 1. Insert settlement record
+  const { error: settError } = await supabase.from('settlements').insert({
+    user_id: user.id,
+    settlement_id: header.settlementId,
+    marketplace,
+    period_start: header.periodStart,
+    period_end: header.periodEnd,
+    deposit_date: header.depositDate,
+    sales_principal: summary.salesPrincipal,
+    sales_shipping: summary.salesShipping,
+    promotional_discounts: summary.promotionalDiscounts,
+    seller_fees: summary.sellerFees,
+    fba_fees: summary.fbaFees,
+    storage_fees: summary.storageFees,
+    refunds: summary.refunds,
+    reimbursements: summary.reimbursements,
+    other_fees: summary.otherFees,
+    net_ex_gst: summary.netExGst,
+    gst_on_income: summary.gstOnIncome,
+    gst_on_expenses: summary.gstOnExpenses,
+    bank_deposit: summary.bankDeposit,
+    reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
+    status: 'saved',
+    is_split_month: splitMonth.isSplitMonth,
+    split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
+    split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
+    parser_version: PARSER_VERSION,
+  } as any);
+  if (settError) throw settError;
+
+  // Fire-and-forget: extract fee observations for intelligence engine
+  if (extractFees) {
+    import('@/utils/fee-observation-engine').then(({ extractAmazonFeeObservations }) => {
+      extractAmazonFeeObservations({
+        settlement_id: header.settlementId,
+        marketplace,
+        period_start: header.periodStart,
+        period_end: header.periodEnd,
+        sales_principal: summary.salesPrincipal,
+        seller_fees: summary.sellerFees,
+        fba_fees: summary.fbaFees,
+        storage_fees: summary.storageFees,
+        refunds: summary.refunds,
+      }, user.id).catch(console.error);
+    });
+  }
+
+  // 2. Insert settlement_lines (batch in chunks of 500)
+  if (lines.length > 0) {
+    const lineRows = lines.map(l => ({
+      user_id: user.id,
+      settlement_id: header.settlementId,
+      transaction_type: l.transactionType,
+      amount_type: l.amountType,
+      amount_description: l.amountDescription,
+      accounting_category: l.accountingCategory,
+      amount: l.amount,
+      order_id: l.orderId || null,
+      sku: l.sku || null,
+      posted_date: l.postedDate || null,
+      marketplace_name: l.marketplaceName || null,
+    }));
+    for (let i = 0; i < lineRows.length; i += 500) {
+      const chunk = lineRows.slice(i, i + 500);
+      const { error: lineErr } = await supabase.from('settlement_lines').insert(chunk);
+      if (lineErr) throw lineErr;
+    }
+  }
+
+  // 3. Insert settlement_unmapped
+  if (unmapped.length > 0) {
+    const unmappedRows = unmapped.map(u => ({
+      user_id: user.id,
+      settlement_id: header.settlementId,
+      transaction_type: u.transactionType,
+      amount_type: u.amountType,
+      amount_description: u.amountDescription,
+      amount: u.amount,
+      raw_row: u.rawRow,
+    }));
+    const { error: unmappedErr } = await supabase.from('settlement_unmapped').insert(unmappedRows);
+    if (unmappedErr) throw unmappedErr;
+  }
+
+  return { success: true, overwritten: isOverwrite };
+}
+
   const [selectedPlatform, setSelectedPlatform] = useState('amazon');
   const selectedMarketplace = SELECTED_MARKETPLACE;
   const [activeTab, setActiveTab] = useState('upload');
