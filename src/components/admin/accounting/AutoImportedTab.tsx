@@ -217,6 +217,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const [marking, setMarking] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [auditing, setAuditing] = useState(false);
+  const [lastAuditTime, setLastAuditTime] = useState<string | null>(null);
 
   // Transaction drill-down
   const { expandedLines, lineItems, loadingLines, loadLineItems } = useTransactionDrilldown();
@@ -288,23 +289,45 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       // silent
     }
   }, []);
-
-  const [hasAutoAudited, setHasAutoAudited] = useState(false);
-
   useEffect(() => {
     loadApiSettlements();
     loadXeroMatches();
     loadCooldown();
   }, [loadApiSettlements, loadXeroMatches, loadCooldown]);
 
-  // Auto-audit Xero status on first load when settlements exist
+  const AUDIT_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
+
+  const getAuditCacheKey = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user ? `xettle_last_audit_${user.id}` : null;
+  }, []);
+
+  // Auto-audit Xero status on first load — with 30-minute cooldown
   useEffect(() => {
-    if (!loading && settlements.length > 0 && !hasAutoAudited && !auditing) {
-      setHasAutoAudited(true);
+    if (loading || settlements.length === 0 || auditing) return;
+
+    const checkAndAudit = async () => {
+      const cacheKey = await getAuditCacheKey();
+      if (!cacheKey) return;
+
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const elapsed = Date.now() - parseInt(cached, 10);
+        if (elapsed < AUDIT_COOLDOWN_MS) {
+          const mins = Math.round((AUDIT_COOLDOWN_MS - elapsed) / 60000);
+          setLastAuditTime(new Date(parseInt(cached, 10)).toISOString());
+          console.log(`[AutoImported] Skipping auto-audit — last run ${Math.round(elapsed / 60000)}min ago (cooldown: ${mins}min left)`);
+          return;
+        }
+      }
+
       console.log(`[AutoImported] Auto-auditing Xero status for ${settlements.length} settlements`);
       handleRunAudit();
-    }
-  }, [loading, settlements.length, hasAutoAudited, auditing]);
+    };
+
+    checkAndAudit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, settlements.length]);
 
   // Cooldown timer
   useEffect(() => {
@@ -375,6 +398,12 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       }
 
       await Promise.all([loadApiSettlements(), loadXeroMatches()]);
+
+      // Save audit timestamp to sessionStorage for cooldown
+      const cacheKey = `xettle_last_audit_${user.id}`;
+      const now = Date.now();
+      sessionStorage.setItem(cacheKey, String(now));
+      setLastAuditTime(new Date(now).toISOString());
     } catch (err: any) {
       console.error('[Audit] Failed:', err);
       toast.error(`Audit failed: ${err.message}`);
@@ -586,7 +615,9 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                   Run Accounting Audit
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Check Xero invoices &amp; bank deposits
+                  {lastAuditTime
+                    ? `Last audited ${Math.round((Date.now() - new Date(lastAuditTime).getTime()) / 60000)} min ago`
+                    : 'Check Xero invoices & bank deposits'}
                 </p>
               </div>
               <Button
