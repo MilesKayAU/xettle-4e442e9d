@@ -331,7 +331,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               </div>
             </div>
 
-            {settlements.map((s, idx) => {
+            {filteredSettlements.map((s, idx) => {
               const sales = s.sales_principal || 0;
               const fees = s.seller_fees || 0;
               const net = s.bank_deposit || 0;
