@@ -30,15 +30,98 @@ type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [xeroConnected, setXeroConnected] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardInitialStep, setWizardInitialStep] = useState(1);
+  const [hasAmazon, setHasAmazon] = useState(false);
+  const [hasShopify, setHasShopify] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     supabase.from('xero_tokens').select('id').limit(1)
       .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
   }, [user]);
+
+  // ─── Setup wizard pre-check ───────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const checkWizard = async () => {
+      try {
+        const [settRes, amazonRes, shopifyRes, wizardRes] = await Promise.all([
+          supabase.from('settlements').select('id').limit(1),
+          supabase.from('amazon_tokens').select('id').limit(1),
+          supabase.from('shopify_tokens').select('id').limit(1),
+          supabase.from('app_settings').select('value').eq('key', 'onboarding_wizard_complete').maybeSingle(),
+        ]);
+
+        const hasSettlements = !!(settRes.data && settRes.data.length > 0);
+        const hasAmz = !!(amazonRes.data && amazonRes.data.length > 0);
+        const hasShp = !!(shopifyRes.data && shopifyRes.data.length > 0);
+        const wizardComplete = wizardRes.data?.value === 'true';
+
+        setHasAmazon(hasAmz);
+        setHasShopify(hasShp);
+
+        // Check dismiss count
+        const dismissCount = parseInt(sessionStorage.getItem('xettle_wizard_dismiss_count') || '0', 10);
+
+        if (hasSettlements || wizardComplete || dismissCount >= 3) {
+          setShowWizard(false);
+          return;
+        }
+
+        if (!hasAmz || !hasShp || !xeroConnected) {
+          // Detect OAuth return
+          const connected = searchParams.get('connected');
+          if (connected === 'amazon' || connected === 'shopify') {
+            setWizardInitialStep(2);
+            if (connected === 'amazon') setHasAmazon(true);
+            if (connected === 'shopify') setHasShopify(true);
+          } else if (connected === 'xero') {
+            setWizardInitialStep(3);
+          }
+          if (connected) {
+            searchParams.delete('connected');
+            setSearchParams(searchParams, { replace: true });
+          }
+          setShowWizard(true);
+        }
+      } catch {
+        // silently fail
+      }
+    };
+    checkWizard();
+  }, [user, xeroConnected]);
+
+  const handleWizardClose = () => {
+    const count = parseInt(sessionStorage.getItem('xettle_wizard_dismiss_count') || '0', 10) + 1;
+    sessionStorage.setItem('xettle_wizard_dismiss_count', String(count));
+    setShowWizard(false);
+  };
+
+  const handleWizardComplete = async () => {
+    setShowWizard(false);
+    sessionStorage.removeItem('xettle_setup_step');
+    try {
+      const { data: existing } = await supabase
+        .from('app_settings')
+        .select('id')
+        .eq('key', 'onboarding_wizard_complete')
+        .maybeSingle();
+      if (existing) {
+        await supabase.from('app_settings').update({ value: 'true' }).eq('id', existing.id);
+      } else {
+        await supabase.from('app_settings').insert({
+          user_id: user!.id,
+          key: 'onboarding_wizard_complete',
+          value: 'true',
+        });
+      }
+    } catch {}
+  };
   const [activeView, setActiveView] = useState<DashboardView>(() => {
     return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
   });
