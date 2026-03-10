@@ -705,6 +705,7 @@ export type Database = {
           xero_journal_id_1: string | null
           xero_journal_id_2: string | null
           xero_status: string | null
+          xero_type: string | null
         }
         Insert: {
           bank_deposit?: number | null
@@ -745,6 +746,7 @@ export type Database = {
           xero_journal_id_1?: string | null
           xero_journal_id_2?: string | null
           xero_status?: string | null
+          xero_type?: string | null
         }
         Update: {
           bank_deposit?: number | null
@@ -785,6 +787,7 @@ export type Database = {
           xero_journal_id_1?: string | null
           xero_journal_id_2?: string | null
           xero_status?: string | null
+          xero_type?: string | null
         }
         Relationships: []
       }
