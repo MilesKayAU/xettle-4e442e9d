@@ -10,6 +10,7 @@ const corsHeaders = {
 const IGNORED_SOURCES = new Set([
   "web", "shopify", "pos", "online_store", "iphone", "android",
   "unknown", "", "shopify_draft_order", "draft_orders", "buy_button",
+  "checkout", "subscription_contract_checkout_one",
 ]);
 
 Deno.serve(async (req) => {
