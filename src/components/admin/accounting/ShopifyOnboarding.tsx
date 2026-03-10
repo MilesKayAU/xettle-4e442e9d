@@ -738,6 +738,16 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
           <p className="text-xs text-muted-foreground">Takes 2 minutes ⏱</p>
         </CardContent>
       </Card>
+      {/* Unknown Entity Classification Dialog */}
+      <UnknownEntityDialog
+        open={showEntityDialog}
+        onOpenChange={setShowEntityDialog}
+        unknowns={unknownEntities}
+        onClassified={() => {
+          setUnknownEntities([]);
+          onMarketplacesChanged?.();
+        }}
+      />
     </div>
   );
 }
