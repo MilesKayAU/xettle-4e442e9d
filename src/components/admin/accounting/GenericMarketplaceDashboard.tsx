@@ -795,27 +795,6 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
       <Separator />
 
-      {/* Reconciliation Status */}
-      <div className="space-y-3">
-        <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
-          <Scale className="h-4 w-4 text-primary" />
-          Reconciliation
-        </h4>
-        {hasShopify && currentUserId ? (
-          <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
-        ) : !hasShopify && settlements.length > 0 ? (
-          <Card className="border-dashed border-border">
-            <CardContent className="py-4 text-center">
-              <p className="text-xs text-muted-foreground">
-                Connect Shopify to enable reconciliation →
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
-      </div>
-
-      <Separator />
-
       {/* Profit Summary */}
       <div className="space-y-3">
         <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
