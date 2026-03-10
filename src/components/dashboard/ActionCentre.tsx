@@ -287,6 +287,12 @@ export default function ActionCentre({
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {lastAutoSync && (
+            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-3 w-3" />
+              Auto-sync {formatTimeAgo(lastAutoSync)}
+            </span>
+          )}
           {lastChecked && <span>Updated {formatTimeAgo(lastChecked)}</span>}
           <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="h-7 px-2 gap-1.5">
             {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
