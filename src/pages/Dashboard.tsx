@@ -261,9 +261,10 @@ export default function Dashboard() {
         <div className="container-custom">
           <nav className="flex gap-1 py-2">
             {([
-              { key: 'smart_upload' as DashboardView, label: 'Smart Upload', icon: Upload, step: '①' },
-              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, step: '②' },
-              { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3, step: '③' },
+              { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard, step: '' },
+              { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload, step: '' },
+              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, step: '' },
+              { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3, step: '' },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
