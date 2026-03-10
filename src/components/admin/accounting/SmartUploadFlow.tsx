@@ -58,7 +58,7 @@ import MultiMarketplaceSplitCard from './MultiMarketplaceSplitCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
+type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'first_contact' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
 
 interface DetectedFile {
   file: File;
@@ -72,6 +72,10 @@ interface DetectedFile {
   splitResult?: MultiMarketplaceSplitResult;
   /** CSV headers for caching fingerprint */
   csvHeaders?: string[];
+  /** Sample rows from file (first 3 data rows) */
+  sampleRows?: string[][];
+  /** Whether this file was low-confidence (for post-save banner) */
+  wasLowConfidence?: boolean;
 }
 
 interface SmartUploadFlowProps {
