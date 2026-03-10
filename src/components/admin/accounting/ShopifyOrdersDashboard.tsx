@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { detectMarketplaceFromOrder, detectAllMarketplaces, classifyUnknownTag, type OrderDetectionResult } from '@/utils/shopify-order-detector';
 import ShopifyOnboarding from './ShopifyOnboarding';
 import UnknownEntityDialog from './UnknownEntityDialog';
 import SkuCostManager from './SkuCostManager';
@@ -618,7 +619,7 @@ export default function ShopifyOrdersDashboard() {
         return;
       }
 
-      // Convert API orders → parser rows
+      // Convert API orders → parser rows using new detector
       const { rows, unpaidCount } = convertApiOrdersToRows(apiOrders);
 
       if (rows.length === 0) {
@@ -627,16 +628,22 @@ export default function ShopifyOrdersDashboard() {
         return;
       }
 
-      // Run through the existing parser pipeline by building CSV-like content
-      // We use the rows directly with the grouping logic
-      const result = parseShopifyOrdersCSV('', { preloadedRows: rows } as any);
-
-      // Actually, we need to use the rows directly. Let's group them manually.
-      // Import the grouping logic from the parser
-      const { buildSettlementsFromGroups } = await import('@/utils/shopify-orders-parser');
-      const { detectMarketplaceFromRow, getRegistryEntry: getEntry } = await import('@/utils/marketplace-registry');
+      // Run new detector on each row to override detectedMarketplace
+      for (const row of rows) {
+        const detection = detectMarketplaceFromOrder({
+          tags: row.tags,
+          note_attributes: row.noteAttributes,
+          gateway: row.paymentMethod,
+        });
+        if (detection.marketplace_code) {
+          row.detectedMarketplace = detection.marketplace_code;
+        }
+      }
 
       // Group orders by marketplace + currency
+      const { buildSettlementsFromGroups } = await import('@/utils/shopify-orders-parser');
+      const { getRegistryEntry: getEntry } = await import('@/utils/marketplace-registry');
+
       const groupMap = new Map<string, typeof rows>();
       for (const order of rows) {
         const key = JSON.stringify({ m: order.detectedMarketplace, c: order.currency });
