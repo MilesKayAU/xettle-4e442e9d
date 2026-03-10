@@ -1450,6 +1450,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           )}
         </div>
       )}
+      {/* Post-save validation banner for new formats */}
+      {showNewFormatBanner && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
+          <CardContent className="py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                This was a new format for us. If anything looks wrong in your settlements, use the 🐛 Report Issue button — we'll fix it fast.
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" className="text-xs shrink-0" onClick={() => setShowNewFormatBanner(false)}>
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Unknown Entity Classification Dialog */}
       <UnknownEntityDialog
         open={showEntityDialog}
@@ -1467,6 +1484,68 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           setUnknownEntities([]);
         }}
       />
+
+      {/* First Contact Modal for unknown/low-confidence files */}
+      {firstContactIdx !== null && filesRef.current[firstContactIdx] && (() => {
+        const df = filesRef.current[firstContactIdx];
+        const extracted = df.csvHeaders || df.detection?.columnMapping ? Object.keys(df.detection?.columnMapping || {}) : [];
+        const headers = df.csvHeaders || extracted;
+        const sampleRows = df.sampleRows || [];
+        return (
+          <FirstContactModal
+            open={true}
+            onOpenChange={(open) => { if (!open) setFirstContactIdx(null); }}
+            filename={df.file.name}
+            headers={headers}
+            sampleRows={sampleRows}
+            rowCount={df.detection?.recordCount || 0}
+            confidence={df.detection?.confidence || 0}
+            confidenceTier={confidenceTier(df.detection?.confidence || 0)}
+            detectedMarketplace={df.detection?.marketplace || 'unknown'}
+            onConfirm={(code, name) => {
+              // Override marketplace and move to detected
+              setFiles(prev => {
+                const updated = [...prev];
+                if (firstContactIdx < updated.length) {
+                  updated[firstContactIdx] = {
+                    ...updated[firstContactIdx],
+                    overrideMarketplace: code,
+                    status: 'detected',
+                    wasLowConfidence: true,
+                    detection: {
+                      ...(updated[firstContactIdx].detection || {
+                        marketplace: code,
+                        marketplaceLabel: name,
+                        confidence: 100,
+                        isSettlementFile: true,
+                        detectionLevel: 2 as const,
+                      }),
+                      marketplace: code,
+                      marketplaceLabel: name,
+                      isSettlementFile: true,
+                    },
+                  };
+                }
+                return updated;
+              });
+              // Create marketplace tab
+              ensureMarketplaceConnection(code);
+              onMarketplacesChanged?.();
+              setFirstContactIdx(null);
+            }}
+            onCancel={() => {
+              setFiles(prev => {
+                const updated = [...prev];
+                if (firstContactIdx < updated.length) {
+                  updated[firstContactIdx] = { ...updated[firstContactIdx], status: 'unknown' };
+                }
+                return updated;
+              });
+              setFirstContactIdx(null);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
