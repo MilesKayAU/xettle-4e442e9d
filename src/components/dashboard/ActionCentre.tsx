@@ -476,11 +476,11 @@ export default function ActionCentre({
               </tbody>
             </table>
             <div className="flex flex-wrap gap-4 mt-3 text-[10px] text-muted-foreground">
-              <span>✅ Complete</span>
+              <span>✅ Complete (verified)</span>
               <span>🟡 Ready to push</span>
               <span>⚠️ Gap detected</span>
               <span>❌ Missing/needed</span>
-              <span>✅ Synced to Xero</span>
+              <span>➖ Pre-boundary (assumed)</span>
             </div>
           </CardContent>
         </Card>
