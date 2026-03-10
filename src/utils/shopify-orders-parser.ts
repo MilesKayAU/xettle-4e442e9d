@@ -211,12 +211,11 @@ function parseCSVRow(line: string): string[] {
 }
 
 function monthYear(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
-  } catch {
-    return dateStr;
-  }
+  if (!dateStr || dateStr.length < 7) return dateStr;
+  const [y, m] = dateStr.split('-').map(Number);
+  if (!y || !m || m < 1 || m > 12) return dateStr;
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${months[m - 1]} ${y}`;
 }
 
 // ─── Column Matching ────────────────────────────────────────────────────────
