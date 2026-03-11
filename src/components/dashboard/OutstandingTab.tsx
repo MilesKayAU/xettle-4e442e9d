@@ -8,7 +8,8 @@
  * 🔴 Red — invoice in Xero but nothing in our system → "Upload"
  */
 
-import { useState, useCallback, useEffect, Fragment } from 'react';
+import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
