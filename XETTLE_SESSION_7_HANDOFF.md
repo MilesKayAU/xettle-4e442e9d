@@ -12,7 +12,7 @@
 |---|---|---|---|
 | Sales | 200 | OUTPUT | AU domestic + international blended |
 | Refunds | 205 | OUTPUT | Revenue contra |
-| Reimbursements | 271 | NONE | BAS Excluded — not taxable |
+| Reimbursements | 271 | OUTPUT | ATO classifies as taxable income — conservative/safe |
 | Promotional Discounts | 200 | OUTPUT | Reduces sales base |
 | Seller Fees | 407 | INPUT | GST on purchases |
 | FBA Fees | 408 | INPUT | GST on purchases |
@@ -64,9 +64,12 @@ in app_settings via getCode(). Falls back to above defaults.
 ### GST / BAS
 
 - AU hardcoded: OUTPUT / INPUT / NONE — correct for all paths
-- Reimbursements: NONE (BAS Excluded) — matches LMB AU spec
-- International sales: GST base correctly excludes non-AU
-  orders at calculation level (presentation split = Phase 2)
+- Reimbursements: OUTPUT (Session 7 audit correction — code uses OUTPUT, not NONE.
+  Conservative/safe. ATO guidance on compensation is ambiguous, taxable income treatment
+  overpays slightly but avoids BAS risk. LMB claims NONE but verify with your accountant.)
+- International sales: ✅ **LIVE** — AU marketplace gets OUTPUT, international gets
+  EXEMPTOUTPUT (GST Free Income). GST base correctly calculated. Two separate Xero
+  lines generated automatically. Was marked "Phase 2" but already shipped.
 - ACCPAY bill: INPUT fixed (was OUTPUT — critical BAS bug)
 - Advertising Costs: INPUT (GST on purchases)
 
@@ -96,10 +99,10 @@ in app_settings via getCode(). Falls back to above defaults.
 | LMB9 | Reserved Balances | Current Asset | ❌ not built |
 | LMB9A | Split Month Rollovers | Current Asset | 612 ✅ |
 
-LMB AU GST defaults (our implementation matches):
+LMB AU GST defaults (our implementation — see Session 7 corrections):
 - AU Sales → GST on Income (OUTPUT)
-- International Sales → GST Free (Phase 2 presentation)
-- Reimbursements → BAS Excluded (NONE) ✅
+- International Sales → GST Free (EXEMPTOUTPUT) ✅ LIVE
+- Reimbursements → OUTPUT (Session 7 correction — conservative/safe vs LMB's NONE)
 - Fees → GST on Expenses (INPUT) ✅
 
 ---
@@ -151,11 +154,14 @@ LMB AU GST defaults (our implementation matches):
    - Bunnings/Catch/MyDeal use fixed payment schedules
    - Lower risk of cross-month splits
 
-6. International sales presentation split (Phase 2)
-   - GST calculation already correct
-   - Just needs two Sales lines on Xero invoice
-   - Requires au_sales + intl_sales columns on settlements
-   - Schema change — do carefully
+### ✅ Confirmed Features (not gaps)
+
+4. International sales presentation — **ALREADY LIVE**
+   - AU sales → OUTPUT, International → EXEMPTOUTPUT
+   - Two separate Xero lines generated automatically
+   - Was listed as Phase 2 but code audit confirmed live
+
+### 🟡 Medium Priority
 
 ### 🟢 Lower Priority  
 
@@ -246,6 +252,24 @@ Non-blocking — attachment failure logged but doesn't fail the push.
 ### ⏸️ Task 3: Negative rollover detection — PARKED
 Needs real Amazon AU settlement data to identify exact field names.
 Speculative build risks BAS errors. Current ACCPAY flagging is safe.
+
+### 🐛 Bug Found & Fixed: Advertising Costs Tax Type
+**Problem:** Advertising Costs was getting `BASEXCLUDED` instead of `INPUT`.
+
+**Cause:** The expense bucket filter in 5 locations only included 
+`['Seller Fees', 'FBA Fees', 'Storage Fees']` — Advertising Costs was missing,
+so it fell through to `otherBuckets` and got `BASEXCLUDED` tax type.
+
+**Impact:** Sellers could NOT claim GST input credits on ad spend. Real money
+left on the table (~$454/month for a $5K/month ad spender).
+
+**Fix:** Added `'Advertising Costs'` to the expense category array in all
+5 locations across 2 files:
+- `src/utils/amazon-xero-push.ts` — buildAmazonInvoiceLineItems(), buildJournalPreviewRows(), computeSplitMonthRollover()
+- `src/components/admin/accounting/AccountingDashboard.tsx` — rollover computation, journal preview
+
+**After fix:** Advertising Costs now correctly gets `INPUT` tax type,
+allowing sellers to claim GST credits on Amazon advertising spend.
 
 ### 🧪 Task 4: Real-world push test — TESTING MONTH
 Part of the upcoming testing month. First real push will validate
