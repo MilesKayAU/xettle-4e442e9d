@@ -142,8 +142,9 @@ export default function Dashboard() {
   }, [user, xeroConnected]);
 
   const handleWizardClose = () => {
-    const count = parseInt(sessionStorage.getItem('xettle_wizard_dismiss_count') || '0', 10) + 1;
-    sessionStorage.setItem('xettle_wizard_dismiss_count', String(count));
+    const dismissKey = user ? `xettle_wizard_dismiss_count_${user.id}` : 'xettle_wizard_dismiss_count';
+    const count = parseInt(sessionStorage.getItem(dismissKey) || '0', 10) + 1;
+    sessionStorage.setItem(dismissKey, String(count));
     setShowWizard(false);
   };
 
