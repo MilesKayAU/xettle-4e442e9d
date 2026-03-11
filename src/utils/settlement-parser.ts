@@ -142,6 +142,7 @@ export interface SettlementSummary {
   bankDeposit: number;
   reconciliationMatch: boolean;
   reconciliationDiff: number;
+  reconciliationChecks: ReconciliationCheckResult[];
   debugBreakdown: DebugBreakdownRow[];
   // Marketplace-aware totals (AU vs international)
   auSales: number;
