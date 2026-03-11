@@ -113,6 +113,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
+  const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
+
   useEffect(() => {
     if (hasLoadedOnce && settlements.length > 0 && !hasAutoAudited && !refreshingXero) {
       setHasAutoAudited(true);
@@ -120,6 +122,20 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       handleRefreshXero();
     }
   }, [hasLoadedOnce, settlements.length, hasAutoAudited, refreshingXero, handleRefreshXero, code]);
+
+  // Auto-expand unpushed settlements so bookkeepers see detail before pushing
+  useEffect(() => {
+    if (hasLoadedOnce && settlements.length > 0 && !hasAutoExpanded) {
+      setHasAutoExpanded(true);
+      const unpushed = settlements.filter(s =>
+        s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push'
+      );
+      // Auto-expand the first unpushed settlement
+      if (unpushed.length > 0 && unpushed.length <= 5) {
+        loadLineItems(unpushed[0].settlement_id);
+      }
+    }
+  }, [hasLoadedOnce, settlements, hasAutoExpanded, loadLineItems]);
 
   useEffect(() => {
     async function checkShopifyAndBoundary() {
@@ -698,49 +714,118 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                 <div className="flex items-center gap-2 py-3 justify-center text-xs text-muted-foreground">
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading transactions…
                                 </div>
-                              ) : (
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-xs">
-                                    <thead>
-                                      <tr className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                                        <th className="text-left py-1 pr-2">Order ID</th>
-                                        <th className="text-left py-1 pr-2">SKU</th>
-                                        <th className="text-left py-1 pr-2">Type</th>
-                                        <th className="text-left py-1 pr-2">Description</th>
-                                        <th className="text-right py-1">Amount</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {lines.map((line: any, lIdx: number) => {
-                                        const isRefund = line.transaction_type?.toLowerCase().includes('refund');
-                                        const isFee = (line.amount || 0) < 0 && !isRefund;
-                                        return (
-                                          <tr
-                                            key={lIdx}
-                                            className={`border-t border-border/50 ${
-                                              isRefund ? 'text-destructive' :
-                                              isFee ? 'text-amber-600 dark:text-amber-400' :
-                                              ''
-                                            }`}
-                                          >
-                                            <td className="py-1 pr-2 font-mono">{line.order_id || '—'}</td>
-                                            <td className="py-1 pr-2">{line.sku || '—'}</td>
-                                            <td className="py-1 pr-2">{line.transaction_type || '—'}</td>
-                                            <td className="py-1 pr-2 max-w-[200px] truncate">{line.amount_description || '—'}</td>
-                                            <td className="py-1 text-right font-mono font-medium">{formatAUD(line.amount || 0)}</td>
+                              ) : (() => {
+                                // ─── Financial summary strip ───
+                                const salesTotal = lines
+                                  .filter((l: any) => (l.amount || 0) > 0 && !l.transaction_type?.toLowerCase().includes('refund'))
+                                  .reduce((sum: number, l: any) => sum + (l.amount || 0), 0);
+                                const feesTotal = lines
+                                  .filter((l: any) => (l.amount || 0) < 0 && !l.transaction_type?.toLowerCase().includes('refund'))
+                                  .reduce((sum: number, l: any) => sum + Math.abs(l.amount || 0), 0);
+                                const refundsTotal = lines
+                                  .filter((l: any) => l.transaction_type?.toLowerCase().includes('refund'))
+                                  .reduce((sum: number, l: any) => sum + Math.abs(l.amount || 0), 0);
+                                const linesTotal = lines.reduce((sum: number, l: any) => sum + (l.amount || 0), 0);
+                                const reconDiff = Math.abs(linesTotal - net);
+                                const reconOk = reconDiff <= 0.05;
+                                const uniqueOrders = new Set(lines.filter((l: any) => l.order_id).map((l: any) => l.order_id)).size;
+
+                                return (
+                                  <div className="space-y-2">
+                                    {/* Summary strip */}
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-2 rounded-md bg-background border border-border">
+                                      <div className="text-xs">
+                                        <span className="text-muted-foreground">Sales: </span>
+                                        <span className="font-semibold text-foreground">{formatAUD(salesTotal)}</span>
+                                      </div>
+                                      <div className="text-xs">
+                                        <span className="text-muted-foreground">Fees: </span>
+                                        <span className="font-semibold text-amber-600 dark:text-amber-400">−{formatAUD(feesTotal)}</span>
+                                      </div>
+                                      {refundsTotal > 0 && (
+                                        <div className="text-xs">
+                                          <span className="text-muted-foreground">Refunds: </span>
+                                          <span className="font-semibold text-destructive">−{formatAUD(refundsTotal)}</span>
+                                        </div>
+                                      )}
+                                      <div className="text-xs">
+                                        <span className="text-muted-foreground">Net: </span>
+                                        <span className="font-bold text-foreground">{formatAUD(linesTotal)}</span>
+                                      </div>
+                                      <div className="text-xs">
+                                        <span className="text-muted-foreground">Orders: </span>
+                                        <span className="font-semibold text-foreground">{uniqueOrders}</span>
+                                      </div>
+                                      <div className="text-xs ml-auto">
+                                        {reconOk ? (
+                                          <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Reconciled to header
+                                          </span>
+                                        ) : (
+                                          <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            {formatAUD(reconDiff)} variance vs header
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Unpushed settlement review prompt */}
+                                    {isSyncable && !isAlreadyRecorded && (
+                                      <div className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-primary/5 border border-primary/20">
+                                        <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
+                                        <p className="text-xs text-foreground">
+                                          <span className="font-medium">Review required</span> — check the transaction breakdown above before pushing to Xero.
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Transaction table */}
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                            <th className="text-left py-1 pr-2">Order ID</th>
+                                            <th className="text-left py-1 pr-2">SKU</th>
+                                            <th className="text-left py-1 pr-2">Type</th>
+                                            <th className="text-left py-1 pr-2">Description</th>
+                                            <th className="text-right py-1">Amount</th>
                                           </tr>
-                                        );
-                                      })}
-                                      <tr className="border-t-2 border-border font-semibold">
-                                        <td colSpan={4} className="py-1.5 pr-2">Total ({lines.length} lines)</td>
-                                        <td className="py-1.5 text-right font-mono">
-                                          {formatAUD(lines.reduce((sum: number, l: any) => sum + (l.amount || 0), 0))}
-                                        </td>
-                                      </tr>
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
+                                        </thead>
+                                        <tbody>
+                                          {lines.map((line: any, lIdx: number) => {
+                                            const isRefund = line.transaction_type?.toLowerCase().includes('refund');
+                                            const isFee = (line.amount || 0) < 0 && !isRefund;
+                                            return (
+                                              <tr
+                                                key={lIdx}
+                                                className={`border-t border-border/50 ${
+                                                  isRefund ? 'text-destructive' :
+                                                  isFee ? 'text-amber-600 dark:text-amber-400' :
+                                                  ''
+                                                }`}
+                                              >
+                                                <td className="py-1 pr-2 font-mono">{line.order_id || '—'}</td>
+                                                <td className="py-1 pr-2">{line.sku || '—'}</td>
+                                                <td className="py-1 pr-2">{line.transaction_type || '—'}</td>
+                                                <td className="py-1 pr-2 max-w-[200px] truncate">{line.amount_description || '—'}</td>
+                                                <td className="py-1 text-right font-mono font-medium">{formatAUD(line.amount || 0)}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                          <tr className="border-t-2 border-border font-semibold">
+                                            <td colSpan={4} className="py-1.5 pr-2">Total ({lines.length} lines)</td>
+                                            <td className="py-1.5 text-right font-mono">
+                                              {formatAUD(linesTotal)}
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>
