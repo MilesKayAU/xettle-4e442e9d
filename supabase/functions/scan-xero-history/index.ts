@@ -135,9 +135,11 @@ interface DetectedSettlement {
   marketplace: string
   last_recorded_date: string
   last_amount: number
-  source: 'invoice' | 'bank_transaction' | 'journal'
+  source: 'invoice' | 'bank_transaction' | 'journal' | 'contact_standalone'
   reference: string
   xero_id: string
+  is_reconciled?: boolean
+  bank_account_name?: string
 }
 
 Deno.serve(async (req) => {
@@ -184,8 +186,9 @@ Deno.serve(async (req) => {
     let hasXettlePrefix = false
     let hasMarketplaceContacts = false
     let hasBankPatterns = false
+    const standaloneContacts: string[] = []
 
-    // 1. Scan Invoices
+    // ─── 1. Scan Invoices ───────────────────────────────────────────
     try {
       const invoiceData = await xeroGet(
         `https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED,PAID&order=Date DESC&pageSize=100`,
@@ -230,6 +233,7 @@ Deno.serve(async (req) => {
       console.error('Invoice scan error:', e)
     }
 
+    // ─── 2. Scan Bank Transactions (with IsReconciled + BankAccount) ─
     let bankScanError: string | null = null
     try {
       const bankData = await xeroGet(
@@ -245,6 +249,8 @@ Deno.serve(async (req) => {
         const narration = txn.LineItems?.[0]?.Description || ''
         const txnId = txn.BankTransactionID || ''
         const amount = txn.Total || 0
+        const isReconciled = txn.IsReconciled === true
+        const bankAccountName = txn.BankAccount?.Name || null
 
         const marketplace = matchesMarketplace(contactName) || matchesMarketplace(narration) || matchesMarketplace(reference)
 
@@ -263,6 +269,8 @@ Deno.serve(async (req) => {
                   ? 'invoice' : 'bank_transaction',
                 reference: reference || narration || contactName,
                 xero_id: txnId,
+                is_reconciled: isReconciled,
+                bank_account_name: bankAccountName,
               })
             }
           }
@@ -278,21 +286,65 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Determine boundary
+    // ─── 3. Scan ALL Contacts (standalone detection) ────────────────
+    try {
+      const contactsData = await xeroGet(
+        `https://api.xero.com/api.xro/2.0/Contacts?includeArchived=false&pageSize=100`,
+        accessToken, tenantId
+      )
+
+      for (const contact of (contactsData.Contacts || [])) {
+        const contactName = contact.Name || ''
+        const marketplace = matchesMarketplace(contactName)
+
+        if (marketplace && !detectedMap.has(marketplace)) {
+          // This marketplace exists as a Xero contact but has no invoices or bank txns yet
+          standaloneContacts.push(contactName)
+          detectedMap.set(marketplace, {
+            marketplace,
+            last_recorded_date: new Date().toISOString().split('T')[0],
+            last_amount: 0,
+            source: 'contact_standalone',
+            reference: `Xero contact: ${contactName}`,
+            xero_id: contact.ContactID || '',
+          })
+          hasMarketplaceContacts = true
+
+          // Also create a channel_alert for visibility in Setup Hub
+          await supabase.from('channel_alerts').upsert({
+            user_id: userId,
+            source_name: marketplace,
+            detected_label: contactName,
+            detection_method: 'xero_contact_standalone',
+            alert_type: 'new',
+            status: 'pending',
+            order_count: 0,
+            total_revenue: 0,
+          }, { onConflict: 'user_id,source_name' })
+        }
+      }
+      console.log(`[scan-xero-history] Standalone contacts found: ${standaloneContacts.length}`, standaloneContacts)
+    } catch (e) {
+      console.error('Contacts scan error:', e)
+    }
+
+    // ─── 4. Determine boundary ──────────────────────────────────────
     const detected_settlements = Array.from(detectedMap.values())
     let accounting_boundary_date: string | null = null
 
-    if (detected_settlements.length > 0) {
-      const latestDate = detected_settlements.reduce((latest, s) =>
+    // Only use settlements with actual financial data for boundary (not standalone contacts)
+    const financialDetections = detected_settlements.filter(s => s.source !== 'contact_standalone')
+    if (financialDetections.length > 0) {
+      const latestDate = financialDetections.reduce((latest, s) =>
         s.last_recorded_date > latest ? s.last_recorded_date : latest,
-        detected_settlements[0].last_recorded_date
+        financialDetections[0].last_recorded_date
       )
       const d = new Date(latestDate)
       d.setDate(d.getDate() + 1)
       accounting_boundary_date = d.toISOString().split('T')[0]
     }
 
-    // 4. Confidence
+    // ─── 5. Confidence ──────────────────────────────────────────────
     let confidence: 'high' | 'medium' | 'low' = 'low'
     let confidence_reason = ''
 
@@ -301,7 +353,7 @@ Deno.serve(async (req) => {
       confidence_reason = 'Found Xettle-prefixed invoices — previous Xettle usage detected.'
     } else if (hasMarketplaceContacts) {
       confidence = 'medium'
-      confidence_reason = 'Found marketplace-named contacts in Xero invoices.'
+      confidence_reason = 'Found marketplace-named contacts in Xero.'
     } else if (hasBankPatterns) {
       confidence = 'low'
       confidence_reason = 'Found bank transaction patterns only — no invoices matched.'
@@ -309,7 +361,7 @@ Deno.serve(async (req) => {
       confidence_reason = 'No marketplace history found in Xero.'
     }
 
-    // ─── 5. PERSIST detected marketplaces as marketplace_connections ───
+    // ─── 6. PERSIST detected marketplaces as marketplace_connections ─
     let marketplaces_created = 0
     for (const det of detected_settlements) {
       if (det.marketplace === 'unknown') continue
@@ -325,18 +377,20 @@ Deno.serve(async (req) => {
           connection_type: 'auto_detected',
           connection_status: 'active',
           settings: {
-            detected_from: 'xero_scan',
+            detected_from: det.source === 'contact_standalone' ? 'xero_contact' : 'xero_scan',
             last_xero_date: det.last_recorded_date,
             last_xero_amount: det.last_amount,
             xero_source: det.source,
             xero_reference: det.reference,
+            is_reconciled: det.is_reconciled ?? null,
+            bank_account_name: det.bank_account_name ?? null,
           },
         }, { onConflict: 'user_id,marketplace_code,country_code' })
       if (!upsertErr) marketplaces_created++
       else console.error(`Failed to upsert marketplace_connection for ${det.marketplace}:`, upsertErr)
     }
 
-    // ─── 6. PERSIST accounting boundary date ───────────────────────────
+    // ─── 7. PERSIST accounting boundary date ────────────────────────
     if (accounting_boundary_date) {
       const { data: existingBoundary } = await supabase
         .from('app_settings')
@@ -358,7 +412,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ─── 7. Mark scan as completed ────────────────────────────────────
+    // ─── 8. Mark scan as completed ──────────────────────────────────
     const { data: existingScanFlag } = await supabase
       .from('app_settings')
       .select('id')
@@ -378,7 +432,7 @@ Deno.serve(async (req) => {
         })
     }
 
-    // ─── 8. Log system event ──────────────────────────────────────────
+    // ─── 9. Log system event ────────────────────────────────────────
     await supabase.from('system_events').insert({
       user_id: userId,
       event_type: 'xero_scan_completed',
@@ -386,15 +440,16 @@ Deno.serve(async (req) => {
       details: {
         marketplaces_detected: detected_settlements.length,
         marketplaces_created,
+        standalone_contacts: standaloneContacts,
         accounting_boundary_date,
         confidence,
         confidence_reason,
       },
     })
 
-    console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces, created ${marketplaces_created} connections, boundary: ${accounting_boundary_date}`)
+    console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces (${standaloneContacts.length} from contacts only), created ${marketplaces_created} connections, boundary: ${accounting_boundary_date}`)
 
-    // ─── 9. Trigger validation sweep server-side as backup ────────────
+    // ─── 10. Trigger validation sweep server-side as backup ─────────
     try {
       const sweepUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/run-validation-sweep`
       await fetch(sweepUrl, {
@@ -413,9 +468,8 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       hasXero: true,
       accounting_boundary_date,
-      hasXero: true,
-      accounting_boundary_date,
       detected_settlements,
+      standalone_contacts: standaloneContacts,
       marketplaces_created,
       confidence,
       confidence_reason,
