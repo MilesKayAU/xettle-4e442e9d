@@ -662,6 +662,17 @@ serve(async (req) => {
 
     const invoicePayload = { Invoices: [invoiceData] };
 
+    // Validate TaxTypes before sending to Xero
+    const VALID_TAX_TYPES = ['OUTPUT', 'INPUT', 'EXEMPTOUTPUT', 'BASEXCLUDED'];
+    for (const item of invoiceData.LineItems) {
+      if (!VALID_TAX_TYPES.includes(item.TaxType)) {
+        throw new Error(
+          `Invalid TaxType "${item.TaxType}" on line item "${item.Description}". ` +
+          `Must be one of: ${VALID_TAX_TYPES.join(', ')}`
+        );
+      }
+    }
+
     console.log('Creating invoice in Xero:', JSON.stringify(invoicePayload, null, 2));
 
     const response = await fetch('https://api.xero.com/api.xro/2.0/Invoices', {
