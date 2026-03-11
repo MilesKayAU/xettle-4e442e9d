@@ -371,7 +371,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const isSelected = selected.has(s.id);
                     const isSyncable = s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push';
                     const isPushFailed = s.status === 'push_failed';
-                    const isSynced = s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external';
+                    const isSynced = ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
                     const isAlreadyRecorded = s.status === 'already_recorded';
 
                     const prev = filteredSettlements[idx + 1];

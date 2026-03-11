@@ -70,7 +70,7 @@ export default function SettlementsOverview({
 
         // Latest sent to Xero
         const xeroSynced = marketplaceSettlements.filter(s =>
-          s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external'
+          ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')
         );
         const lastSentToXero = xeroSynced.length > 0
           ? xeroSynced.sort((a, b) => b.period_end.localeCompare(a.period_end))[0].period_end

@@ -59,7 +59,7 @@ export default function SettlementsSummaryStrip({ userMarketplaceCount }: Settle
       const revenue = rows.reduce((sum, s) => sum + (s.sales_principal || 0), 0);
       const fees = rows.reduce((sum, s) => sum + (s.seller_fees || 0), 0);
       const net = rows.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
-      const synced = rows.filter(s => s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external').length;
+      const synced = rows.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
       const ready = rows.filter(s => s.status === 'saved' || s.status === 'parsed').length;
       const failed = rows.filter(s => s.status === 'push_failed').length;
 
