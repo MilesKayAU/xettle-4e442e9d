@@ -300,6 +300,7 @@ Deno.serve(async (req) => {
         xero_reference: reference,
         contact_name: contactName,
         marketplace,
+        is_marketplace: isMarketplace,
         invoice_date: invoiceDate,
         due_date: dueDate,
         amount,
