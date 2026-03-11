@@ -404,8 +404,9 @@ export function computeSplitMonthRollover(
   for (const [, amount] of Object.entries(expenseBuckets)) {
     const a = round2(amount);
     if (a === 0) continue;
-    const exGst = round2(a - round2(a / 11));
-    xeroTotal += round2(exGst * 1.1);
+    const absA = Math.abs(a);
+    const exGst = round2(absA - round2(absA / 11));
+    xeroTotal -= round2(exGst * 1.1);
   }
   for (const [, amount] of Object.entries(otherBuckets)) {
     xeroTotal += round2(amount);
