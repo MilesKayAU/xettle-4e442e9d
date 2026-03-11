@@ -59,6 +59,31 @@ const XeroCallback = () => {
         setStatus('success');
         setMessage('Successfully connected to Xero!');
         sessionStorage.removeItem('xero_oauth_state');
+
+        // Auto-trigger AI Account Mapper if no mapping exists yet
+        try {
+          const { data: existingCodes } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('user_id', session.user.id)
+            .eq('key', 'accounting_xero_account_codes')
+            .maybeSingle();
+
+          if (!existingCodes?.value) {
+            console.log('[XeroCallback] No account codes set — auto-triggering AI mapper');
+            supabase.functions.invoke('ai-account-mapper', {
+              body: { action: 'scan_and_match', autoTrigger: true },
+            }).then(({ data: mapResult }) => {
+              if (mapResult?.success) {
+                console.log('[XeroCallback] AI mapper suggested mapping stored');
+              }
+            }).catch((e) => {
+              console.error('[XeroCallback] AI mapper auto-trigger failed:', e);
+            });
+          }
+        } catch (e) {
+          console.error('[XeroCallback] Auto-mapper check failed:', e);
+        }
         
         // Auto-redirect after brief success display
         setTimeout(() => {
