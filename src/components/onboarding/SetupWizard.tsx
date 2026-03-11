@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { supabase } from '@/integrations/supabase/client';
 import SetupStepConnectXero from './SetupStepConnectXero';
 import SetupStepConnectStores from './SetupStepConnectStores';
 import SetupStepUpload from './SetupStepUpload';
-import SetupStepScanning from './SetupStepScanning';
 import SetupStepResults from './SetupStepResults';
 
 interface SetupWizardProps {
@@ -19,7 +19,8 @@ interface SetupWizardProps {
   justConnectedXero?: boolean;
 }
 
-const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Scan', 'Results'];
+const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Results'];
+const TOTAL_STEPS = 4;
 const STORAGE_KEY = 'xettle_setup_step';
 const SELECTED_MARKETPLACES_KEY = 'xettle_setup_marketplaces';
 
@@ -35,7 +36,9 @@ export default function SetupWizard({
 }: SetupWizardProps) {
   const [step, setStep] = useState(() => {
     const saved = sessionStorage.getItem(STORAGE_KEY);
-    return saved ? parseInt(saved, 10) : initialStep;
+    const parsed = saved ? parseInt(saved, 10) : initialStep;
+    // Clamp to new max
+    return Math.min(parsed, TOTAL_STEPS);
   });
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [selectedMarketplaces, setSelectedMarketplaces] = useState<string[]>(() => {
@@ -43,9 +46,10 @@ export default function SetupWizard({
     return saved ? JSON.parse(saved) : [];
   });
   const [skippedAllApis, setSkippedAllApis] = useState(false);
+  const [pendingScans, setPendingScans] = useState(0);
 
   useEffect(() => {
-    if (initialStep > 1) setStep(initialStep);
+    if (initialStep > 1) setStep(Math.min(initialStep, TOTAL_STEPS));
   }, [initialStep]);
 
   useEffect(() => {
@@ -56,8 +60,37 @@ export default function SetupWizard({
     sessionStorage.setItem(SELECTED_MARKETPLACES_KEY, JSON.stringify(selectedMarketplaces));
   }, [selectedMarketplaces]);
 
-  const handleNext = () => setStep(s => Math.min(s + 1, 5));
-  const handleSkip = () => setStep(s => Math.min(s + 1, 5));
+  // Fire-and-forget background scan orchestrator
+  const fireBackgroundScan = useCallback(async (fnName: string) => {
+    setPendingScans(p => p + 1);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const baseUrl = `https://${projectId}.supabase.co/functions/v1`;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      };
+      // Fire the scan
+      await fetch(`${baseUrl}/${fnName}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({}),
+      }).catch(() => {});
+      // Follow up with validation sweep
+      await fetch(`${baseUrl}/run-validation-sweep`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({}),
+      }).catch(() => {});
+    } finally {
+      setPendingScans(p => p - 1);
+    }
+  }, []);
+
+  const handleNext = () => setStep(s => Math.min(s + 1, TOTAL_STEPS));
+  const handleSkip = () => setStep(s => Math.min(s + 1, TOTAL_STEPS));
   const handleComplete = () => {
     sessionStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SELECTED_MARKETPLACES_KEY);
@@ -79,10 +112,10 @@ export default function SetupWizard({
   );
   const shouldShowUpload = hasCsvMarketplaces || skippedAllApis;
 
-  // If step 3 (Upload) should be skipped, auto-advance
+  // If step 3 (Upload) should be skipped, auto-advance to Results (step 4)
   const effectiveStep = step === 3 && !shouldShowUpload ? 4 : step;
 
-  const progressValue = (effectiveStep / 5) * 100;
+  const progressValue = (effectiveStep / TOTAL_STEPS) * 100;
 
   return (
     <>
@@ -91,7 +124,7 @@ export default function SetupWizard({
           {/* Progress header */}
           <div className="px-6 pt-6 pb-3 space-y-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Step {effectiveStep} of 5</span>
+              <span>Step {effectiveStep} of {TOTAL_STEPS}</span>
               <span>Setup takes about 60 seconds</span>
             </div>
             <Progress value={progressValue} className="h-1.5" />
@@ -116,6 +149,7 @@ export default function SetupWizard({
                 onNext={handleNext}
                 onSkip={handleSkip}
                 hasXero={hasXero}
+                onFireBackgroundScan={fireBackgroundScan}
               />
             )}
             {effectiveStep === 2 && (
@@ -131,6 +165,7 @@ export default function SetupWizard({
                 justConnectedXero={justConnectedXero}
                 selectedMarketplaces={selectedMarketplaces}
                 onMarketplacesChange={setSelectedMarketplaces}
+                onFireBackgroundScan={fireBackgroundScan}
               />
             )}
             {effectiveStep === 3 && shouldShowUpload && (
@@ -141,19 +176,12 @@ export default function SetupWizard({
               />
             )}
             {effectiveStep === 4 && (
-              <SetupStepScanning
-                onNext={handleNext}
-                hasAmazon={hasAmazon}
-                hasShopify={hasShopify}
-                hasXero={hasXero}
-              />
-            )}
-            {effectiveStep === 5 && (
               <SetupStepResults
                 onNext={handleComplete}
                 hasXero={hasXero}
                 hasAmazon={hasAmazon}
                 hasShopify={hasShopify}
+                scansInProgress={pendingScans > 0}
               />
             )}
           </div>

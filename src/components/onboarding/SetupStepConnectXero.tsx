@@ -9,9 +9,10 @@ interface Props {
   onNext: () => void;
   onSkip: () => void;
   hasXero: boolean;
+  onFireBackgroundScan?: (fnName: string) => void;
 }
 
-export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props) {
+export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onFireBackgroundScan }: Props) {
   const [connecting, setConnecting] = useState(false);
   const [showSkipWarning, setShowSkipWarning] = useState(false);
 
@@ -36,6 +37,14 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props)
       toast.error(err.message || 'Failed to start Xero connection');
       setConnecting(false);
     }
+  };
+
+  const handleContinue = () => {
+    // Fire background scan if Xero is connected
+    if (hasXero && onFireBackgroundScan) {
+      onFireBackgroundScan('scan-xero-history');
+    }
+    onNext();
   };
 
   return (
@@ -84,7 +93,7 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props)
       {/* Actions */}
       <div className="flex flex-col items-center gap-2">
         {hasXero ? (
-          <Button onClick={onNext} className="w-full">
+          <Button onClick={handleContinue} className="w-full">
             Continue
           </Button>
         ) : (
