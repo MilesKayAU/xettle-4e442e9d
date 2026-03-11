@@ -28,6 +28,7 @@ export default function AdminHeader({ onSignOut, userEmail }: AdminHeaderProps) 
           )}
         </div>
         <div className="flex gap-2">
+          <AccountResetButton />
           <Button 
             variant="destructive"
             size="sm"
