@@ -26,7 +26,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<MarketplaceSummary[]>([]);
   const [readyToPush, setReadyToPush] = useState(0);
-  const [retried, setRetried] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const loadData = async () => {
     try {
