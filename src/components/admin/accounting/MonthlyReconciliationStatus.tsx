@@ -152,7 +152,7 @@ export default function MonthlyReconciliationStatus({
         },
       };
 
-      const lineItems = buildSimpleInvoiceLines(std);
+      const lineItems = await buildSimpleInvoiceLines(std);
       const result = await syncSettlementToXero(s.settlement_id, s.marketplace, { lineItems });
       if (result.success) ok++;
       else fail++;

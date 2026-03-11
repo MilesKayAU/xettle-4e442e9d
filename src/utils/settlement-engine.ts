@@ -97,6 +97,45 @@ export interface XeroLineItem {
   Quantity: number;
 }
 
+// ─── Default Account Codes ──────────────────────────────────────────────────
+
+const DEFAULT_ACCOUNT_CODES: Record<string, string> = {
+  'Sales': '200',
+  'Refunds': '205',
+  'Reimbursements': '271',
+  'Seller Fees': '407',
+  'FBA Fees': '408',
+  'Storage Fees': '409',
+  'Promotional Discounts': '200',
+  'Other Fees': '405',
+};
+
+/**
+ * Fetch the user's custom account code overrides from app_settings.
+ * Returns a getCode(category) helper that falls back to defaults.
+ */
+async function loadUserAccountCodes(): Promise<(category: string) => string> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return (cat) => DEFAULT_ACCOUNT_CODES[cat] || '400';
+
+    const { data: acSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', user.id)
+      .eq('key', 'accounting_xero_account_codes')
+      .maybeSingle();
+
+    if (acSetting?.value) {
+      const userCodes = JSON.parse(acSetting.value);
+      return (cat: string) => userCodes[cat] || DEFAULT_ACCOUNT_CODES[cat] || '400';
+    }
+  } catch (e) {
+    console.error('Failed to load user account codes, using defaults:', e);
+  }
+  return (cat) => DEFAULT_ACCOUNT_CODES[cat] || '400';
+}
+
 /**
  * Build standard 2-line Xero invoice from a StandardSettlement.
  * Line 1: Marketplace Sales (Account 200, GST on Income)
@@ -105,18 +144,20 @@ export interface XeroLineItem {
  * For Amazon, the AccountingDashboard builds its own multi-line invoices
  * due to the complexity of FBA fees, storage, refunds, etc.
  */
-export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLineItem[] {
+export async function buildSimpleInvoiceLines(settlement: StandardSettlement): Promise<XeroLineItem[]> {
+  const getCode = await loadUserAccountCodes();
+
   const lines: XeroLineItem[] = [
     {
       Description: 'Marketplace Sales',
-      AccountCode: '200',
+      AccountCode: getCode('Sales'),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round(settlement.sales_ex_gst * 100) / 100,
       Quantity: 1,
     },
     {
       Description: 'Marketplace Commission',
-      AccountCode: '407',
+      AccountCode: getCode('Seller Fees'),
       TaxType: 'INPUT',
       UnitAmount: -Math.abs(Math.round(settlement.fees_ex_gst * 100) / 100),
       Quantity: 1,
@@ -129,7 +170,7 @@ export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLin
   if (meta.refundsExGst && meta.refundsExGst !== 0) {
     lines.push({
       Description: 'Customer Refunds',
-      AccountCode: '200',
+      AccountCode: getCode('Refunds'),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round((meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) * 100) / 100,
       Quantity: 1,
@@ -140,7 +181,7 @@ export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLin
   if (meta.refundCommissionExGst && meta.refundCommissionExGst !== 0) {
     lines.push({
       Description: 'Commission Refund (on refunded orders)',
-      AccountCode: '407',
+      AccountCode: getCode('Seller Fees'),
       TaxType: 'INPUT',
       UnitAmount: Math.round(Math.abs(meta.refundCommissionExGst) * 100) / 100,
       Quantity: 1,
@@ -151,7 +192,7 @@ export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLin
   if (meta.shippingExGst && meta.shippingExGst !== 0) {
     lines.push({
       Description: 'Shipping Revenue',
-      AccountCode: '200',
+      AccountCode: getCode('Sales'),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round(meta.shippingExGst * 100) / 100,
       Quantity: 1,
@@ -162,7 +203,7 @@ export function buildSimpleInvoiceLines(settlement: StandardSettlement): XeroLin
   if (meta.subscriptionAmount && meta.subscriptionAmount !== 0) {
     lines.push({
       Description: 'Marketplace Subscription',
-      AccountCode: '407',
+      AccountCode: getCode('Seller Fees'),
       TaxType: 'INPUT',
       UnitAmount: Math.round(meta.subscriptionAmount * 100) / 100,
       Quantity: 1,
@@ -636,23 +677,27 @@ export async function syncSettlementToXero(
     const label = MARKETPLACE_LABELS[marketplace] || marketplace;
     const description = `${label} Settlement ${periodLabel}`;
 
-    // Build line items (use provided or default 2-line)
-    let lineItems = options?.lineItems || [
-      {
-        Description: 'Marketplace Sales',
-        AccountCode: '200',
-        TaxType: 'OUTPUT',
-        UnitAmount: Math.round(s.sales_principal * 100) / 100,
-        Quantity: 1,
-      },
-      {
-        Description: 'Marketplace Commission',
-        AccountCode: '407',
-        TaxType: 'INPUT',
-        UnitAmount: -Math.abs(Math.round(s.seller_fees * 100) / 100),
-        Quantity: 1,
-      },
-    ];
+    // Build line items (use provided or default 2-line with user account code overrides)
+    let lineItems = options?.lineItems;
+    if (!lineItems) {
+      const getCode = await loadUserAccountCodes();
+      lineItems = [
+        {
+          Description: 'Marketplace Sales',
+          AccountCode: getCode('Sales'),
+          TaxType: 'OUTPUT',
+          UnitAmount: Math.round(s.sales_principal * 100) / 100,
+          Quantity: 1,
+        },
+        {
+          Description: 'Marketplace Commission',
+          AccountCode: getCode('Seller Fees'),
+          TaxType: 'INPUT',
+          UnitAmount: -Math.abs(Math.round(s.seller_fees * 100) / 100),
+          Quantity: 1,
+        },
+      ];
+    }
 
     // Zero-amount guard: filter out lines with UnitAmount === 0
     lineItems = lineItems.filter((li: XeroLineItem) => Math.round(li.UnitAmount * 100) !== 0);
