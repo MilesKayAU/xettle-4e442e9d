@@ -724,7 +724,14 @@ function formatEventLabel(event: SystemEvent): string {
   const period = event.period_label || '';
 
   switch (event.event_type) {
-    case 'validation_sweep_complete': return 'Status refresh completed';
+    case 'validation_sweep_complete': {
+      const checked = event.details?.marketplaces_checked;
+      const ready = event.details?.ready_to_push;
+      const parts: string[] = ['Status refresh completed'];
+      if (checked) parts[0] += ` — ${checked} marketplaces checked`;
+      if (ready) parts.push(`${ready} ready to push`);
+      return parts.join(', ');
+    }
     case 'settlement_saved': return `Settlement saved: ${mp} ${period}`;
     case 'xero_push_success': return `Pushed to Xero: ${mp} ${period}`;
     case 'xero_push_failed': return `Xero push failed: ${mp} ${period}`;
