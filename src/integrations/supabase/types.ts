@@ -1096,6 +1096,7 @@ export type Database = {
       }
       settlements: {
         Row: {
+          advertising_costs: number | null
           bank_deposit: number | null
           bank_verified: boolean | null
           bank_verified_amount: number | null
@@ -1140,6 +1141,7 @@ export type Database = {
           xero_type: string | null
         }
         Insert: {
+          advertising_costs?: number | null
           bank_deposit?: number | null
           bank_verified?: boolean | null
           bank_verified_amount?: number | null
@@ -1184,6 +1186,7 @@ export type Database = {
           xero_type?: string | null
         }
         Update: {
+          advertising_costs?: number | null
           bank_deposit?: number | null
           bank_verified?: boolean | null
           bank_verified_amount?: number | null
