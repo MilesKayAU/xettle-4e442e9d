@@ -215,6 +215,7 @@ export default function PostSetupBanner({
         onScanComplete?.();
       } catch (err) {
         console.error('Shopify scan trigger failed:', err);
+        setShopifyScanComplete(true);
       } finally {
         setShopifyScanning(false);
       }
