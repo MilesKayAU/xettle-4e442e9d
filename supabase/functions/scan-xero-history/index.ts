@@ -412,7 +412,7 @@ Deno.serve(async (req) => {
     for (const det of detected_settlements) {
       if (det.marketplace === 'unknown') continue
 
-      const displayName = MARKETPLACE_NAMES[det.marketplace] || det.marketplace.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+      const displayName = getRegistryName(det.marketplace)
 
       // Payment processors → channel_alert, NOT marketplace_connection
       if (isPaymentProcessor(det.marketplace)) {
