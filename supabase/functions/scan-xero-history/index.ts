@@ -375,11 +375,34 @@ Deno.serve(async (req) => {
     }
 
     // ─── 6. PERSIST detected marketplaces as marketplace_connections ─
+    // Payment processors get channel_alerts instead of marketplace_connections
     let marketplaces_created = 0
+    let gateway_alerts_created = 0
     for (const det of detected_settlements) {
       if (det.marketplace === 'unknown') continue
 
       const displayName = MARKETPLACE_NAMES[det.marketplace] || det.marketplace.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+
+      // Payment processors → channel_alert, NOT marketplace_connection
+      if (isPaymentProcessor(det.marketplace)) {
+        await supabase.from('channel_alerts').upsert({
+          user_id: userId,
+          source_name: det.marketplace,
+          detected_label: displayName,
+          detection_method: det.source === 'bank_transaction' ? 'xero_bank_deposit' : 'xero_contact',
+          alert_type: 'payment_gateway_deposit',
+          status: 'pending',
+          deposit_amount: det.last_amount || null,
+          deposit_date: det.last_recorded_date || null,
+          deposit_description: det.reference || null,
+          order_count: 0,
+          total_revenue: det.last_amount || 0,
+        }, { onConflict: 'user_id,source_name' })
+        gateway_alerts_created++
+        console.log(`[scan-xero-history] Payment processor ${det.marketplace} → channel_alert (not marketplace)`)
+        continue
+      }
+
       const { error: upsertErr } = await supabase
         .from('marketplace_connections')
         .upsert({
