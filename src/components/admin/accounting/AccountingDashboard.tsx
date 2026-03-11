@@ -33,7 +33,7 @@ import { useBulkSelect } from '@/hooks/use-bulk-select';
 import BulkDeleteDialog from '@/components/admin/accounting/shared/BulkDeleteDialog';
 import { useXeroSync } from '@/hooks/use-xero-sync';
 import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
-import { deleteSettlement } from '@/utils/settlement-engine';
+import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplicateCheck } from '@/utils/settlement-engine';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
@@ -78,38 +78,9 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0];
 }
 
-async function removeExistingSettlementForUser(userId: string, settlementId: string, marketplace?: string) {
-  const { error: linesError } = await supabase
-    .from('settlement_lines')
-    .delete()
-    .eq('user_id', userId)
-    .eq('settlement_id', settlementId);
-  if (linesError) throw linesError;
-
-  const { error: unmappedError } = await supabase
-    .from('settlement_unmapped')
-    .delete()
-    .eq('user_id', userId)
-    .eq('settlement_id', settlementId);
-  if (unmappedError) throw unmappedError;
-
-  let deleteSettlementsQuery = supabase
-    .from('settlements')
-    .delete()
-    .eq('user_id', userId)
-    .eq('settlement_id', settlementId);
-
-  if (marketplace) {
-    deleteSettlementsQuery = deleteSettlementsQuery.eq('marketplace', marketplace);
-  }
-
-  const { error: settlementError } = await deleteSettlementsQuery;
-  if (settlementError) throw settlementError;
-}
-
 /**
  * saveAmazonSettlement — shared save utility for all Amazon settlement save paths.
- * Handles dedup check, overwrite, insert settlement + lines + unmapped, and optional fee extraction.
+ * Uses universal checkForDuplicate() before insert. Never uses delete+re-insert overwrite.
  */
 interface SaveAmazonSettlementOptions {
   parsed: ParsedSettlement;
@@ -125,17 +96,21 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
   const { header, summary, lines, unmapped } = parsed;
   const splitMonth = parsed.splitMonth;
 
-  // Duplicate check: overwrite existing with fresh parse
-  const { data: existingData } = await supabase
-    .from('settlements')
-    .select('id')
-    .eq('settlement_id', header.settlementId)
-    .eq('user_id', user.id)
-    .limit(1);
+  // ─── Universal Duplicate Check (replaces old delete+re-insert overwrite) ───
+  const dupCheck = await checkForDuplicate({
+    settlementId: header.settlementId,
+    marketplace,
+    userId: user.id,
+    periodStart: header.periodStart,
+    periodEnd: header.periodEnd,
+    bankDeposit: summary.bankDeposit,
+  });
 
-  const isOverwrite = !!(existingData && existingData.length > 0);
-  if (isOverwrite) {
-    await removeExistingSettlementForUser(user.id, header.settlementId, marketplace);
+  if (dupCheck.isDuplicate) {
+    return {
+      success: false,
+      error: `This settlement already exists in your account (matched by ${dupCheck.matchMethod}).`,
+    };
   }
 
   // Split-month rollover debug logging
@@ -180,6 +155,10 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
     parser_version: PARSER_VERSION,
   } as any);
   if (settError) throw settError;
+
+  // Register aliases + post-insert safety check
+  registerAliases(header.settlementId, user.id, 'csv_upload');
+  postInsertDuplicateCheck(header.settlementId, marketplace, user.id);
 
   // Fire-and-forget: extract fee observations for intelligence engine
   if (extractFees) {
@@ -235,7 +214,7 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
     if (unmappedErr) throw unmappedErr;
   }
 
-  return { success: true, overwritten: isOverwrite };
+  return { success: true, overwritten: false };
 }
 
 export default function AccountingDashboard() {

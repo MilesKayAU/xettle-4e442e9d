@@ -170,10 +170,23 @@ export function buildInvoiceDescription(settlement: StandardSettlement): string 
 // ─── Universal Duplicate Prevention ─────────────────────────────────────────
 
 /**
- * UNIVERSAL DEDUP — ALL settlement inserts must go through this function.
- * This applies to: CSV upload, API sync, manual entry, auto-sync, any future source.
- * When adding a new marketplace API integration, do NOT bypass this check.
- * The alias registry handles ID format differences between CSV and API paths.
+ * ⚠️ UNIVERSAL RULE — NO EXCEPTIONS:
+ * Every insert or upsert into the settlements table MUST call checkForDuplicate() first.
+ * This applies to:
+ * - Every marketplace (Amazon, Shopify, BigW, MyDeal, Kogan, Bunnings, any future marketplace)
+ * - Every source (CSV upload, API sync, manual entry, auto-sync, public demo)
+ * - Every function name (saveSettlement, saveAmazonSettlement, or any future variant)
+ *
+ * If you are adding a new settlement save function, you MUST:
+ * 1. Call checkForDuplicate() before insert
+ * 2. Register aliases after successful insert via registerAliases()
+ * 3. Return { success: false, reason: 'duplicate' } if duplicate detected
+ * 4. Never use delete + re-insert to 'update' a settlement
+ *
+ * Bypassing this check will cause duplicate Xero invoices for paying customers.
+ *
+ * Post-insert safety: after every insert, postInsertDuplicateCheck() verifies
+ * no duplicate was created (catches race conditions or future code that bypasses this).
  */
 export async function checkForDuplicate(params: {
   settlementId: string;
@@ -245,8 +258,9 @@ export async function checkForDuplicate(params: {
 
 /**
  * Register settlement ID aliases for cross-source dedup.
+ * Exported so any settlement save function (including legacy ones) can register aliases.
  */
-async function registerAliases(
+export async function registerAliases(
   settlementId: string,
   userId: string,
   source: string,
@@ -281,6 +295,40 @@ async function registerAliases(
   }
 }
 
+/**
+ * Post-insert safety check — catches duplicates created by race conditions
+ * or future code that bypasses checkForDuplicate().
+ * Fire-and-forget: logs critical alert to system_events if duplicate found.
+ */
+export async function postInsertDuplicateCheck(
+  settlementId: string,
+  marketplace: string,
+  userId: string,
+): Promise<void> {
+  try {
+    const { count } = await supabase
+      .from('settlements')
+      .select('*', { count: 'exact', head: true })
+      .eq('settlement_id', settlementId)
+      .eq('user_id', userId)
+      .eq('marketplace', marketplace);
+
+    if (count && count > 1) {
+      console.error(`[CRITICAL] Duplicate settlement detected post-insert: ${settlementId} (${marketplace}), count=${count}`);
+      await supabase.from('system_events' as any).insert({
+        user_id: userId,
+        event_type: 'critical_duplicate_created',
+        marketplace_code: marketplace,
+        settlement_id: settlementId,
+        details: { count, detected_at: new Date().toISOString() },
+        severity: 'critical',
+      } as any);
+    }
+  } catch (err) {
+    console.error('[postInsertDuplicateCheck] error:', err);
+  }
+}
+
 // ─── Save to Database ───────────────────────────────────────────────────────
 
 export interface SaveResult {
@@ -307,6 +355,20 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       .maybeSingle();
 
     if (boundarySetting?.value && settlement.period_end < boundarySetting.value) {
+      // ─── Dedup check applies even for boundary settlements ─────────
+      const boundaryDupCheck = await checkForDuplicate({
+        settlementId: settlement.settlement_id,
+        marketplace: settlement.marketplace,
+        userId: user.id,
+        periodStart: settlement.period_start,
+        periodEnd: settlement.period_end,
+        bankDeposit: settlement.net_payout,
+      });
+
+      if (boundaryDupCheck.isDuplicate) {
+        return { success: false, error: `This settlement already exists (matched by ${boundaryDupCheck.matchMethod}).`, duplicate: true };
+      }
+
       // Save with special status — no Xero entry will be created
       const meta = settlement.metadata || {};
       const { error } = await supabase.from('settlements').insert({
@@ -332,8 +394,9 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
 
       if (error) return { success: false, error: error.message };
 
-      // Register aliases for boundary settlements too
+      // Register aliases + post-insert safety check
       registerAliases(settlement.settlement_id, user.id, settlement.source, meta.sourceReference);
+      postInsertDuplicateCheck(settlement.settlement_id, settlement.marketplace, user.id);
 
       return {
         success: true,
@@ -389,9 +452,10 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
     } as any);
 
-    // Register aliases after successful insert
+    // Register aliases + post-insert safety check after successful insert
     if (!error) {
       registerAliases(settlement.settlement_id, user.id, settlement.source, meta.sourceReference);
+      postInsertDuplicateCheck(settlement.settlement_id, settlement.marketplace, user.id);
     }
 
     if (error) return { success: false, error: error.message };
