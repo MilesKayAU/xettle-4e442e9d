@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
-import { ShoppingBag, Package, CheckCircle2, Loader2, Upload } from 'lucide-react';
+import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
@@ -11,18 +12,46 @@ interface Props {
   onSkip: () => void;
   hasAmazon: boolean;
   hasShopify: boolean;
+  selectedMarketplaces: string[];
+  onMarketplacesChange: (marketplaces: string[]) => void;
 }
 
-const CONNECTORS = [
-  { id: 'amazon', label: 'Amazon', icon: Package, recommended: true },
-  { id: 'shopify', label: 'Shopify', icon: ShoppingBag, recommended: true },
+interface MarketplaceOption {
+  id: string;
+  label: string;
+  icon: typeof Package;
+  type: 'api' | 'csv';
+}
+
+const API_MARKETPLACES: MarketplaceOption[] = [
+  { id: 'amazon', label: 'Amazon', icon: Package, type: 'api' },
+  { id: 'shopify', label: 'Shopify', icon: ShoppingBag, type: 'api' },
 ];
 
-export default function SetupStepConnectStores({ onNext, onSkip, hasAmazon, hasShopify }: Props) {
+const CSV_MARKETPLACES: MarketplaceOption[] = [
+  { id: 'bunnings', label: 'Bunnings', icon: Store, type: 'csv' },
+  { id: 'bigw', label: 'BigW', icon: Store, type: 'csv' },
+  { id: 'kogan', label: 'Kogan', icon: Store, type: 'csv' },
+  { id: 'catch', label: 'Catch', icon: Store, type: 'csv' },
+  { id: 'mydeal', label: 'MyDeal', icon: Store, type: 'csv' },
+  { id: 'everyday_market', label: 'Everyday Market', icon: Store, type: 'csv' },
+  { id: 'ebay', label: 'eBay', icon: Store, type: 'csv' },
+];
+
+export default function SetupStepConnectStores({
+  onNext,
+  onSkip,
+  hasAmazon,
+  hasShopify,
+  selectedMarketplaces,
+  onMarketplacesChange,
+}: Props) {
   const [connectingAmazon, setConnectingAmazon] = useState(false);
   const [connectingShopify, setConnectingShopify] = useState(false);
   const [shopDomain, setShopDomain] = useState('');
   const [showShopifyInput, setShowShopifyInput] = useState(false);
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customName, setCustomName] = useState('');
 
   const connectedMap: Record<string, boolean> = {
     amazon: hasAmazon,
@@ -37,9 +66,7 @@ export default function SetupStepConnectStores({ onNext, onSkip, hasAmazon, hasS
         body: {},
       });
       if (error || data?.error) throw new Error(data?.error || 'Failed to get Amazon auth URL');
-      if (data?.url) {
-        window.location.href = data.url;
-      }
+      if (data?.url) window.location.href = data.url;
     } catch (err: any) {
       toast.error(err.message || 'Failed to start Amazon connection');
       setConnectingAmazon(false);
@@ -58,48 +85,65 @@ export default function SetupStepConnectStores({ onNext, onSkip, hasAmazon, hasS
         body: { action: 'install', shop: domain },
       });
       if (error || data?.error) throw new Error(data?.error || 'Failed to start Shopify connection');
-      if (data?.url) {
-        window.location.href = data.url;
-      }
+      if (data?.url) window.location.href = data.url;
     } catch (err: any) {
       toast.error(err.message || 'Failed to start Shopify connection');
       setConnectingShopify(false);
     }
   };
 
-  const anyConnected = hasAmazon || hasShopify;
+  const toggleMarketplace = (id: string) => {
+    const updated = selectedMarketplaces.includes(id)
+      ? selectedMarketplaces.filter(m => m !== id)
+      : [...selectedMarketplaces, id];
+    onMarketplacesChange(updated);
+  };
+
+  const handleAddCustom = () => {
+    if (!customName.trim()) return;
+    const id = customName.trim().toLowerCase().replace(/\s+/g, '_');
+    if (!selectedMarketplaces.includes(id)) {
+      onMarketplacesChange([...selectedMarketplaces, id]);
+    }
+    setCustomName('');
+    setShowCustomInput(false);
+    toast.success(`${customName.trim()} added — you can upload its files in the next step.`);
+  };
+
+  const hasAnySelection = selectedMarketplaces.length > 0 || hasAmazon || hasShopify;
 
   return (
     <div className="space-y-6">
       <div className="text-center space-y-2">
-        <h2 className="text-xl font-bold text-foreground">Let Xettle automate your accounting</h2>
+        <h2 className="text-xl font-bold text-foreground">Which marketplaces do you sell on?</h2>
         <p className="text-sm text-muted-foreground">
-          Connect your sales channels so Xettle can automatically find settlements and prepare your books.
+          Connect APIs for automatic sync, or toggle on CSV-only marketplaces — both work perfectly.
         </p>
       </div>
 
-      <div className="grid gap-3">
-        {CONNECTORS.map((connector) => {
-          const Icon = connector.icon;
-          const isConnected = connectedMap[connector.id];
-          const isLoading = connector.id === 'amazon' ? connectingAmazon : connectingShopify;
+      {/* API-connected marketplaces */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Sync</p>
+        {API_MARKETPLACES.map((m) => {
+          const Icon = m.icon;
+          const isConnected = connectedMap[m.id];
+          const isLoading = m.id === 'amazon' ? connectingAmazon : connectingShopify;
 
           return (
-            <Card key={connector.id} className={`border transition-colors ${isConnected ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/10' : 'border-border'}`}>
-              <CardContent className="p-4 flex items-center justify-between">
+            <Card key={m.id} className={`border transition-colors ${isConnected ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/10' : 'border-border'}`}>
+              <CardContent className="p-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Icon className="h-5 w-5 text-primary" />
+                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Icon className="h-4 w-4 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">{connector.label}</p>
-                    {connector.recommended && !isConnected && (
-                      <span className="text-[10px] font-medium text-primary">Recommended</span>
-                    )}
-                    {isConnected && (
+                    <p className="font-medium text-foreground text-sm">{m.label}</p>
+                    {isConnected ? (
                       <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3" /> Connected
                       </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">Auto-sync settlements</span>
                     )}
                   </div>
                 </div>
@@ -108,7 +152,7 @@ export default function SetupStepConnectStores({ onNext, onSkip, hasAmazon, hasS
                     size="sm"
                     variant="outline"
                     disabled={isLoading}
-                    onClick={connector.id === 'amazon' ? handleConnectAmazon : handleConnectShopify}
+                    onClick={m.id === 'amazon' ? handleConnectAmazon : handleConnectShopify}
                   >
                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Connect'}
                   </Button>
@@ -134,14 +178,71 @@ export default function SetupStepConnectStores({ onNext, onSkip, hasAmazon, hasS
         </div>
       )}
 
+      {/* CSV-only marketplaces */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">CSV Upload</p>
+        <div className="grid grid-cols-2 gap-2">
+          {CSV_MARKETPLACES.map((m) => {
+            const isSelected = selectedMarketplaces.includes(m.id);
+            return (
+              <Card
+                key={m.id}
+                className={`border transition-colors cursor-pointer ${
+                  isSelected
+                    ? 'border-primary/40 bg-primary/5'
+                    : 'border-border hover:border-primary/20'
+                }`}
+                onClick={() => toggleMarketplace(m.id)}
+              >
+                <CardContent className="p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Store className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">{m.label}</span>
+                  </div>
+                  <Switch
+                    checked={isSelected}
+                    onCheckedChange={() => toggleMarketplace(m.id)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Custom marketplace */}
+      {showCustomInput ? (
+        <div className="flex gap-2">
+          <Input
+            placeholder="e.g. Woolworths MarketPlus"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()}
+            className="text-sm"
+            autoFocus
+          />
+          <Button size="sm" onClick={handleAddCustom} disabled={!customName.trim()}>
+            Add
+          </Button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowCustomInput(true)}
+          className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+        >
+          <Plus className="h-3 w-3" /> I don't see my marketplace
+        </button>
+      )}
+
       {/* Trust signal */}
       <p className="text-xs text-muted-foreground text-center">
-        Xettle never changes your accounting without your approval. You can change these anytime later.
+        Every platform is optional. You can add or remove marketplaces anytime.
       </p>
 
       {/* Actions */}
       <div className="flex flex-col items-center gap-2">
-        {anyConnected && (
+        {hasAnySelection && (
           <Button onClick={onNext} className="w-full">
             Continue
           </Button>
@@ -150,8 +251,7 @@ export default function SetupStepConnectStores({ onNext, onSkip, hasAmazon, hasS
           onClick={onSkip}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
         >
-          <Upload className="h-3 w-3" />
-          Or upload settlement files manually
+          <Upload className="h-3 w-3" /> Skip all — I'll upload files manually
         </button>
       </div>
     </div>
