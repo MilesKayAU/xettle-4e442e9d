@@ -190,7 +190,7 @@ export default function Setup() {
     })();
   }, [navigate]);
 
-  // ─── Phase 1: auto-start scans on mount ───────────────────────────
+  // ─── Phase 1: auto-start scans on mount (Amazon runs LAST) ─────
   useEffect(() => {
     if (!caps || loading || phase1StartedRef.current) return;
     phase1StartedRef.current = true;
@@ -198,15 +198,25 @@ export default function Setup() {
     const token = caps.accessToken!;
     const userId = caps.userId!;
 
-    // B1: Realistic timers — Xero 60s, Shopify 120s, Amazon 180s
+    // Progress timers
     if (caps.hasXero && !phase1Xero) startProgressTimer(setXeroProgress, 150000);
     if (caps.hasShopify && !phase1Shopify) startProgressTimer(setShopifyProgress, 120000);
-    if (caps.hasAmazon && !phase1Amazon) startProgressTimer(setAmazonProgress, 180000);
 
-    // Run scans: Xero & Amazon in parallel, Shopify sequential internally
-    if (caps.hasXero && !phase1Xero) runXeroScan(token, userId);
-    if (caps.hasShopify && !phase1Shopify) runShopifyScan(token, userId);
-    if (caps.hasAmazon && !phase1Amazon) runAmazonScan(token, userId);
+    // Run Xero & Shopify in parallel, then Amazon last (most rate-sensitive)
+    const runSequenced = async () => {
+      const promises: Promise<void>[] = [];
+      if (caps.hasXero && !phase1Xero) promises.push(runXeroScan(token, userId));
+      if (caps.hasShopify && !phase1Shopify) promises.push(runShopifyScan(token, userId));
+      await Promise.allSettled(promises);
+
+      // Amazon runs AFTER Xero & Shopify complete
+      if (caps.hasAmazon && !phase1Amazon) {
+        startProgressTimer(setAmazonProgress, 180000);
+        await runAmazonScan(token, userId);
+      }
+    };
+
+    runSequenced();
 
     if (phase1Xero) setXeroProgress(100);
     if (phase1Shopify) setShopifyProgress(100);
@@ -424,8 +434,27 @@ export default function Setup() {
       setPhase1Amazon(true);
       await upsertSetting(userId, 'setup_phase1_amazon', 'true');
     } else {
-      setAmazonStep({ status: 'error', message: 'Amazon fetch failed', error: result.error });
-      setAmazonProgress(0);
+      // Check for rate limit / mutex / cooldown — show calm message
+      const errorData = result.data || {};
+      const errorType = errorData.error_type || errorData.error || '';
+      const isRateLimit = errorType === 'rate_limit' || errorType === 'rate_limited' || result.error?.includes('429');
+      const isMutex = errorType === 'mutex' || errorType === 'sync_in_progress';
+      const isCooldown = errorType === 'cooldown' || result.error?.includes('cooldown');
+
+      if (isRateLimit || isMutex || isCooldown) {
+        const msg = errorData.message || (isRateLimit
+          ? '⏱ Amazon API rate limited — this is temporary. Will retry automatically in 15 minutes.'
+          : isMutex
+            ? '⏱ Amazon sync already running. Will complete shortly.'
+            : '⏱ Amazon synced recently — will retry automatically in 1 hour.');
+        setAmazonStep({ status: 'success', message: msg });
+        setAmazonProgress(100);
+        setPhase1Amazon(true);
+        await upsertSetting(userId, 'setup_phase1_amazon', 'true');
+      } else {
+        setAmazonStep({ status: 'error', message: 'Amazon sync encountered an issue — check your connection', error: result.error });
+        setAmazonProgress(0);
+      }
     }
   }
 

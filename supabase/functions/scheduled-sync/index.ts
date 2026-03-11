@@ -84,10 +84,43 @@ Deno.serve(async (req) => {
   // Track which steps errored
   const stepErrors: string[] = [];
 
-  // 1. Fetch Amazon settlements
+  // 1. Fetch Amazon settlements (check mutex/rate-limit per user first)
   console.log("[scheduled-sync] Step 1: Amazon fetch...");
-  results.amazon = await callFunction("fetch-amazon-settlements", { "x-action": "sync" });
-  if (results.amazon?.error) stepErrors.push('amazon');
+  
+  // Check if any user has an active lock or rate limit
+  let amazonSkipped = false;
+  for (const uid of [...new Set((amazonTokens || []).map(t => t.user_id))]) {
+    const { data: lockData } = await adminClient
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'amazon_sync_lock_expiry')
+      .eq('user_id', uid)
+      .maybeSingle();
+    
+    if (lockData?.value && new Date(lockData.value) > new Date()) {
+      console.log(`[scheduled-sync] Amazon sync skipped for ${uid} — manual sync in progress`);
+      amazonSkipped = true;
+    }
+
+    const { data: rlData } = await adminClient
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'amazon_rate_limit_until')
+      .eq('user_id', uid)
+      .maybeSingle();
+
+    if (rlData?.value && new Date(rlData.value) > new Date()) {
+      console.log(`[scheduled-sync] Amazon rate limited for ${uid} — cooldown active`);
+      amazonSkipped = true;
+    }
+  }
+
+  if (!amazonSkipped) {
+    results.amazon = await callFunction("fetch-amazon-settlements", { "x-action": "sync" });
+    if (results.amazon?.error) stepErrors.push('amazon');
+  } else {
+    results.amazon = { skipped: true, reason: 'mutex_or_rate_limit' };
+  }
 
   // 2. Fetch Shopify payouts
   console.log("[scheduled-sync] Step 2: Shopify fetch...");

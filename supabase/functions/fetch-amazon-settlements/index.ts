@@ -295,7 +295,7 @@ async function refreshAccessToken(amazonToken: any): Promise<string> {
 // ═══════════════════════════════════════════════════════════════
 // Helper: download a single report with retry on 429
 // ═══════════════════════════════════════════════════════════════
-async function downloadReport(baseUrl: string, accessToken: string, reportDocumentId: string): Promise<string> {
+async function downloadReport(baseUrl: string, accessToken: string, reportDocumentId: string, supabase?: any, userId?: string): Promise<string> {
   const docUrl = `${baseUrl}/reports/2021-06-30/documents/${reportDocumentId}`;
   let docResponse: Response | null = null;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -307,6 +307,16 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
     docResponse = await fetch(docUrl, { headers: { 'x-amz-access-token': accessToken } });
     if (docResponse.status !== 429) break;
     console.warn('SP-API 429 rate limited');
+  }
+
+  if (docResponse?.status === 429) {
+    // Store rate limit cooldown so other callers don't also hit Amazon
+    if (supabase && userId) {
+      await upsertSetting(supabase, userId, 'amazon_rate_limit_until',
+        new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      );
+    }
+    throw new Error('RATE_LIMITED: Amazon API rate limited after 5 retries');
   }
 
   if (!docResponse || !docResponse.ok) {
@@ -363,6 +373,37 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
   }
 
   console.log(`[Sync] Processing ${amazonTokens.length} user(s) with Amazon tokens`);
+
+  for (const amazonToken of amazonTokens) {
+    const userId = amazonToken.user_id;
+
+    // ─── Check mutex: skip if manual sync in progress ────────────
+    const { data: lockSetting } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'amazon_sync_lock_expiry')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (lockSetting?.value && new Date(lockSetting.value) > new Date()) {
+      details.push(`User ${userId}: Skipped — manual sync in progress`);
+      console.log(`[Sync] Amazon sync skipped for ${userId} — manual sync in progress`);
+      continue;
+    }
+
+    // ─── Check rate limit cooldown ───────────────────────────────
+    const { data: rateLimitSetting } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'amazon_rate_limit_until')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (rateLimitSetting?.value && new Date(rateLimitSetting.value) > new Date()) {
+      details.push(`User ${userId}: Skipped — Amazon rate limit cooldown active`);
+      console.log(`[Sync] Amazon rate limited for ${userId} — cooldown active`);
+      continue;
+    }
 
   for (const amazonToken of amazonTokens) {
     const userId = amazonToken.user_id;
@@ -435,7 +476,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         if (i > 0) await new Promise(r => setTimeout(r, 3000));
 
         try {
-          const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId);
+          const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId, supabaseAdmin, userId);
           const parsed = parseSettlementTSV(content, gstRate);
 
           if (existingIds.has(parsed.header.settlementId)) {
@@ -545,6 +586,70 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
 // - Returns summary with totals for UI
 // ═══════════════════════════════════════════════════════════════
 async function handleSmartSync(supabase: any, userId: string): Promise<Response> {
+  // ─── Check rate limit cooldown (Amazon 429 backoff) ────────────
+  const { data: rateLimitSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'amazon_rate_limit_until')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (rateLimitSetting?.value) {
+    const rateLimitUntil = new Date(rateLimitSetting.value);
+    if (rateLimitUntil > new Date()) {
+      const minutesLeft = Math.ceil((rateLimitUntil.getTime() - Date.now()) / 60000);
+      return new Response(
+        JSON.stringify({
+          error: 'rate_limited',
+          error_type: 'rate_limit',
+          message: `Amazon API rate limited — this is temporary. Will retry automatically in ${minutesLeft} minutes.`,
+          retry_after: rateLimitSetting.value,
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // ─── Check sync mutex (prevent concurrent Amazon syncs) ────────
+  const { data: lockSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'amazon_sync_lock_expiry')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (lockSetting?.value) {
+    const lockExpiry = new Date(lockSetting.value);
+    if (lockExpiry > new Date()) {
+      return new Response(
+        JSON.stringify({
+          error: 'sync_in_progress',
+          error_type: 'mutex',
+          message: 'Amazon sync already running. Please wait for it to complete.',
+          retry_after: lockSetting.value,
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // ─── Acquire sync lock (10 minute expiry) ──────────────────────
+  await upsertSetting(supabase, userId, 'amazon_sync_lock_expiry',
+    new Date(Date.now() + 10 * 60 * 1000).toISOString()
+  );
+
+  try {
+    return await _executeSmartSync(supabase, userId);
+  } finally {
+    // ─── Always release lock when done ────────────────────────────
+    await supabase.from('app_settings')
+      .delete()
+      .eq('user_id', userId)
+      .eq('key', 'amazon_sync_lock_expiry');
+  }
+}
+
+async function _executeSmartSync(supabase: any, userId: string): Promise<Response> {
   // ─── Check cooldown (1 hour minimum between syncs) ────────────
   const { data: cooldownSetting } = await supabase
     .from('app_settings')
@@ -560,7 +665,8 @@ async function handleSmartSync(supabase: any, userId: string): Promise<Response>
       return new Response(
         JSON.stringify({
           error: 'Sync cooldown active',
-          message: `Last sync was ${Math.round((Date.now() - lastSync.getTime()) / 60000)} minutes ago. Please wait at least 1 hour between syncs.`,
+          error_type: 'cooldown',
+          message: `Amazon synced ${Math.round((Date.now() - lastSync.getTime()) / 60000)} minutes ago. Will retry automatically in 1 hour.`,
           last_sync: cooldownSetting.value,
         }),
         { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -671,7 +777,7 @@ async function handleSmartSync(supabase: any, userId: string): Promise<Response>
     if (i > 0) await new Promise(r => setTimeout(r, 3000));
 
     try {
-      const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId);
+      const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId, supabase, userId);
       const parsed = parseSettlementTSV(content, gstRate);
 
       // Dedup check 1: exact settlement ID
