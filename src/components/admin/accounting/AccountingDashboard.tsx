@@ -1249,6 +1249,7 @@ export default function AccountingDashboard() {
                 <ShopifyConnectionStatus />
                 <ChannelManagement />
                 <AutomationSettingsPanel userTier={userTier} />
+                <ReconciliationSettingsCard />
                 <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />
                 <SyncHistoryCard />
                 <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
