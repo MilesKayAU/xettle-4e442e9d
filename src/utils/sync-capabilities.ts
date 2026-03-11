@@ -49,6 +49,15 @@ export interface ScanStepResult {
   detail?: string;
 }
 
+export interface EdgeCallResult {
+  ok: boolean;
+  data?: any;
+  error?: string;
+  aborted?: boolean;
+  statusCode?: number;
+  rateLimited?: boolean;
+}
+
 /**
  * Calls an edge function with proper error handling.
  * Returns a structured result instead of silently swallowing errors.
@@ -58,7 +67,7 @@ export async function callEdgeFunctionSafe(
   accessToken: string,
   body: Record<string, unknown> = {},
   options?: { signal?: AbortSignal; headers?: Record<string, string> },
-): Promise<{ ok: boolean; data?: any; error?: string; aborted?: boolean }> {
+): Promise<EdgeCallResult> {
   try {
     const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
     const controller = new AbortController();

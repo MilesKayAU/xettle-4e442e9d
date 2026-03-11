@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, AlertTriangle, Loader2, ArrowRight, Search, PartyPopper, SkipForward, Upload } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, ArrowRight, Search, PartyPopper, SkipForward, Upload, Clock3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
