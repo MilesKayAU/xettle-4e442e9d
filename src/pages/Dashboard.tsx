@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import SetupWizard from '@/components/onboarding/SetupWizard';
@@ -19,6 +19,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
+import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -285,6 +286,25 @@ export default function Dashboard() {
     localStorage.setItem('xettle_insights_subtab', tab);
   }
 
+  // ─── AI Assistant context per view ─────────────────────────────
+  const aiContext = useMemo(() => {
+    const now = new Date();
+    const monthLabel = now.toLocaleString('en-AU', { month: 'long', year: 'numeric' });
+    if (activeView === 'insights') {
+      return { page: 'insights', period: monthLabel, marketplaces: userMarketplaces.map(m => m.marketplace_code) };
+    }
+    if (activeView === 'settlements') {
+      return { page: 'settlements', marketplace: selectedMarketplace, marketplaces: userMarketplaces.map(m => m.marketplace_code) };
+    }
+    return { page: 'dashboard', month: monthLabel, marketplaces: userMarketplaces.map(m => m.marketplace_code) };
+  }, [activeView, selectedMarketplace, userMarketplaces]);
+
+  const aiSuggestedPrompts = useMemo(() => {
+    if (activeView === 'insights') return ['Which marketplace is most profitable?', 'Why are my fees so high this month?', 'How does this month compare to last?'];
+    if (activeView === 'settlements') return ['Why is this settlement negative?', 'Is this ready to push to Xero?', 'Explain these fees', 'What does this gap mean?'];
+    return ['What needs my attention today?', 'Why do I have settlements missing?', 'Am I up to date with Xero?'];
+  }, [activeView]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -299,7 +319,6 @@ export default function Dashboard() {
   const isShopifyOrders = selectedMarketplace === 'shopify_orders';
   const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
 
-  // Sub-tab config
   const settlementSubTabs: { key: SettlementsSubTab; label: string }[] = [
     { key: 'all', label: 'All Settlements' },
     { key: 'overview', label: 'Overview' },
@@ -590,6 +609,12 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
       </div>
+
+      {/* AI Assistant floating button — context-aware per active view */}
+      <AskAiButton
+        context={aiContext}
+        suggestedPrompts={aiSuggestedPrompts}
+      />
     </div>
   );
 }
