@@ -12,7 +12,7 @@
 |---|---|---|---|
 | Sales | 200 | OUTPUT | AU domestic + international blended |
 | Refunds | 205 | OUTPUT | Revenue contra |
-| Reimbursements | 271 | NONE | BAS Excluded — not taxable |
+| Reimbursements | 271 | OUTPUT | ATO classifies as taxable income — conservative/safe |
 | Promotional Discounts | 200 | OUTPUT | Reduces sales base |
 | Seller Fees | 407 | INPUT | GST on purchases |
 | FBA Fees | 408 | INPUT | GST on purchases |
