@@ -1278,6 +1278,11 @@ export default function AccountingDashboard() {
               </div>
             </TabsContent>
 
+            {/* INSIGHTS TAB */}
+            <TabsContent value="insights">
+              <InsightsTab />
+            </TabsContent>
+
             {/* Upgrade nudge dialog */}
             <UpgradeNudgeDialog
               open={showUpgradeNudge}
