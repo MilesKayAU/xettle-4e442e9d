@@ -334,6 +334,13 @@ export default function ActionCentre({
 
   return (
     <div className="space-y-6">
+      {/* Welcome guide for first-time users */}
+      {rows.length === 0 && (
+        <WelcomeGuide
+          onUpload={() => onSwitchToUpload()}
+          onConnectStore={() => onSwitchToSettlements()}
+        />
+      )}
       {/* Greeting header */}
       <div className="flex items-start justify-between">
         <div>
