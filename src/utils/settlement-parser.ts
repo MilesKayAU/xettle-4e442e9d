@@ -79,6 +79,8 @@ export const XERO_ACCOUNT_MAP: Record<string, { code: string; name: string }> = 
   'Seller Fees': { code: '407', name: 'Amazon Seller Fees' },
   'FBA Fees': { code: '408', name: 'Amazon FBA Fees' },
   'Storage Fees': { code: '409', name: 'Amazon Storage Fees' },
+  'Advertising Costs': { code: '410', name: 'Amazon Advertising Costs' },
+  'Other Fees': { code: '405', name: 'Amazon Other Fees' },
   'Reimbursements': { code: '271', name: 'Amazon FBA Inventory Reimbursement AU' },
   'Tax Collected by Amazon': { code: '824', name: 'Amazon Sales Tax AU' },
   'Split Month Rollover': { code: '612', name: 'Amazon Split Month Rollovers' },
