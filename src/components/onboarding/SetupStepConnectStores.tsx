@@ -69,7 +69,7 @@ export default function SetupStepConnectStores({
   const [step, setStep] = useState<1 | 2 | 3>(getInitialStep);
   const [connectingAmazon, setConnectingAmazon] = useState(false);
   const [connectingShopify, setConnectingShopify] = useState(false);
-  const [shopDomain, setShopDomain] = useState('');
+  const [shopDomain, setShopDomain] = useState('mileskayaustralia.myshopify.com');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customName, setCustomName] = useState('');
 
