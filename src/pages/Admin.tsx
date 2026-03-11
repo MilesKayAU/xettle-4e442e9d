@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import XettleLogo from '@/components/shared/XettleLogo';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import { supabase } from '@/integrations/supabase/client';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -158,7 +159,7 @@ export default function Admin() {
         <div className="container-custom flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
             <Link to="/dashboard" className="flex items-center">
-              <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-8" />
+              <XettleLogo height={32} />
             </Link>
             <Badge variant="secondary">Admin</Badge>
           </div>

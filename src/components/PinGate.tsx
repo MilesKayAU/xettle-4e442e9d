@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import XettleLogo from '@/components/shared/XettleLogo';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -85,7 +86,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
             <Lock className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-lg">
-            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-6 inline-block mr-1" /> — Access Required
+            <XettleLogo height={24} className="inline-block mr-1" /> — Access Required
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">Enter the 4-digit PIN to continue</p>
         </CardHeader>

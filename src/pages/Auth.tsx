@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import XettleLogo from '@/components/shared/XettleLogo';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -172,7 +173,7 @@ export default function Auth() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-block">
-            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-10 mx-auto" />
+            <XettleLogo height={40} />
           </Link>
           <p className="text-muted-foreground mt-2">Amazon settlements, Xettled.</p>
         </div>

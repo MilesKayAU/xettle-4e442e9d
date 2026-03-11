@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import XettleLogo from '@/components/shared/XettleLogo';
 
 export default function Terms() {
   return (
@@ -8,7 +9,7 @@ export default function Terms() {
       <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
         <div className="container-custom flex items-center justify-between h-16">
           <Link to="/" className="flex items-center">
-            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-8" />
+            <XettleLogo height={32} />
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link>

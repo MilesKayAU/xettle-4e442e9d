@@ -18,6 +18,7 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
+import XettleLogo from '@/components/shared/XettleLogo';
 import DashboardConnectionStrip from '@/components/dashboard/DashboardConnectionStrip';
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
@@ -452,7 +453,7 @@ export default function Dashboard() {
       <header className="border-b border-border bg-card">
         <div className="container-custom flex items-center justify-between h-16">
           <Link to="/" className="flex items-center">
-            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-8" />
+            <XettleLogo height={32} />
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" asChild>

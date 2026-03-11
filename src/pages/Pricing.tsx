@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import XettleLogo from '@/components/shared/XettleLogo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -70,7 +71,7 @@ export default function Pricing() {
       <header className="border-b border-border bg-card">
         <div className="container mx-auto max-w-5xl flex items-center justify-between h-16 px-4">
           <Link to="/" className="flex items-center">
-            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-8" />
+            <XettleLogo height={32} />
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/dashboard">
