@@ -21,6 +21,7 @@ import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher
 import { formatSettlementDate, formatAUD } from '@/utils/settlement-engine';
 
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
+import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
 
 // ── Shared architecture hooks + components ──────────────────────────────────
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';

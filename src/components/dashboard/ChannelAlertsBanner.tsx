@@ -419,6 +419,59 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           const isUnlinked = alert.alert_type === 'unlinked';
           const isLinking = linkingAlertId === alert.id;
 
+          const isUnmatchedDeposit = alert.alert_type === 'unmatched_deposit';
+          const isUnknownDeposit = alert.alert_type === 'unknown_deposit';
+
+          // ─── DEPOSIT ALERTS — curious, not alarming ───
+          if (isUnmatchedDeposit || isUnknownDeposit) {
+            const depositAmt = alert.deposit_amount
+              ? formatCurrency(alert.deposit_amount)
+              : formatCurrency(alert.total_revenue);
+            const depositDate = alert.deposit_date
+              ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+              : null;
+
+            return (
+              <Card key={alert.id} className="border-primary/20 bg-primary/5">
+                <CardContent className="flex items-center gap-3 p-4">
+                  <Banknote className="h-5 w-5 text-primary shrink-0" />
+                  <div className="flex-1 text-sm">
+                    {isUnmatchedDeposit ? (
+                      <>
+                        <p className="font-medium text-foreground">
+                          💰 We spotted a possible {displayName} deposit — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">
+                          Upload {displayName} settlements to reconcile it.
+                          {alert.match_confidence && (
+                            <span className="ml-1 text-xs opacity-60">({alert.match_confidence}% confidence)</span>
+                          )}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium text-foreground">
+                          💰 We found a deposit we couldn't match — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">
+                          Is this a marketplace payment? Set up the marketplace to reconcile it.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
+                      Not now
+                    </Button>
+                    <Button size="sm" onClick={() => handleSetup(alert)} className="gap-1">
+                      {isUnmatchedDeposit ? `Set up ${displayName}` : 'Identify this deposit'} <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          }
+
           // ─── UNLINKED ALERT — marketplace exists, just needs linking ───
           if (isUnlinked) {
             return (
