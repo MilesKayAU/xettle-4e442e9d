@@ -1,0 +1,50 @@
+name: Percy Visual Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  percy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Start dev server
+        run: npm run dev &
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_TEST_MODE: 'true'
+
+      - name: Wait for server
+        run: npx wait-on http://localhost:8080 --timeout 60000
+
+      - name: Run Percy visual tests
+        run: npx percy exec -- npx playwright test tests/visual.spec.ts
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+          TEST_URL: http://localhost:8080
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: tests/screenshots/
