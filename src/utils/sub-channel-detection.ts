@@ -28,6 +28,7 @@ export interface DetectedSubChannel {
   suggested_code?: string;
   is_numeric_id?: boolean;
   candidate_tags?: string[];
+  detection_method?: string; // 'tag' | 'source_name' | etc.
 }
 
 export interface SubChannelAuditResult {
