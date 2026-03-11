@@ -77,7 +77,7 @@ export default function SetupStepConnectStores({
     setConnectingAmazon(true);
     try {
       const { data, error } = await supabase.functions.invoke('amazon-auth', {
-        headers: { 'x-action': 'get-auth-url' },
+        headers: { 'x-action': 'authorize' },
         body: {},
       });
       if (error || data?.error) throw new Error(data?.error || 'Failed to get Amazon auth URL');
