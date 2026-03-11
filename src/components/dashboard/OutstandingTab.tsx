@@ -26,6 +26,7 @@ interface OutstandingRow {
   xero_reference: string;
   contact_name: string;
   marketplace: string;
+  is_marketplace: boolean;
   invoice_date: string | null;
   due_date: string | null;
   amount: number;
