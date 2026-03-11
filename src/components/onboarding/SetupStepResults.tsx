@@ -161,10 +161,12 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
 
         // Write remaining flags
         const writeFlag = async (key: string) => {
-          await supabase.from('app_settings').upsert(
-            { user_id: caps.userId!, key, value: 'true' },
-            { onConflict: 'user_id,key' }
-          ).catch(() => {});
+          try {
+            await supabase.from('app_settings').upsert(
+              { user_id: caps.userId!, key, value: 'true' },
+              { onConflict: 'user_id,key' }
+            );
+          } catch {}
         };
 
         if (caps.hasShopify) {
