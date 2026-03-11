@@ -313,6 +313,56 @@ export default function Dashboard() {
     { key: 'sku', label: 'SKU Comparison', pro: true },
   ];
 
+  // ─── AI Assistant context per view ─────────────────────────────
+  const aiContext = useMemo(() => {
+    const now = new Date();
+    const monthLabel = now.toLocaleString('en-AU', { month: 'long', year: 'numeric' });
+
+    if (activeView === 'insights') {
+      return {
+        page: 'insights',
+        period: monthLabel,
+        marketplaces: userMarketplaces.map(m => m.marketplace_code),
+      };
+    }
+    if (activeView === 'settlements') {
+      return {
+        page: 'settlements',
+        marketplace: selectedMarketplace,
+        marketplaces: userMarketplaces.map(m => m.marketplace_code),
+      };
+    }
+    // dashboard default
+    return {
+      page: 'dashboard',
+      month: monthLabel,
+      marketplaces: userMarketplaces.map(m => m.marketplace_code),
+    };
+  }, [activeView, selectedMarketplace, userMarketplaces]);
+
+  const aiSuggestedPrompts = useMemo(() => {
+    if (activeView === 'insights') {
+      return [
+        'Which marketplace is most profitable?',
+        'Why are my fees so high this month?',
+        'How does this month compare to last?',
+      ];
+    }
+    if (activeView === 'settlements') {
+      return [
+        'Why is this settlement negative?',
+        'Is this ready to push to Xero?',
+        'Explain these fees',
+        'What does this gap mean?',
+      ];
+    }
+    return [
+      'What needs my attention today?',
+      'Why do I have settlements missing?',
+      'Am I up to date with Xero?',
+    ];
+  }, [activeView]);
+
   return (
     <div className="min-h-screen bg-background">
       <SetupWizard
