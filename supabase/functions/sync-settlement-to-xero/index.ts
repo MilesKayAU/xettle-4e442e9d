@@ -492,7 +492,7 @@ serve(async (req) => {
         ? [{
             Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
             AccountCode: getCode('Other Fees'),
-            TaxType: "OUTPUT",
+            TaxType: "INPUT",
             UnitAmount: Math.round(Math.abs(netAmount) * 100) / 100,
             Quantity: 1,
           }]
