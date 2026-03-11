@@ -12,7 +12,7 @@ interface Props {
 
 interface ScanStep {
   label: string;
-  fn: string | null; // edge function name, null = no API call
+  fn: string | null;
 }
 
 export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXero }: Props) {
@@ -29,7 +29,16 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
 
   const [completedSteps, setCompletedSteps] = useState<number>(0);
   const [timedOut, setTimedOut] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const hasStarted = useRef(false);
+
+  // Elapsed time counter
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (hasStarted.current) return;
@@ -48,9 +57,8 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
 
           if (step.fn) {
             try {
-              // Call the actual edge function with a 25s timeout per step
               const controller = new AbortController();
-              const timeout = setTimeout(() => controller.abort(), 25000);
+              const timeout = setTimeout(() => controller.abort(), 45000);
 
               const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
               await fetch(`https://${projectId}.supabase.co/functions/v1/${step.fn}`, {
@@ -68,7 +76,6 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
               // Step failed — continue to next
             }
           } else {
-            // No API call, just a brief pause for UX
             await new Promise(r => setTimeout(r, 800));
           }
 
@@ -77,14 +84,12 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           }
         }
 
-        // All done — advance after brief pause
         if (!cancelled) {
           setTimeout(() => {
             if (!cancelled) onNext();
           }, 1200);
         }
       } catch {
-        // If everything fails, still advance
         if (!cancelled) {
           setTimeout(onNext, 2000);
         }
@@ -93,7 +98,6 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
 
     runScans();
 
-    // 60s timeout safety — if scans are still running, force advance
     const safetyTimeout = setTimeout(() => {
       if (!cancelled) {
         setTimedOut(true);
@@ -101,7 +105,7 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           if (!cancelled) onNext();
         }, 3000);
       }
-    }, 60000);
+    }, 90000);
 
     return () => {
       cancelled = true;
@@ -109,13 +113,46 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
     };
   }, []);
 
+  const showSlowWarning = elapsedSeconds >= 20 && completedSteps < steps.length && !timedOut;
+
   return (
     <div className="space-y-6 py-4">
       <div className="text-center space-y-2">
         <h2 className="text-xl font-bold text-foreground">Setting up your account...</h2>
         <p className="text-sm text-muted-foreground">
-          We're shortcutting your setup by scanning your connected accounts to auto-detect your marketplaces and build them into your dashboard. This usually takes 10–30 seconds.
+          We're shortcutting your setup by scanning your connected accounts to auto-detect your marketplaces and build them into your dashboard.
         </p>
+        <p className="text-xs text-muted-foreground">
+          Setup takes about 60 seconds
+        </p>
+      </div>
+
+      {/* Circular progress indicator */}
+      <div className="flex justify-center">
+        <div className="relative h-16 w-16">
+          <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
+            <circle
+              cx="32" cy="32" r="28"
+              fill="none"
+              className="stroke-muted"
+              strokeWidth="4"
+            />
+            <circle
+              cx="32" cy="32" r="28"
+              fill="none"
+              className="stroke-primary transition-all duration-700"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 28}`}
+              strokeDashoffset={`${2 * Math.PI * 28 * (1 - completedSteps / steps.length)}`}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-semibold text-muted-foreground">
+              {Math.round((completedSteps / steps.length) * 100)}%
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="max-w-sm mx-auto space-y-3">
@@ -138,6 +175,18 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           </div>
         ))}
       </div>
+
+      {showSlowWarning && (
+        <div className="text-center space-y-1 animate-in fade-in duration-500">
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">
+              Still working — this can take up to 60 seconds for large accounts
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">Please don't close this window</p>
+        </div>
+      )}
 
       {timedOut && (
         <div className="text-center space-y-1">
