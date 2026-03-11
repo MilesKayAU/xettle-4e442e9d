@@ -320,7 +320,6 @@ Deno.serve(async (req) => {
       }
 
       // ─── Auto-provision shopify_sub_channels for detected marketplaces ───
-      const resolvedCode = resolveMarketplaceCode(analysis.detectedLabel, src);
       const subChannelPayload = {
         user_id: userId,
         source_name: src,
