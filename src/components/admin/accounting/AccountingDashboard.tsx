@@ -78,35 +78,6 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0];
 }
 
-async function removeExistingSettlementForUser(userId: string, settlementId: string, marketplace?: string) {
-  const { error: linesError } = await supabase
-    .from('settlement_lines')
-    .delete()
-    .eq('user_id', userId)
-    .eq('settlement_id', settlementId);
-  if (linesError) throw linesError;
-
-  const { error: unmappedError } = await supabase
-    .from('settlement_unmapped')
-    .delete()
-    .eq('user_id', userId)
-    .eq('settlement_id', settlementId);
-  if (unmappedError) throw unmappedError;
-
-  let deleteSettlementsQuery = supabase
-    .from('settlements')
-    .delete()
-    .eq('user_id', userId)
-    .eq('settlement_id', settlementId);
-
-  if (marketplace) {
-    deleteSettlementsQuery = deleteSettlementsQuery.eq('marketplace', marketplace);
-  }
-
-  const { error: settlementError } = await deleteSettlementsQuery;
-  if (settlementError) throw settlementError;
-}
-
 /**
  * saveAmazonSettlement — shared save utility for all Amazon settlement save paths.
  * Uses universal checkForDuplicate() before insert. Never uses delete+re-insert overwrite.
