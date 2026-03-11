@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
@@ -14,9 +14,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   CheckCircle2, AlertTriangle, SkipForward, RefreshCw, ArrowRight,
-  Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink
+  Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink, ArrowLeft, Copy, Check
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
+import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -619,6 +620,14 @@ export default function Setup() {
   }
 
   function StepRow({ step: s, onRetry }: { step: StepState; onRetry?: () => void }) {
+    const [copied, setCopied] = useState(false);
+    const copyError = () => {
+      if (s.error) {
+        navigator.clipboard.writeText(s.error);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    };
     return (
       <div className="space-y-1">
         <div className="flex items-start gap-3 py-1.5">
@@ -631,9 +640,15 @@ export default function Setup() {
           )}
         </div>
         {s.status === 'error' && s.error && (
-          <div className="ml-7 rounded bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive space-y-1">
-            <p className="font-medium">Error details (share with support):</p>
-            <code className="block whitespace-pre-wrap break-all font-mono text-[11px]">{s.error}</code>
+          <div className="ml-7 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-destructive">Error details (share with support):</p>
+              <Button variant="ghost" size="sm" onClick={copyError} className="h-5 px-1.5 text-[10px] text-destructive hover:text-destructive">
+                {copied ? <Check className="h-3 w-3 mr-0.5" /> : <Copy className="h-3 w-3 mr-0.5" />}
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+            <code className="block whitespace-pre-wrap break-all font-mono text-[11px] text-destructive/80">{s.error}</code>
           </div>
         )}
       </div>
@@ -718,10 +733,23 @@ export default function Setup() {
   // ─── Render ───────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-2xl mx-auto px-4 py-12 space-y-8">
+      {/* App header — matches Dashboard */}
+      <header className="border-b border-border bg-card">
+        <div className="max-w-4xl mx-auto flex items-center justify-between h-14 px-4">
+          <Link to="/" className="flex items-center">
+            <XettleLogo height={28} />
+          </Link>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back to Dashboard
+          </Button>
+        </div>
+      </header>
+
+      <div className="max-w-2xl mx-auto px-4 py-10 space-y-8">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-foreground">Setting up your Xettle account</h1>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold text-foreground">Setting up your account</h1>
           <p className="text-muted-foreground text-sm">
             Some steps run automatically — others wait until your data is ready. You can leave and come back.
           </p>
