@@ -127,12 +127,13 @@ export function buildAmazonInvoiceLineItems(
   for (const [category, amount] of Object.entries(expenseBuckets)) {
     const appliedAmount = ratio ? round2(amount * ratio) : round2(amount);
     if (appliedAmount === 0) continue;
-    const exGst = round2(appliedAmount - round2(appliedAmount / 11));
+    const absAmount = Math.abs(appliedAmount);
+    const exGst = round2(absAmount - round2(absAmount / 11));
     lineItems.push({
       Description: `Amazon ${category} ${periodLabel}`,
       AccountCode: getAccountCode(category),
       TaxType: 'INPUT',
-      UnitAmount: exGst,
+      UnitAmount: -Math.abs(exGst),
       Quantity: 1,
     });
   }
