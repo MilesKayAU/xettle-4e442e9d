@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import XettleLogo from '@/components/shared/XettleLogo';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
