@@ -66,7 +66,7 @@ export default function Dashboard() {
     if (isTestMode) {
       const connected = searchParams.get('connected');
       if (connected === 'amazon' || connected === 'shopify') setWizardInitialStep(2);
-      else if (connected === 'xero') setWizardInitialStep(3);
+      else if (connected === 'xero') setWizardInitialStep(2);
       setShowWizard(true);
       return;
     }
