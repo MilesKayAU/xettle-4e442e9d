@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
+import { useTrialStatus } from '@/hooks/use-trial-status';
+import TrialBanner from '@/components/shared/TrialBanner';
 import SetupWizard from '@/components/onboarding/SetupWizard';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
@@ -38,6 +40,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
+  const trialInfo = useTrialStatus(user?.id);
   const [isAdmin, setIsAdmin] = useState(false);
   const [xeroConnected, setXeroConnected] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
@@ -390,6 +393,9 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* Trial status banner */}
+      <TrialBanner status={trialInfo.status} daysRemaining={trialInfo.daysRemaining} />
 
       {/* Primary tab bar */}
       <div className="border-b border-border bg-card/50">

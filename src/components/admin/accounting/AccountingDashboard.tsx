@@ -381,11 +381,10 @@ export default function AccountingDashboard() {
     checkXero();
   }, []);
 
-  // Check user tier (pro > starter > paid > trial > free)
+  // Check user tier (pro > starter > paid > free) — trial expiry is handled at app level
   useEffect(() => {
     const checkTier = async () => {
       try {
-        // Check in order: pro, starter, paid (legacy), admin, trial
         const { data: isPro } = await supabase.rpc('has_role', { _role: 'pro' as any });
         if (isPro) { setUserTier('pro'); setIsPaidUser(true); return; }
         
@@ -395,45 +394,12 @@ export default function AccountingDashboard() {
         const { data: isPaid } = await supabase.rpc('has_role', { _role: 'paid' });
         if (isPaid) { setUserTier('starter'); setIsPaidUser(true); return; }
         
-        // Admins get Pro access
         const { data: isAdmin } = await supabase.rpc('has_role', { _role: 'admin' });
         if (isAdmin) { setUserTier('pro'); setIsPaidUser(true); return; }
 
-        // Trial users get starter access, but check expiry
+        // Trial users get starter access (expiry handled by useTrialStatus at app level)
         const { data: isTrial } = await supabase.rpc('has_role', { _role: 'trial' as any });
-        if (isTrial) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: trialSetting } = await supabase
-              .from('app_settings')
-              .select('value')
-              .eq('user_id', user.id)
-              .eq('key', 'trial_started_at')
-              .maybeSingle();
-            
-            if (trialSetting?.value) {
-              const daysSinceStart = Math.floor(
-                (Date.now() - new Date(trialSetting.value).getTime()) / (1000 * 60 * 60 * 24)
-              );
-              if (daysSinceStart > 10) {
-                // Trial expired — downgrade to free
-                await supabase
-                  .from('user_roles')
-                  .delete()
-                  .eq('user_id', user.id)
-                  .eq('role', 'trial' as any);
-                await supabase
-                  .from('user_roles')
-                  .upsert({ user_id: user.id, role: 'free' as any }, { onConflict: 'user_id,role' });
-                setUserTier('free'); setIsPaidUser(false);
-                return;
-              }
-            }
-            // Trial still active — give starter access
-            setUserTier('starter'); setIsPaidUser(true);
-            return;
-          }
-        }
+        if (isTrial) { setUserTier('starter'); setIsPaidUser(true); return; }
       } catch {}
     };
     checkTier();
