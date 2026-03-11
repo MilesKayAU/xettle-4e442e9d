@@ -332,6 +332,7 @@ export default function Dashboard() {
         hasAmazon={hasAmazon}
         hasShopify={hasShopify}
         hasXero={xeroConnected}
+        justConnectedXero={justConnectedXero}
       />
       {/* Top bar */}
       <header className="border-b border-border bg-card">
