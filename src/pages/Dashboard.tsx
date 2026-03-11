@@ -341,7 +341,6 @@ export default function Dashboard() {
             </Button>
             <Button variant="ghost" size="sm" onClick={() => {
               switchView('settlements');
-              setSelectedMarketplace('amazon_au');
               setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
             }}>
               <Settings className="h-4 w-4 mr-1" />
