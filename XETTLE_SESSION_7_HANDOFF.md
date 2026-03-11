@@ -218,10 +218,17 @@ Xettle is flat rate — advantage grows with volume/channels.
 
 ## Session 7 First Tasks
 
+✅ COMPLETED START OF SESSION 7:
+- Xero Tracking Categories fully built
+  Files: xero-auth, sync-settlement-to-xero, 
+         auto-push-xero, AccountingDashboard, 
+         AccountMapperCard
+  Opt-in toggle in Settings + Account Mapper card
+  Caches category/option IDs to avoid repeat API calls
+  Every line item tagged: Sales Channel → marketplace name
+
 1. Confirm Xero Tracking Categories build status
-   - Was sent to Lovable this session, result not confirmed
-   - If complete: test with a real settlement push
-   - If incomplete: resend prompt from session 6 notes
+   - ✅ CONFIRMED BUILT — see above
 
 2. Audit CSV attach to Xero invoice
    - Write and send prompt
