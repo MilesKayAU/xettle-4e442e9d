@@ -479,25 +479,79 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
             const depositDate = alert.deposit_date
               ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
               : null;
+            const depositDateFull = alert.deposit_date
+              ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+              : null;
+            const isDetailOpen = expandedAlertId === alert.id;
 
             return (
               <Card key={alert.id} className="border-muted bg-muted/30">
-                <CardContent className="flex items-center gap-3 p-4">
-                  <span className="text-lg shrink-0">💳</span>
-                  <div className="flex-1 text-sm">
-                    <p className="font-medium text-foreground">
-                      {displayName} deposit detected{depositAmt ? ` — ${depositAmt}` : ''}{depositDate ? ` on ${depositDate}` : ''}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5">
-                      This appears to be a payment gateway deposit, not a marketplace settlement.
-                      {displayName} orders placed on your Shopify store are included in your Shopify Payments payout.
-                    </p>
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 p-4">
+                    <span className="text-lg shrink-0">💳</span>
+                    <div className="flex-1 text-sm">
+                      <p className="font-medium text-foreground">
+                        {displayName} deposit detected{depositAmt ? ` — ${depositAmt}` : ''}{depositDate ? ` on ${depositDate}` : ''}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5">
+                        This appears to be a payment gateway deposit, not a marketplace settlement.
+                        {displayName} orders placed on your Shopify store are included in your Shopify Payments payout.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setExpandedAlertId(isDetailOpen ? null : alert.id)}
+                        className="gap-1 text-xs text-muted-foreground"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        {isDetailOpen ? 'Hide' : 'Details'}
+                        {isDetailOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
+                        Dismiss
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
-                      Dismiss
-                    </Button>
-                  </div>
+
+                  {isDetailOpen && (
+                    <div className="border-t border-muted bg-background/50 px-4 py-3 space-y-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Transaction details
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="flex items-start gap-2 text-sm">
+                          <Banknote className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Deposit amount</p>
+                            <p className="font-semibold text-foreground">{depositAmt}</p>
+                          </div>
+                        </div>
+                        {depositDateFull && (
+                          <div className="flex items-start gap-2 text-sm">
+                            <Calendar className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Transaction date</p>
+                              <p className="font-semibold text-foreground">{depositDateFull}</p>
+                            </div>
+                          </div>
+                        )}
+                        {alert.deposit_description && (
+                          <div className="flex items-start gap-2 text-sm">
+                            <FileText className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Bank narration</p>
+                              <p className="font-semibold text-foreground break-all">{alert.deposit_description}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground italic border-t pt-2">
+                        {displayName} is a payment gateway. If customers pay via {displayName} on your Shopify store, those orders are already included in your Shopify Payments payout total. No separate settlement tracking is needed.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
