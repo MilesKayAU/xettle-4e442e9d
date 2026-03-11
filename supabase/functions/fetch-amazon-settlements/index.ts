@@ -777,7 +777,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
     if (i > 0) await new Promise(r => setTimeout(r, 3000));
 
     try {
-      const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId);
+      const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId, supabase, userId);
       const parsed = parseSettlementTSV(content, gstRate);
 
       // Dedup check 1: exact settlement ID
