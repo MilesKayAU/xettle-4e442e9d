@@ -287,7 +287,7 @@ export async function parseBunningsSummaryPdf(
       period_end: periodEnd,
       sales_ex_gst: sales.exGst,
       gst_on_sales: sales.gst,
-      fees_ex_gst: netFeesExGst,
+      fees_ex_gst: normalisedFeesExGst,
       gst_on_fees: Math.abs(netFeesGst),
       net_payout: netPayout,
       source: 'csv_upload' as const,
