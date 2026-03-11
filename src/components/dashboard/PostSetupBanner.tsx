@@ -113,6 +113,7 @@ export default function PostSetupBanner({
         if (data.marketplaces_created > 0 || data.detected_settlements?.length > 0) {
           setMarketplacesFound(data.detected_settlements?.length || data.marketplaces_created || 0);
         }
+        await callEdgeFunction('run-validation-sweep').catch(() => {});
         onScanComplete?.();
       } catch (err) {
         console.error('Xero scan trigger failed:', err);
@@ -154,6 +155,7 @@ export default function PostSetupBanner({
 
         await setAppFlag('amazon_scan_completed');
         setAmazonScanComplete(true);
+        await callEdgeFunction('run-validation-sweep').catch(() => {});
         onScanComplete?.();
       } catch (err) {
         console.error('Amazon scan trigger failed:', err);
@@ -198,6 +200,7 @@ export default function PostSetupBanner({
 
         await setAppFlag('shopify_scan_completed');
         setShopifyScanComplete(true);
+        await callEdgeFunction('run-validation-sweep').catch(() => {});
         onScanComplete?.();
       } catch (err) {
         console.error('Shopify scan trigger failed:', err);
