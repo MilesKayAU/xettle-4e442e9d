@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Sparkles, Loader2, Trash2, Store, CreditCard } from 'lucide-react';
+import { Plus, Sparkles, Loader2, Trash2, Store, CreditCard, Megaphone } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -303,7 +303,7 @@ export default function KnowledgeBaseDashboard() {
                 <Store className="h-3.5 w-3.5" /> Marketplaces ({marketplaces.length})
               </TabsTrigger>
               <TabsTrigger value="processors" className="gap-1.5">
-                <CreditCard className="h-3.5 w-3.5" /> Payment Processors ({processors.length})
+                <CreditCard className="h-3.5 w-3.5" /> Gateways & Ad Platforms ({processors.length})
               </TabsTrigger>
             </TabsList>
 
@@ -397,7 +397,12 @@ export default function KnowledgeBaseDashboard() {
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.processor_name}</TableCell>
                       <TableCell><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.processor_code}</code></TableCell>
-                      <TableCell><Badge variant="outline" className="text-[10px]">{p.type}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant={p.type === 'advertising_platform' ? 'destructive' : 'outline'} className="text-[10px] gap-1">
+                          {p.type === 'advertising_platform' && <Megaphone className="h-3 w-3" />}
+                          {p.type === 'advertising_platform' ? 'Ad Platform' : p.type}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1 max-w-[200px]">
                           {p.detection_keywords.slice(0, 3).map(k => (

@@ -14,6 +14,7 @@ interface RegistryEntry {
   xero_patterns: string[]
   bank_patterns: string[]
   is_processor: boolean
+  processor_type?: string // 'payment_gateway' | 'advertising_platform' etc.
 }
 
 let _registryCache: RegistryEntry[] | null = null
@@ -24,7 +25,7 @@ async function loadRegistries(supabaseAdmin: any): Promise<void> {
 
   const [mpRes, ppRes] = await Promise.all([
     supabaseAdmin.from('marketplace_registry').select('marketplace_code, marketplace_name, detection_keywords, xero_contact_patterns, bank_narration_patterns, is_active'),
-    supabaseAdmin.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords, xero_contact_patterns, bank_narration_patterns, is_active'),
+    supabaseAdmin.from('payment_processor_registry').select('processor_code, processor_name, type, detection_keywords, xero_contact_patterns, bank_narration_patterns, is_active'),
   ])
 
   const entries: RegistryEntry[] = []
@@ -51,6 +52,7 @@ async function loadRegistries(supabaseAdmin: any): Promise<void> {
       xero_patterns: (p.xero_contact_patterns || []) as string[],
       bank_patterns: (p.bank_narration_patterns || []) as string[],
       is_processor: true,
+      processor_type: p.type || 'payment_gateway',
     })
     procCodes.add(p.processor_code)
   }
@@ -61,9 +63,14 @@ async function loadRegistries(supabaseAdmin: any): Promise<void> {
 
 function isPaymentProcessor(code: string): boolean {
   if (_processorCodes) return _processorCodes.has(code)
-  // Fallback hardcoded list if registry not loaded
   const FALLBACK = ['paypal','stripe','afterpay','zip','zippay','klarna','laybuy','humm','openpay','latitude','square','tyro','braintree']
   return FALLBACK.some(p => (code || '').toLowerCase().includes(p))
+}
+
+function isAdvertisingPlatform(code: string): boolean {
+  if (!_registryCache) return false
+  const entry = _registryCache.find(e => e.code === code)
+  return entry?.processor_type === 'advertising_platform'
 }
 
 function matchesMarketplace(name: string): string | null {
@@ -342,6 +349,11 @@ Deno.serve(async (req) => {
         const marketplace = matchesMarketplace(contactName)
 
         if (marketplace && !detectedMap.has(marketplace)) {
+          // Skip advertising platforms — they're expenses, not revenue sources
+          if (isAdvertisingPlatform(marketplace)) {
+            console.log(`[scan-xero-history] Advertising platform contact ${contactName} → ignored`)
+            continue
+          }
           // This marketplace exists as a Xero contact but has no invoices or bank txns yet
           standaloneContacts.push(contactName)
           detectedMap.set(marketplace, {
@@ -414,8 +426,19 @@ Deno.serve(async (req) => {
 
       const displayName = getRegistryName(det.marketplace)
 
+      // Advertising platforms (Meta, Google Ads, etc.) — silently ignore, not revenue
+      if (isAdvertisingPlatform(det.marketplace)) {
+        console.log(`[scan-xero-history] Advertising platform ${det.marketplace} → ignored (expense, not revenue)`)
+        continue
+      }
+
       // Payment processors → channel_alert, NOT marketplace_connection
       if (isPaymentProcessor(det.marketplace)) {
+        // Filter out zero/negative value deposits — not actionable
+        if ((det.last_amount || 0) <= 0) {
+          console.log(`[scan-xero-history] Payment processor ${det.marketplace} → skipped (zero/negative amount)`)
+          continue
+        }
         await supabase.from('channel_alerts').upsert({
           user_id: userId,
           source_name: det.marketplace,
