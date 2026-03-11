@@ -186,7 +186,6 @@ export default function Setup() {
     if (result.ok) {
       const d = result.data || {};
       const invoiceCount = d.detected_settlements?.length || 0;
-      const marketplaces = d.marketplaces_created || [];
       const boundary = d.accounting_boundary_date;
 
       // Also check xero_accounting_matches for bank verification count
@@ -195,12 +194,12 @@ export default function Setup() {
         .select('*', { count: 'exact', head: true });
 
       const parts = [`Found ${invoiceCount} existing marketplace invoices in Xero`];
-      if (marketplaces.length > 0) {
-        parts.push(`Detected marketplaces: ${marketplaces.join(', ')}`);
-      }
       if (boundary) parts.push(`Accounting boundary: ${boundary}`);
       if (bankMatchCount && bankMatchCount > 0) {
         parts.push(`${bankMatchCount} bank-verified records`);
+      }
+      if (d.bank_scan_error) {
+        parts.push(`⚠️ ${d.bank_scan_error}`);
       }
 
       setXeroStep({ status: 'success', message: parts.join(' · ') });
