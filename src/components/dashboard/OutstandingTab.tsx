@@ -289,8 +289,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Total outstanding</p>
-              <p className="text-xl font-bold text-foreground">{formatAUD(data.total_outstanding)}</p>
-              <p className="text-xs text-muted-foreground">{data.invoice_count} invoices</p>
+              <p className="text-xl font-bold text-foreground">{formatAUD(filteredTotal)}</p>
+              <p className="text-xs text-muted-foreground">{filteredRows.length} invoices</p>
             </CardContent>
           </Card>
           <Card>
