@@ -508,6 +508,7 @@ Deno.serve(async (req) => {
       detected_settlements,
       standalone_contacts: standaloneContacts,
       marketplaces_created,
+      gateway_alerts_created,
       confidence,
       confidence_reason,
       bank_scan_error: bankScanError,
