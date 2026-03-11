@@ -154,6 +154,10 @@ export default function PostSetupBanner({
           .eq('marketplace', 'amazon_au');
         setAmazonFound(count ?? 0);
 
+        // Provision all marketplace connections + clean ghosts
+        const { data: { session: amzSession } } = await supabase.auth.getSession();
+        if (amzSession) await provisionAllMarketplaceConnections(amzSession.user.id);
+
         await setAppFlag('amazon_scan_completed');
         setAmazonScanComplete(true);
         await callEdgeFunction('run-validation-sweep').catch(() => {});
