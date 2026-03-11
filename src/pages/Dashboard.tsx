@@ -445,8 +445,8 @@ export default function Dashboard() {
       {/* Top bar */}
       <header className="border-b border-border bg-card">
         <div className="container-custom flex items-center justify-between h-16">
-          <Link to="/" className="text-xl font-bold tracking-tight">
-            <span className="text-primary underline decoration-primary decoration-2 underline-offset-4">X</span><span className="text-foreground">ettle</span>
+          <Link to="/" className="flex items-center">
+            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-8" />
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" asChild>

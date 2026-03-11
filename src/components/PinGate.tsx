@@ -85,7 +85,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
             <Lock className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-lg">
-            <span className="text-primary underline decoration-primary decoration-2 underline-offset-4">X</span><span className="text-foreground">ettle</span> — Access Required
+            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-6 inline-block mr-1" /> — Access Required
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">Enter the 4-digit PIN to continue</p>
         </CardHeader>

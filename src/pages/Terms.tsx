@@ -7,8 +7,8 @@ export default function Terms() {
     <div className="min-h-screen bg-background">
       <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
         <div className="container-custom flex items-center justify-between h-16">
-          <Link to="/" className="text-xl font-bold tracking-tight">
-            <span className="text-primary underline decoration-primary decoration-2 underline-offset-4">X</span><span className="text-foreground">ettle</span>
+          <Link to="/" className="flex items-center">
+            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-8" />
           </Link>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link>
