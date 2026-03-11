@@ -46,6 +46,7 @@ export function runReconciliation(
     summary.sellerFees +
     summary.fbaFees +
     summary.storageFees +
+    summary.advertisingCosts +
     summary.refunds +
     summary.reimbursements +
     summary.otherFees
