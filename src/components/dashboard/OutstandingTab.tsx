@@ -126,8 +126,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     return filteredRows.reduce((sum, r) => sum + r.amount, 0);
   }, [filteredRows]);
 
+  const [noXeroConnection, setNoXeroConnection] = useState(false);
+
   const fetchOutstanding = useCallback(async () => {
     setLoading(true);
+    setNoXeroConnection(false);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
@@ -135,6 +138,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
+
+      // Handle "No Xero connection" gracefully
+      if (resp.data?.error === 'No Xero connection') {
+        setNoXeroConnection(true);
+        setHasLoaded(true);
+        return;
+      }
 
       if (resp.error) throw resp.error;
       setData(resp.data as OutstandingSummary);
@@ -265,6 +275,30 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
+      </div>
+    );
+  }
+
+  // No Xero connection — show helpful message
+  if (noXeroConnection) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Outstanding</h2>
+          <p className="text-muted-foreground mt-1">
+            Xero invoices awaiting payment — matched against your settlements and bank deposits.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <FileText className="h-12 w-12 text-muted-foreground/40 mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No Xero Connection</h3>
+            <p className="text-muted-foreground max-w-md">
+              Connect your Xero account to see outstanding invoices. Go to the <strong>Setup</strong> tab to link Xero, 
+              then return here to reconcile your marketplace settlements.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
