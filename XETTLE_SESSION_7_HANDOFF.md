@@ -63,10 +63,10 @@ in app_settings via getCode(). Falls back to above defaults.
 
 ### GST / BAS
 
-- AU hardcoded: OUTPUT / INPUT / NONE — correct for all paths
-- Reimbursements: OUTPUT (Session 7 audit correction — code uses OUTPUT, not NONE.
-  Conservative/safe. ATO guidance on compensation is ambiguous, taxable income treatment
-  overpays slightly but avoids BAS risk. LMB claims NONE but verify with your accountant.)
+- AU hardcoded: OUTPUT / INPUT / BASEXCLUDED — correct for all paths
+- Reimbursements: BASEXCLUDED (Session 7 correction — FBA reimbursements for 
+  lost/damaged inventory are compensation payments, not taxable supplies under ATO rules.
+  Matches UK/EU VAT logic directly: compensation does not attract GST.)
 - International sales: ✅ **LIVE** — AU marketplace gets OUTPUT, international gets
   EXEMPTOUTPUT (GST Free Income). GST base correctly calculated. Two separate Xero
   lines generated automatically. Was marked "Phase 2" but already shipped.
