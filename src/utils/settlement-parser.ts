@@ -579,6 +579,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     bankDeposit: header.totalAmount,
     reconciliationMatch,
     reconciliationDiff,
+    reconciliationChecks,
     debugBreakdown,
     auSales,
     auFees,

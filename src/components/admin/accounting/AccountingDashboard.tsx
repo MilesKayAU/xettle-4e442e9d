@@ -864,6 +864,7 @@ export default function AccountingDashboard() {
         reconciliationMatch: s.reconciliation_status === 'matched',
         reconciliationDiff: round2((s.bank_deposit || 0) - grossTotal),
         debugBreakdown: [],
+        reconciliationChecks: [],
         auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0)),
         auFees: round2((s.seller_fees || 0) + (s.fba_fees || 0) + (s.storage_fees || 0)),
         internationalSales: 0,
