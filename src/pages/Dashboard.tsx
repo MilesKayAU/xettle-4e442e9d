@@ -394,6 +394,9 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Trial status banner */}
+      <TrialBanner status={trialInfo.status} daysRemaining={trialInfo.daysRemaining} />
+
       {/* Primary tab bar */}
       <div className="border-b border-border bg-card/50">
         <div className="container-custom">
