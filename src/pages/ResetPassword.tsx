@@ -66,8 +66,8 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Link to="/" className="text-2xl font-bold tracking-tight">
-            <span className="text-primary underline decoration-primary decoration-2 underline-offset-4">X</span><span className="text-foreground">ettle</span>
+          <Link to="/" className="inline-block">
+            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-10 mx-auto" />
           </Link>
         </div>
 

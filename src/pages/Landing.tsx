@@ -48,9 +48,7 @@ export default function Landing() {
       <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
         <div className="container-custom flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-2">
-            <span className="text-xl font-bold tracking-tight">
-              <span className="text-primary underline decoration-primary decoration-2 underline-offset-4">X</span><span className="text-foreground">ettle</span>
-            </span>
+            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-8" />
             <span className="hidden sm:inline text-xs text-muted-foreground border-l border-border pl-2">
               Marketplace settlements → Xero, automatically
             </span>
