@@ -14,7 +14,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   CheckCircle2, AlertTriangle, SkipForward, RefreshCw, ArrowRight,
-  Loader2, Plus, LayoutDashboard, X
+  Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
@@ -28,13 +28,42 @@ interface StepState {
   error?: string;
 }
 
-interface Phase3Results {
-  complete: number;
-  pushedNoBank: number;
-  readyToPush: number;
-  unmatchedDeposits: number;
-  uploadNeeded: number;
-  gapDetails: string[];
+interface MarketplaceValidationRow {
+  overall_status: string;
+  marketplace_code: string;
+  period_start: string;
+  period_end: string;
+  period_label: string;
+  settlement_net: number | null;
+  bank_amount: number | null;
+  bank_matched: boolean | null;
+  xero_pushed: boolean | null;
+  settlement_uploaded: boolean | null;
+}
+
+interface MarketplacePeriodDetail {
+  period_label: string;
+  period_start: string;
+  period_end: string;
+  status: string;
+  settlement_net: number | null;
+  bank_amount: number | null;
+  bank_matched: boolean;
+  xero_pushed: boolean;
+  settlement_uploaded: boolean;
+}
+
+interface MarketplaceBreakdown {
+  code: string;
+  name: string;
+  periods: MarketplacePeriodDetail[];
+}
+
+interface DetectedMarketplace {
+  name: string;
+  code: string;
+  orderCount?: number;
+  source: string; // 'shopify_orders' | 'shopify_tags' | 'xero_contact' | 'settlement' | 'file_fingerprint' | 'api_connection'
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -52,6 +81,30 @@ async function getSetting(key: string): Promise<string | null> {
     .eq('key', key)
     .maybeSingle();
   return data?.value ?? null;
+}
+
+const MARKETPLACE_DISPLAY: Record<string, string> = {
+  amazon_au: 'Amazon AU',
+  shopify_payments: 'Shopify Payments',
+  bigw: 'BigW',
+  kogan: 'Kogan',
+  mydeal: 'MyDeal',
+  bunnings: 'Bunnings',
+  catch: 'Catch',
+  ebay_au: 'eBay AU',
+  woolworths: 'Everyday Market',
+  theiconic: 'The Iconic',
+  etsy: 'Etsy',
+  paypal: 'PayPal',
+};
+
+function displayName(code: string, fallback?: string): string {
+  return MARKETPLACE_DISPLAY[code] || fallback || code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function formatCurrency(n: number | null | undefined): string {
+  if (n == null) return '$0.00';
+  return '$' + Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ─── Component ──────────────────────────────────────────────────────
@@ -81,15 +134,13 @@ export default function Setup() {
 
   // Phase 2
   const [phase2Running, setPhase2Running] = useState(false);
-  const [detectedMarketplaces, setDetectedMarketplaces] = useState<
-    { name: string; code: string; orderCount?: number }[]
-  >([]);
+  const [detectedMarketplaces, setDetectedMarketplaces] = useState<DetectedMarketplace[]>([]);
   const [showAddManual, setShowAddManual] = useState(false);
   const [manualChannel, setManualChannel] = useState<DetectedSubChannel | null>(null);
 
   // Phase 3
   const [phase3Running, setPhase3Running] = useState(false);
-  const [phase3Results, setPhase3Results] = useState<Phase3Results | null>(null);
+  const [phase3Breakdown, setPhase3Breakdown] = useState<MarketplaceBreakdown[]>([]);
 
   const mountedRef = useRef(true);
   const phase1StartedRef = useRef(false);
@@ -107,7 +158,6 @@ export default function Setup() {
         return;
       }
 
-      // Check if already dismissed
       const dismissed = await getSetting('setup_hub_dismissed');
       if (dismissed === 'true') {
         navigate('/dashboard');
@@ -116,7 +166,6 @@ export default function Setup() {
 
       setCaps(c);
 
-      // Load existing phase flags
       const [p1x, p1s, p1a, p2, p3] = await Promise.all([
         getSetting('setup_phase1_xero'),
         getSetting('setup_phase1_shopify'),
@@ -142,17 +191,16 @@ export default function Setup() {
     const token = caps.accessToken!;
     const userId = caps.userId!;
 
-    // Start time-based progress bars
-    if (caps.hasXero && !phase1Xero) startProgressTimer(setXeroProgress, 30000);
-    if (caps.hasShopify && !phase1Shopify) startProgressTimer(setShopifyProgress, 60000);
-    if (caps.hasAmazon && !phase1Amazon) startProgressTimer(setAmazonProgress, 120000);
+    // B1: Realistic timers — Xero 60s, Shopify 120s, Amazon 180s
+    if (caps.hasXero && !phase1Xero) startProgressTimer(setXeroProgress, 60000);
+    if (caps.hasShopify && !phase1Shopify) startProgressTimer(setShopifyProgress, 120000);
+    if (caps.hasAmazon && !phase1Amazon) startProgressTimer(setAmazonProgress, 180000);
 
-    // Run scans in parallel per API
+    // Run scans: Xero & Amazon in parallel, Shopify sequential internally
     if (caps.hasXero && !phase1Xero) runXeroScan(token, userId);
     if (caps.hasShopify && !phase1Shopify) runShopifyScan(token, userId);
     if (caps.hasAmazon && !phase1Amazon) runAmazonScan(token, userId);
 
-    // Mark already-complete bars
     if (phase1Xero) setXeroProgress(100);
     if (phase1Shopify) setShopifyProgress(100);
     if (phase1Amazon) setAmazonProgress(100);
@@ -164,7 +212,7 @@ export default function Setup() {
     durationMs: number
   ) {
     const interval = 200;
-    const increment = (interval / durationMs) * 95; // cap at 95%
+    const increment = (interval / durationMs) * 95;
     const id = setInterval(() => {
       setter(prev => {
         if (prev >= 95 || !mountedRef.current) {
@@ -178,7 +226,7 @@ export default function Setup() {
 
   // ─── Xero scan ────────────────────────────────────────────────────
   async function runXeroScan(token: string, userId: string) {
-    setXeroStep({ status: 'running', message: 'Scanning your Xero history...' });
+    setXeroStep({ status: 'running', message: 'Scanning Xero invoices, contacts & bank transactions...' });
     const result = await callEdgeFunctionSafe('scan-xero-history', token);
 
     if (!mountedRef.current) return;
@@ -187,16 +235,17 @@ export default function Setup() {
       const d = result.data || {};
       const invoiceCount = d.detected_settlements?.length || 0;
       const boundary = d.accounting_boundary_date;
+      const standaloneCount = d.standalone_contacts?.length || 0;
 
-      // Also check xero_accounting_matches for bank verification count
       const { count: bankMatchCount } = await supabase
         .from('xero_accounting_matches')
         .select('*', { count: 'exact', head: true });
 
-      const parts = [`Found ${invoiceCount} existing marketplace invoices in Xero`];
-      if (boundary) parts.push(`Accounting boundary: ${boundary}`);
+      const parts = [`Found ${invoiceCount} marketplace records in Xero`];
+      if (standaloneCount > 0) parts.push(`${standaloneCount} contacts without invoices`);
+      if (boundary) parts.push(`Boundary: ${boundary}`);
       if (bankMatchCount && bankMatchCount > 0) {
-        parts.push(`${bankMatchCount} bank-verified records`);
+        parts.push(`${bankMatchCount} bank-verified`);
       }
       if (d.bank_scan_error) {
         parts.push(`⚠️ ${d.bank_scan_error}`);
@@ -214,7 +263,6 @@ export default function Setup() {
 
   // ─── Shopify scan (enforced A→B→C sequence) ──────────────────────
   async function runShopifyScan(token: string, userId: string) {
-    // Step A: Payouts
     setShopifyPayoutsStep({ status: 'running', message: 'Fetching payouts...' });
     const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', token);
     if (!mountedRef.current) return;
@@ -227,8 +275,7 @@ export default function Setup() {
     const payoutCount = payoutsResult.data?.count || payoutsResult.data?.settlements_created || 0;
     setShopifyPayoutsStep({ status: 'success', message: `✅ ${payoutCount} payouts fetched` });
 
-    // Step B: Orders
-    setShopifyOrdersStep({ status: 'running', message: 'Fetching orders...' });
+    setShopifyOrdersStep({ status: 'running', message: 'Fetching orders (this may take a while)...' });
     const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', token);
     if (!mountedRef.current) return;
 
@@ -240,7 +287,6 @@ export default function Setup() {
     const ordersFetched = ordersResult.data?.orders_saved || ordersResult.data?.count || 0;
     setShopifyOrdersStep({ status: 'success', message: `✅ ${ordersFetched} orders fetched` });
 
-    // Step C: Guard — verify shopify_orders count > 0
     const { count: actualOrderCount } = await supabase
       .from('shopify_orders')
       .select('*', { count: 'exact', head: true });
@@ -248,9 +294,8 @@ export default function Setup() {
     if (!actualOrderCount || actualOrderCount === 0) {
       setShopifyChannelsStep({
         status: 'error',
-        message: '⚠️ Orders fetch returned 0 results — sub-channel detection skipped. This may mean your Shopify store has no orders yet.',
+        message: '⚠️ No orders in database — channel detection skipped.',
       });
-      // Still mark Phase 1 Shopify as done since payouts succeeded
       setShopifyProgress(100);
       setPhase1Shopify(true);
       await upsertSetting(userId, 'setup_phase1_shopify', 'true');
@@ -280,12 +325,11 @@ export default function Setup() {
 
   // ─── Amazon scan ──────────────────────────────────────────────────
   async function runAmazonScan(token: string, userId: string) {
-    setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements...' });
+    setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements (this can take several minutes)...' });
     const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token);
     if (!mountedRef.current) return;
 
     if (result.ok) {
-      // Query settlements for count and date range
       const { data: settlements } = await supabase
         .from('settlements')
         .select('period_start, period_end')
@@ -296,13 +340,12 @@ export default function Setup() {
         const earliest = settlements[0].period_start;
         const latest = settlements[settlements.length - 1].period_end;
 
-        // Gap detection: Amazon settles every ~14 days
         const gaps: string[] = [];
         for (let i = 1; i < settlements.length; i++) {
           const prevEnd = new Date(settlements[i - 1].period_end);
           const nextStart = new Date(settlements[i].period_start);
           const daysDiff = (nextStart.getTime() - prevEnd.getTime()) / (1000 * 60 * 60 * 24);
-          if (daysDiff > 21) { // more than 21 days = likely a gap
+          if (daysDiff > 21) {
             gaps.push(`${settlements[i - 1].period_end} to ${settlements[i].period_start}`);
           }
         }
@@ -332,18 +375,18 @@ export default function Setup() {
     const userId = caps.userId!;
     if (api === 'xero') {
       setXeroProgress(0);
-      startProgressTimer(setXeroProgress, 30000);
+      startProgressTimer(setXeroProgress, 60000);
       runXeroScan(token, userId);
     } else if (api === 'shopify') {
       setShopifyProgress(0);
-      startProgressTimer(setShopifyProgress, 60000);
+      startProgressTimer(setShopifyProgress, 120000);
       setShopifyPayoutsStep({ status: 'idle', message: '' });
       setShopifyOrdersStep({ status: 'idle', message: '' });
       setShopifyChannelsStep({ status: 'idle', message: '' });
       runShopifyScan(token, userId);
     } else {
       setAmazonProgress(0);
-      startProgressTimer(setAmazonProgress, 120000);
+      startProgressTimer(setAmazonProgress, 180000);
       runAmazonScan(token, userId);
     }
   }, [caps]);
@@ -371,9 +414,23 @@ export default function Setup() {
     return () => clearInterval(id);
   }, [caps, loading, phase1Xero, phase1Shopify, phase1Amazon]);
 
-  // ─── Phase 2: Identify marketplaces ───────────────────────────────
-  const anyPhase1Done = phase1Xero || phase1Shopify || phase1Amazon;
+  // ─── B2: Phase 2 gate — ALL connected APIs must complete ──────────
+  const allConnectedPhase1Done =
+    (!caps?.hasXero || phase1Xero) &&
+    (!caps?.hasShopify || phase1Shopify) &&
+    (!caps?.hasAmazon || phase1Amazon);
 
+  const phase2GateReason = (): string | null => {
+    if (!caps) return 'Initialising...';
+    const waiting: string[] = [];
+    if (caps.hasXero && !phase1Xero) waiting.push('Xero');
+    if (caps.hasShopify && !phase1Shopify) waiting.push('Shopify');
+    if (caps.hasAmazon && !phase1Amazon) waiting.push('Amazon');
+    if (waiting.length === 0) return null;
+    return `Waiting for ${waiting.join(' and ')} to finish...`;
+  };
+
+  // ─── B3: Phase 2 — reads ALL 5 detection sources ─────────────────
   const runPhase2 = useCallback(async () => {
     if (!caps?.userId || !caps?.accessToken) return;
     setPhase2Running(true);
@@ -381,26 +438,88 @@ export default function Setup() {
     try {
       await provisionAllMarketplaceConnections(caps.userId);
 
-      // Query results
-      const [alertsRes, connectionsRes] = await Promise.all([
-        supabase.from('channel_alerts').select('source_name, order_count, detected_label, alert_type'),
-        supabase.from('marketplace_connections').select('marketplace_name, marketplace_code'),
+      // Query all 5 sources in parallel
+      const [subChannelsRes, alertsRes, connectionsRes, settlementsRes, fingerprintsRes] = await Promise.all([
+        supabase.from('shopify_sub_channels').select('source_name, marketplace_label, marketplace_code, order_count, total_revenue'),
+        supabase.from('channel_alerts').select('source_name, order_count, detected_label, detection_method, total_revenue'),
+        supabase.from('marketplace_connections').select('marketplace_name, marketplace_code, connection_type, settings'),
+        supabase.from('settlements').select('marketplace').neq('marketplace', null),
+        supabase.from('marketplace_file_fingerprints').select('marketplace_code'),
       ]);
 
-      const marketplaces: { name: string; code: string; orderCount?: number }[] = [];
+      const marketplaces: DetectedMarketplace[] = [];
       const seen = new Set<string>();
 
-      // From marketplace_connections
+      // Source 1: shopify_sub_channels (source_name detection)
+      for (const ch of subChannelsRes.data || []) {
+        const code = ch.marketplace_code || ch.source_name;
+        if (code && !seen.has(code)) {
+          seen.add(code);
+          marketplaces.push({
+            name: ch.marketplace_label || displayName(code),
+            code,
+            orderCount: ch.order_count ?? undefined,
+            source: 'Shopify orders (source_name)',
+          });
+        }
+      }
+
+      // Source 2: channel_alerts (tag detection + xero contacts)
+      for (const alert of alertsRes.data || []) {
+        const code = alert.source_name;
+        if (code && !seen.has(code)) {
+          seen.add(code);
+          const method = alert.detection_method === 'tag' ? 'Shopify orders (tag detection)'
+            : alert.detection_method === 'xero_contact_standalone' ? 'Xero contacts'
+            : 'Detected from orders';
+          marketplaces.push({
+            name: alert.detected_label || displayName(code),
+            code,
+            orderCount: alert.order_count ?? undefined,
+            source: method,
+          });
+        }
+      }
+
+      // Source 3: marketplace_connections (Xero scan + API connections)
       for (const conn of connectionsRes.data || []) {
         if (!seen.has(conn.marketplace_code)) {
           seen.add(conn.marketplace_code);
-          const alert = (alertsRes.data || []).find(
-            a => a.source_name === conn.marketplace_code || a.detected_label === conn.marketplace_name
-          );
+          const settings = conn.settings as Record<string, any> | null;
+          const detectedFrom = settings?.detected_from;
+          const source = detectedFrom === 'xero_scan' ? 'Xero invoice history'
+            : detectedFrom === 'xero_contact' ? 'Xero contacts'
+            : conn.connection_type === 'api' ? 'API connection'
+            : 'Auto-detected';
           marketplaces.push({
             name: conn.marketplace_name,
             code: conn.marketplace_code,
-            orderCount: alert?.order_count ?? undefined,
+            source,
+          });
+        }
+      }
+
+      // Source 4: settlements (marketplaces with actual data)
+      for (const s of settlementsRes.data || []) {
+        const code = s.marketplace;
+        if (code && !seen.has(code)) {
+          seen.add(code);
+          marketplaces.push({
+            name: displayName(code),
+            code,
+            source: 'Existing settlement data',
+          });
+        }
+      }
+
+      // Source 5: file fingerprints
+      for (const fp of fingerprintsRes.data || []) {
+        if (fp.marketplace_code && !seen.has(fp.marketplace_code)) {
+          seen.add(fp.marketplace_code);
+          marketplaces.push({
+            name: displayName(fp.marketplace_code),
+            code: fp.marketplace_code,
+            source: 'Previous CSV upload',
           });
         }
       }
@@ -415,57 +534,49 @@ export default function Setup() {
     }
   }, [caps]);
 
-  // ─── Phase 3: Validation & bank matching ──────────────────────────
+  // ─── B4: Phase 3 — per-marketplace breakdown ─────────────────────
   const runPhase3 = useCallback(async () => {
     if (!caps?.accessToken || !caps?.userId) return;
     setPhase3Running(true);
 
     try {
-      // 1. Bank deposit matching FIRST
       if (caps.hasXero) {
         await callEdgeFunctionSafe('match-bank-deposits', caps.accessToken);
       }
 
-      // 2. Full validation sweep
       await callEdgeFunctionSafe('run-validation-sweep', caps.accessToken);
 
-      // 3. Query results
       const { data: validations } = await supabase
         .from('marketplace_validation')
-        .select('overall_status, marketplace_code, period_start, period_end, settlement_net, bank_amount');
+        .select('overall_status, marketplace_code, period_start, period_end, period_label, settlement_net, bank_amount, bank_matched, xero_pushed, settlement_uploaded')
+        .order('marketplace_code')
+        .order('period_start', { ascending: false });
 
-      const { data: deposits } = await supabase
-        .from('channel_alerts')
-        .select('*')
-        .eq('alert_type', 'unmatched_deposit');
-
-      const results: Phase3Results = {
-        complete: 0,
-        pushedNoBank: 0,
-        readyToPush: 0,
-        unmatchedDeposits: deposits?.length || 0,
-        uploadNeeded: 0,
-        gapDetails: [],
-      };
-
-      for (const v of validations || []) {
-        switch (v.overall_status) {
-          case 'complete': results.complete++; break;
-          case 'pushed_to_xero': results.pushedNoBank++; break;
-          case 'ready_to_push': results.readyToPush++; break;
-          case 'missing':
-          case 'settlement_needed':
-            results.uploadNeeded++;
-            break;
-          case 'gap_detected':
-            results.gapDetails.push(
-              `${v.marketplace_code} missing ${v.period_start} to ${v.period_end}`
-            );
-            break;
-        }
+      // Group by marketplace
+      const byMarketplace = new Map<string, MarketplacePeriodDetail[]>();
+      for (const v of (validations || []) as MarketplaceValidationRow[]) {
+        const code = v.marketplace_code;
+        if (!byMarketplace.has(code)) byMarketplace.set(code, []);
+        byMarketplace.get(code)!.push({
+          period_label: v.period_label,
+          period_start: v.period_start,
+          period_end: v.period_end,
+          status: v.overall_status,
+          settlement_net: v.settlement_net,
+          bank_amount: v.bank_amount,
+          bank_matched: v.bank_matched || false,
+          xero_pushed: v.xero_pushed || false,
+          settlement_uploaded: v.settlement_uploaded || false,
+        });
       }
 
-      setPhase3Results(results);
+      const breakdown: MarketplaceBreakdown[] = Array.from(byMarketplace.entries()).map(([code, periods]) => ({
+        code,
+        name: displayName(code),
+        periods,
+      }));
+
+      setPhase3Breakdown(breakdown);
       setPhase3Complete(true);
       await upsertSetting(caps.userId, 'setup_phase3_complete', 'true');
     } catch (err) {
@@ -483,12 +594,6 @@ export default function Setup() {
     navigate('/dashboard');
   }, [caps, navigate]);
 
-  const dismissSetup = useCallback(async () => {
-    if (caps?.userId) {
-      await upsertSetting(caps.userId, 'setup_hub_dismissed', 'true');
-    }
-  }, [caps]);
-
   // ─── Render helpers ───────────────────────────────────────────────
   function StatusIcon({ status }: { status: StepStatus }) {
     switch (status) {
@@ -500,7 +605,7 @@ export default function Setup() {
     }
   }
 
-  function StepRow({ step: s, onRetry, api }: { step: StepState; onRetry?: () => void; api?: string }) {
+  function StepRow({ step: s, onRetry }: { step: StepState; onRetry?: () => void }) {
     return (
       <div className="flex items-start gap-3 py-1.5">
         <StatusIcon status={s.status} />
@@ -512,6 +617,60 @@ export default function Setup() {
         )}
       </div>
     );
+  }
+
+  function periodStatusIcon(status: string) {
+    switch (status) {
+      case 'complete': return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+      case 'pushed_to_xero': return <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />;
+      case 'ready_to_push': return <ArrowRight className="h-3.5 w-3.5 text-blue-500" />;
+      case 'settlement_needed':
+      case 'missing': return <X className="h-3.5 w-3.5 text-destructive" />;
+      case 'gap_detected': return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
+      case 'already_recorded': return <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />;
+      default: return <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />;
+    }
+  }
+
+  function periodStatusText(p: MarketplacePeriodDetail): string {
+    switch (p.status) {
+      case 'complete':
+        return `${formatCurrency(p.settlement_net)} — in Xero, bank deposit matched ✓`;
+      case 'pushed_to_xero':
+        return `${formatCurrency(p.settlement_net)} — in Xero, awaiting bank match`;
+      case 'ready_to_push':
+        return `${formatCurrency(p.settlement_net)} — validated, ready to push to Xero`;
+      case 'settlement_needed':
+      case 'missing':
+        return 'No settlement file found';
+      case 'gap_detected':
+        return 'Settlement gap detected — possible missing period';
+      case 'already_recorded':
+        return 'Pre-boundary historical record';
+      default:
+        return p.status;
+    }
+  }
+
+  function periodAction(p: MarketplacePeriodDetail, marketplaceCode: string) {
+    if (p.status === 'ready_to_push') {
+      return (
+        <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => navigate('/dashboard')}>
+          Push to Xero →
+        </Button>
+      );
+    }
+    if (p.status === 'settlement_needed' || p.status === 'missing') {
+      return (
+        <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => navigate('/dashboard')}>
+          <Upload className="h-3 w-3 mr-1" /> Upload file
+        </Button>
+      );
+    }
+    if (p.status === 'complete' || p.status === 'pushed_to_xero') {
+      return null; // Already handled
+    }
+    return null;
   }
 
   // ─── Loading state ────────────────────────────────────────────────
@@ -526,6 +685,14 @@ export default function Setup() {
   if (!caps) return null;
 
   const hasAnyApi = caps.hasXero || caps.hasShopify || caps.hasAmazon;
+  const gateReason = phase2GateReason();
+
+  // Progress bar status text
+  function progressStatus(progress: number, done: boolean, apiName: string): string {
+    if (done) return 'Complete';
+    if (progress >= 95) return 'Still working...';
+    return 'Scanning...';
+  }
 
   // ─── Render ───────────────────────────────────────────────────────
   return (
@@ -535,7 +702,7 @@ export default function Setup() {
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold text-foreground">Setting up your Xettle account</h1>
           <p className="text-muted-foreground text-sm">
-            Some steps run automatically — others wait until your data is ready.
+            Some steps run automatically — others wait until your data is ready. You can leave and come back.
           </p>
         </div>
 
@@ -546,13 +713,12 @@ export default function Setup() {
               Phase 1 — Fetching your data
             </h2>
 
-            {/* Xero row */}
-            {caps.hasXero ? (
+            {caps.hasXero && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Xero</span>
                   <span className="text-xs text-muted-foreground">
-                    {phase1Xero ? 'Complete' : 'Scanning...'}
+                    {progressStatus(xeroProgress, phase1Xero, 'Xero')}
                   </span>
                 </div>
                 <Progress value={xeroProgress} className="h-1.5" />
@@ -560,15 +726,14 @@ export default function Setup() {
                   <StepRow step={xeroStep} onRetry={() => retryStep('xero')} />
                 )}
               </div>
-            ) : null}
+            )}
 
-            {/* Shopify row */}
-            {caps.hasShopify ? (
+            {caps.hasShopify && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Shopify</span>
                   <span className="text-xs text-muted-foreground">
-                    {phase1Shopify ? 'Complete' : 'Fetching...'}
+                    {progressStatus(shopifyProgress, phase1Shopify, 'Shopify')}
                   </span>
                 </div>
                 <Progress value={shopifyProgress} className="h-1.5" />
@@ -578,15 +743,14 @@ export default function Setup() {
                   <StepRow step={shopifyChannelsStep} onRetry={() => retryStep('shopify')} />
                 )}
               </div>
-            ) : null}
+            )}
 
-            {/* Amazon row */}
-            {caps.hasAmazon ? (
+            {caps.hasAmazon && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Amazon</span>
                   <span className="text-xs text-muted-foreground">
-                    {phase1Amazon ? 'Complete' : 'Fetching...'}
+                    {progressStatus(amazonProgress, phase1Amazon, 'Amazon')}
                   </span>
                 </div>
                 <Progress value={amazonProgress} className="h-1.5" />
@@ -594,7 +758,7 @@ export default function Setup() {
                   <StepRow step={amazonStep} onRetry={() => retryStep('amazon')} />
                 )}
               </div>
-            ) : null}
+            )}
 
             {!hasAnyApi && (
               <p className="text-sm text-muted-foreground">
@@ -612,24 +776,39 @@ export default function Setup() {
             </h2>
 
             {phase2Complete ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm text-emerald-600">
                   <CheckCircle2 className="h-4 w-4" />
-                  <span>Marketplaces identified</span>
+                  <span>{detectedMarketplaces.length} marketplace{detectedMarketplaces.length !== 1 ? 's' : ''} identified</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {detectedMarketplaces.map(m => (
-                    <span
-                      key={m.code}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-secondary text-secondary-foreground"
-                    >
-                      {m.name}
-                      {m.orderCount != null && m.orderCount > 0 && (
-                        <span className="text-muted-foreground">({m.orderCount} orders)</span>
-                      )}
-                    </span>
-                  ))}
-                </div>
+
+                {/* Group by source */}
+                {(() => {
+                  const bySource = new Map<string, DetectedMarketplace[]>();
+                  for (const m of detectedMarketplaces) {
+                    if (!bySource.has(m.source)) bySource.set(m.source, []);
+                    bySource.get(m.source)!.push(m);
+                  }
+                  return Array.from(bySource.entries()).map(([source, items]) => (
+                    <div key={source} className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground">{source}:</p>
+                      <div className="flex flex-wrap gap-2 pl-2">
+                        {items.map(m => (
+                          <span
+                            key={m.code}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-secondary text-secondary-foreground"
+                          >
+                            {m.name}
+                            {m.orderCount != null && m.orderCount > 0 && (
+                              <span className="text-muted-foreground">({m.orderCount} orders)</span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
+
                 <button
                   onClick={() => {
                     setManualChannel({
@@ -652,7 +831,7 @@ export default function Setup() {
                   <span>
                     <Button
                       onClick={runPhase2}
-                      disabled={!anyPhase1Done || phase2Running}
+                      disabled={!allConnectedPhase1Done || phase2Running}
                       className="w-full"
                     >
                       {phase2Running ? (
@@ -663,8 +842,8 @@ export default function Setup() {
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {!anyPhase1Done && (
-                  <TooltipContent>Waiting for your data to load...</TooltipContent>
+                {gateReason && (
+                  <TooltipContent>{gateReason}</TooltipContent>
                 )}
               </Tooltip>
             )}
@@ -675,62 +854,50 @@ export default function Setup() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              Phase 3 — Check for missing settlements
+              Phase 3 — Settlement status by marketplace
             </h2>
 
-            {phase3Complete && phase3Results ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm text-emerald-600">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Validation complete</span>
-                </div>
-                <div className="space-y-2 text-sm">
-                  {phase3Results.complete > 0 && (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                      <span>Already in Xero and verified: <strong>{phase3Results.complete}</strong> settlements</span>
+            {phase3Complete && phase3Breakdown.length > 0 ? (
+              <div className="space-y-6">
+                {phase3Breakdown.map(mp => (
+                  <div key={mp.code} className="space-y-2">
+                    <h3 className="text-sm font-semibold text-foreground">{mp.name}</h3>
+                    <div className="space-y-1.5 pl-2">
+                      {mp.periods.map((p, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          {periodStatusIcon(p.status)}
+                          <span className="text-muted-foreground font-medium min-w-[80px]">{p.period_label}</span>
+                          <span className="text-foreground flex-1">{periodStatusText(p)}</span>
+                          {periodAction(p, mp.code)}
+                        </div>
+                      ))}
                     </div>
-                  )}
-                  {phase3Results.pushedNoBank > 0 && (
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                      <span>Xero has invoice but no bank match: <strong>{phase3Results.pushedNoBank}</strong> (possible timing difference)</span>
-                    </div>
-                  )}
-                  {phase3Results.readyToPush > 0 && (
-                    <div className="flex items-center gap-2">
-                      <ArrowRight className="h-3.5 w-3.5 text-primary" />
-                      <span>Ready to push to Xero: <strong>{phase3Results.readyToPush}</strong> settlements</span>
-                    </div>
-                  )}
-                  {phase3Results.unmatchedDeposits > 0 && (
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                      <span>Bank deposit found but no invoice: <strong>{phase3Results.unmatchedDeposits}</strong> (needs attention)</span>
-                    </div>
-                  )}
-                  {phase3Results.uploadNeeded > 0 && (
-                    <div className="flex items-center gap-2">
-                      <X className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span>Upload needed — no data from any source: <strong>{phase3Results.uploadNeeded}</strong></span>
-                    </div>
-                  )}
-                  {phase3Results.gapDetails.map((gap, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                      <span className="text-muted-foreground">Settlement gap: {gap}</span>
-                    </div>
-                  ))}
-                </div>
+                    {/* Marketplace-level action hint */}
+                    {mp.periods.some(p => p.status === 'settlement_needed' || p.status === 'missing') && (
+                      <p className="text-xs text-muted-foreground pl-2 pt-1">
+                        → Download your {mp.name} settlement and upload it here
+                      </p>
+                    )}
+                    {mp.periods.some(p => p.status === 'ready_to_push') && !mp.periods.some(p => p.status === 'settlement_needed' || p.status === 'missing') && (
+                      <p className="text-xs text-muted-foreground pl-2 pt-1">
+                        → Push these to Xero to complete your reconciliation
+                      </p>
+                    )}
+                  </div>
+                ))}
 
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-3 pt-4 border-t border-border">
                   <Button onClick={goToDashboard}>
                     <LayoutDashboard className="h-4 w-4 mr-2" /> Go to Dashboard
                   </Button>
-                  <Button variant="outline" onClick={dismissSetup}>
-                    Dismiss setup
-                  </Button>
                 </div>
+              </div>
+            ) : phase3Complete && phase3Breakdown.length === 0 ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">No validation data found. Upload settlement files from the dashboard.</p>
+                <Button onClick={goToDashboard}>
+                  <LayoutDashboard className="h-4 w-4 mr-2" /> Go to Dashboard
+                </Button>
               </div>
             ) : (
               <Tooltip>
@@ -744,7 +911,7 @@ export default function Setup() {
                       {phase3Running ? (
                         <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Checking settlements...</>
                       ) : (
-                        <>Check for missing settlements <ArrowRight className="h-4 w-4 ml-2" /></>
+                        <>Check settlement status <ArrowRight className="h-4 w-4 ml-2" /></>
                       )}
                     </Button>
                   </span>
@@ -757,7 +924,6 @@ export default function Setup() {
           </CardContent>
         </Card>
 
-        {/* No APIs: skip to dashboard */}
         {!hasAnyApi && (
           <div className="text-center">
             <Button onClick={goToDashboard} variant="outline">
@@ -767,7 +933,6 @@ export default function Setup() {
         )}
       </div>
 
-      {/* Manual channel modal */}
       {showAddManual && manualChannel && (
         <SubChannelSetupModal
           channel={manualChannel}
@@ -776,7 +941,6 @@ export default function Setup() {
           onComplete={() => {
             setShowAddManual(false);
             setManualChannel(null);
-            // Re-run Phase 2 to pick up the new channel
             runPhase2();
           }}
         />

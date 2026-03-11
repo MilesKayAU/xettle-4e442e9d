@@ -13,7 +13,7 @@ interface ShopifyOrder {
   processed_at: string;
   financial_status: string;
   gateway: string;
-  note_attributes: unknown[];
+  note_attributes: { name: string; value: string }[];
   tags: string;
   subtotal_price: string;
   total_shipping_price_set: unknown;
@@ -112,7 +112,6 @@ Deno.serve(async (req) => {
 
     // 2. Build Shopify API URL
     const buildUrl = (cursor?: string) => {
-      // When using cursor pagination, Shopify only allows limit, fields, and page_info
       if (cursor) {
         const params = new URLSearchParams({
           limit: String(effectiveLimit),
@@ -202,7 +201,13 @@ Deno.serve(async (req) => {
         gateway: o.gateway || null,
         tags: o.tags || null,
         total_price: parseFloat(o.total_price || "0") || 0,
+        total_tax: parseFloat(o.total_tax || "0") || 0,
+        total_discounts: parseFloat(o.total_discounts || "0") || 0,
         financial_status: o.financial_status || null,
+        note_attributes: o.note_attributes && o.note_attributes.length > 0
+          ? JSON.stringify(o.note_attributes)
+          : null,
+        processed_at: o.processed_at || null,
         created_at_shopify: o.created_at || null,
         synced_at: new Date().toISOString(),
       }));
