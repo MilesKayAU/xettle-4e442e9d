@@ -512,9 +512,9 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   });
 
   // 2. Column totals: income + expenses should equal gross total
-  const incomeTotal = round2(salesPrincipal + salesShipping + promotionalDiscounts + refunds + reimbursements);
-  const expenseTotal = round2(sellerFees + fbaFees + storageFees + advertisingCosts + unmappedTotal);
-  const columnSum = round2(incomeTotal + expenseTotal);
+  const reconIncomeTotal = round2(salesPrincipal + salesShipping + promotionalDiscounts + refunds + reimbursements);
+  const reconExpenseTotal = round2(sellerFees + fbaFees + storageFees + advertisingCosts + unmappedTotal);
+  const columnSum = round2(reconIncomeTotal + reconExpenseTotal);
   reconciliationChecks.push({
     name: 'Column totals',
     passed: Math.abs(columnSum - grossTotal) < 0.01,
