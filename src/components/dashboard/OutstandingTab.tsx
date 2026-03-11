@@ -8,7 +8,8 @@
  * 🔴 Red — invoice in Xero but nothing in our system → "Upload"
  */
 
-import { useState, useCallback, useEffect, Fragment } from 'react';
+import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +27,7 @@ interface OutstandingRow {
   xero_reference: string;
   contact_name: string;
   marketplace: string;
+  is_marketplace: boolean;
   invoice_date: string | null;
   due_date: string | null;
   amount: number;
@@ -82,6 +84,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [applying, setApplying] = useState<Set<string>>(new Set());
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [showNonMarketplace, setShowNonMarketplace] = useState(false);
+
+  // Filter rows based on marketplace toggle
+  const filteredRows = useMemo(() => {
+    if (!data) return [];
+    if (showNonMarketplace) return data.rows;
+    return data.rows.filter(r => r.is_marketplace !== false);
+  }, [data, showNonMarketplace]);
+
+  const nonMarketplaceCount = useMemo(() => {
+    if (!data) return 0;
+    return data.rows.filter(r => r.is_marketplace === false).length;
+  }, [data]);
+
+  const filteredTotal = useMemo(() => {
+    return filteredRows.reduce((sum, r) => sum + r.amount, 0);
+  }, [filteredRows]);
 
   const fetchOutstanding = useCallback(async () => {
     setLoading(true);
@@ -253,14 +272,25 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </Button>
       </div>
 
+      {/* Filter toggle for non-marketplace invoices */}
+      {data && nonMarketplaceCount > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Switch
+            checked={showNonMarketplace}
+            onCheckedChange={setShowNonMarketplace}
+          />
+          <span>Show {nonMarketplaceCount} non-marketplace invoice{nonMarketplaceCount > 1 ? 's' : ''}</span>
+        </div>
+      )}
+
       {/* Summary strip */}
       {data && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Total outstanding</p>
-              <p className="text-xl font-bold text-foreground">{formatAUD(data.total_outstanding)}</p>
-              <p className="text-xs text-muted-foreground">{data.invoice_count} invoices</p>
+              <p className="text-xl font-bold text-foreground">{formatAUD(filteredTotal)}</p>
+              <p className="text-xs text-muted-foreground">{filteredRows.length} invoices</p>
             </CardContent>
           </Card>
           <Card>
@@ -323,7 +353,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* No data */}
-      {data && data.rows.length === 0 && (
+      {data && filteredRows.length === 0 && (
         <Card>
           <CardContent className="p-8 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-3" />
@@ -334,7 +364,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* Main table */}
-      {data && data.rows.length > 0 && (
+      {data && filteredRows.length > 0 && (
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -351,7 +381,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               </tr>
             </thead>
             <tbody>
-              {data.rows.map(row => {
+              {filteredRows.map(row => {
                 const isExpanded = expandedRow === row.xero_invoice_id;
                 const isApplying = applying.has(row.xero_invoice_id);
                 const isBalanced = row.match_status === 'balanced';
