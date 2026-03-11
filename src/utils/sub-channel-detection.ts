@@ -145,7 +145,7 @@ export async function saveSubChannel(params: {
         country_code: 'AU',
         connection_type: 'sub_channel',
         connection_status: 'active',
-      } as any, { onConflict: 'user_id,marketplace_code' } as any);
+      } as any, { onConflict: 'user_id,marketplace_code,country_code' } as any);
     }
 
     return { success: true };
