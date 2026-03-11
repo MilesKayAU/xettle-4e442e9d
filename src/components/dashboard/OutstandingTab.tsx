@@ -272,6 +272,17 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </Button>
       </div>
 
+      {/* Filter toggle for non-marketplace invoices */}
+      {data && nonMarketplaceCount > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Switch
+            checked={showNonMarketplace}
+            onCheckedChange={setShowNonMarketplace}
+          />
+          <span>Show {nonMarketplaceCount} non-marketplace invoice{nonMarketplaceCount > 1 ? 's' : ''}</span>
+        </div>
+      )}
+
       {/* Summary strip */}
       {data && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
