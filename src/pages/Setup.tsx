@@ -232,10 +232,19 @@ export default function Setup() {
 
   // ─── Xero scan ────────────────────────────────────────────────────
   async function runXeroScan(token: string, userId: string) {
+    const ac = new AbortController();
+    xeroAbortRef.current = ac;
     setXeroStep({ status: 'running', message: 'Scanning Xero invoices, contacts & bank transactions...' });
-    const result = await callEdgeFunctionSafe('scan-xero-history', token);
+    const result = await callEdgeFunctionSafe('scan-xero-history', token, {}, { signal: ac.signal });
 
+    xeroAbortRef.current = null;
     if (!mountedRef.current) return;
+
+    if (result.aborted) {
+      setXeroStep({ status: 'error', message: 'Xero scan stopped', error: 'Stopped by user' });
+      setXeroProgress(0);
+      return;
+    }
 
     if (result.ok) {
       const d = result.data || {};
