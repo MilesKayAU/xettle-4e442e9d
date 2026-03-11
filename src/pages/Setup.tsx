@@ -278,19 +278,26 @@ export default function Setup() {
 
   // ─── Shopify scan (enforced A→B→C sequence) ──────────────────────
   async function runShopifyScan(token: string, userId: string) {
+    const ac = new AbortController();
+    shopifyAbortRef.current = ac;
+
     setShopifyPayoutsStep({ status: 'running', message: 'Fetching payouts...' });
-    const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', token);
+    const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', token, {}, { signal: ac.signal });
     if (!mountedRef.current) return;
+    if (payoutsResult.aborted) {
+      shopifyAbortRef.current = null;
+      setShopifyPayoutsStep({ status: 'error', message: 'Stopped', error: 'Stopped by user' });
+      setShopifyProgress(0);
+      return;
+    }
 
     if (!payoutsResult.ok) {
-      // Cooldown (429) or timeout is non-fatal — existing data is valid, continue pipeline
       const isCooldown = payoutsResult.error?.includes('429');
       const isTimeout = payoutsResult.error?.includes('timed out');
       if (isCooldown || isTimeout) {
         setShopifyPayoutsStep({ status: 'success', message: '✅ Payouts already synced recently' });
       } else {
         setShopifyPayoutsStep({ status: 'error', message: 'Payouts fetch failed', error: payoutsResult.error });
-        // Don't halt — continue to orders & channels even if payouts fail
       }
     } else {
       const payoutCount = payoutsResult.data?.synced || payoutsResult.data?.count || 0;
@@ -304,12 +311,19 @@ export default function Setup() {
     }
 
     setShopifyOrdersStep({ status: 'running', message: 'Fetching orders (this may take a while)...' });
-    const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', token);
+    const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', token, {}, { signal: ac.signal });
     if (!mountedRef.current) return;
+    if (ordersResult.aborted) {
+      shopifyAbortRef.current = null;
+      setShopifyOrdersStep({ status: 'error', message: 'Stopped', error: 'Stopped by user' });
+      setShopifyProgress(0);
+      return;
+    }
 
     if (!ordersResult.ok) {
       setShopifyOrdersStep({ status: 'error', message: 'Orders fetch failed', error: ordersResult.error });
       setShopifyProgress(0);
+      shopifyAbortRef.current = null;
       return;
     }
     const ordersFetched = ordersResult.data?.orders_saved || ordersResult.data?.count || 0;
@@ -326,13 +340,20 @@ export default function Setup() {
       });
       setShopifyProgress(100);
       setPhase1Shopify(true);
+      shopifyAbortRef.current = null;
       await upsertSetting(userId, 'setup_phase1_shopify', 'true');
       return;
     }
 
     setShopifyChannelsStep({ status: 'running', message: 'Scanning for sales channels...' });
-    const channelsResult = await callEdgeFunctionSafe('scan-shopify-channels', token);
+    const channelsResult = await callEdgeFunctionSafe('scan-shopify-channels', token, {}, { signal: ac.signal });
+    shopifyAbortRef.current = null;
     if (!mountedRef.current) return;
+    if (channelsResult.aborted) {
+      setShopifyChannelsStep({ status: 'error', message: 'Stopped', error: 'Stopped by user' });
+      setShopifyProgress(0);
+      return;
+    }
 
     if (channelsResult.ok) {
       const { count: subChannelCount } = await supabase
