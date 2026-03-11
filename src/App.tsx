@@ -20,6 +20,7 @@ const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const AmazonCallback = lazy(() => import("@/pages/AmazonCallback"));
 const ShopifyCallback = lazy(() => import("@/pages/ShopifyCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
+const Setup = lazy(() => import("@/pages/Setup"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -56,6 +57,7 @@ function App() {
                   {/* Authenticated routes — trial banner renders on all */}
                   <Route element={<AuthenticatedLayout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/setup" element={<Setup />} />
                     <Route path="/admin" element={<Admin />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
