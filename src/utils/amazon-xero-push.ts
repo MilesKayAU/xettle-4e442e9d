@@ -127,12 +127,13 @@ export function buildAmazonInvoiceLineItems(
   for (const [category, amount] of Object.entries(expenseBuckets)) {
     const appliedAmount = ratio ? round2(amount * ratio) : round2(amount);
     if (appliedAmount === 0) continue;
-    const exGst = round2(appliedAmount - round2(appliedAmount / 11));
+    const absAmount = Math.abs(appliedAmount);
+    const exGst = round2(absAmount - round2(absAmount / 11));
     lineItems.push({
       Description: `Amazon ${category} ${periodLabel}`,
       AccountCode: getAccountCode(category),
       TaxType: 'INPUT',
-      UnitAmount: exGst,
+      UnitAmount: -Math.abs(exGst),
       Quantity: 1,
     });
   }
@@ -167,14 +168,12 @@ export function buildAmazonInvoiceLineItems(
   if (bankDeposit !== undefined && !ratio) {
     let xeroTotal = 0;
     for (const item of lineItems) {
-      if (item.TaxType === 'OUTPUT') {
-        xeroTotal += round2(round2(item.UnitAmount) * 1.1);
-      } else if (item.TaxType === 'INPUT') {
-        xeroTotal += round2(round2(item.UnitAmount) * 1.1);
-      } else if (item.TaxType === 'EXEMPTOUTPUT') {
-        xeroTotal += round2(item.UnitAmount);
+      const amt = item.UnitAmount;
+      const sign = amt < 0 ? -1 : 1;
+      if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
+        xeroTotal += round2(round2(Math.abs(amt)) * 1.1) * sign;
       } else {
-        xeroTotal += round2(item.UnitAmount);
+        xeroTotal += round2(amt);
       }
     }
     xeroTotal = round2(xeroTotal);
@@ -405,8 +404,9 @@ export function computeSplitMonthRollover(
   for (const [, amount] of Object.entries(expenseBuckets)) {
     const a = round2(amount);
     if (a === 0) continue;
-    const exGst = round2(a - round2(a / 11));
-    xeroTotal += round2(exGst * 1.1);
+    const absA = Math.abs(a);
+    const exGst = round2(absA - round2(absA / 11));
+    xeroTotal -= round2(exGst * 1.1);
   }
   for (const [, amount] of Object.entries(otherBuckets)) {
     xeroTotal += round2(amount);

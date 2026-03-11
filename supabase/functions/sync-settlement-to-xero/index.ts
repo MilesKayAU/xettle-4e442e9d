@@ -627,7 +627,7 @@ serve(async (req) => {
         ? [{
             Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
             AccountCode: getCode('Other Fees'),
-            TaxType: "INPUT",
+            TaxType: "INPUT", // Fee-only negative settlements assumed domestic; intl/reimbursements not expected here
             UnitAmount: Math.round(Math.abs(netAmount) * 100) / 100,
             Quantity: 1,
             ...(trackingArray ? { Tracking: trackingArray } : {}),
