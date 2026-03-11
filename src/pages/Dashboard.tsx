@@ -103,7 +103,7 @@ export default function Dashboard() {
             if (connected === 'amazon') setHasAmazon(true);
             if (connected === 'shopify') setHasShopify(true);
           } else if (connected === 'xero') {
-            setWizardInitialStep(3);
+            setWizardInitialStep(2);
           }
           if (connected) {
             searchParams.delete('connected');

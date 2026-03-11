@@ -26,7 +26,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<MarketplaceSummary[]>([]);
   const [readyToPush, setReadyToPush] = useState(0);
-  const [retried, setRetried] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const loadData = async () => {
     try {
@@ -83,16 +83,17 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
     loadData();
   }, []);
 
-  // Auto-retry once after 5s if scans are still in progress to catch fast completions
+  // Auto-retry at 5s and 15s if scans are still in progress
   useEffect(() => {
-    if (scansInProgress && !retried) {
+    if (scansInProgress && retryCount < 2) {
+      const delay = retryCount === 0 ? 5000 : 15000;
       const timer = setTimeout(() => {
-        setRetried(true);
+        setRetryCount(prev => prev + 1);
         loadData();
-      }, 5000);
+      }, delay);
       return () => clearTimeout(timer);
     }
-  }, [scansInProgress, retried]);
+  }, [scansInProgress, retryCount]);
 
   const getLabel = (code: string) =>
     (MARKETPLACE_LABELS as Record<string, string>)[code] || code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
