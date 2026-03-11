@@ -73,15 +73,38 @@ function isAdvertisingPlatform(code: string): boolean {
   return entry?.processor_type === 'advertising_platform'
 }
 
+/** Word-boundary match for short patterns (≤5 chars) to prevent false positives */
+function patternMatches(text: string, pattern: string): boolean {
+  const lowerPattern = pattern.toLowerCase()
+  if (lowerPattern.length <= 5) {
+    // Short patterns require word boundaries (prevents "King George Square Car Park" matching "square")
+    const regex = new RegExp(`\\b${lowerPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+    return regex.test(text)
+  }
+  return text.includes(lowerPattern)
+}
+
 function matchesMarketplace(name: string): string | null {
   const lower = name.toLowerCase().trim()
   if (!_registryCache) return null
 
+  // First check if this matches an advertising platform — skip entirely if so
   for (const entry of _registryCache) {
-    // Check all detection keywords and xero contact patterns
+    if (entry.processor_type !== 'advertising_platform') continue
     const allPatterns = [...entry.keywords, ...entry.xero_patterns.map(p => p.toLowerCase())]
     for (const pattern of allPatterns) {
-      if (lower.includes(pattern.toLowerCase())) {
+      if (patternMatches(lower, pattern)) {
+        return null // Advertising platform — not a sales channel
+      }
+    }
+  }
+
+  for (const entry of _registryCache) {
+    // Skip advertising platforms (already checked above)
+    if (entry.processor_type === 'advertising_platform') continue
+    const allPatterns = [...entry.keywords, ...entry.xero_patterns.map(p => p.toLowerCase())]
+    for (const pattern of allPatterns) {
+      if (patternMatches(lower, pattern)) {
         return entry.code
       }
     }
