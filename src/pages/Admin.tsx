@@ -28,13 +28,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen } from 'lucide-react';
 import AccountResetButton from '@/components/admin/AccountResetButton';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
 import BugReportsDashboard from '@/components/admin/BugReportsDashboard';
 import DataIntegrityDashboard from '@/components/admin/DataIntegrityDashboard';
 import PreLaunchChecklist from '@/components/admin/PreLaunchChecklist';
+import KnowledgeBaseDashboard from '@/components/admin/KnowledgeBaseDashboard';
 
 interface UserRow {
   id: string;
