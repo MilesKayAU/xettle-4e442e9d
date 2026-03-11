@@ -758,8 +758,12 @@ export default function Setup() {
                   </span>
                 </div>
                 <Progress value={shopifyProgress} className="h-1.5" />
-                {shopifyPayoutsStep.status !== 'idle' && <StepRow step={shopifyPayoutsStep} />}
-                {shopifyOrdersStep.status !== 'idle' && <StepRow step={shopifyOrdersStep} />}
+                {shopifyPayoutsStep.status !== 'idle' && (
+                  <StepRow step={shopifyPayoutsStep} onRetry={() => retryStep('shopify')} />
+                )}
+                {shopifyOrdersStep.status !== 'idle' && (
+                  <StepRow step={shopifyOrdersStep} onRetry={() => retryStep('shopify')} />
+                )}
                 {shopifyChannelsStep.status !== 'idle' && (
                   <StepRow step={shopifyChannelsStep} onRetry={() => retryStep('shopify')} />
                 )}
