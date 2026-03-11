@@ -256,7 +256,7 @@ export function buildJournalPreviewRows(
   const getTaxInfo = (cat: string, marketplace: 'au' | 'intl'): { taxRate: string; hasGst: boolean } => {
     if (cat === 'Reimbursements') return { taxRate: 'BAS Excluded', hasGst: false };
     if (marketplace === 'intl') return { taxRate: 'GST Free Income', hasGst: false };
-    if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs'].includes(cat)) {
+    if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees'].includes(cat)) {
       return { taxRate: 'GST on Expenses', hasGst: true };
     }
     if (['Sales - Principal', 'Sales - Shipping', 'Refunds', 'Promotional Discounts'].includes(cat)) {
