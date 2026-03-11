@@ -308,35 +308,26 @@ Deno.serve(async (req) => {
     for (const det of detected_settlements) {
       if (det.marketplace === 'unknown') continue
 
-      // Check if already exists
-      const { data: existing } = await supabase
+      const displayName = MARKETPLACE_NAMES[det.marketplace] || det.marketplace.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+      const { error: upsertErr } = await supabase
         .from('marketplace_connections')
-        .select('id')
-        .eq('marketplace_code', det.marketplace)
-        .maybeSingle()
-
-      if (!existing) {
-        const displayName = MARKETPLACE_NAMES[det.marketplace] || det.marketplace.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-        const { error: insertErr } = await supabase
-          .from('marketplace_connections')
-          .insert({
-            user_id: userId,
-            marketplace_code: det.marketplace,
-            marketplace_name: displayName,
-            country_code: 'AU',
-            connection_type: 'auto_detected',
-            connection_status: 'active',
-            settings: {
-              detected_from: 'xero_scan',
-              last_xero_date: det.last_recorded_date,
-              last_xero_amount: det.last_amount,
-              xero_source: det.source,
-              xero_reference: det.reference,
-            },
-          })
-        if (!insertErr) marketplaces_created++
-        else console.error(`Failed to create marketplace_connection for ${det.marketplace}:`, insertErr)
-      }
+        .upsert({
+          user_id: userId,
+          marketplace_code: det.marketplace,
+          marketplace_name: displayName,
+          country_code: 'AU',
+          connection_type: 'auto_detected',
+          connection_status: 'active',
+          settings: {
+            detected_from: 'xero_scan',
+            last_xero_date: det.last_recorded_date,
+            last_xero_amount: det.last_amount,
+            xero_source: det.source,
+            xero_reference: det.reference,
+          },
+        }, { onConflict: 'user_id,marketplace_code,country_code' })
+      if (!upsertErr) marketplaces_created++
+      else console.error(`Failed to upsert marketplace_connection for ${det.marketplace}:`, upsertErr)
     }
 
     // ─── 6. PERSIST accounting boundary date ───────────────────────────
