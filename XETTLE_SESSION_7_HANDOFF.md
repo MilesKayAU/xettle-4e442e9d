@@ -154,11 +154,14 @@ LMB AU GST defaults (our implementation — see Session 7 corrections):
    - Bunnings/Catch/MyDeal use fixed payment schedules
    - Lower risk of cross-month splits
 
-6. International sales presentation split (Phase 2)
-   - GST calculation already correct
-   - Just needs two Sales lines on Xero invoice
-   - Requires au_sales + intl_sales columns on settlements
-   - Schema change — do carefully
+### ✅ Confirmed Features (not gaps)
+
+4. International sales presentation — **ALREADY LIVE**
+   - AU sales → OUTPUT, International → EXEMPTOUTPUT
+   - Two separate Xero lines generated automatically
+   - Was listed as Phase 2 but code audit confirmed live
+
+### 🟡 Medium Priority
 
 ### 🟢 Lower Priority  
 
