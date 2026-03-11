@@ -513,7 +513,16 @@ export default function AccountingDashboard() {
       if (result.summary.reconciliationMatch) {
         toast.success(`Settlement ${result.header.settlementId} parsed & reconciled ✓`);
       } else {
-        toast.warning(`Settlement parsed but reconciliation FAILED — diff: ${formatAUD(result.summary.reconciliationDiff)}`);
+        const failedChecks = (result.summary.reconciliationChecks || [])
+          .filter(c => !c.passed)
+          .map(c => `• ${c.name}: FAIL${c.detail ? ` — ${c.detail}` : ''}`)
+          .join('\n');
+        const passedCount = (result.summary.reconciliationChecks || []).filter(c => c.passed).length;
+        const totalCount = (result.summary.reconciliationChecks || []).length;
+        toast.warning(
+          `Settlement parsed but reconciliation FAILED — diff: ${formatAUD(result.summary.reconciliationDiff)}\n` +
+          `Checks: ${passedCount}/${totalCount} passed\n${failedChecks}`
+        );
       }
     } catch (err: any) {
       toast.error(`Parse error: ${err.message}`);
