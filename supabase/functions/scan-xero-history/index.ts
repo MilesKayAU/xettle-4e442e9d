@@ -361,6 +361,7 @@ Deno.serve(async (req) => {
     }
 
     // ─── 3. Scan ALL Contacts (standalone detection) ────────────────
+    const unmatchedContacts: string[] = []
     try {
       const contactsData = await xeroGet(
         `https://api.xero.com/api.xro/2.0/Contacts?includeArchived=false&pageSize=100`,
@@ -400,11 +401,31 @@ Deno.serve(async (req) => {
             order_count: 0,
             total_revenue: 0,
           }, { onConflict: 'user_id,source_name' })
+        } else if (!marketplace) {
+          // Collect unmatched contacts for classification pipeline
+          const trimmed = (contactName || '').trim()
+          if (trimmed.length > 3 && !/^\d+$/.test(trimmed)) {
+            unmatchedContacts.push(trimmed)
+          }
         }
       }
       console.log(`[scan-xero-history] Standalone contacts found: ${standaloneContacts.length}`, standaloneContacts)
+      console.log(`[scan-xero-history] Unmatched contacts for classification: ${unmatchedContacts.length}`)
     } catch (e) {
       console.error('Contacts scan error:', e)
+    }
+
+    // ─── 3b. Log unmatched contacts to system_events ────────────────
+    if (unmatchedContacts.length > 0) {
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_unmatched_contacts_detected',
+        severity: 'info',
+        details: {
+          count: unmatchedContacts.length,
+          contacts: unmatchedContacts.slice(0, 100), // cap at 100
+        },
+      })
     }
 
     // ─── 4. Determine boundary ──────────────────────────────────────
