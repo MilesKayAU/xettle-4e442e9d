@@ -23,20 +23,33 @@ const NON_MARKETPLACE_TAGS = new Set([
   "manual", "exchange", "return", "priority",
 ]);
 
-/** Check if a tag is purely numeric or too short to be a marketplace name */
+/** Known marketplace label-to-code mappings */
+const LABEL_TO_CODE: Record<string, string> = {
+  mydeal: "mydeal",
+  "my deal": "mydeal",
+  bunnings: "bunnings",
+  kogan: "kogan",
+  "big w": "bigw",
+  bigw: "bigw",
+  "everyday market": "everyday_market",
+  catch: "catch",
+  ebay: "ebay",
+  "tiktok shop": "tiktok_shop",
+  amazon: "amazon_au",
+};
+
 function isNonMarketplaceTag(tag: string): boolean {
   const t = tag.toLowerCase().trim();
   if (!t || t.length < 2) return true;
-  if (/^\d+$/.test(t)) return true; // purely numeric
+  if (/^\d+$/.test(t)) return true;
   if (NON_MARKETPLACE_TAGS.has(t)) return true;
   return false;
 }
 
-/** Check if a source_name is numeric (Shopify channel ID) or in ignore list */
 function needsTagScan(src: string): boolean {
   const lower = src.toLowerCase().trim();
-  if (IGNORED_SOURCES.has(lower)) return false; // shouldn't reach here but guard
-  if (/^\d{4,}$/.test(lower)) return true; // numeric channel ID
+  if (IGNORED_SOURCES.has(lower)) return false;
+  if (/^\d{4,}$/.test(lower)) return true;
   return false;
 }
 
@@ -53,9 +66,7 @@ interface TagAnalysis {
   confidence: number;
 }
 
-/** Analyse tags for a set of orders sharing a source_name */
 function analyseTagsForSource(allTags: string[], orderCount: number): TagAnalysis {
-  // Extract and clean individual tags
   const tagCounts: Record<string, number> = {};
   for (const rawTags of allTags) {
     if (!rawTags) continue;
@@ -67,9 +78,7 @@ function analyseTagsForSource(allTags: string[], orderCount: number): TagAnalysi
     }
   }
 
-  const candidates = Object.entries(tagCounts)
-    .sort((a, b) => b[1] - a[1]);
-
+  const candidates = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
   const candidateLabels = candidates.map(([tag]) => tag);
 
   if (candidates.length === 0) {
@@ -80,8 +89,6 @@ function analyseTagsForSource(allTags: string[], orderCount: number): TagAnalysi
   const ratio = topCount / orderCount;
 
   if (ratio >= 0.5) {
-    // Majority tag — use it as the label
-    // Capitalise properly: find original casing from first occurrence
     let originalCase = topTag.charAt(0).toUpperCase() + topTag.slice(1);
     for (const rawTags of allTags) {
       if (!rawTags) continue;
@@ -98,13 +105,23 @@ function analyseTagsForSource(allTags: string[], orderCount: number): TagAnalysi
     };
   }
 
-  // No majority — unknown with candidates listed
   return {
     detectedLabel: null,
     detectionMethod: "unknown",
     candidateTags: candidateLabels,
     confidence: Math.round(ratio * 100),
   };
+}
+
+/** Resolve a detected label to a marketplace_code */
+function resolveMarketplaceCode(label: string | null, sourceName: string): string | null {
+  if (label) {
+    const code = LABEL_TO_CODE[label.toLowerCase().trim()];
+    if (code) return code;
+  }
+  const code = LABEL_TO_CODE[sourceName.toLowerCase().trim()];
+  if (code) return code;
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -168,10 +185,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ─── Check existing sub_channels and alerts ───
+    // ─── Cross-reference: existing sub_channels, alerts, and settlements ───
     const { data: knownChannels } = await adminClient
       .from("shopify_sub_channels")
-      .select("source_name, ignored")
+      .select("source_name, ignored, marketplace_code")
       .eq("user_id", userId)
       .in("source_name", sourceNames);
 
@@ -179,11 +196,31 @@ Deno.serve(async (req) => {
 
     const { data: existingAlerts } = await adminClient
       .from("channel_alerts")
-      .select("source_name, status")
+      .select("source_name, status, alert_type")
       .eq("user_id", userId)
       .in("source_name", sourceNames);
 
     const alertedSet = new Set((existingAlerts || []).map((a: any) => a.source_name));
+
+    // Fetch user's existing marketplace settlements to detect "unlinked" state
+    const { data: userSettlements } = await adminClient
+      .from("settlements")
+      .select("marketplace")
+      .eq("user_id", userId);
+
+    const existingMarketplaceCodes = new Set(
+      (userSettlements || []).map((s: any) => (s.marketplace || "").toLowerCase().trim())
+    );
+
+    // Also check marketplace_connections
+    const { data: userConnections } = await adminClient
+      .from("marketplace_connections")
+      .select("marketplace_code")
+      .eq("user_id", userId);
+
+    for (const conn of userConnections || []) {
+      existingMarketplaceCodes.add((conn.marketplace_code || "").toLowerCase().trim());
+    }
 
     // ─── Auto-ignore stale pending alerts for IGNORED_SOURCES ───
     const { data: allPendingAlerts } = await adminClient
@@ -205,17 +242,17 @@ Deno.serve(async (req) => {
 
     // ─── Create / update alerts with intelligent detection ───
     let newAlerts = 0;
-    const detectionResults: Record<string, TagAnalysis> = {};
+    let unlinkedAlerts = 0;
+    let skippedAlreadyLinked = 0;
+    const detectionResults: Record<string, TagAnalysis & { alert_type: string }> = {};
 
     for (const [src, data] of Object.entries(sourceData)) {
       // Determine detection method
       let analysis: TagAnalysis;
 
       if (needsTagScan(src)) {
-        // Numeric channel ID — must use tag scanning
         analysis = analyseTagsForSource(data.tags, data.count);
       } else {
-        // Named source — use it directly, but still scan tags for enrichment
         const tagAnalysis = analyseTagsForSource(data.tags, data.count);
         analysis = {
           detectedLabel: src.charAt(0).toUpperCase() + src.slice(1),
@@ -225,9 +262,27 @@ Deno.serve(async (req) => {
         };
       }
 
-      detectionResults[src] = analysis;
+      // Resolve marketplace code from the detected label
+      const resolvedCode = resolveMarketplaceCode(analysis.detectedLabel, src);
 
-      if (knownSet.has(src)) continue; // already set up
+      // Determine alert_type by cross-referencing existing data
+      let alertType: "new" | "unlinked" | "already_linked" = "new";
+
+      if (knownSet.has(src)) {
+        // Already set up in shopify_sub_channels → already_linked, skip
+        alertType = "already_linked";
+        skippedAlreadyLinked++;
+        detectionResults[src] = { ...analysis, alert_type: alertType };
+        continue;
+      }
+
+      if (resolvedCode && existingMarketplaceCodes.has(resolvedCode)) {
+        // Marketplace exists in settlements/connections but not linked to Shopify orders
+        alertType = "unlinked";
+        unlinkedAlerts++;
+      }
+
+      detectionResults[src] = { ...analysis, alert_type: alertType };
 
       const alertPayload = {
         user_id: userId,
@@ -238,10 +293,10 @@ Deno.serve(async (req) => {
         detection_method: analysis.detectionMethod,
         detected_label: analysis.detectedLabel,
         candidate_tags: JSON.stringify(analysis.candidateTags),
+        alert_type: alertType,
       };
 
       if (alertedSet.has(src)) {
-        // Update existing pending alert with latest detection
         const existing = (existingAlerts || []).find((a: any) => a.source_name === src);
         if (existing && existing.status === "pending") {
           await adminClient.from("channel_alerts")
@@ -251,6 +306,7 @@ Deno.serve(async (req) => {
               detection_method: analysis.detectionMethod,
               detected_label: analysis.detectedLabel,
               candidate_tags: JSON.stringify(analysis.candidateTags),
+              alert_type: alertType,
             })
             .eq("user_id", userId)
             .eq("source_name", src);
@@ -268,6 +324,8 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         new_channels: newAlerts,
+        unlinked_channels: unlinkedAlerts,
+        already_linked_skipped: skippedAlreadyLinked,
         scanned_sources: sourceNames,
         total_orders_scanned: Object.values(sourceData).reduce((s, d) => s + d.count, 0),
         detection_results: detectionResults,
