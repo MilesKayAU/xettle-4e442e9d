@@ -105,7 +105,7 @@ export default function ReconciliationHub() {
         // Channel alerts (unmatched deposits etc.)
         supabase
           .from('channel_alerts')
-          .select('id, source_name, detected_label, alert_type, status, deposit_amount, deposit_date, deposit_description, match_confidence, created_at')
+          .select('id, source_name, detected_label, alert_type, status, deposit_amount, deposit_date, deposit_description, match_confidence, created_at, order_count, total_revenue')
           .eq('status', 'pending')
           .order('created_at', { ascending: false }),
         // Validation gaps
