@@ -515,6 +515,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     storageFees,
     refunds,
     reimbursements,
+    advertisingCosts,
     otherFees: unmappedTotal,
     grossTotal,
     netExGst,
