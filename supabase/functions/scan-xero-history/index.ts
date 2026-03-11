@@ -52,6 +52,7 @@ async function loadRegistries(supabaseAdmin: any): Promise<void> {
       xero_patterns: (p.xero_contact_patterns || []) as string[],
       bank_patterns: (p.bank_narration_patterns || []) as string[],
       is_processor: true,
+      processor_type: p.type || 'payment_gateway',
     })
     procCodes.add(p.processor_code)
   }
