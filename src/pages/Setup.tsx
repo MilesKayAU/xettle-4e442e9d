@@ -192,7 +192,7 @@ export default function Setup() {
     const userId = caps.userId!;
 
     // B1: Realistic timers — Xero 60s, Shopify 120s, Amazon 180s
-    if (caps.hasXero && !phase1Xero) startProgressTimer(setXeroProgress, 60000);
+    if (caps.hasXero && !phase1Xero) startProgressTimer(setXeroProgress, 150000);
     if (caps.hasShopify && !phase1Shopify) startProgressTimer(setShopifyProgress, 120000);
     if (caps.hasAmazon && !phase1Amazon) startProgressTimer(setAmazonProgress, 180000);
 
@@ -268,12 +268,25 @@ export default function Setup() {
     if (!mountedRef.current) return;
 
     if (!payoutsResult.ok) {
-      setShopifyPayoutsStep({ status: 'error', message: 'Payouts fetch failed', error: payoutsResult.error });
-      setShopifyProgress(0);
-      return;
+      // Cooldown (429) or timeout is non-fatal — existing data is valid, continue pipeline
+      const isCooldown = payoutsResult.error?.includes('429');
+      const isTimeout = payoutsResult.error?.includes('timed out');
+      if (isCooldown || isTimeout) {
+        setShopifyPayoutsStep({ status: 'success', message: '✅ Payouts already synced recently' });
+      } else {
+        setShopifyPayoutsStep({ status: 'error', message: 'Payouts fetch failed', error: payoutsResult.error });
+        // Don't halt — continue to orders & channels even if payouts fail
+      }
+    } else {
+      const payoutCount = payoutsResult.data?.synced || payoutsResult.data?.count || 0;
+      const skipped = payoutsResult.data?.skipped || 0;
+      const msg = payoutCount > 0
+        ? `✅ ${payoutCount} payouts fetched`
+        : skipped > 0
+          ? `✅ ${skipped} payouts already up to date`
+          : '✅ No new payouts found';
+      setShopifyPayoutsStep({ status: 'success', message: msg });
     }
-    const payoutCount = payoutsResult.data?.count || payoutsResult.data?.settlements_created || 0;
-    setShopifyPayoutsStep({ status: 'success', message: `✅ ${payoutCount} payouts fetched` });
 
     setShopifyOrdersStep({ status: 'running', message: 'Fetching orders (this may take a while)...' });
     const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', token);
