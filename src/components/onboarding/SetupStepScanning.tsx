@@ -122,13 +122,26 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           }
         }
 
-        // Write scan flags
-        if (caps.hasShopify) {
+        // Write scan completion flags so PostSetupBanner doesn't re-run
+        const writeFlag = async (key: string) => {
           await supabase.from('app_settings').upsert(
-            { user_id: caps.userId, key: 'shopify_channel_scan_triggered', value: 'true' },
+            { user_id: caps.userId!, key, value: 'true' },
             { onConflict: 'user_id,key' }
-          ).then(() => {});
+          );
+        };
+
+        const flagPromises: Promise<void>[] = [];
+        if (caps.hasShopify) {
+          flagPromises.push(writeFlag('shopify_channel_scan_triggered'));
+          flagPromises.push(writeFlag('shopify_scan_completed'));
         }
+        if (caps.hasAmazon) {
+          flagPromises.push(writeFlag('amazon_scan_completed'));
+        }
+        if (caps.hasXero) {
+          flagPromises.push(writeFlag('xero_scan_completed'));
+        }
+        await Promise.allSettled(flagPromises);
 
         if (!cancelled) {
           setTimeout(() => { if (!cancelled) onNext(); }, 1200);
@@ -212,7 +225,7 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
                 'text-foreground',
                 stepStatuses[i] === 'skipped' && 'text-muted-foreground line-through'
               )}>
-                {stepStatuses[i] === 'skipped' || stepStatuses[i] === 'error'
+                {stepStatuses[i] === 'skipped'
                   ? stepMessages[i] || step.label
                   : step.label}
               </span>
