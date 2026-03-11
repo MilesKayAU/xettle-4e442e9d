@@ -91,6 +91,7 @@ export default function Dashboard() {
       setShowWizard(true);
       return;
     }
+    const connected = searchParams.get('connected');
     const checkWizard = async () => {
       try {
         const [settRes, amazonRes, shopifyRes, wizardRes] = await Promise.all([
@@ -108,10 +109,10 @@ export default function Dashboard() {
         setHasAmazon(hasAmz);
         setHasShopify(hasShp);
 
-        const dismissCount = parseInt(sessionStorage.getItem('xettle_wizard_dismiss_count') || '0', 10);
+        const dismissKey = user ? `xettle_wizard_dismiss_count_${user.id}` : 'xettle_wizard_dismiss_count';
+        const dismissCount = parseInt(sessionStorage.getItem(dismissKey) || '0', 10);
 
         // If user just connected via OAuth callback, always show wizard regardless of existing data
-        const connected = searchParams.get('connected');
         if (connected) {
           // Don't skip — let the wizard handle the post-connection flow
         } else if (hasSettlements || wizardComplete || dismissCount >= 3) {
@@ -120,7 +121,6 @@ export default function Dashboard() {
         }
 
         if (!hasAmz || !hasShp || !xeroConnected) {
-          const connected = searchParams.get('connected');
           if (connected === 'amazon' || connected === 'shopify') {
             setWizardInitialStep(2);
             if (connected === 'amazon') setHasAmazon(true);
@@ -134,16 +134,18 @@ export default function Dashboard() {
           }
           setShowWizard(true);
         }
-      } catch {
-        // silently fail
+      } catch (error) {
+        console.error("Wizard check failed, defaulting to show:", error);
+        setShowWizard(true);
       }
     };
     checkWizard();
   }, [user, xeroConnected]);
 
   const handleWizardClose = () => {
-    const count = parseInt(sessionStorage.getItem('xettle_wizard_dismiss_count') || '0', 10) + 1;
-    sessionStorage.setItem('xettle_wizard_dismiss_count', String(count));
+    const dismissKey = user ? `xettle_wizard_dismiss_count_${user.id}` : 'xettle_wizard_dismiss_count';
+    const count = parseInt(sessionStorage.getItem(dismissKey) || '0', 10) + 1;
+    sessionStorage.setItem(dismissKey, String(count));
     setShowWizard(false);
   };
 
