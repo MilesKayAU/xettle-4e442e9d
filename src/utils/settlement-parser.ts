@@ -279,7 +279,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   let firstNonAuMarketplaceName: string | null = null;
 
   const INCOME_CATEGORIES = new Set(['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
-  const EXPENSE_CATEGORIES = new Set(['Seller Fees', 'FBA Fees', 'Storage Fees']);
+  const EXPENSE_CATEGORIES = new Set(['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs']);
 
   const normaliseOrderId = (value: string): string => value.trim().replace(/\s+/g, '').toLowerCase();
   const getOrderIdentifiers = (row: string[]): string[] => {
