@@ -499,6 +499,7 @@ Deno.serve(async (req) => {
     );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.info(`[fetch-shopify-payouts] Auth: user=${user?.id}, error=${authError?.message}`);
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
