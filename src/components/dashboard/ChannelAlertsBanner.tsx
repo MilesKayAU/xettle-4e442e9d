@@ -134,6 +134,16 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
             .select('id', { count: 'exact', head: true }) as any;
 
           if (count === 0 || count === null) {
+            // Check if scan was already triggered during onboarding
+            const { data: flagRow } = await supabase
+              .from('app_settings')
+              .select('value')
+              .eq('key', 'shopify_channel_scan_triggered')
+              .maybeSingle();
+
+            if (flagRow?.value === 'true') {
+              setScanAlreadyTriggered(true);
+            }
             setNeedsInitialSync(true);
           }
         }
