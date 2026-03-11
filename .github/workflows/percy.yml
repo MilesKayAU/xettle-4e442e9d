@@ -23,7 +23,10 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Create screenshots directory
+        run: mkdir -p tests/screenshots
 
       - name: Start dev server
         run: npm run dev &
@@ -32,20 +35,23 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_TEST_MODE: 'true'
 
-      - name: Wait for server
-        run: npx wait-on http://localhost:8080 --timeout 60000
+      - name: Wait for dev server
+        run: npx wait-on http://localhost:8080 --timeout 120000 --interval 2000
 
       - name: Run Percy visual tests
-        run: npx percy exec -- npx playwright test tests/visual.spec.ts
+        run: npx percy exec -- npx playwright test tests/visual.spec.ts --reporter=list
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
           TEST_URL: http://localhost:8080
           TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
 
-      - name: Upload screenshots on failure
+      - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-screenshots
-          path: tests/screenshots/
+          name: playwright-results
+          path: |
+            tests/screenshots/
+            playwright-report/
+          if-no-files-found: ignore

@@ -2,12 +2,15 @@ import { test } from '@playwright/test';
 import { percySnapshot } from '@percy/playwright';
 
 const BASE_URL = process.env.TEST_URL ?? 'http://localhost:8080';
+const TEST_EMAIL = process.env.TEST_EMAIL ?? '';
+const TEST_PASSWORD = process.env.TEST_PASSWORD ?? '';
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`${BASE_URL}/auth`);
-  await page.fill('[name=email]', process.env.TEST_EMAIL ?? '');
-  await page.fill('[name=password]', process.env.TEST_PASSWORD ?? '');
-  await page.click('[type=submit]');
+  await page.waitForLoadState('networkidle');
+  await page.fill('#signin-email', TEST_EMAIL);
+  await page.fill('#signin-password', TEST_PASSWORD);
+  await page.click('button[type=submit]');
   await page.waitForURL('**/dashboard', { timeout: 15000 });
   await page.waitForLoadState('networkidle');
 });
