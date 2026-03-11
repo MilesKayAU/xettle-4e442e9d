@@ -67,7 +67,7 @@ export default function ResetPassword() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="text-2xl font-bold tracking-tight">
-            <span className="text-primary">Xe</span><span className="text-foreground">ttle</span>
+            <span className="text-primary underline decoration-primary decoration-2 underline-offset-4">X</span><span className="text-foreground">ettle</span>
           </Link>
         </div>
 

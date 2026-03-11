@@ -446,7 +446,7 @@ export default function Dashboard() {
       <header className="border-b border-border bg-card">
         <div className="container-custom flex items-center justify-between h-16">
           <Link to="/" className="text-xl font-bold tracking-tight">
-            <span className="text-primary">Xe</span><span className="text-foreground">ttle</span>
+            <span className="text-primary underline decoration-primary decoration-2 underline-offset-4">X</span><span className="text-foreground">ettle</span>
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" asChild>
