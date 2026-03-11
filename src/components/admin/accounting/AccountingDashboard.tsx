@@ -853,6 +853,7 @@ export default function AccountingDashboard() {
         storageFees: s.storage_fees || 0,
         refunds: s.refunds || 0,
         reimbursements: s.reimbursements || 0,
+        advertisingCosts: s.advertising_costs || 0,
         otherFees: s.other_fees || 0,
         grossTotal,
         netExGst: s.net_ex_gst || 0,
