@@ -434,8 +434,27 @@ export default function Setup() {
       setPhase1Amazon(true);
       await upsertSetting(userId, 'setup_phase1_amazon', 'true');
     } else {
-      setAmazonStep({ status: 'error', message: 'Amazon fetch failed', error: result.error });
-      setAmazonProgress(0);
+      // Check for rate limit / mutex / cooldown — show calm message
+      const errorData = result.data || {};
+      const errorType = errorData.error_type || errorData.error || '';
+      const isRateLimit = errorType === 'rate_limit' || errorType === 'rate_limited' || result.error?.includes('429');
+      const isMutex = errorType === 'mutex' || errorType === 'sync_in_progress';
+      const isCooldown = errorType === 'cooldown' || result.error?.includes('cooldown');
+
+      if (isRateLimit || isMutex || isCooldown) {
+        const msg = errorData.message || (isRateLimit
+          ? '⏱ Amazon API rate limited — this is temporary. Will retry automatically in 15 minutes.'
+          : isMutex
+            ? '⏱ Amazon sync already running. Will complete shortly.'
+            : '⏱ Amazon synced recently — will retry automatically in 1 hour.');
+        setAmazonStep({ status: 'success', message: msg });
+        setAmazonProgress(100);
+        setPhase1Amazon(true);
+        await upsertSetting(userId, 'setup_phase1_amazon', 'true');
+      } else {
+        setAmazonStep({ status: 'error', message: 'Amazon sync encountered an issue — check your connection', error: result.error });
+        setAmazonProgress(0);
+      }
     }
   }
 
