@@ -314,7 +314,7 @@ Deno.serve(async (req) => {
           const daysDiff = Math.abs(
             (new Date(txnDate).getTime() - new Date(invoiceDate).getTime()) / (1000 * 60 * 60 * 24)
           );
-          if (daysDiff <= 30) {
+          if (daysDiff <= 7) {
             bankMatch = {
               amount: txnAmount,
               date: txnDate,

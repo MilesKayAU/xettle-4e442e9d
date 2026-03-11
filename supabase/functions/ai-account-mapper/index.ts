@@ -329,7 +329,7 @@ Return JSON only with this exact structure:
       await supabase.from('app_settings').upsert({
         user_id: userId,
         key: 'ai_mapper_status',
-        value: 'suggested',
+        value: mapperStatus,
       }, { onConflict: 'user_id,key' })
 
       await supabase.from('app_settings').upsert({
