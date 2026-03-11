@@ -181,7 +181,7 @@ LMB AU GST defaults (our implementation):
 ✅ Split-month rollover invoices
 ✅ Rollback and resend
 ✅ Advertising costs separated
-✅ Reimbursements BAS-excluded
+✅ Reimbursements BAS-excluded (BASEXCLUDED — matches LMB exactly)
 ✅ Boundary date protection
 ✅ Audit file attached to Xero invoice
 ✅ Xero Tracking Categories (per-channel P&L)
