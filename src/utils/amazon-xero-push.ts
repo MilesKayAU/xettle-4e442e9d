@@ -381,7 +381,7 @@ export function computeSplitMonthRollover(
     if (INCOME_CATS.has(cat)) {
       if (line.isAuMarketplace) auBuckets[cat] = (auBuckets[cat] || 0) + line.amount;
       else intlBuckets[cat] = (intlBuckets[cat] || 0) + line.amount;
-    } else if (['Seller Fees', 'FBA Fees', 'Storage Fees'].includes(cat)) {
+    } else if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs'].includes(cat)) {
       expenseBuckets[cat] = (expenseBuckets[cat] || 0) + line.amount;
     } else {
       otherBuckets[cat] = (otherBuckets[cat] || 0) + line.amount;
