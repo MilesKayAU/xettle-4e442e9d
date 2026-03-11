@@ -100,11 +100,15 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
 
           if (step.fn) {
             const body: Record<string, unknown> = {};
+            const headers: Record<string, string> = {};
             if (step.fn === 'fetch-shopify-orders' && caps.shopDomain) {
               body.shopDomain = caps.shopDomain;
             }
+            if (step.fn === 'fetch-amazon-settlements') {
+              headers['x-action'] = 'smart-sync';
+            }
 
-            const result = await callEdgeFunctionSafe(step.fn, caps.accessToken, body);
+            const result = await callEdgeFunctionSafe(step.fn, caps.accessToken, body, { headers });
 
             if (result.ok) {
               updateStep(i, 'success');
