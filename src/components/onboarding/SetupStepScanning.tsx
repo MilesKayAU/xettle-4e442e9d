@@ -13,6 +13,7 @@ interface Props {
 interface ScanStep {
   label: string;
   fn: string | null;
+  action?: string;
 }
 
 export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXero }: Props) {
