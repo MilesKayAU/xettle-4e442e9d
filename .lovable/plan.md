@@ -1,300 +1,80 @@
-# Xettle Complete Technical Audit — Cross-Referenced
-**Date: 9 March 2026 (v2 — verified against codebase)**
-**Scope: Full codebase — frontend, backend, parsers, engines, edge functions, database, security**
 
----
 
-## 1. Architecture Overview
+## Audit Results: Why No Data Synced
 
-### Stack
-- **Frontend**: React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
-- **Backend**: Lovable Cloud (Supabase) — Postgres, Edge Functions, Auth, RLS
-- **Integrations**: Xero (OAuth2), Amazon SP-API (OAuth2)
-- **State**: React Query (5-min stale time), Supabase Realtime subscriptions
-- **Routing**: React Router v6 with lazy-loaded pages
+### Critical Finding: SetupStepScanning is NEVER RENDERED
 
-### Key Pages
-| Route | Component | Purpose |
-|-------|-----------|---------|
-| `/` | Landing | Marketing page |
-| `/auth` | Auth | Sign in / Sign up with email verification |
-| `/dashboard` | Dashboard | Main app — marketplace tabs, Smart Upload, Insights |
-| `/admin` | Admin | Admin panel (role-gated) |
-| `/pricing` | Pricing | Plan tiers |
-| `/xero/callback` | XeroCallback | OAuth2 callback for Xero |
-| `/amazon/callback` | AmazonCallback | OAuth2 callback for Amazon SP-API |
-| `/reset-password` | ResetPassword | Password reset flow |
+`SetupStepScanning.tsx` — the component with the full adaptive scan orchestration — **is not imported or used anywhere**. The wizard has 4 steps: `Connect Xero → Marketplaces → Upload → Results`. There is no scanning step. The component is orphaned dead code.
 
-### Architecture Rules (ARCHITECTURE.md)
-Three enforced rules:
-1. **All dashboards MUST use shared hooks** — useSettlementManager, useBulkSelect, useXeroSync, useReconciliation, useTransactionDrilldown
-2. **No direct color classes** — use semantic design tokens only
-3. **Secrets never in code** — use Lovable Cloud secrets
+### What Actually Happened
 
----
+1. User signed up, went through the wizard, connected Xero, Shopify, Amazon
+2. Wizard completed → set `onboarding_wizard_complete = true`
+3. **No scanning ever ran** during the wizard — it skipped straight to Results
+4. User lands on Dashboard (default view) — `PostSetupBanner` only renders on the **Upload Hub tab**, not the Dashboard tab
+5. `run-validation-sweep` ran (from somewhere else), but found zero data → created empty "missing" rows for amazon_au and shopify_payments
+6. **Result**: All tokens exist, but zero orders, zero settlements, zero sub-channels, zero channel alerts
 
-## 2. Database Schema (17 tables)
+### Database State Summary
 
-| Table | Purpose | RLS |
-|-------|---------|-----|
-| `settlements` | Core settlement records — one per marketplace period | ✅ user_id scoped |
-| `settlement_lines` | Transaction-level line items per settlement | ✅ user_id scoped |
-| `settlement_unmapped` | Rows that couldn't be categorized during parsing | ✅ user_id scoped |
-| `marketplace_connections` | User's active marketplace tabs | ✅ user_id scoped |
-| `marketplaces` | Global marketplace metadata (admin-managed) | ✅ read=all, write=admin |
-| `marketplace_fee_observations` | Fee rate observations per settlement | ✅ user_id scoped |
-| `marketplace_fee_alerts` | Anomaly alerts when fee rates deviate | ✅ user_id + admin read |
-| `marketplace_ad_spend` | Manual ad spend entries per marketplace | ⚠️ public role (Gap 4) |
-| `marketplace_shipping_costs` | Estimated shipping cost per order | ⚠️ public role (Gap 4) |
-| `marketplace_file_fingerprints` | User-specific column signature fingerprints | ✅ user_id scoped |
-| `marketplace_fingerprints` | Global + user-specific marketplace detection patterns | ✅ mixed |
-| `product_costs` | SKU-level COGS data | ✅ user_id scoped |
-| `xero_tokens` | Xero OAuth2 tokens | ✅ user_id scoped |
-| `amazon_tokens` | Amazon SP-API OAuth2 tokens | ✅ user_id scoped |
-| `app_settings` | Per-user key/value settings | ✅ user_id scoped |
-| `sync_history` | Xero sync event log | ✅ user_id scoped |
-| `user_roles` | RBAC roles (admin, paid, starter, pro) | ✅ read-only for user |
+| Data | Count | Expected |
+|------|-------|----------|
+| shopify_tokens | 1 ✅ | Token exists |
+| amazon_tokens | 1 ✅ | Token exists |
+| xero_tokens | 1 ✅ | Token exists |
+| shopify_orders | **0** ❌ | Should have thousands |
+| settlements | **0** ❌ | Should have Amazon + Shopify payouts |
+| shopify_sub_channels | **0** ❌ | Should have Bunnings, MyDeal, etc. |
+| channel_alerts | **0** ❌ | Should have detected channels |
+| scan completion flags | **0** ❌ | Never written |
+| Edge function calls (fetch/scan) | **0** ❌ | Never called |
 
----
+### Root Causes (3 bugs)
 
-## 3. Verified ✅ — What IS Built
+**Bug 1 — SetupStepScanning is dead code**
+The scanning component exists but is never rendered in the wizard or anywhere else. The wizard goes `Connect Xero → Marketplaces → Upload → Results` with no scanning step.
 
-### Parsers (all working)
-| Parser | File | Lines | Status |
-|--------|------|-------|--------|
-| Amazon AU Settlement | `settlement-parser.ts` | ~400 | ✅ Production |
-| Shopify Payments | `shopify-payments-parser.ts` | ~300 | ✅ Production |
-| Shopify Orders | `shopify-orders-parser.ts` | ~250 | ✅ Production |
-| Bunnings Billing Cycle | `bunnings-summary-parser.ts` | ~200 | ✅ Production |
-| Woolworths MarketPlus | `woolworths-marketplus-parser.ts` | 481 | ✅ Production — splits by Order Source column |
-| Generic CSV | `generic-csv-parser.ts` | ~200 | ✅ Fallback for any marketplace |
+**Bug 2 — PostSetupBanner only renders on Upload tab**
+It's inside `{activeView === 'smart_upload' && ...}`. The default landing is `'dashboard'`. If the user never clicks Upload Hub, scans never trigger.
 
-### Engines (all working)
-| Engine | File | Lines | Purpose |
-|--------|------|-------|---------|
-| Settlement Engine | `settlement-engine.ts` | ~500 | CRUD operations, dedup (app-level), Supabase persistence |
-| Reconciliation Engine | `reconciliation-engine.ts` | ~300 | Amazon-specific recon |
-| Universal Reconciliation | `universal-reconciliation.ts` | ~250 | Balance + GST + Sanity checks for any marketplace |
-| Fee Observation Engine | `fee-observation-engine.ts` | ~350 | Fee rate tracking + anomaly alerts |
-| Profit Engine | `profit-engine.ts` | 135 | COGS calculation from product_costs table |
-| File Fingerprint Engine | `file-fingerprint-engine.ts` | ~200 | Column signature detection |
-| File Marketplace Detector | `file-marketplace-detector.ts` | ~300 | 3-level detection pipeline |
+**Bug 3 — No scan trigger on Dashboard mount**
+The Dashboard view shows `DashboardConnectionStrip`, `ChannelAlertsBanner`, `ActionCentre`, and `ValidationSweep` — none of which trigger the API fetch/scan sequence.
 
-### Shared Hooks (all built, GenericMarketplaceDashboard uses them)
-| Hook | File | Purpose |
-|------|------|---------|
-| `useSettlementManager` | `use-settlement-manager.ts` | Fetch + filter + loading states |
-| `useBulkSelect` | `use-bulk-select.ts` | Checkbox selection + Xero-aware bulk delete |
-| `useXeroSync` | `use-xero-sync.ts` | Push/sync/rollback with Xero |
-| `useReconciliation` | `use-reconciliation.ts` | Inline Balance/GST/Sanity checks |
-| `useTransactionDrilldown` | `use-transaction-drilldown.ts` | Line-item drill-down per settlement |
+### Fix Plan
 
-### Shared UI Components (all built)
-| Component | File | Purpose |
-|-----------|------|---------|
-| `SettlementStatusBadge` | `shared/SettlementStatusBadge.tsx` | Consistent status badges |
-| `ReconChecksInline` | `shared/ReconChecksInline.tsx` | Expandable recon results |
-| `BulkDeleteDialog` | `shared/BulkDeleteDialog.tsx` | Xero-aware delete confirmation |
-| `GapDetector` | `shared/GapDetector.tsx` | Missing period detection |
+**Fix 1: Wire SetupStepScanning into the wizard**
+Insert it as Step 4 (before Results becomes Step 5) when the user has ANY API connected. The wizard becomes:
+- Step 1: Connect Xero
+- Step 2: Connect Stores (Amazon/Shopify)
+- Step 3: Upload (if CSV marketplaces selected, else skip)
+- **Step 4: Scanning** (if any API connected, else skip)
+- Step 5: Results
 
-### Dashboard Components (verified)
-| Component | File | Status |
-|-----------|------|--------|
-| `GenericMarketplaceDashboard` | ✅ Fully refactored — uses all shared hooks, ~700 lines |
-| `AccountingDashboard` | ❌ 4,395 lines — NOT on shared hooks (Gap 2) |
-| `ShopifyPaymentsDashboard` | ❌ ~800 lines — NOT on shared hooks (Gap 2) |
-| `BunningsDashboard` | ❌ ~1,230 lines — NOT on shared hooks (Gap 2) |
-| `ShopifyOrdersDashboard` | ❌ ~1,315 lines — NOT on shared hooks (Gap 2) |
-| `InsightsDashboard` | ✅ Cross-marketplace analytics |
-| `SkuCostManager` | ✅ SKU cost CRUD UI |
-| `MonthlyReconciliationStatus` | ✅ Built |
-| `OnboardingChecklist` | ✅ Built |
-| `MarketplaceReturnRatio` | ✅ Built |
+**Fix 2: Move PostSetupBanner to Dashboard view (or both)**
+The scan banner should appear on the default Dashboard tab — not hidden in Upload Hub. This ensures scans trigger even if the wizard was skipped or completed without scanning.
 
-### Edge Functions (10 deployed)
-| Function | Purpose | JWT |
-|----------|---------|-----|
-| `ai-file-interpreter` | AI-powered file classification | verify_jwt=false |
-| `sync-xero-status` | Sync-back invoice status from Xero | verify_jwt=false |
-| `sync-settlement-to-xero` | Push settlement as Xero invoice | auth in code |
-| `auto-push-xero` | Batch auto-push new settlements | auth in code |
-| `xero-auth` | Xero OAuth2 token exchange | auth in code |
-| `amazon-auth` | Amazon SP-API OAuth2 token exchange | auth in code |
-| `fetch-amazon-settlements` | Pull settlements from Amazon SP-API | auth in code |
-| `sync-amazon-journal` | Create Xero journal from Amazon data | auth in code |
-| `admin-list-users` | List users (admin only) | auth in code |
-| `admin-manage-users` | Manage user roles (admin only) | auth in code |
+**Fix 3: Add a scan-on-first-load trigger**
+On Dashboard mount, if tokens exist but no scan completion flags exist, auto-trigger the scan sequence. This catches users who completed the wizard before scanning was wired up (like the current test account).
 
-### Other Verified
-- ✅ Rollback flow (void Xero invoice + reset local status)
-- ✅ Xero reference format: `Xettle-{settlement_id}` (new) + legacy `(ID)` parsing
-- ✅ Duplicate prevention: pre-push Xero API search + local journal ID check
-- ✅ Smart Upload Flow with marketplace auto-detection
-- ✅ MarketplaceSwitcher with tab management
-- ✅ Marketplace config tab (admin)
-- ✅ Seller Central Guide for Amazon
-- ✅ Shopify onboarding flow
+### Secondary Issues Found
 
----
+- **Duplicate `onboarding_wizard_complete`** rows for 2 different user_ids (2 test accounts)
+- **Duplicate `amazon_au` marketplace_connections** — 2 rows with identical data
+- **`callEdgeFunctionSafe` uses raw fetch** — works but edge function logs may not appear in the standard log viewer (explains "No logs found" for functions that did boot in the context logs)
 
-## 4. THE REAL GAPS — Priority Ordered
+### Implementation Details
 
-### Gap 1 — CRITICAL: No DB Unique Constraint on Settlements
-**Risk**: Race condition = duplicate settlements possible
-**Current state**: Dedup is application-level only in `settlement-engine.ts`
-**Fix**: Single migration:
-```sql
-CREATE UNIQUE INDEX idx_settlement_dedup ON settlements (settlement_id, marketplace, user_id);
-```
-**Effort**: 5 minutes
+**SetupWizard.tsx changes:**
+- Import `SetupStepScanning`
+- Update `STEP_LABELS` to `['Connect Xero', 'Marketplaces', 'Upload', 'Scanning', 'Results']`
+- Update `TOTAL_STEPS` to 5
+- Add scanning step rendering at `effectiveStep === 4`
+- Auto-skip scanning step if no APIs connected (`!hasXero && !hasAmazon && !hasShopify`)
 
-### Gap 2 — CRITICAL: 4 Dashboards NOT on Shared Hooks
-**Risk**: Feature drift, inconsistent UX, duplicated bug-prone code
+**Dashboard.tsx changes:**
+- Move `PostSetupBanner` into the Dashboard view (not just Upload Hub), OR render it in both views
+- Add first-load scan detection: check if tokens exist but scan flags don't, then trigger scan
 
-| Dashboard | Lines | Missing Features |
-|-----------|-------|-----------------|
-| `AccountingDashboard.tsx` | 4,395 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `ShopifyPaymentsDashboard.tsx` | ~800 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `BunningsDashboard.tsx` | ~1,230 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `ShopifyOrdersDashboard.tsx` | ~1,315 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
+**Deduplication:**
+- Clean up duplicate `amazon_au` marketplace_connections (add `ON CONFLICT` guard in provisioning)
 
-**Fix**: Migrate each to use shared hooks + components (follow GenericMarketplaceDashboard pattern)
-**Effort**: 2-4 hours per dashboard
-
-### Gap 3 — CRITICAL: Stripe/Billing = Zero
-**Current state**:
-- No Stripe code anywhere in codebase
-- No subscription enforcement
-- Roles exist in DB (`paid`, `starter`, `pro`) but nothing gates features
-- Users can use everything for free forever
-
-**Fix needed**:
-1. Enable Stripe integration
-2. Create subscription products/prices
-3. Implement plan-gating middleware
-4. Wire role assignment on subscription events
-**Effort**: 1-2 days
-
-### Gap 4 — SECURITY: RLS Tightening
-| Table | Issue | Fix |
-|-------|-------|-----|
-| `marketplace_ad_spend` | Uses `public` role instead of `authenticated` | Change RLS policies to `authenticated` |
-| `marketplace_shipping_costs` | Uses `public` role instead of `authenticated` | Change RLS policies to `authenticated` |
-| Edge functions | No rate limiting | Add rate limiting logic |
-
-**Fix**: Migration to update RLS policies + edge function code updates
-**Effort**: 30 minutes for RLS, 1-2 hours for rate limiting
-
----
-
-## 5. File Detection Pipeline (3-Level)
-
-```
-Upload → Fingerprint DB match (highest confidence)
-       → Heuristic detection (column pattern matching via fingerprint-library.ts)
-       → AI fallback (ai-file-interpreter edge function using Gemini)
-```
-
-Each level populates `marketplace_fingerprints` and `marketplace_file_fingerprints` tables for future auto-detection.
-
----
-
-## 6. Xero Integration Architecture
-
-### Flow
-1. **OAuth2**: `xero-auth` edge function handles token exchange + refresh
-2. **Push**: `sync-settlement-to-xero` creates Xero invoice with line items
-3. **Sync-back**: `sync-xero-status` queries Xero for invoice status updates
-4. **Auto-push**: `auto-push-xero` batch-pushes new settlements
-5. **Rollback**: Void Xero invoice + reset local `xero_journal_id` and `status`
-
-### Duplicate Prevention (3-layer)
-1. Local check: `xero_journal_id` already set → skip
-2. Pre-push API search: Query Xero by reference `Xettle-{id}` → skip if found
-3. Legacy format support: `sync-xero-status` parses both new and legacy reference formats
-
-### Reference Format
-- **New**: `Xettle-{settlement_id}` (in Reference field)
-- **Legacy**: Human-readable with `(settlement_id)` suffix
-- Both parsed by sync-back function
-
----
-
-## 7. Secrets Configuration (Verified)
-
-| Secret | Purpose | Status |
-|--------|---------|--------|
-| `XERO_CLIENT_ID` | Xero OAuth2 | ✅ Set |
-| `XERO_CLIENT_SECRET` | Xero OAuth2 | ✅ Set |
-| `AMAZON_SP_CLIENT_ID` | Amazon SP-API OAuth2 | ✅ Set |
-| `AMAZON_SP_CLIENT_SECRET` | Amazon SP-API OAuth2 | ✅ Set |
-| `LOVABLE_API_KEY` | AI file interpreter | ✅ Set |
-| `RESEND_API_KEY` | Email sending | ✅ Set |
-| `SUPABASE_URL` | Edge function access | ✅ Auto |
-| `SUPABASE_SERVICE_ROLE_KEY` | Edge function admin access | ✅ Auto |
-| `SUPABASE_PUBLISHABLE_KEY` | Client-side access | ✅ Auto |
-| `SUPABASE_ANON_KEY` | Client-side access | ✅ Auto |
-| `SUPABASE_DB_URL` | Direct DB access | ✅ Auto |
-
----
-
-## 8. Recommended Fix Order
-
-### Phase 1 — Integrity (Day 1)
-1. ✅ Gap 1: Add DB unique constraint (5 min)
-2. ✅ Gap 4: Fix RLS `public` → `authenticated` (30 min)
-
-### Phase 2 — Dashboard Migration (Day 1-3)
-3. Gap 2: Migrate `AccountingDashboard.tsx` to shared hooks (largest, highest impact)
-4. Gap 2: Migrate `ShopifyPaymentsDashboard.tsx`
-5. Gap 2: Migrate `BunningsDashboard.tsx`
-6. Gap 2: Migrate `ShopifyOrdersDashboard.tsx`
-
-### Phase 3 — Monetisation (Day 3-5)
-7. Gap 3: Enable Stripe
-8. Gap 3: Create subscription tiers matching existing roles
-9. Gap 3: Implement plan-gating
-10. Gap 3: Wire webhook for role assignment
-
-### Phase 4 — Hardening (Day 5+)
-11. Rate limiting on edge functions
-12. Unit tests (Vitest) for parsers and engines
-13. E2E tests for critical flows
-14. Error monitoring setup
-
----
-
-## 9. Code Quality Notes
-
-### Strengths
-- Clean separation: parsers → engines → hooks → components
-- Consistent RLS pattern across 17 tables
-- Smart 3-level file detection with learning
-- Universal reconciliation works for any marketplace
-- Well-structured edge functions with proper CORS
-
-### Weaknesses
-- `AccountingDashboard.tsx` at 4,395 lines is unmaintainable
-- Some `as any` type casts in dashboard components
-- No automated tests anywhere
-- No error boundary at dashboard level (only app-level)
-- Console.log statements in production code
-
----
-
-## 10. Summary Stats
-
-| Metric | Count |
-|--------|-------|
-| Total files | ~120 |
-| React components | ~60 |
-| Custom hooks | 8 |
-| Utility modules | 14 |
-| Edge functions | 10 |
-| Database tables | 17 |
-| RLS policies | ~40 |
-| Parsers | 6 |
-| Engines | 7 |
-| Lines of dashboard code | ~8,500 |
-| Lines on shared hooks | ~700 (GenericMarketplaceDashboard only) |
-| Lines NOT on shared hooks | ~7,800 |
