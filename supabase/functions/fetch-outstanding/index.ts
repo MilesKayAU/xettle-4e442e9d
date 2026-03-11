@@ -54,18 +54,21 @@ function parseXeroDate(dateField: string | null | undefined): string | null {
   return raw.split('T')[0];
 }
 
-function extractSettlementId(reference: string): string | null {
-  if (reference.startsWith('Xettle-')) return reference.slice(7).replace(/-P[12]$/, '');
-  if (reference.startsWith('AMZN-')) return reference.slice(5);
-  const lmbMatch = reference.match(/^LMB-\w+-(\d+)-\d+$/);
-  if (lmbMatch) return lmbMatch[1];
+function extractSettlementId(reference: string): { id: string | null; part: number | null } {
+  if (reference.startsWith('Xettle-')) {
+    const partMatch = reference.match(/-P([12])$/);
+    return { id: reference.slice(7).replace(/-P[12]$/, ''), part: partMatch ? parseInt(partMatch[1]) : null };
+  }
+  if (reference.startsWith('AMZN-')) return { id: reference.slice(5), part: null };
+  const lmbMatch = reference.match(/^LMB-\w+-(\d+)-(\d+)$/);
+  if (lmbMatch) return { id: lmbMatch[1], part: parseInt(lmbMatch[2]) };
   const numericMatch = reference.match(/\b(\d{8,})\b/);
-  if (numericMatch) return numericMatch[1];
+  if (numericMatch) return { id: numericMatch[1], part: null };
   const shopifyMatch = reference.match(/(Shopify-[\w]+)/);
-  if (shopifyMatch) return shopifyMatch[1];
+  if (shopifyMatch) return { id: shopifyMatch[1], part: null };
   const genericMatch = reference.match(/(\d+_\w+)/);
-  if (genericMatch) return genericMatch[1];
-  return null;
+  if (genericMatch) return { id: genericMatch[1], part: null };
+  return { id: null, part: null };
 }
 
 function detectMarketplace(reference: string, contactName: string): string {
