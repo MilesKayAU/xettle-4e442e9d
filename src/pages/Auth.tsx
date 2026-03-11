@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import XettleLogo from '@/components/shared/XettleLogo';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
