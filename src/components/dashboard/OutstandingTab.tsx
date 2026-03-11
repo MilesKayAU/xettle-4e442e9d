@@ -84,6 +84,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [applying, setApplying] = useState<Set<string>>(new Set());
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [showNonMarketplace, setShowNonMarketplace] = useState(false);
+
+  // Filter rows based on marketplace toggle
+  const filteredRows = useMemo(() => {
+    if (!data) return [];
+    if (showNonMarketplace) return data.rows;
+    return data.rows.filter(r => r.is_marketplace !== false);
+  }, [data, showNonMarketplace]);
+
+  const nonMarketplaceCount = useMemo(() => {
+    if (!data) return 0;
+    return data.rows.filter(r => r.is_marketplace === false).length;
+  }, [data]);
+
+  const filteredTotal = useMemo(() => {
+    return filteredRows.reduce((sum, r) => sum + r.amount, 0);
+  }, [filteredRows]);
 
   const fetchOutstanding = useCallback(async () => {
     setLoading(true);
