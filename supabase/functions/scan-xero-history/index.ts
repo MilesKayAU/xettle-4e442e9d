@@ -476,6 +476,7 @@ Deno.serve(async (req) => {
       details: {
         marketplaces_detected: detected_settlements.length,
         marketplaces_created,
+        gateway_alerts_created,
         standalone_contacts: standaloneContacts,
         accounting_boundary_date,
         confidence,
@@ -483,7 +484,7 @@ Deno.serve(async (req) => {
       },
     })
 
-    console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces (${standaloneContacts.length} from contacts only), created ${marketplaces_created} connections, boundary: ${accounting_boundary_date}`)
+    console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces, created ${marketplaces_created} connections + ${gateway_alerts_created} gateway alerts, boundary: ${accounting_boundary_date}`)
 
     // ─── 10. Trigger validation sweep server-side as backup ─────────
     try {
