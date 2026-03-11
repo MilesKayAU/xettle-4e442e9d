@@ -113,6 +113,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
+  const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
+
   useEffect(() => {
     if (hasLoadedOnce && settlements.length > 0 && !hasAutoAudited && !refreshingXero) {
       setHasAutoAudited(true);
@@ -120,6 +122,20 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       handleRefreshXero();
     }
   }, [hasLoadedOnce, settlements.length, hasAutoAudited, refreshingXero, handleRefreshXero, code]);
+
+  // Auto-expand unpushed settlements so bookkeepers see detail before pushing
+  useEffect(() => {
+    if (hasLoadedOnce && settlements.length > 0 && !hasAutoExpanded) {
+      setHasAutoExpanded(true);
+      const unpushed = settlements.filter(s =>
+        s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push'
+      );
+      // Auto-expand the first unpushed settlement
+      if (unpushed.length > 0 && unpushed.length <= 5) {
+        loadLineItems(unpushed[0].settlement_id);
+      }
+    }
+  }, [hasLoadedOnce, settlements, hasAutoExpanded, loadLineItems]);
 
   useEffect(() => {
     async function checkShopifyAndBoundary() {
