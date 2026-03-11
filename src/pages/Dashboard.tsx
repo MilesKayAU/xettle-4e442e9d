@@ -19,6 +19,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
+import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard } from 'lucide-react';
