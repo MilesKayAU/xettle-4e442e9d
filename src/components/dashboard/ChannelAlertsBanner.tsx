@@ -1,13 +1,14 @@
 /**
  * ChannelAlertsBanner — Shows pending channel alerts on the Dashboard.
- * Uses intelligent tag-based detection: detected_label, candidate_tags, detection_method.
+ * Supports three alert types: 'new' (brand new channel), 'unlinked' (marketplace exists, not linked),
+ * and 'already_linked' (skipped entirely by scanner).
  */
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Tag } from 'lucide-react';
+import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Tag, Link as LinkIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
@@ -23,6 +24,7 @@ interface ChannelAlert {
   detection_method?: string;
   detected_label?: string;
   candidate_tags?: string[];
+  alert_type?: string; // 'new' | 'unlinked' | 'already_linked'
 }
 
 interface ChannelAlertsBannerProps {
@@ -50,6 +52,31 @@ function getConnectorNote(candidateTags: string[]): string | null {
   return null;
 }
 
+/** Known marketplace label-to-code mappings (mirrors edge function) */
+const LABEL_TO_CODE: Record<string, string> = {
+  mydeal: 'mydeal',
+  'my deal': 'mydeal',
+  bunnings: 'bunnings',
+  kogan: 'kogan',
+  'big w': 'bigw',
+  bigw: 'bigw',
+  'everyday market': 'everyday_market',
+  catch: 'catch',
+  ebay: 'ebay',
+  'tiktok shop': 'tiktok_shop',
+  amazon: 'amazon_au',
+};
+
+function resolveMarketplaceCode(label: string | null, sourceName: string): string | null {
+  if (label) {
+    const code = LABEL_TO_CODE[label.toLowerCase().trim()];
+    if (code) return code;
+  }
+  const code = LABEL_TO_CODE[sourceName.toLowerCase().trim()];
+  if (code) return code;
+  return null;
+}
+
 /** Get the best display name for an alert */
 function getDisplayName(alert: ChannelAlert): string {
   if (alert.detected_label) return alert.detected_label;
@@ -66,9 +93,9 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [syncDismissed, setSyncDismissed] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [shopDomain, setShopDomain] = useState<string | null>(null);
-  // For inline user-naming of unknown channels
   const [namingAlertId, setNamingAlertId] = useState<string | null>(null);
   const [customName, setCustomName] = useState('');
+  const [linkingAlertId, setLinkingAlertId] = useState<string | null>(null);
 
   const loadAlerts = async () => {
     try {
@@ -212,7 +239,6 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   };
 
   const handleSetup = (alert: ChannelAlert) => {
-    const displayName = getDisplayName(alert);
     const hasDetectedLabel = !!alert.detected_label;
 
     setSetupChannel({
@@ -227,7 +253,44 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     });
   };
 
-  /** User names an unknown channel inline */
+  /** Link an unlinked channel — creates sub_channel record, marks alert actioned */
+  const handleLinkNow = async (alert: ChannelAlert) => {
+    setLinkingAlertId(alert.id);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error('Please log in first.'); return; }
+
+      const displayName = getDisplayName(alert);
+      const marketplaceCode = resolveMarketplaceCode(alert.detected_label, alert.source_name);
+
+      // Create shopify_sub_channels record
+      await supabase.from('shopify_sub_channels' as any).upsert({
+        user_id: user.id,
+        source_name: alert.source_name,
+        marketplace_label: displayName,
+        marketplace_code: marketplaceCode,
+        settlement_type: 'separate_file',
+        ignored: false,
+        order_count: alert.order_count,
+        total_revenue: alert.total_revenue,
+      } as any, { onConflict: 'user_id,source_name' } as any);
+
+      // Mark alert as actioned
+      await supabase
+        .from('channel_alerts' as any)
+        .update({ status: 'actioned', actioned_at: new Date().toISOString() } as any)
+        .eq('id', alert.id);
+
+      setAlerts(prev => prev.filter(a => a.id !== alert.id));
+      onAlertCountChange?.(alerts.length - 1);
+      toast.success(`${displayName} orders are now linked to your ${displayName} settlements. Cross-reference reconciliation is enabled.`);
+    } catch (err: any) {
+      toast.error(`Failed to link: ${err.message || 'Unknown error'}`);
+    } finally {
+      setLinkingAlertId(null);
+    }
+  };
+
   const handleNameChannel = async (alert: ChannelAlert) => {
     if (!customName.trim()) return;
     await supabase
@@ -310,7 +373,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           <div className="flex items-center gap-3">
             <Search className="h-5 w-5 text-amber-600" />
             <p className="text-sm font-medium">
-              {alerts.length} new sales channels detected in Shopify
+              {alerts.length} sales channel alert{alerts.length !== 1 ? 's' : ''} in Shopify
             </p>
           </div>
           <Button size="sm" variant="outline" onClick={() => setExpanded(true)} className="gap-1">
@@ -342,7 +405,43 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           const candidateTags = alert.candidate_tags || [];
           const connectorNote = getConnectorNote(candidateTags);
           const isNaming = namingAlertId === alert.id;
+          const isUnlinked = alert.alert_type === 'unlinked';
+          const isLinking = linkingAlertId === alert.id;
 
+          // ─── UNLINKED ALERT — marketplace exists, just needs linking ───
+          if (isUnlinked) {
+            return (
+              <Card key={alert.id} className="border-primary/30 bg-primary/5">
+                <CardContent className="flex items-center gap-3 p-4">
+                  <LinkIcon className="h-5 w-5 text-primary shrink-0" />
+                  <div className="flex-1 text-sm">
+                    <p className="font-medium text-foreground">
+                      🔗 Link Shopify orders to {displayName}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5">
+                      We found {alert.order_count} {displayName} order{alert.order_count !== 1 ? 's' : ''} in Shopify
+                      {' '}({formatCurrency(alert.total_revenue)}).
+                      You already have {displayName} settlements set up. Link them to enable cross-reference reconciliation.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
+                      Not now
+                    </Button>
+                    <Button size="sm" onClick={() => handleLinkNow(alert)} disabled={isLinking} className="gap-1">
+                      {isLinking ? (
+                        <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Linking...</>
+                      ) : (
+                        <>Link now <ArrowRight className="h-3.5 w-3.5" /></>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          }
+
+          // ─── NEW ALERT — brand new channel, needs full setup ───
           return (
             <Card key={alert.id} className="border-amber-500/30 bg-amber-500/5">
               <CardContent className="flex flex-col gap-2 p-4">
