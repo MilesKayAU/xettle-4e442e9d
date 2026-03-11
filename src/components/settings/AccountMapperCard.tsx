@@ -355,11 +355,71 @@ export default function AccountMapperCard() {
             );
           })}
         </div>
+        <TrackingCategoryPrompt />
         <Button variant="outline" size="sm" onClick={runMapper} className="gap-2">
           <RefreshCw className="h-3 w-3" />
           Re-run AI mapper
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+function TrackingCategoryPrompt() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'xero_tracking_enabled')
+        .maybeSingle();
+      setEnabled(data?.value === 'true');
+    };
+    check();
+  }, []);
+
+  const handleEnable = async () => {
+    setToggling(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      await supabase.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'xero_tracking_enabled',
+        value: 'true',
+      } as any, { onConflict: 'user_id,key' });
+      setEnabled(true);
+      toast.success('Tracking Categories enabled');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  if (enabled === null) return null;
+
+  if (enabled) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Tracking Categories: Enabled ✓
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between text-xs bg-muted/50 border rounded-md px-3 py-2">
+      <span className="text-muted-foreground">📊 Enable Tracking Categories for per-channel P&L</span>
+      <Button variant="outline" size="sm" onClick={handleEnable} disabled={toggling} className="h-6 text-xs px-2">
+        {toggling ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Enable'}
+      </Button>
+    </div>
   );
 }

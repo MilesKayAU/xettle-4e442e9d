@@ -1254,6 +1254,7 @@ export default function AccountingDashboard() {
                 <AccountMapperCard />
                 <ShopifyConnectionStatus />
                 <ChannelManagement />
+                <TrackingCategoriesToggle />
                 <AutomationSettingsPanel userTier={userTier} />
                 <ReconciliationSettingsCard />
                 <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />

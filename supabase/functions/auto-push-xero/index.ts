@@ -137,6 +137,18 @@ Deno.serve(async (req) => {
           'Advertising Costs': '410',
         }[cat] || '405')
 
+        // ─── Check tracking categories setting ────────────────────
+        let trackingEnabled = false
+        try {
+          const { data: trackingSetting } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('user_id', userId)
+            .eq('key', 'xero_tracking_enabled')
+            .maybeSingle()
+          trackingEnabled = trackingSetting?.value === 'true'
+        } catch {}
+
         let userPushed = 0
         let userSkipped = 0
         let userErrors = 0
@@ -166,17 +178,62 @@ Deno.serve(async (req) => {
           const netAmount = s.bank_deposit || s.net_ex_gst || 0
           const description = `${contactName} Settlement ${s.period_start} → ${s.period_end}`
 
+          // ─── Resolve tracking if enabled ─────────────────────────
+          let trackingArray: any[] | null = null
+          if (trackingEnabled) {
+            const cacheKey = `xero_tracking_sales_channel_${contactName.toLowerCase().replace(/\s+/g, '_')}`
+            try {
+              const { data: cachedTracking } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('user_id', userId)
+                .eq('key', cacheKey)
+                .maybeSingle()
+              if (cachedTracking?.value) {
+                const cached = JSON.parse(cachedTracking.value)
+                trackingArray = [{ Name: cached.categoryName, Option: cached.optionName }]
+              }
+            } catch {}
+
+            if (!trackingArray) {
+              try {
+                const trackingUrl = `${supabaseUrl}/functions/v1/xero-auth`
+                const trackingResp = await fetch(trackingUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${serviceRoleKey}`,
+                    'x-action': 'get_or_create_tracking',
+                  },
+                  body: JSON.stringify({
+                    action: 'get_or_create_tracking',
+                    categoryName: 'Sales Channel',
+                    optionName: contactName,
+                  }),
+                })
+                if (trackingResp.ok) {
+                  const trackingResult = await trackingResp.json()
+                  if (trackingResult.success) {
+                    trackingArray = [{ Name: trackingResult.categoryName, Option: trackingResult.optionName }]
+                  }
+                }
+              } catch (trackErr) {
+                console.error('[auto-push-xero] Tracking resolution failed (non-fatal):', trackErr)
+              }
+            }
+          }
+
           // Build line items
           const lineItems = [
-            { Description: `${contactName} Sales`, AccountCode: getCode('Sales'), TaxType: 'OUTPUT', UnitAmount: round2((s.sales_principal || 0) + (s.sales_shipping || 0)), Quantity: 1 },
-            { Description: `${contactName} Promotional Discounts`, AccountCode: getCode('Promotional Discounts'), TaxType: 'OUTPUT', UnitAmount: round2(s.promotional_discounts || 0), Quantity: 1 },
-            { Description: `${contactName} Refunds`, AccountCode: getCode('Refunds'), TaxType: 'OUTPUT', UnitAmount: round2(s.refunds || 0), Quantity: 1 },
-            { Description: `${contactName} Reimbursements`, AccountCode: getCode('Reimbursements'), TaxType: 'NONE', UnitAmount: round2(s.reimbursements || 0), Quantity: 1 },
-            { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.seller_fees || 0)), Quantity: 1 },
-            { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.fba_fees || 0)), Quantity: 1 },
-            { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.storage_fees || 0)), Quantity: 1 },
-            { Description: `${contactName} Advertising Costs`, AccountCode: getCode('Advertising Costs'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.advertising_costs || 0)), Quantity: 1 },
-            { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(Math.max(round2(s.other_fees || 0), 0)), Quantity: 1 },
+            { Description: `${contactName} Sales`, AccountCode: getCode('Sales'), TaxType: 'OUTPUT', UnitAmount: round2((s.sales_principal || 0) + (s.sales_shipping || 0)), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
+            { Description: `${contactName} Promotional Discounts`, AccountCode: getCode('Promotional Discounts'), TaxType: 'OUTPUT', UnitAmount: round2(s.promotional_discounts || 0), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
+            { Description: `${contactName} Refunds`, AccountCode: getCode('Refunds'), TaxType: 'OUTPUT', UnitAmount: round2(s.refunds || 0), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
+            { Description: `${contactName} Reimbursements`, AccountCode: getCode('Reimbursements'), TaxType: 'NONE', UnitAmount: round2(s.reimbursements || 0), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
+            { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.seller_fees || 0)), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
+            { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.fba_fees || 0)), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
+            { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.storage_fees || 0)), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
+            { Description: `${contactName} Advertising Costs`, AccountCode: getCode('Advertising Costs'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.advertising_costs || 0)), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
+            { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(Math.max(round2(s.other_fees || 0), 0)), Quantity: 1, ...(trackingArray ? { Tracking: trackingArray } : {}) },
           ].filter(item => Math.abs(item.UnitAmount) > 0.01)
 
           if (lineItems.length === 0) {
