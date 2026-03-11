@@ -141,10 +141,12 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
               if (step.fn === 'fetch-shopify-orders') shopifyOrdersFetched = true;
               // Write completion flag
               if (step.flagKey) {
+            try {
                 await supabase.from('app_settings').upsert(
                   { user_id: caps.userId!, key: step.flagKey, value: 'true' },
                   { onConflict: 'user_id,key' }
-                ).catch(() => {});
+                );
+              } catch {}
               }
             } else {
               updateStep(i, 'error', result.error || 'Failed');
