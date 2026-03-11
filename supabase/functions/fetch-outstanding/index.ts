@@ -126,8 +126,10 @@ Deno.serve(async (req) => {
     let token = tokens[0] as XeroToken;
     token = await refreshToken(supabase, token);
 
-    // ─── Fetch all AUTHORISED invoices from Xero ───
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED&order=Date DESC`;
+    // ─── Fetch AUTHORISED sales invoices (ACCREC) from Xero ───
+    // Only fetch accounts receivable — excludes bills (ACCPAY) like BAS, Bunnings bills, etc.
+    const invoiceWhere = encodeURIComponent('Type=="ACCREC"');
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
     const xeroResp = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token.access_token}`,
