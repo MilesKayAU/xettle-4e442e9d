@@ -791,6 +791,42 @@ export type Database = {
         }
         Relationships: []
       }
+      reconciliation_notes: {
+        Row: {
+          created_at: string | null
+          created_by: string
+          id: string
+          item_id: string
+          item_type: string
+          note: string
+          resolved: boolean | null
+          resolved_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by: string
+          id?: string
+          item_id: string
+          item_type: string
+          note: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string
+          id?: string
+          item_id?: string
+          item_type?: string
+          note?: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       settlement_id_aliases: {
         Row: {
           alias_id: string
