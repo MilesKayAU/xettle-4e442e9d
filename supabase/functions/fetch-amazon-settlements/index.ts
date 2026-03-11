@@ -234,7 +234,7 @@ function detectSplitMonth(header: any, allLines: any[], gstDivisor: number): any
   const lastDayMonth1Str = formatDateStr(lastDayMonth1);
 
   const aggregateLines = (monthLines: any[]) => {
-    let sp = 0, ss = 0, pd = 0, sf = 0, ff = 0, stf = 0, ref = 0, reim = 0, oth = 0;
+    let sp = 0, ss = 0, pd = 0, sf = 0, ff = 0, stf = 0, ad = 0, ref = 0, reim = 0, oth = 0;
     for (const line of monthLines) {
       const cat = line.accountingCategory, amt = line.amount;
       if (cat === 'Sales' && line.amountDescription === 'Principal') sp += amt;
@@ -244,15 +244,16 @@ function detectSplitMonth(header: any, allLines: any[], gstDivisor: number): any
       else if (cat === 'Seller Fees') sf += amt;
       else if (cat === 'FBA Fees') ff += amt;
       else if (cat === 'Storage Fees') stf += amt;
+      else if (cat === 'Advertising Costs') ad += amt;
       else if (cat === 'Refunds') ref += amt;
       else if (cat === 'Reimbursements') reim += amt;
       else oth += amt;
     }
-    const ts = round2(sp + ss), gross = round2(ts + pd + sf + ff + stf + ref + reim + oth);
-    const expTotal = round2(sf + ff + stf);
+    const ts = round2(sp + ss), gross = round2(ts + pd + sf + ff + stf + ad + ref + reim + oth);
+    const expTotal = round2(sf + ff + stf + ad);
     const gstInc = round2(round2(sp + ss) / gstDivisor), gstExp = round2(expTotal / gstDivisor);
     const net = round2(gross - gstInc - gstExp);
-    return { salesPrincipal: round2(sp), salesShipping: round2(ss), totalSales: ts, promotionalDiscounts: round2(pd), sellerFees: round2(sf), fbaFees: round2(ff), storageFees: round2(stf), refunds: round2(ref), reimbursements: round2(reim), otherFees: round2(oth), grossTotal: gross, netExGst: net, gstOnIncome: gstInc, gstOnExpenses: gstExp };
+    return { salesPrincipal: round2(sp), salesShipping: round2(ss), totalSales: ts, promotionalDiscounts: round2(pd), sellerFees: round2(sf), fbaFees: round2(ff), storageFees: round2(stf), advertisingCosts: round2(ad), refunds: round2(ref), reimbursements: round2(reim), otherFees: round2(oth), grossTotal: gross, netExGst: net, gstOnIncome: gstInc, gstOnExpenses: gstExp };
   };
 
   const month1Lines = allLines.filter((l: any) => !l.postedDate || l.postedDate <= lastDayMonth1Str);
