@@ -421,8 +421,19 @@ Deno.serve(async (req) => {
 
       const displayName = getRegistryName(det.marketplace)
 
+      // Advertising platforms (Meta, Google Ads, etc.) — silently ignore, not revenue
+      if (isAdvertisingPlatform(det.marketplace)) {
+        console.log(`[scan-xero-history] Advertising platform ${det.marketplace} → ignored (expense, not revenue)`)
+        continue
+      }
+
       // Payment processors → channel_alert, NOT marketplace_connection
       if (isPaymentProcessor(det.marketplace)) {
+        // Filter out zero/negative value deposits — not actionable
+        if ((det.last_amount || 0) <= 0) {
+          console.log(`[scan-xero-history] Payment processor ${det.marketplace} → skipped (zero/negative amount)`)
+          continue
+        }
         await supabase.from('channel_alerts').upsert({
           user_id: userId,
           source_name: det.marketplace,
