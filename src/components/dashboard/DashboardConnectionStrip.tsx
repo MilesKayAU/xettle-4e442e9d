@@ -78,27 +78,16 @@ export default function DashboardConnectionStrip({ onSwitchToUpload }: Props) {
           {conn.connected ? (
             <span className="text-foreground">
               <span className="text-emerald-500">🟢</span>{' '}
-              <span className="font-medium">{conn.label}</span>{' '}
-              <span className="text-muted-foreground">
-                connected{conn.lastSync ? ` · synced ${conn.lastSync}` : ''}
-              </span>
+              <span className="font-medium">{conn.label}</span>
+              {conn.lastSync && (
+                <span className="text-muted-foreground"> synced {conn.lastSync}</span>
+              )}
             </span>
           ) : (
             <span className="text-foreground">
               <span className="text-amber-500">⚠️</span>{' '}
               <span className="font-medium">{conn.label}</span>{' '}
               <span className="text-muted-foreground">not connected</span>
-              {onSwitchToUpload && (
-                <>
-                  {' — '}
-                  <button
-                    onClick={onSwitchToUpload}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Connect →
-                  </button>
-                </>
-              )}
             </span>
           )}
         </React.Fragment>
