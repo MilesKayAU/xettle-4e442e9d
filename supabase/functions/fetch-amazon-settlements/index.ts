@@ -516,7 +516,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
             gst_on_expenses: summary.gstOnExpenses,
             bank_deposit: summary.bankDeposit,
             reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
-            status: isBeforeCutoff ? 'synced_external' : 'saved',
+            status: isBeforeCutoff ? 'already_recorded' : 'saved',
             source: 'api',
             is_split_month: splitMonth.isSplitMonth,
             split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
