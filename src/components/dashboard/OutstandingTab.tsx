@@ -139,8 +139,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
-      // Handle "No Xero connection" gracefully
-      if (resp.data?.error === 'No Xero connection') {
+      // Handle "No Xero connection" gracefully — supabase.functions.invoke
+      // puts non-2xx responses in resp.error, not resp.data
+      const noXeroMsg = resp.data?.error || resp.error?.message || '';
+      if (typeof noXeroMsg === 'string' && noXeroMsg.includes('No Xero connection')) {
         setNoXeroConnection(true);
         setHasLoaded(true);
         return;
