@@ -165,6 +165,7 @@ export default function PostSetupBanner({
         onScanComplete?.();
       } catch (err) {
         console.error('Amazon scan trigger failed:', err);
+        setAmazonScanComplete(true);
       } finally {
         setAmazonScanning(false);
       }
