@@ -3,12 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, AlertTriangle, Clock, PartyPopper, Send, Upload, ArrowRight } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Clock, PartyPopper, Send, Upload, ArrowRight, Loader2 } from 'lucide-react';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 
 interface Props {
   onNext: () => void;
   hasXero?: boolean;
+  hasAmazon?: boolean;
+  hasShopify?: boolean;
 }
 
 interface MarketplaceSummary {
@@ -19,7 +21,7 @@ interface MarketplaceSummary {
   externalCount: number;
 }
 
-export default function SetupStepResults({ onNext, hasXero }: Props) {
+export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopify }: Props) {
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<MarketplaceSummary[]>([]);
   const [readyToPush, setReadyToPush] = useState(0);
@@ -89,6 +91,33 @@ export default function SetupStepResults({ onNext, hasXero }: Props) {
   const anyGaps = summaries.some(s => s.hasMissing);
   const isEmpty = summaries.length === 0;
 
+  // Build adaptive message based on connection path
+  const getAdaptiveMessage = () => {
+    const hasAny = hasXero || hasAmazon || hasShopify;
+    if (!hasAny) {
+      return "Upload settlement CSVs from your dashboard — you can connect APIs anytime from Settings.";
+    }
+    if (hasXero && hasAmazon && hasShopify) {
+      return "You're fully connected! Settlements will flow in automatically and sync to Xero.";
+    }
+    if (hasXero && hasAmazon) {
+      return "Amazon settlements will sync automatically. We're scanning Xero for existing records.";
+    }
+    if (hasXero && hasShopify) {
+      return "Shopify payouts will sync automatically. We're scanning Xero for sub-channels.";
+    }
+    if (hasXero) {
+      return "Xettle is scanning your Xero for existing marketplace records. Upload a settlement file to get started.";
+    }
+    if (hasAmazon) {
+      return "Amazon settlements will sync automatically. Connect Xero anytime to push journals.";
+    }
+    if (hasShopify) {
+      return "Shopify payouts will sync automatically. Connect Xero anytime to push journals.";
+    }
+    return "You're all set up!";
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 py-4">
@@ -106,13 +135,20 @@ export default function SetupStepResults({ onNext, hasXero }: Props) {
           <>
             <h2 className="text-xl font-bold text-foreground">You're all set up!</h2>
             <p className="text-sm text-muted-foreground">
-              No settlement data detected yet — upload your first files from the dashboard.
+              {getAdaptiveMessage()}
             </p>
+            {(hasXero || hasAmazon || hasShopify) && (
+              <div className="flex items-center justify-center gap-2 mt-2 text-xs text-primary">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Background sync in progress — data will appear shortly</span>
+              </div>
+            )}
           </>
         ) : (
           <>
             <PartyPopper className="h-8 w-8 text-emerald-500 mx-auto" />
             <h2 className="text-xl font-bold text-foreground">Here's what we found</h2>
+            <p className="text-sm text-muted-foreground">{getAdaptiveMessage()}</p>
           </>
         )}
       </div>
