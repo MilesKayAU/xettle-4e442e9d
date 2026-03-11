@@ -388,7 +388,7 @@ export default function Setup() {
     const userId = caps.userId!;
     if (api === 'xero') {
       setXeroProgress(0);
-      startProgressTimer(setXeroProgress, 60000);
+      startProgressTimer(setXeroProgress, 150000);
       runXeroScan(token, userId);
     } else if (api === 'shopify') {
       setShopifyProgress(0);
@@ -620,13 +620,21 @@ export default function Setup() {
 
   function StepRow({ step: s, onRetry }: { step: StepState; onRetry?: () => void }) {
     return (
-      <div className="flex items-start gap-3 py-1.5">
-        <StatusIcon status={s.status} />
-        <span className="text-sm text-foreground flex-1">{s.message}</span>
-        {s.status === 'error' && onRetry && (
-          <Button variant="ghost" size="sm" onClick={onRetry} className="h-6 px-2 text-xs">
-            <RefreshCw className="h-3 w-3 mr-1" /> Retry
-          </Button>
+      <div className="space-y-1">
+        <div className="flex items-start gap-3 py-1.5">
+          <StatusIcon status={s.status} />
+          <span className="text-sm text-foreground flex-1">{s.message}</span>
+          {s.status === 'error' && onRetry && (
+            <Button variant="ghost" size="sm" onClick={onRetry} className="h-6 px-2 text-xs">
+              <RefreshCw className="h-3 w-3 mr-1" /> Retry
+            </Button>
+          )}
+        </div>
+        {s.status === 'error' && s.error && (
+          <div className="ml-7 rounded bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive space-y-1">
+            <p className="font-medium">Error details (share with support):</p>
+            <code className="block whitespace-pre-wrap break-all font-mono text-[11px]">{s.error}</code>
+          </div>
         )}
       </div>
     );
@@ -750,8 +758,12 @@ export default function Setup() {
                   </span>
                 </div>
                 <Progress value={shopifyProgress} className="h-1.5" />
-                {shopifyPayoutsStep.status !== 'idle' && <StepRow step={shopifyPayoutsStep} />}
-                {shopifyOrdersStep.status !== 'idle' && <StepRow step={shopifyOrdersStep} />}
+                {shopifyPayoutsStep.status !== 'idle' && (
+                  <StepRow step={shopifyPayoutsStep} onRetry={() => retryStep('shopify')} />
+                )}
+                {shopifyOrdersStep.status !== 'idle' && (
+                  <StepRow step={shopifyOrdersStep} onRetry={() => retryStep('shopify')} />
+                )}
                 {shopifyChannelsStep.status !== 'idle' && (
                   <StepRow step={shopifyChannelsStep} onRetry={() => retryStep('shopify')} />
                 )}
