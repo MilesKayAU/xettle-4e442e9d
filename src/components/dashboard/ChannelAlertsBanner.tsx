@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Tag, Link as LinkIcon } from 'lucide-react';
+import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Tag, Link as LinkIcon, Banknote } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
@@ -24,7 +24,11 @@ interface ChannelAlert {
   detection_method?: string;
   detected_label?: string;
   candidate_tags?: string[];
-  alert_type?: string; // 'new' | 'unlinked' | 'already_linked'
+  alert_type?: string; // 'new' | 'unlinked' | 'already_linked' | 'unmatched_deposit' | 'unknown_deposit'
+  deposit_amount?: number | null;
+  deposit_date?: string | null;
+  deposit_description?: string | null;
+  match_confidence?: number | null;
 }
 
 interface ChannelAlertsBannerProps {
@@ -414,6 +418,59 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           const isNaming = namingAlertId === alert.id;
           const isUnlinked = alert.alert_type === 'unlinked';
           const isLinking = linkingAlertId === alert.id;
+
+          const isUnmatchedDeposit = alert.alert_type === 'unmatched_deposit';
+          const isUnknownDeposit = alert.alert_type === 'unknown_deposit';
+
+          // ─── DEPOSIT ALERTS — curious, not alarming ───
+          if (isUnmatchedDeposit || isUnknownDeposit) {
+            const depositAmt = alert.deposit_amount
+              ? formatCurrency(alert.deposit_amount)
+              : formatCurrency(alert.total_revenue);
+            const depositDate = alert.deposit_date
+              ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+              : null;
+
+            return (
+              <Card key={alert.id} className="border-primary/20 bg-primary/5">
+                <CardContent className="flex items-center gap-3 p-4">
+                  <Banknote className="h-5 w-5 text-primary shrink-0" />
+                  <div className="flex-1 text-sm">
+                    {isUnmatchedDeposit ? (
+                      <>
+                        <p className="font-medium text-foreground">
+                          💰 We spotted a possible {displayName} deposit — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">
+                          Upload {displayName} settlements to reconcile it.
+                          {alert.match_confidence && (
+                            <span className="ml-1 text-xs opacity-60">({alert.match_confidence}% confidence)</span>
+                          )}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium text-foreground">
+                          💰 We found a deposit we couldn't match — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">
+                          Is this a marketplace payment? Set up the marketplace to reconcile it.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
+                      Not now
+                    </Button>
+                    <Button size="sm" onClick={() => handleSetup(alert)} className="gap-1">
+                      {isUnmatchedDeposit ? `Set up ${displayName}` : 'Identify this deposit'} <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          }
 
           // ─── UNLINKED ALERT — marketplace exists, just needs linking ───
           if (isUnlinked) {

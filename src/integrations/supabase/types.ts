@@ -170,10 +170,14 @@ export type Database = {
           alert_type: string | null
           candidate_tags: Json | null
           created_at: string | null
+          deposit_amount: number | null
+          deposit_date: string | null
+          deposit_description: string | null
           detected_label: string | null
           detection_method: string | null
           first_seen_at: string | null
           id: string
+          match_confidence: number | null
           order_count: number | null
           source_name: string
           status: string
@@ -185,10 +189,14 @@ export type Database = {
           alert_type?: string | null
           candidate_tags?: Json | null
           created_at?: string | null
+          deposit_amount?: number | null
+          deposit_date?: string | null
+          deposit_description?: string | null
           detected_label?: string | null
           detection_method?: string | null
           first_seen_at?: string | null
           id?: string
+          match_confidence?: number | null
           order_count?: number | null
           source_name: string
           status?: string
@@ -200,10 +208,14 @@ export type Database = {
           alert_type?: string | null
           candidate_tags?: Json | null
           created_at?: string | null
+          deposit_amount?: number | null
+          deposit_date?: string | null
+          deposit_description?: string | null
           detected_label?: string | null
           detection_method?: string | null
           first_seen_at?: string | null
           id?: string
+          match_confidence?: number | null
           order_count?: number | null
           source_name?: string
           status?: string

@@ -21,6 +21,7 @@ import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher
 import { formatSettlementDate, formatAUD } from '@/utils/settlement-engine';
 
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
+import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
 
 // ── Shared architecture hooks + components ──────────────────────────────────
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
@@ -269,16 +270,11 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             </CardContent>
           </Card>
         ) : settlements.length === 0 ? (
-          <Card className="border-border">
-            <CardContent className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">No settlements saved yet.</p>
-              {onSwitchToUpload && (
-                <Button variant="link" size="sm" onClick={onSwitchToUpload} className="mt-2 gap-1">
-                  <Upload className="h-3.5 w-3.5" /> Upload files via Smart Upload
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+          <ChannelDetectedEmptyState
+            marketplaceCode={code}
+            marketplaceName={marketplaceName}
+            onUpload={onSwitchToUpload}
+          />
         ) : (
           <div className="space-y-2">
             {/* Bulk actions bar */}

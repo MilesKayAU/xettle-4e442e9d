@@ -168,6 +168,204 @@ async function dedupPass(adminSupabase: any, userId: string) {
   return suppressed;
 }
 
+// ─── P3: Unmatched bank deposit detection ───────────────────────────
+interface NarrationMatch {
+  marketplace_code: string | null
+  marketplace_name: string
+  confidence: number
+}
+
+// Static base dictionary — augmented dynamically per user
+const BASE_MARKETPLACE_KEYWORDS: Record<string, string> = {
+  kogan: 'kogan',
+  mydeal: 'mydeal',
+  'my deal': 'mydeal',
+  bunnings: 'bunnings',
+  catch: 'catch',
+  'big w': 'bigw',
+  bigw: 'bigw',
+  ebay: 'ebay',
+  amazon: 'amazon_au',
+  temu: 'temu',
+  'tiktok': 'tiktok_shop',
+  woolworths: 'woolworths',
+  'everyday market': 'everyday_market',
+}
+
+// Bonus keywords that increase confidence
+const SIGNAL_KEYWORDS = ['marketplace', 'pty ltd', 'seller', 'payment', 'settlement', 'remittance', 'payout']
+
+function scoreNarrationMatch(
+  narration: string,
+  dynamicDict: Map<string, string>, // label → marketplace_code
+): NarrationMatch {
+  const lower = narration.toLowerCase().trim()
+  if (!lower) return { marketplace_code: null, marketplace_name: '', confidence: 0 }
+
+  let bestMatch: NarrationMatch = { marketplace_code: null, marketplace_name: '', confidence: 0 }
+
+  for (const [label, code] of dynamicDict.entries()) {
+    const labelLower = label.toLowerCase()
+    let score = 0
+
+    // Exact match in narration
+    if (lower.includes(labelLower)) {
+      // Base score by label length relative to narration — longer labels = more specific = higher confidence
+      score = Math.min(70, 40 + (labelLower.length / lower.length) * 60)
+
+      // Bonus: label appears at start of narration
+      if (lower.startsWith(labelLower)) score += 10
+
+      // Bonus: signal keywords present
+      for (const kw of SIGNAL_KEYWORDS) {
+        if (lower.includes(kw)) { score += 5; break }
+      }
+    } else {
+      // Word overlap scoring for partial matches
+      const narrationWords = lower.split(/\s+/)
+      const labelWords = labelLower.split(/\s+/)
+      let matchedWords = 0
+      for (const lw of labelWords) {
+        if (lw.length >= 3 && narrationWords.some(nw => nw.includes(lw) || lw.includes(nw))) {
+          matchedWords++
+        }
+      }
+      if (matchedWords > 0) {
+        score = (matchedWords / labelWords.length) * 50
+      }
+    }
+
+    score = Math.min(100, Math.round(score))
+    if (score > bestMatch.confidence) {
+      bestMatch = { marketplace_code: code, marketplace_name: label, confidence: score }
+    }
+  }
+
+  return bestMatch
+}
+
+async function unmatchedDepositPass(
+  adminSupabase: any,
+  userId: string,
+  xeroBankTxns: any[],
+  settlements: any[],
+  connections: any[],
+) {
+  if (xeroBankTxns.length === 0) return
+
+  // Load user's threshold from app_settings (default $50)
+  const { data: thresholdSetting } = await adminSupabase
+    .from('app_settings')
+    .select('value')
+    .eq('user_id', userId)
+    .eq('key', 'unmatched_deposit_threshold')
+    .maybeSingle()
+  const threshold = parseFloat(thresholdSetting?.value || '50')
+
+  // Build dynamic dictionary
+  const dict = new Map<string, string>()
+
+  // 1. Base keywords
+  for (const [label, code] of Object.entries(BASE_MARKETPLACE_KEYWORDS)) {
+    dict.set(label, code)
+  }
+
+  // 2. User's sub-channels
+  const { data: subChannels } = await adminSupabase
+    .from('shopify_sub_channels')
+    .select('marketplace_label, marketplace_code, source_name')
+    .eq('user_id', userId)
+    .eq('ignored', false)
+
+  for (const sc of (subChannels || [])) {
+    if (sc.marketplace_label) dict.set(sc.marketplace_label.toLowerCase(), sc.marketplace_code || sc.source_name)
+    if (sc.source_name) dict.set(sc.source_name.toLowerCase(), sc.marketplace_code || sc.source_name)
+  }
+
+  // 3. Fingerprints (shared registry)
+  const { data: fingerprints } = await adminSupabase
+    .from('marketplace_file_fingerprints')
+    .select('marketplace_code')
+
+  for (const fp of (fingerprints || [])) {
+    if (fp.marketplace_code && !dict.has(fp.marketplace_code.toLowerCase())) {
+      dict.set(fp.marketplace_code.toLowerCase().replace(/_/g, ' '), fp.marketplace_code)
+    }
+  }
+
+  // 4. Global marketplaces table
+  const { data: marketplaces } = await adminSupabase
+    .from('marketplaces')
+    .select('marketplace_code, name')
+
+  for (const mp of (marketplaces || [])) {
+    if (mp.name) dict.set(mp.name.toLowerCase(), mp.marketplace_code)
+  }
+
+  // Known marketplace codes for this user
+  const knownCodes = new Set((connections || []).map((c: any) => c.marketplace_code))
+
+  // Build quick settlement matching lookup
+  const settlementAmounts = (settlements || []).map((s: any) => ({
+    amount: Math.abs(parseFloat(s.bank_deposit) || 0),
+    periodEnd: s.period_end ? new Date(s.period_end) : null,
+  }))
+
+  for (const txn of xeroBankTxns) {
+    const amount = Math.abs(txn.amount || 0)
+    if (amount < threshold) continue
+
+    // Check if this transaction matches any known settlement
+    const txnDate = txn.date ? new Date(txn.date) : null
+    let matchesSettlement = false
+    for (const s of settlementAmounts) {
+      if (Math.abs(s.amount - amount) <= 0.05 && s.periodEnd && txnDate) {
+        const daysDiff = Math.abs((txnDate.getTime() - s.periodEnd.getTime()) / (1000 * 60 * 60 * 24))
+        if (daysDiff <= 14) { matchesSettlement = true; break }
+      }
+    }
+    if (matchesSettlement) continue
+
+    // Score narration
+    const narration = txn.reference || ''
+    const match = scoreNarrationMatch(narration, dict)
+
+    if (match.confidence > 60 && match.marketplace_code && !knownCodes.has(match.marketplace_code)) {
+      // Unmatched deposit — known marketplace not set up
+      await adminSupabase.from('channel_alerts').upsert({
+        user_id: userId,
+        source_name: match.marketplace_name || match.marketplace_code,
+        alert_type: 'unmatched_deposit',
+        status: 'pending',
+        detected_label: match.marketplace_name,
+        detection_method: 'bank_transaction',
+        deposit_amount: amount,
+        deposit_date: txn.date,
+        deposit_description: narration,
+        match_confidence: match.confidence,
+        total_revenue: amount,
+        order_count: 0,
+      }, { onConflict: 'user_id,source_name' })
+    } else if (match.confidence <= 60) {
+      // Unknown deposit — can't identify marketplace
+      await adminSupabase.from('channel_alerts').upsert({
+        user_id: userId,
+        source_name: `unknown_deposit_${txn.date || 'undated'}_${Math.round(amount)}`,
+        alert_type: 'unknown_deposit',
+        status: 'pending',
+        detected_label: null,
+        detection_method: 'bank_transaction',
+        deposit_amount: amount,
+        deposit_date: txn.date,
+        deposit_description: narration,
+        match_confidence: match.confidence,
+        total_revenue: amount,
+        order_count: 0,
+      }, { onConflict: 'user_id,source_name' })
+    }
+  }
+}
+
 async function sweepUser(adminSupabase: any, userId: string) {
   // Addition 1: Check parser version drift at start of every sweep
   await checkParserVersionDrift(adminSupabase, userId);
@@ -499,6 +697,14 @@ async function sweepUser(adminSupabase: any, userId: string) {
   } catch (e) {
     console.error('[validation-sweep] dedup pass error:', e);
     await logEvent(adminSupabase, userId, 'dedup_pass_error', { error: String(e) }, 'error');
+  }
+
+  // P3: Unmatched bank deposit detection
+  try {
+    await unmatchedDepositPass(adminSupabase, userId, xeroBankTxns, settlements || [], connections)
+  } catch (e) {
+    console.error('[validation-sweep] unmatched deposit pass error:', e)
+    await logEvent(adminSupabase, userId, 'unmatched_deposit_pass_error', { error: String(e) }, 'error')
   }
 
   // Log sweep completion
