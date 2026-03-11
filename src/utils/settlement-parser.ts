@@ -44,6 +44,8 @@ const CATEGORY_MAP: Record<string, string> = {
   // Storage Fees
   'other-transaction|other-transaction|StorageRenewalBilling': 'Storage Fees',
   'other-transaction|other-transaction|Storage Fee': 'Storage Fees',
+  // Advertising Costs (Sponsored Products, PPC)
+  'other-transaction|other-transaction|CostOfAdvertising': 'Advertising Costs',
   // Seller Fees
   'other-transaction|other-transaction|Subscription Fee': 'Seller Fees',
   'AmazonFees|Vine Enrollment Fee|Base fee': 'Seller Fees',
