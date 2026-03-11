@@ -392,8 +392,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Trial status banner */}
-      <TrialBanner status={trialInfo.status} daysRemaining={trialInfo.daysRemaining} />
+      {/* Trial banner is rendered by AuthenticatedLayout above */}
 
       {/* Primary tab bar */}
       <div className="border-b border-border bg-card/50">
