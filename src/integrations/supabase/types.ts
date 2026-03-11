@@ -1136,12 +1136,16 @@ export type Database = {
           financial_status: string | null
           gateway: string | null
           id: string
+          note_attributes: Json | null
           order_name: string | null
+          processed_at: string | null
           shopify_order_id: number
           source_name: string | null
           synced_at: string | null
           tags: string | null
+          total_discounts: number | null
           total_price: number | null
+          total_tax: number | null
           user_id: string
         }
         Insert: {
@@ -1149,12 +1153,16 @@ export type Database = {
           financial_status?: string | null
           gateway?: string | null
           id?: string
+          note_attributes?: Json | null
           order_name?: string | null
+          processed_at?: string | null
           shopify_order_id: number
           source_name?: string | null
           synced_at?: string | null
           tags?: string | null
+          total_discounts?: number | null
           total_price?: number | null
+          total_tax?: number | null
           user_id: string
         }
         Update: {
@@ -1162,12 +1170,16 @@ export type Database = {
           financial_status?: string | null
           gateway?: string | null
           id?: string
+          note_attributes?: Json | null
           order_name?: string | null
+          processed_at?: string | null
           shopify_order_id?: number
           source_name?: string | null
           synced_at?: string | null
           tags?: string | null
+          total_discounts?: number | null
           total_price?: number | null
+          total_tax?: number | null
           user_id?: string
         }
         Relationships: []
