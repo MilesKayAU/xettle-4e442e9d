@@ -312,7 +312,9 @@ export default function Setup() {
     }
 
     setShopifyOrdersStep({ status: 'running', message: 'Fetching orders (this may take a while)...' });
-    const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', token, {}, { signal: ac.signal });
+    const shopDomain = caps?.shopDomain;
+    const ordersBody = shopDomain ? { shopDomain } : {};
+    const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', token, ordersBody, { signal: ac.signal });
     if (!mountedRef.current) return;
     if (ordersResult.aborted) {
       shopifyAbortRef.current = null;
