@@ -62,7 +62,7 @@ export default function SubChannelSetupModal({
 
   const [label, setLabel] = useState(defaultLabel);
   const [marketplaceType, setMarketplaceType] = useState(defaultType);
-  const [settlementType, setSettlementType] = useState<'separate_file' | 'shopify_payments'>('shopify_payments');
+  const [settlementType, setSettlementType] = useState<'separate_file' | 'shopify_payments'>('separate_file');
   const [saving, setSaving] = useState(false);
 
   const marketplaceCode = marketplaceType === 'other'
