@@ -5,12 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
-import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload, ArrowRight, ChevronDown, Sparkles } from 'lucide-react';
+import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload, ArrowRight, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
   onNext: () => void;
   onSkip: () => void;
+  onBack?: () => void;
   hasAmazon: boolean;
   hasShopify: boolean;
   hasXero?: boolean;
@@ -52,6 +53,7 @@ function StepDots({ current, total }: { current: number; total: number }) {
 export default function SetupStepConnectStores({
   onNext,
   onSkip,
+  onBack,
   hasAmazon,
   hasShopify,
   hasXero,
@@ -111,7 +113,6 @@ export default function SetupStepConnectStores({
     }
   };
 
-  // Fire scans when advancing past a connected store
   const advanceFromShopify = () => {
     if (hasShopify && onFireBackgroundScan) {
       onFireBackgroundScan('fetch-shopify-payouts');
@@ -143,6 +144,17 @@ export default function SetupStepConnectStores({
     setCustomName('');
     setShowCustomInput(false);
     toast.success(`${customName.trim()} added — you can upload its files in the next step.`);
+  };
+
+  // Back within sub-steps goes to previous sub-step, or to wizard back
+  const handleInternalBack = () => {
+    if (step === 1 && onBack) {
+      onBack();
+    } else if (step === 2) {
+      setStep(1);
+    } else if (step === 3) {
+      setStep(2);
+    }
   };
 
   return (
@@ -183,29 +195,27 @@ export default function SetupStepConnectStores({
             </div>
 
             {!hasShopify && (
-              <>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="your-store.myshopify.com"
-                    value={shopDomain}
-                    onChange={(e) => setShopDomain(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleConnectShopify()}
-                    className="text-sm"
-                  />
-                  <Button
-                    onClick={handleConnectShopify}
-                    disabled={connectingShopify}
-                    className="w-full"
-                  >
-                    {connectingShopify ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <ShoppingBag className="h-4 w-4 mr-2" />
-                    )}
-                    Connect Shopify
-                  </Button>
-                </div>
-              </>
+              <div className="space-y-2">
+                <Input
+                  placeholder="your-store.myshopify.com"
+                  value={shopDomain}
+                  onChange={(e) => setShopDomain(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleConnectShopify()}
+                  className="text-sm"
+                />
+                <Button
+                  onClick={handleConnectShopify}
+                  disabled={connectingShopify}
+                  className="w-full"
+                >
+                  {connectingShopify ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <ShoppingBag className="h-4 w-4 mr-2" />
+                  )}
+                  Connect Shopify
+                </Button>
+              </div>
             )}
 
             {hasShopify && (
@@ -214,14 +224,24 @@ export default function SetupStepConnectStores({
               </Button>
             )}
 
-            {!hasShopify && (
-              <button
-                onClick={() => setStep(2)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-center"
-              >
-                Skip — I don't use Shopify
-              </button>
-            )}
+            <div className="flex items-center justify-between">
+              {onBack ? (
+                <button
+                  onClick={onBack}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                >
+                  <ArrowLeft className="h-3 w-3" /> Back
+                </button>
+              ) : <div />}
+              {!hasShopify && (
+                <button
+                  onClick={() => setStep(2)}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Skip — I don't use Shopify
+                </button>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -267,31 +287,29 @@ export default function SetupStepConnectStores({
               </Button>
             )}
 
-            {!hasAmazon && (
-              <button
-                onClick={() => setStep(3)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-center"
-              >
-                Skip — I don't use Amazon
-              </button>
-            )}
-
-            {step === 2 && (
+            <div className="flex items-center justify-between">
               <button
                 onClick={() => setStep(1)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-center"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
               >
-                ← Back to Shopify
+                <ArrowLeft className="h-3 w-3" /> Back
               </button>
-            )}
+              {!hasAmazon && (
+                <button
+                  onClick={() => setStep(3)}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Skip — I don't use Amazon
+                </button>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* ── Step 3: CSV Marketplaces (context-aware) ── */}
+      {/* ── Step 3: CSV Marketplaces ── */}
       {step === 3 && (
         <div className="space-y-4">
-          {/* Dynamic header based on connection state */}
           {hasXero ? (
             <div className="text-center space-y-2">
               <div className="flex items-center justify-center gap-2">
@@ -319,7 +337,6 @@ export default function SetupStepConnectStores({
             </div>
           )}
 
-          {/* CSV grid — collapsed when Xero connected, visible otherwise */}
           {hasXero ? (
             <Collapsible>
               <CollapsibleTrigger className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors mx-auto">
@@ -331,13 +348,7 @@ export default function SetupStepConnectStores({
                   {CSV_MARKETPLACES.map((m) => {
                     const isSelected = selectedMarketplaces.includes(m.id);
                     return (
-                      <Card
-                        key={m.id}
-                        className={`border transition-colors cursor-pointer ${
-                          isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/20'
-                        }`}
-                        onClick={() => toggleMarketplace(m.id)}
-                      >
+                      <Card key={m.id} className={`border transition-colors cursor-pointer ${isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/20'}`} onClick={() => toggleMarketplace(m.id)}>
                         <CardContent className="p-3 flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Store className="h-4 w-4 text-muted-foreground" />
@@ -367,13 +378,7 @@ export default function SetupStepConnectStores({
                 {CSV_MARKETPLACES.map((m) => {
                   const isSelected = selectedMarketplaces.includes(m.id);
                   return (
-                    <Card
-                      key={m.id}
-                      className={`border transition-colors cursor-pointer ${
-                        isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/20'
-                      }`}
-                      onClick={() => toggleMarketplace(m.id)}
-                    >
+                    <Card key={m.id} className={`border transition-colors cursor-pointer ${isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/20'}`} onClick={() => toggleMarketplace(m.id)}>
                       <CardContent className="p-3 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Store className="h-4 w-4 text-muted-foreground" />
@@ -406,14 +411,16 @@ export default function SetupStepConnectStores({
             <Button onClick={onNext} className="w-full">
               Continue
             </Button>
-            <button onClick={() => setStep(2)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-              ← Back to Amazon
-            </button>
-            {!hasXero && !hasShopify && !hasAmazon && (
-              <button onClick={onSkip} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-                <Upload className="h-3 w-3" /> Skip all — I'll upload files manually
+            <div className="flex items-center justify-between w-full">
+              <button onClick={() => setStep(2)} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                <ArrowLeft className="h-3 w-3" /> Back
               </button>
-            )}
+              {!hasXero && !hasShopify && !hasAmazon && (
+                <button onClick={onSkip} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                  <Upload className="h-3 w-3" /> Skip all — I'll upload files manually
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
