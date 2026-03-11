@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
+import { useTrialStatus } from '@/hooks/use-trial-status';
+import TrialBanner from '@/components/shared/TrialBanner';
 import SetupWizard from '@/components/onboarding/SetupWizard';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
