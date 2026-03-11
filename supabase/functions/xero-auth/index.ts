@@ -98,18 +98,17 @@ Deno.serve(async (req) => {
         { global: { headers: { Authorization: authHeader } } }
       )
 
-      const token = authHeader.replace('Bearer ', '')
-      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token)
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
       
-      if (claimsError || !claimsData?.claims) {
-        console.error('Auth error:', claimsError)
+      if (authError || !user) {
+        console.error('Auth error:', authError)
         return new Response(
           JSON.stringify({ error: 'Unauthorized' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      const userId = claimsData.claims.sub
+      const userId = user.id
       const body = await req.json()
       const { code, redirectUri } = body
 
@@ -234,17 +233,16 @@ Deno.serve(async (req) => {
         { global: { headers: { Authorization: authHeader } } }
       )
 
-      const token = authHeader.replace('Bearer ', '')
-      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token)
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
       
-      if (claimsError || !claimsData?.claims) {
+      if (authError || !user) {
         return new Response(
           JSON.stringify({ error: 'Unauthorized' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      const userId = claimsData.claims.sub
+      const userId = user.id
 
       // Use service role to read AND refresh tokens
       const supabaseAdmin = createClient(
@@ -343,17 +341,16 @@ Deno.serve(async (req) => {
         { global: { headers: { Authorization: authHeader } } }
       )
 
-      const token = authHeader.replace('Bearer ', '')
-      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token)
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
       
-      if (claimsError || !claimsData?.claims) {
+      if (authError || !user) {
         return new Response(
           JSON.stringify({ error: 'Unauthorized' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      const userId = claimsData.claims.sub
+      const userId = user.id
 
       const { error } = await supabase
         .from('xero_tokens')
@@ -390,15 +387,14 @@ Deno.serve(async (req) => {
         { global: { headers: { Authorization: authHeader } } }
       )
 
-      const token = authHeader.replace('Bearer ', '')
-      const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token)
-      if (claimsError || !claimsData?.claims) {
+      const { data: { user }, error: authError } = await supabaseUser.auth.getUser()
+      if (authError || !user) {
         return new Response(
           JSON.stringify({ error: 'Unauthorized' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-      const userId = claimsData.claims.sub
+      const userId = user.id
 
       const supabaseAdmin = createClient(
         Deno.env.get('SUPABASE_URL')!,
@@ -498,15 +494,14 @@ Deno.serve(async (req) => {
         { global: { headers: { Authorization: authHeader } } }
       )
 
-      const token = authHeader.replace('Bearer ', '')
-      const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token)
-      if (claimsError || !claimsData?.claims) {
+      const { data: { user }, error: authError } = await supabaseUser.auth.getUser()
+      if (authError || !user) {
         return new Response(
           JSON.stringify({ error: 'Unauthorized' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-      const userId = claimsData.claims.sub
+      const userId = user.id
 
       let body: any = parsedBody || {};
       try { if (!parsedBody) body = await req.json(); } catch {}

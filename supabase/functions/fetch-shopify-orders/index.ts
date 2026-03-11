@@ -48,17 +48,15 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Use getClaims for JWT verification (signing-keys compatible)
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      console.error("[fetch-shopify-orders] Auth failed:", claimsError?.message);
-      return new Response(JSON.stringify({ error: "Unauthorized", detail: claimsError?.message }), {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[fetch-shopify-orders] Auth failed:", authError?.message);
+      return new Response(JSON.stringify({ error: "Unauthorized", detail: authError?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const authenticatedUserId = claimsData.claims.sub as string;
+    const authenticatedUserId = user.id;
     console.log("[fetch-shopify-orders] Auth OK, user:", authenticatedUserId);
 
     let body: any = {};
