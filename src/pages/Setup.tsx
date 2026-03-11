@@ -825,9 +825,16 @@ export default function Setup() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Xero</span>
-                  <span className="text-xs text-muted-foreground">
-                    {progressStatus(xeroProgress, phase1Xero, 'Xero')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {xeroStep.status === 'running' && (
+                      <Button variant="ghost" size="sm" onClick={() => stopScan('xero')} className="h-6 px-2 text-xs text-destructive hover:text-destructive">
+                        <Square className="h-3 w-3 mr-1" /> Stop
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {progressStatus(xeroProgress, phase1Xero, 'Xero')}
+                    </span>
+                  </div>
                 </div>
                 <Progress value={xeroProgress} className="h-1.5" />
                 {xeroStep.status !== 'idle' && (
@@ -840,9 +847,16 @@ export default function Setup() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Shopify</span>
-                  <span className="text-xs text-muted-foreground">
-                    {progressStatus(shopifyProgress, phase1Shopify, 'Shopify')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {(shopifyPayoutsStep.status === 'running' || shopifyOrdersStep.status === 'running' || shopifyChannelsStep.status === 'running') && (
+                      <Button variant="ghost" size="sm" onClick={() => stopScan('shopify')} className="h-6 px-2 text-xs text-destructive hover:text-destructive">
+                        <Square className="h-3 w-3 mr-1" /> Stop
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {progressStatus(shopifyProgress, phase1Shopify, 'Shopify')}
+                    </span>
+                  </div>
                 </div>
                 <Progress value={shopifyProgress} className="h-1.5" />
                 {shopifyPayoutsStep.status !== 'idle' && (
@@ -861,9 +875,16 @@ export default function Setup() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Amazon</span>
-                  <span className="text-xs text-muted-foreground">
-                    {progressStatus(amazonProgress, phase1Amazon, 'Amazon')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {amazonStep.status === 'running' && (
+                      <Button variant="ghost" size="sm" onClick={() => stopScan('amazon')} className="h-6 px-2 text-xs text-destructive hover:text-destructive">
+                        <Square className="h-3 w-3 mr-1" /> Stop
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {progressStatus(amazonProgress, phase1Amazon, 'Amazon')}
+                    </span>
+                  </div>
                 </div>
                 <Progress value={amazonProgress} className="h-1.5" />
                 {amazonStep.status !== 'idle' && (
