@@ -251,7 +251,7 @@ function detectSplitMonth(header: any, allLines: any[], gstDivisor: number): any
     }
     const ts = round2(sp + ss), gross = round2(ts + pd + sf + ff + stf + ad + ref + reim + oth);
     const expTotal = round2(sf + ff + stf + ad);
-    const gstInc = round2(round2(sp + ss) / gstDivisor), gstExp = round2(expTotal / gstDivisor);
+    const gstInc = round2(round2(sp + ss + pd) / gstDivisor), gstExp = round2(expTotal / gstDivisor);
     const net = round2(gross - gstInc - gstExp);
     return { salesPrincipal: round2(sp), salesShipping: round2(ss), totalSales: ts, promotionalDiscounts: round2(pd), sellerFees: round2(sf), fbaFees: round2(ff), storageFees: round2(stf), advertisingCosts: round2(ad), refunds: round2(ref), reimbursements: round2(reim), otherFees: round2(oth), grossTotal: gross, netExGst: net, gstOnIncome: gstInc, gstOnExpenses: gstExp };
   };
