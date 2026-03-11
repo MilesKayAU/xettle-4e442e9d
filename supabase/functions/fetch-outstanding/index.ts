@@ -210,6 +210,7 @@ Deno.serve(async (req) => {
 
       // Try to find matching bank deposit
       const marketplace = detectMarketplace(reference, contactName);
+      const isMarketplace = marketplace !== 'unknown';
       let bankMatch: any = null;
       let bankDifference: number | null = null;
 
