@@ -30,6 +30,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
+const OutstandingTab = lazy(() => import('@/components/dashboard/OutstandingTab'));
 
 import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
 const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
