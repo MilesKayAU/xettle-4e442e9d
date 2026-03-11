@@ -34,7 +34,7 @@ const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/
 import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
 const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
 
-type DashboardView = 'dashboard' | 'smart_upload' | 'settlements' | 'insights';
+type DashboardView = 'dashboard' | 'outstanding' | 'smart_upload' | 'settlements' | 'insights';
 type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 

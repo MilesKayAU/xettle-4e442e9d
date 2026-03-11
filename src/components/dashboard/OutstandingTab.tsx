@@ -105,7 +105,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   }, []);
 
   // Auto-load on mount
-  useState(() => { fetchOutstanding(); });
+  useEffect(() => { fetchOutstanding(); }, []);
 
   const applyPayment = useCallback(async (row: OutstandingRow) => {
     if (!row.has_bank_deposit || !row.bank_match) return;
