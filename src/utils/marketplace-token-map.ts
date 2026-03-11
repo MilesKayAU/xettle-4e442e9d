@@ -88,12 +88,15 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
 
   const { data: allConnections } = await supabase
     .from('marketplace_connections')
-    .select('id, marketplace_code')
+    .select('id, marketplace_code, connection_type')
     .eq('user_id', userId);
 
   if (allConnections) {
     for (const conn of allConnections) {
       if (connectedCodes.has(conn.marketplace_code)) continue;
+
+      // Never delete manually-added connections
+      if (conn.connection_type === 'manual') continue;
 
       // Check if there are any settlements for this marketplace
       const { count: settlementCount } = await supabase
@@ -104,16 +107,26 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
 
       if (settlementCount && settlementCount > 0) continue;
 
-      // Check channel_alerts
+      // Check channel_alerts (match by source_name or detected_label)
       const { count: alertCount } = await supabase
         .from('channel_alerts')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
-        .eq('source_name', conn.marketplace_code);
+        .or(`source_name.eq.${conn.marketplace_code},detected_label.ilike.%${conn.marketplace_code.replace('_', '%')}%`);
 
       if (alertCount && alertCount > 0) continue;
 
-      // No backing data — delete ghost
+      // Check shopify_sub_channels
+      const { count: subChannelCount } = await supabase
+        .from('shopify_sub_channels')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('marketplace_code', conn.marketplace_code);
+
+      if (subChannelCount && subChannelCount > 0) continue;
+
+      // No backing data anywhere — delete ghost
+      console.log(`[ghost-cleanup] Removing ghost connection: ${conn.marketplace_code}`);
       await supabase
         .from('marketplace_connections')
         .delete()
