@@ -6,11 +6,9 @@ import AccountingDashboard from '@/components/admin/accounting/AccountingDashboa
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 
-import SettlementsOverview from '@/components/admin/accounting/SettlementsOverview';
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
 import ActionCentre, { type MissingSettlement } from '@/components/dashboard/ActionCentre';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
-import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
 import SkuComparisonView from '@/components/insights/SkuComparisonView';
@@ -20,6 +18,7 @@ import BugReportNotificationBanner from '@/components/bug-report/BugReportNotifi
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
+import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard } from 'lucide-react';
@@ -49,7 +48,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    // Immediately set xero if returning from OAuth
     const connected = searchParams.get('connected');
     if (connected === 'xero') {
       setXeroConnected(true);
@@ -87,7 +85,6 @@ export default function Dashboard() {
         setHasAmazon(hasAmz);
         setHasShopify(hasShp);
 
-        // Check dismiss count
         const dismissCount = parseInt(sessionStorage.getItem('xettle_wizard_dismiss_count') || '0', 10);
 
         if (hasSettlements || wizardComplete || dismissCount >= 3) {
@@ -96,7 +93,6 @@ export default function Dashboard() {
         }
 
         if (!hasAmz || !hasShp || !xeroConnected) {
-          // Detect OAuth return
           const connected = searchParams.get('connected');
           if (connected === 'amazon' || connected === 'shopify') {
             setWizardInitialStep(2);
@@ -144,8 +140,10 @@ export default function Dashboard() {
       }
     } catch {}
   };
+
+  // Default to Upload tab instead of Dashboard
   const [activeView, setActiveView] = useState<DashboardView>(() => {
-    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
+    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'smart_upload';
   });
   const [settlementsSubTab, setSettlementsSubTab] = useState<SettlementsSubTab>(() => {
     return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'all';
@@ -158,6 +156,7 @@ export default function Dashboard() {
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
   const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/auth');
@@ -378,21 +377,19 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Trial banner is rendered by AuthenticatedLayout above */}
-
       {/* Primary tab bar */}
       <div className="border-b border-border bg-card/50">
         <div className="container-custom">
           <nav className="flex gap-1 py-2">
             {([
-              { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
               { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
+              { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
               { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
-              const showDot = tab.key === 'dashboard' && pendingChannelAlerts > 0;
+              const showDot = tab.key === 'smart_upload' && pendingChannelAlerts > 0;
               return (
                 <button
                   key={tab.key}
@@ -458,29 +455,11 @@ export default function Dashboard() {
 
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
-        {/* ─── Dashboard (Homepage with Overview) ────────────────────── */}
+
+        {/* ─── Dashboard (Clean data-only view) ─────────────────────── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              <PostSetupBanner
-                onSwitchToUpload={() => switchView('smart_upload')}
-                hasXero={xeroConnected}
-                hasAmazon={hasAmazon}
-                hasShopify={hasShopify}
-                onConnectXero={() => {
-                  setWizardInitialStep(1);
-                  setShowWizard(true);
-                }}
-                onConnectAmazon={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onConnectShopify={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onScanComplete={loadMarketplaces}
-              />
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
               <ReconciliationSummaryCard onNavigate={() => {
                 switchView('settlements');
@@ -504,16 +483,11 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
 
-        {/* ─── Smart Upload ──────────────────────────────────────────── */}
+        {/* ─── Upload Hub (Smart Upload + Connections + Guide) ───────── */}
         {activeView === 'smart_upload' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Smart Upload</h2>
-                <p className="text-muted-foreground mt-1">
-                  Drop any settlement files — Amazon TSV, Shopify CSV, Bunnings PDF, or anything else. Xettle auto-detects the marketplace, parses your data, and if you're uploading from a new marketplace we'll set it up for you automatically. No configuration needed.
-                </p>
-              </div>
+              {/* Smart Upload — primary action, always on top */}
               <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
                 <SmartUploadFlow
                   onSettlementsSaved={loadMarketplaces}
@@ -526,6 +500,39 @@ export default function Dashboard() {
                   }}
                 />
               </Suspense>
+
+              {/* Connection & sync status cards */}
+              <PostSetupBanner
+                onSwitchToUpload={() => {}} // already on upload tab
+                hasXero={xeroConnected}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
+                onConnectXero={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
+                onConnectAmazon={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onConnectShopify={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onScanComplete={loadMarketplaces}
+              />
+
+              {/* Channel alerts on upload tab */}
+              <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
+
+              {/* Welcome guide — below connections */}
+              <WelcomeGuide
+                onUpload={() => {}} // already on upload tab
+                onConnectStore={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
+              />
             </div>
           </ErrorBoundary>
         )}
@@ -534,8 +541,6 @@ export default function Dashboard() {
         {activeView === 'settlements' && settlementsSubTab === 'all' && (
           <ErrorBoundary>
             <div className="space-y-6">
-
-
               {/* Marketplace Switcher */}
               <div>
                 {!marketplacesLoading && (
@@ -644,7 +649,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* AI Assistant floating button — context-aware per active view */}
+      {/* AI Assistant floating button */}
       <AskAiButton
         context={aiContext}
         suggestedPrompts={aiSuggestedPrompts}
