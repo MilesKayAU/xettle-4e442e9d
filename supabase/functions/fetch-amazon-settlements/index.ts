@@ -913,14 +913,14 @@ serve(async (req) => {
     }
 
     // First, get a fresh access token via the amazon-auth function
-    const { data: authData, error: authError } = await supabase.functions.invoke('amazon-auth', {
+    const { data: authData, error: tokenError } = await supabase.functions.invoke('amazon-auth', {
       headers: { 'x-action': 'refresh' },
     })
 
-    if (authError || !authData?.access_token) {
+    if (tokenError || !authData?.access_token) {
       return new Response(JSON.stringify({
         error: 'Failed to get Amazon access token. Please reconnect your Amazon account.',
-        details: authData?.error || authError?.message,
+        details: authData?.error || tokenError?.message,
       }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
