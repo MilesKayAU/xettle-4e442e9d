@@ -810,7 +810,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         sales_principal: summary.salesPrincipal,
         sales_shipping: summary.salesShipping,
         promotional_discounts: summary.promotionalDiscounts,
-        seller_fees: Math.abs(summary.sellerFees),
+        seller_fees: summary.sellerFees,
         fba_fees: summary.fbaFees,
         storage_fees: summary.storageFees,
         refunds: summary.refunds,
