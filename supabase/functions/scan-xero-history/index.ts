@@ -404,7 +404,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': authHeader!,
         },
         body: JSON.stringify({}),
       })
