@@ -20,13 +20,17 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props)
     try {
       const redirectUri = 'https://xettle.app/xero/callback';
       const { data, error } = await supabase.functions.invoke('xero-auth', {
-        headers: { 'x-action': 'authorize' },
+        headers: { 
+          'x-action': 'authorize',
+          'x-redirect-uri': redirectUri,
+        },
         body: { redirectUri },
       });
       if (error || data?.error) throw new Error(data?.error || 'Failed to get Xero auth URL');
-      if (data?.url) {
+      const authUrl = data?.authUrl || data?.url;
+      if (authUrl) {
         if (data.state) sessionStorage.setItem('xero_oauth_state', data.state);
-        window.location.href = data.url;
+        window.location.href = authUrl;
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to start Xero connection');
