@@ -11,6 +11,7 @@ interface Props {
   hasXero?: boolean;
   hasAmazon?: boolean;
   hasShopify?: boolean;
+  scansInProgress?: boolean;
 }
 
 interface MarketplaceSummary {
@@ -21,64 +22,77 @@ interface MarketplaceSummary {
   externalCount: number;
 }
 
-export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopify }: Props) {
+export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopify, scansInProgress }: Props) {
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<MarketplaceSummary[]>([]);
   const [readyToPush, setReadyToPush] = useState(0);
+  const [retried, setRetried] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const { data: valRows } = await supabase
-          .from('marketplace_validation')
-          .select('marketplace_code, overall_status, settlement_net, settlement_uploaded');
+  const loadData = async () => {
+    try {
+      const { data: valRows } = await supabase
+        .from('marketplace_validation')
+        .select('marketplace_code, overall_status, settlement_net, settlement_uploaded');
 
-        if (valRows && valRows.length > 0) {
+      if (valRows && valRows.length > 0) {
+        const grouped: Record<string, MarketplaceSummary> = {};
+        let pushReady = 0;
+        for (const row of valRows) {
+          const code = row.marketplace_code;
+          if (!grouped[code]) {
+            grouped[code] = { marketplace_code: code, count: 0, totalRevenue: 0, hasMissing: false, externalCount: 0 };
+          }
+          if (row.settlement_uploaded) {
+            grouped[code].count++;
+            grouped[code].totalRevenue += Number(row.settlement_net) || 0;
+          }
+          if (row.overall_status === 'ready_to_push') pushReady++;
+          if (row.overall_status === 'already_recorded') grouped[code].externalCount++;
+          if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing' || row.overall_status === 'gap_detected') {
+            grouped[code].hasMissing = true;
+          }
+        }
+        setSummaries(Object.values(grouped));
+        setReadyToPush(pushReady);
+      } else {
+        // Fallback to settlements table
+        const { data: settlements } = await supabase
+          .from('settlements')
+          .select('marketplace, bank_deposit');
+        if (settlements && settlements.length > 0) {
           const grouped: Record<string, MarketplaceSummary> = {};
-          let pushReady = 0;
-          for (const row of valRows) {
-            const code = row.marketplace_code;
+          for (const s of settlements) {
+            const code = s.marketplace || 'unknown';
             if (!grouped[code]) {
               grouped[code] = { marketplace_code: code, count: 0, totalRevenue: 0, hasMissing: false, externalCount: 0 };
             }
-            if (row.settlement_uploaded) {
-              grouped[code].count++;
-              grouped[code].totalRevenue += Number(row.settlement_net) || 0;
-            }
-            if (row.overall_status === 'ready_to_push') pushReady++;
-            if (row.overall_status === 'already_recorded') grouped[code].externalCount++;
-            if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing' || row.overall_status === 'gap_detected') {
-              grouped[code].hasMissing = true;
-            }
+            grouped[code].count++;
+            grouped[code].totalRevenue += Math.abs(Number(s.bank_deposit) || 0);
           }
           setSummaries(Object.values(grouped));
-          setReadyToPush(pushReady);
-        } else {
-          // Fallback to settlements table
-          const { data: settlements } = await supabase
-            .from('settlements')
-            .select('marketplace, bank_deposit');
-          if (settlements && settlements.length > 0) {
-            const grouped: Record<string, MarketplaceSummary> = {};
-            for (const s of settlements) {
-              const code = s.marketplace || 'unknown';
-              if (!grouped[code]) {
-                grouped[code] = { marketplace_code: code, count: 0, totalRevenue: 0, hasMissing: false, externalCount: 0 };
-              }
-              grouped[code].count++;
-              grouped[code].totalRevenue += Math.abs(Number(s.bank_deposit) || 0);
-            }
-            setSummaries(Object.values(grouped));
-          }
         }
-      } catch {
-        // silently fail
-      } finally {
-        setLoading(false);
       }
-    };
-    load();
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
+
+  // Auto-retry once after 5s if scans are still in progress to catch fast completions
+  useEffect(() => {
+    if (scansInProgress && !retried) {
+      const timer = setTimeout(() => {
+        setRetried(true);
+        loadData();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [scansInProgress, retried]);
 
   const getLabel = (code: string) =>
     (MARKETPLACE_LABELS as Record<string, string>)[code] || code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -137,12 +151,6 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
             <p className="text-sm text-muted-foreground">
               {getAdaptiveMessage()}
             </p>
-            {(hasXero || hasAmazon || hasShopify) && (
-              <div className="flex items-center justify-center gap-2 mt-2 text-xs text-primary">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>Background sync in progress — data will appear shortly</span>
-              </div>
-            )}
           </>
         ) : (
           <>
@@ -152,6 +160,26 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           </>
         )}
       </div>
+
+      {/* Background sync banner */}
+      {scansInProgress && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-3 flex items-center gap-3">
+            <Loader2 className="h-4 w-4 text-primary animate-spin flex-shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Your connected accounts are still syncing — most complete within 5 minutes. Results will appear on your dashboard automatically.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Also show sync hint when empty + has connections but scans already finished */}
+      {isEmpty && !scansInProgress && (hasXero || hasAmazon || hasShopify) && (
+        <div className="flex items-center justify-center gap-2 text-xs text-primary">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span>Background sync in progress — data will appear shortly</span>
+        </div>
+      )}
 
       {/* Summary stats */}
       {!isEmpty && (

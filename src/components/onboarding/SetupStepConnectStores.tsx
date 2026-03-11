@@ -17,6 +17,7 @@ interface Props {
   justConnectedXero?: boolean;
   selectedMarketplaces: string[];
   onMarketplacesChange: (marketplaces: string[]) => void;
+  onFireBackgroundScan?: (fnName: string) => void;
 }
 
 const CSV_MARKETPLACES = [
@@ -57,6 +58,7 @@ export default function SetupStepConnectStores({
   justConnectedXero,
   selectedMarketplaces,
   onMarketplacesChange,
+  onFireBackgroundScan,
 }: Props) {
   const getInitialStep = (): 1 | 2 | 3 => {
     if (hasShopify && hasAmazon) return 3;
@@ -105,6 +107,22 @@ export default function SetupStepConnectStores({
       toast.error(err.message || 'Failed to start Shopify connection');
       setConnectingShopify(false);
     }
+  };
+
+  // Fire scans when advancing past a connected store
+  const advanceFromShopify = () => {
+    if (hasShopify && onFireBackgroundScan) {
+      onFireBackgroundScan('fetch-shopify-payouts');
+      onFireBackgroundScan('scan-shopify-channels');
+    }
+    setStep(2);
+  };
+
+  const advanceFromAmazon = () => {
+    if (hasAmazon && onFireBackgroundScan) {
+      onFireBackgroundScan('fetch-amazon-settlements');
+    }
+    setStep(3);
   };
 
   const toggleMarketplace = (id: string) => {
@@ -189,7 +207,7 @@ export default function SetupStepConnectStores({
             )}
 
             {hasShopify && (
-              <Button onClick={() => setStep(2)} className="w-full">
+              <Button onClick={advanceFromShopify} className="w-full">
                 Continue <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             )}
@@ -242,7 +260,7 @@ export default function SetupStepConnectStores({
             )}
 
             {hasAmazon && (
-              <Button onClick={() => setStep(3)} className="w-full">
+              <Button onClick={advanceFromAmazon} className="w-full">
                 Continue <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             )}
