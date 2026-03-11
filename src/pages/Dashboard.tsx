@@ -141,9 +141,9 @@ export default function Dashboard() {
     } catch {}
   };
 
-  // Default to Upload tab instead of Dashboard
+  // Dashboard is always the default landing page
   const [activeView, setActiveView] = useState<DashboardView>(() => {
-    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'smart_upload';
+    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
   });
   const [settlementsSubTab, setSettlementsSubTab] = useState<SettlementsSubTab>(() => {
     return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'all';
