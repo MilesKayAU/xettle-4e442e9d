@@ -123,6 +123,14 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           }
         }
 
+        // Write flag so Dashboard knows scan was already triggered
+        if (hasShopify) {
+          await supabase.from('app_settings').upsert(
+            { user_id: session.user.id, key: 'shopify_channel_scan_triggered', value: 'true' },
+            { onConflict: 'user_id,key' }
+          ).then(() => {});
+        }
+
         if (!cancelled) {
           setTimeout(() => {
             if (!cancelled) onNext();
