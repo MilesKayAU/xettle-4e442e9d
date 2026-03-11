@@ -458,10 +458,44 @@ export default function Dashboard() {
         <BugReportNotificationBanner />
 
         {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
+        {/* ─── Dashboard (always useful — strip, actions, validation) ──── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              {/* Compact connection health strip */}
+              <DashboardConnectionStrip
+                onSwitchToUpload={() => switchView('smart_upload')}
+              />
+
+              {/* Channel alerts — accounting health info */}
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
+
+              {/* Action Centre — what needs attention */}
+              <ActionCentre
+                onSwitchToUpload={(missing) => {
+                  if (missing) setMissingSettlements(missing);
+                  switchView('smart_upload');
+                }}
+                onSwitchToSettlements={() => {
+                  switchView('settlements');
+                  switchSettlementsSubTab('overview');
+                }}
+                userName={user?.email?.split('@')[0]}
+              />
+
+              {/* Validation table — marketplace × period status grid */}
+              <ValidationSweep
+                onSwitchToUpload={() => switchView('smart_upload')}
+              />
+            </div>
+          </ErrorBoundary>
+        )}
+
+        {/* ─── Upload Hub (connections, guide, upload zone) ───────── */}
+        {activeView === 'smart_upload' && (
+          <ErrorBoundary>
+            <div className="space-y-6">
+              {/* Full connection cards — setup belongs here */}
               <PostSetupBanner
                 onSwitchToUpload={() => switchView('smart_upload')}
                 hasXero={xeroConnected}
@@ -481,33 +515,17 @@ export default function Dashboard() {
                 }}
                 onScanComplete={loadMarketplaces}
               />
-              <ReconciliationSummaryCard onNavigate={() => {
-                switchView('settlements');
-                switchSettlementsSubTab('reconciliation');
-              }} />
-              <ActionCentre
-                onSwitchToUpload={(missing) => {
-                  if (missing) setMissingSettlements(missing);
-                  switchView('smart_upload');
-                }}
-                onSwitchToSettlements={() => {
-                  switchView('settlements');
-                  switchSettlementsSubTab('overview');
-                }}
-                userName={user?.email?.split('@')[0]}
-              />
-              <ValidationSweep
-                onSwitchToUpload={() => switchView('smart_upload')}
-              />
-            </div>
-          </ErrorBoundary>
-        )}
 
-        {/* ─── Upload Hub (Smart Upload + Connections + Guide) ───────── */}
-        {activeView === 'smart_upload' && (
-          <ErrorBoundary>
-            <div className="space-y-6">
-              {/* Smart Upload — primary action, always on top */}
+              {/* Welcome explainer — shown until first settlement */}
+              <WelcomeGuide
+                onUpload={() => {}}
+                onConnectStore={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
+              />
+
+              {/* Smart Upload drop zone — always visible, primary action */}
               <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
                 <SmartUploadFlow
                   onSettlementsSaved={loadMarketplaces}
@@ -520,15 +538,6 @@ export default function Dashboard() {
                   }}
                 />
               </Suspense>
-
-              {/* Welcome guide — helps new users understand the workflow */}
-              <WelcomeGuide
-                onUpload={() => {}}
-                onConnectStore={() => {
-                  setWizardInitialStep(1);
-                  setShowWizard(true);
-                }}
-              />
             </div>
           </ErrorBoundary>
         )}
