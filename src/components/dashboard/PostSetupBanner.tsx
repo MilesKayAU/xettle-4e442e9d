@@ -259,7 +259,6 @@ export default function PostSetupBanner({
   const allConnected = hasXero && hasAmazon && hasShopify;
 
   if (dismissed) return null;
-  if (!hasAnyConnection && !isFreshAccount) return null;
 
   const allScansComplete = (!hasXero || scanComplete) && (!hasAmazon || amazonScanComplete) && (!hasShopify || shopifyScanComplete);
   if (allConnected && allScansComplete && marketplacesFound > 0 && settlementCount !== null && settlementCount > 3) return null;
