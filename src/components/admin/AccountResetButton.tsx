@@ -28,6 +28,11 @@ export default function AccountResetButton() {
       const cleared = Object.values(data.results as Record<string, string>).filter(v => v === 'cleared').length;
       const errors = Object.entries(data.results as Record<string, string>).filter(([, v]) => v.startsWith('error'));
 
+      // Clear wizard session state so it restarts from step 1
+      sessionStorage.removeItem('xettle_setup_step');
+      sessionStorage.removeItem('xettle_setup_marketplaces');
+      sessionStorage.removeItem('xettle_wizard_dismiss_count');
+
       toast({
         title: '🔄 Account Reset Complete',
         description: `${cleared} tables cleared.${errors.length > 0 ? ` ${errors.length} errors — check console.` : ''} Refresh to see changes.`,
