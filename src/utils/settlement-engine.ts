@@ -677,23 +677,27 @@ export async function syncSettlementToXero(
     const label = MARKETPLACE_LABELS[marketplace] || marketplace;
     const description = `${label} Settlement ${periodLabel}`;
 
-    // Build line items (use provided or default 2-line)
-    let lineItems = options?.lineItems || [
-      {
-        Description: 'Marketplace Sales',
-        AccountCode: '200',
-        TaxType: 'OUTPUT',
-        UnitAmount: Math.round(s.sales_principal * 100) / 100,
-        Quantity: 1,
-      },
-      {
-        Description: 'Marketplace Commission',
-        AccountCode: '407',
-        TaxType: 'INPUT',
-        UnitAmount: -Math.abs(Math.round(s.seller_fees * 100) / 100),
-        Quantity: 1,
-      },
-    ];
+    // Build line items (use provided or default 2-line with user account code overrides)
+    let lineItems = options?.lineItems;
+    if (!lineItems) {
+      const getCode = await loadUserAccountCodes();
+      lineItems = [
+        {
+          Description: 'Marketplace Sales',
+          AccountCode: getCode('Sales'),
+          TaxType: 'OUTPUT',
+          UnitAmount: Math.round(s.sales_principal * 100) / 100,
+          Quantity: 1,
+        },
+        {
+          Description: 'Marketplace Commission',
+          AccountCode: getCode('Seller Fees'),
+          TaxType: 'INPUT',
+          UnitAmount: -Math.abs(Math.round(s.seller_fees * 100) / 100),
+          Quantity: 1,
+        },
+      ];
+    }
 
     // Zero-amount guard: filter out lines with UnitAmount === 0
     lineItems = lineItems.filter((li: XeroLineItem) => Math.round(li.UnitAmount * 100) !== 0);
