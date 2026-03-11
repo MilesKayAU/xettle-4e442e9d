@@ -346,23 +346,8 @@ async function unmatchedDepositPass(
         total_revenue: amount,
         order_count: 0,
       }, { onConflict: 'user_id,source_name' })
-    } else if (match.confidence <= 60) {
-      // Unknown deposit — can't identify marketplace
-      await adminSupabase.from('channel_alerts').upsert({
-        user_id: userId,
-        source_name: `unknown_deposit_${txn.date || 'undated'}_${Math.round(amount)}`,
-        alert_type: 'unknown_deposit',
-        status: 'pending',
-        detected_label: null,
-        detection_method: 'bank_transaction',
-        deposit_amount: amount,
-        deposit_date: txn.date,
-        deposit_description: narration,
-        match_confidence: match.confidence,
-        total_revenue: amount,
-        order_count: 0,
-      }, { onConflict: 'user_id,source_name' })
     }
+    // Low-confidence matches are ignored — we don't create alerts for every unidentified bank transaction
   }
 }
 
