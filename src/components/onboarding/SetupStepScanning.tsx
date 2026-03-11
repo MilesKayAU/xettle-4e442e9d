@@ -54,14 +54,55 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
         const { data: { session } } = await supabase.auth.getSession();
         if (!session || cancelled) return;
 
+        // Pre-fetch shopDomain for Shopify order calls
+        let shopDomain: string | null = null;
+        if (hasShopify) {
+          const { data: tokenRow } = await supabase
+            .from('shopify_tokens')
+            .select('shop_domain')
+            .single();
+          shopDomain = tokenRow?.shop_domain ?? null;
+        }
+
         for (let i = 0; i < steps.length; i++) {
           if (cancelled) return;
           const step = steps[i];
 
-          if (step.fn) {
+          if (step.action === 'provision-channels') {
+            // Auto-provision marketplace connections from detected sub-channels
+            try {
+              const { data: channels } = await supabase
+                .from('shopify_sub_channels')
+                .select('marketplace_code, marketplace_label, source_name')
+                .eq('user_id', session.user.id)
+                .eq('ignored', false)
+                .not('marketplace_code', 'is', null);
+
+              if (channels && channels.length > 0) {
+                for (const ch of channels) {
+                  if (!ch.marketplace_code) continue;
+                  await supabase.from('marketplace_connections').upsert({
+                    user_id: session.user.id,
+                    marketplace_code: ch.marketplace_code,
+                    marketplace_name: ch.marketplace_label,
+                    connection_type: 'shopify_sub_channel',
+                    connection_status: 'active',
+                  }, { onConflict: 'user_id,marketplace_code' }).throwOnError().catch(() => {});
+                }
+              }
+            } catch {
+              // continue
+            }
+            await new Promise(r => setTimeout(r, 400));
+          } else if (step.fn) {
             try {
               const controller = new AbortController();
               const timeout = setTimeout(() => controller.abort(), 45000);
+
+              // Pass shopDomain for fetch-shopify-orders
+              const body = step.fn === 'fetch-shopify-orders' && shopDomain
+                ? { shopDomain }
+                : {};
 
               const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
               await fetch(`https://${projectId}.supabase.co/functions/v1/${step.fn}`, {
@@ -70,7 +111,7 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${session.access_token}`,
                 },
-                body: JSON.stringify({}),
+                body: JSON.stringify(body),
                 signal: controller.signal,
               }).catch(() => {});
 
