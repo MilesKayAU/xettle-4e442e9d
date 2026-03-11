@@ -125,7 +125,7 @@ export default function ActionCentre({
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('channel_alerts').select('deposit_amount, total_revenue, alert_type').eq('status', 'pending').in('alert_type', ['unmatched_deposit', 'unknown_deposit']),
+        supabase.from('channel_alerts').select('deposit_amount, total_revenue, alert_type').eq('status', 'pending').eq('alert_type', 'unmatched_deposit'),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
