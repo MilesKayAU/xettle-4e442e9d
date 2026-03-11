@@ -203,6 +203,10 @@ export default function PostSetupBanner({
           .select('id', { count: 'exact', head: true });
         setShopifyChannelsFound(count ?? 0);
 
+        // Provision all marketplace connections + clean ghosts
+        const { data: { session: shopSession } } = await supabase.auth.getSession();
+        if (shopSession) await provisionAllMarketplaceConnections(shopSession.user.id);
+
         await setAppFlag('shopify_scan_completed');
         setShopifyScanComplete(true);
         await callEdgeFunction('run-validation-sweep').catch(() => {});
