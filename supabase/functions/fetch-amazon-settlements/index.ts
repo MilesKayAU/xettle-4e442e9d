@@ -295,7 +295,7 @@ async function refreshAccessToken(amazonToken: any): Promise<string> {
 // ═══════════════════════════════════════════════════════════════
 // Helper: download a single report with retry on 429
 // ═══════════════════════════════════════════════════════════════
-async function downloadReport(baseUrl: string, accessToken: string, reportDocumentId: string): Promise<string> {
+async function downloadReport(baseUrl: string, accessToken: string, reportDocumentId: string, supabase?: any, userId?: string): Promise<string> {
   const docUrl = `${baseUrl}/reports/2021-06-30/documents/${reportDocumentId}`;
   let docResponse: Response | null = null;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -307,6 +307,16 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
     docResponse = await fetch(docUrl, { headers: { 'x-amz-access-token': accessToken } });
     if (docResponse.status !== 429) break;
     console.warn('SP-API 429 rate limited');
+  }
+
+  if (docResponse?.status === 429) {
+    // Store rate limit cooldown so other callers don't also hit Amazon
+    if (supabase && userId) {
+      await upsertSetting(supabase, userId, 'amazon_rate_limit_until',
+        new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      );
+    }
+    throw new Error('RATE_LIMITED: Amazon API rate limited after 5 retries');
   }
 
   if (!docResponse || !docResponse.ok) {
