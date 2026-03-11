@@ -112,6 +112,27 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // ─── Get accounting boundary date ───
+    let boundaryDate: Date;
+    const { data: boundaryRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'accounting_boundary_date')
+      .maybeSingle();
+
+    if (boundaryRow?.value) {
+      boundaryDate = new Date(boundaryRow.value);
+    } else {
+      // Default: 12 months ago
+      boundaryDate = new Date();
+      boundaryDate.setFullYear(boundaryDate.getFullYear() - 1);
+    }
+
+    const bY = boundaryDate.getFullYear();
+    const bM = boundaryDate.getMonth() + 1;
+    const bD = boundaryDate.getDate();
+
     // Get Xero token
     const { data: tokens } = await supabase
       .from('xero_tokens')
@@ -130,8 +151,8 @@ Deno.serve(async (req) => {
     token = await refreshToken(supabase, token);
 
     // ─── Fetch AUTHORISED sales invoices (ACCREC) from Xero ───
-    // Only fetch accounts receivable — excludes bills (ACCPAY) like BAS, Bunnings bills, etc.
-    const invoiceWhere = encodeURIComponent('Type=="ACCREC"');
+    // Only fetch accounts receivable from the accounting boundary onwards
+    const invoiceWhere = encodeURIComponent(`Type=="ACCREC" AND Date>=DateTime(${bY}, ${bM}, ${bD})`);
     const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
     const xeroResp = await fetch(url, {
       headers: {
@@ -150,7 +171,19 @@ Deno.serve(async (req) => {
     }
 
     const xeroData = await xeroResp.json();
-    const invoices = xeroData.Invoices || [];
+    const allInvoices = xeroData.Invoices || [];
+
+    // ─── Filter to known marketplace contacts only ───
+    const MARKETPLACE_CONTACT_PATTERNS = [
+      'amazon', 'shopify', 'ebay', 'catch', 'kogan', 'bigw', 'big w',
+      'everyday market', 'mydeal', 'bunnings', 'woolworths', 'mirakl',
+      'tradesquare', 'temu', 'walmart',
+    ];
+
+    const invoices = allInvoices.filter((inv: any) => {
+      const contact = (inv.Contact?.Name || '').toLowerCase();
+      return MARKETPLACE_CONTACT_PATTERNS.some(p => contact.includes(p));
+    });
 
     // ─── Get user's settlements for matching ───
     const { data: settlements } = await supabase
