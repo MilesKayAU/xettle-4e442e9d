@@ -262,6 +262,17 @@ Deno.serve(async (req) => {
             continue
           }
 
+          // ─── Validate TaxTypes before sending to Xero ────────
+          const VALID_TAX_TYPES = ['OUTPUT', 'INPUT', 'EXEMPTOUTPUT', 'BASEXCLUDED', 'NONE'];
+          for (const item of lineItems) {
+            if (!VALID_TAX_TYPES.includes(item.TaxType)) {
+              throw new Error(
+                `Invalid TaxType "${item.TaxType}" on line item "${item.Description}". ` +
+                `Must be one of: ${VALID_TAX_TYPES.join(', ')}`
+              );
+            }
+          }
+
           // ─── LIVE: Call sync-settlement-to-xero ─────────────────
           try {
             const pushUrl = `${supabaseUrl}/functions/v1/sync-settlement-to-xero`
