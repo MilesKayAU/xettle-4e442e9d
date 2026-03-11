@@ -380,7 +380,7 @@ function buildWoolworthsSettlements(
       period_end: g.periodEnd,
       sales_ex_gst: grossSalesExGst,
       gst_on_sales: round2(gstOnSales + gstOnRefunds),
-      fees_ex_gst: commissionExGst,
+      fees_ex_gst: -Math.abs(commissionExGst),
       gst_on_fees: Math.abs(gstOnCommission),
       net_payout: round2(g.netAmount + g.gst),
       source: 'csv_upload' as const,
