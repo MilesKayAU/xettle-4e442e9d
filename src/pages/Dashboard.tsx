@@ -27,8 +27,11 @@ import { supabase } from '@/integrations/supabase/client';
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
 
+import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
+const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
+
 type DashboardView = 'dashboard' | 'smart_upload' | 'settlements' | 'insights';
-type SettlementsSubTab = 'all' | 'overview';
+type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
 export default function Dashboard() {
@@ -322,6 +325,7 @@ export default function Dashboard() {
   const settlementSubTabs: { key: SettlementsSubTab; label: string }[] = [
     { key: 'all', label: 'All Settlements' },
     { key: 'overview', label: 'Overview' },
+    { key: 'reconciliation', label: 'Reconciliation Hub' },
   ];
 
   const insightsSubTabs: { key: InsightsSubTab; label: string; pro?: boolean }[] = [
@@ -470,6 +474,10 @@ export default function Dashboard() {
           <ErrorBoundary>
             <div className="space-y-6">
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
+              <ReconciliationSummaryCard onNavigate={() => {
+                switchView('settlements');
+                switchSettlementsSubTab('reconciliation');
+              }} />
               <ActionCentre
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);
@@ -554,6 +562,15 @@ export default function Dashboard() {
                 onSwitchToUpload={() => switchView('smart_upload')}
               />
             </div>
+          </ErrorBoundary>
+        )}
+
+        {/* ─── Settlements → Reconciliation Hub ──────────────────────── */}
+        {activeView === 'settlements' && settlementsSubTab === 'reconciliation' && (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+              <ReconciliationHub />
+            </Suspense>
           </ErrorBoundary>
         )}
 
