@@ -57,12 +57,12 @@ export async function callEdgeFunctionSafe(
   name: string,
   accessToken: string,
   body: Record<string, unknown> = {},
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; headers?: Record<string, string> },
 ): Promise<{ ok: boolean; data?: any; error?: string; aborted?: boolean }> {
   try {
     const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
     const controller = new AbortController();
-    const timeoutMs = name === 'scan-xero-history' ? 180000 : name === 'fetch-shopify-orders' ? 60000 : 45000;
+    const timeoutMs = name === 'scan-xero-history' ? 180000 : name === 'fetch-shopify-orders' ? 60000 : name === 'fetch-amazon-settlements' ? 120000 : 45000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     // If an external signal is provided, listen for it to abort early
@@ -82,6 +82,7 @@ export async function callEdgeFunctionSafe(
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
+          ...(options?.headers || {}),
         },
         body: JSON.stringify(body),
         signal: controller.signal,
