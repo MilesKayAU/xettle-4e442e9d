@@ -3192,7 +3192,7 @@ function SettlementReview({
                   {splitMonth.month1.reimbursements !== 0 && <div className="flex justify-between"><span>Reimbursements:</span><span className="font-mono">{formatAUD(splitMonth.month1.reimbursements)}</span></div>}
                   <div className="border-t border-purple-200 my-1" />
                   <div className="flex justify-between text-purple-700 font-medium">
-                    <span>Rollover to 612:</span>
+                    <span>Deferred to 612:</span>
                     <span className="font-mono">{formatAUD(-computedRolloverAmount)}</span>
                   </div>
                   <div className="border-t border-purple-200 my-1" />
