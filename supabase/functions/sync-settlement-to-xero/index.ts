@@ -43,12 +43,83 @@ interface InvoiceRequest {
   country?: string;
   contactName?: string;
   netAmount?: number;
+  // Settlement data for CSV attachment
+  settlementData?: Record<string, any>;
   // Rollback fields
   invoiceIds?: string[];
   settlementId?: string;
   rollbackScope?: 'all' | 'journal_1' | 'journal_2';
   // Legacy compat
   journalIds?: string[];
+}
+
+// ─── Audit CSV Attachment Helper ──────────────────────────────────────
+function buildSettlementCsv(data: Record<string, any>): string {
+  const headers = [
+    'settlement_id', 'period_start', 'period_end', 'marketplace',
+    'net_amount', 'sales', 'refunds', 'reimbursements', 'seller_fees',
+    'fba_fees', 'storage_fees', 'advertising_costs', 'other_fees',
+    'promotional_discounts', 'bank_deposit', 'status'
+  ];
+
+  const row = [
+    data.settlement_id || '',
+    data.period_start || '',
+    data.period_end || '',
+    data.marketplace || '',
+    data.net_ex_gst ?? data.net_amount ?? '',
+    (data.sales_principal || 0) + (data.sales_shipping || 0),
+    data.refunds || 0,
+    data.reimbursements || 0,
+    data.seller_fees || 0,
+    data.fba_fees || 0,
+    data.storage_fees || 0,
+    data.advertising_costs || 0,
+    data.other_fees || 0,
+    data.promotional_discounts || 0,
+    data.bank_deposit || 0,
+    data.status || 'pushed',
+  ];
+
+  return headers.join(',') + '\n' + row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',') + '\n';
+}
+
+async function attachSettlementToXero(
+  token: XeroToken,
+  xeroInvoiceId: string,
+  settlementData: Record<string, any>,
+  filename: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const csvContent = buildSettlementCsv(settlementData);
+    const encoder = new TextEncoder();
+    const csvBytes = encoder.encode(csvContent);
+
+    console.log(`Attaching CSV to Xero invoice ${xeroInvoiceId}: ${filename} (${csvBytes.length} bytes)`);
+
+    const attachUrl = `https://api.xero.com/api.xro/2.0/Invoices/${xeroInvoiceId}/Attachments/${encodeURIComponent(filename)}`;
+    const resp = await fetch(attachUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token.access_token}`,
+        'Content-Type': 'text/csv',
+        'Xero-tenant-id': token.tenant_id,
+      },
+      body: csvBytes,
+    });
+
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error('Xero attachment API error:', resp.status, errorText);
+      return { success: false, error: `Xero attachment error: ${resp.status} - ${errorText}` };
+    }
+
+    console.log('CSV attached successfully to invoice:', xeroInvoiceId);
+    return { success: true };
+  } catch (err: any) {
+    console.error('Attachment failed (non-fatal):', err.message);
+    return { success: false, error: err.message };
+  }
 }
 
 // Refresh Xero token if expired
