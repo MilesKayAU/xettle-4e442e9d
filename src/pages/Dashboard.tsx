@@ -561,6 +561,15 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
 
+        {/* ─── Settlements → Reconciliation Hub ──────────────────────── */}
+        {activeView === 'settlements' && settlementsSubTab === 'reconciliation' && (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+              <ReconciliationHub />
+            </Suspense>
+          </ErrorBoundary>
+        )}
+
         {/* ─── Insights → Overview ───────────────────────────────────── */}
         {activeView === 'insights' && insightsSubTab === 'overview' && (
           <ErrorBoundary>
