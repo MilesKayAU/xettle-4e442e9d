@@ -130,9 +130,10 @@ Deno.serve(async (req) => {
     }
 
     const systemPrompt = `You are an Australian ecommerce accounting assistant. 
-You will be given a list of Xero account codes from an Australian business and must match each of 8 ecommerce settlement categories to the most appropriate account.
+You will be given a list of Xero account codes from an Australian business and must match each of 9 ecommerce settlement categories to the most appropriate account.
 Always prefer existing accounts over creating new ones.
 Australian GST applies — revenue accounts use OUTPUT tax, expense/fee accounts use INPUT tax, reimbursements use NONE.
+Advertising Costs (Sponsored Products, PPC ads) MUST be separated from Other Fees for BAS accuracy.
 Return only valid JSON, no explanation.`
 
     const userPrompt = `Here are the Xero accounts for this business:
@@ -146,6 +147,7 @@ Match each category to the best account code:
 - Seller Fees: referral fees and selling fees charged by marketplace
 - FBA Fees: fulfilment, pick and pack, delivery fees
 - Storage Fees: warehouse and inventory storage fees
+- Advertising Costs: Sponsored Products, PPC advertising fees (INPUT tax, GST on purchases)
 - Other Fees: miscellaneous marketplace charges and adjustments
 
 Return JSON only with this exact structure:
@@ -157,6 +159,7 @@ Return JSON only with this exact structure:
   "Seller Fees": "XXXX",
   "FBA Fees": "XXXX",
   "Storage Fees": "XXXX",
+  "Advertising Costs": "XXXX",
   "Other Fees": "XXXX",
   "confidence": "high" | "medium" | "low",
   "notes": "brief plain English explanation of key decisions"
