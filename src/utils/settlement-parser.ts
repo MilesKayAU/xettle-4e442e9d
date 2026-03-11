@@ -65,6 +65,7 @@ const EXPECTED_SIGNS: Record<string, 1 | -1> = {
   'Seller Fees': -1,         // always negative
   'FBA Fees': -1,            // always negative
   'Storage Fees': -1,        // always negative
+  'Advertising Costs': -1,   // always negative (Sponsored Products spend)
   'Refunds': -1,             // always negative
   'Reimbursements': 1,       // always positive
   'Tax Collected by Amazon': 1, // nets to zero across settlement
