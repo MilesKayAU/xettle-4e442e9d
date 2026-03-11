@@ -255,6 +255,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
     switch (status) {
       case 'success': return <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />;
       case 'skipped': return <SkipForward className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
+      case 'rate_limited': return <Clock3 className="h-4 w-4 text-amber-500 flex-shrink-0" />;
       case 'error': return <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />;
       case 'running': return <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />;
       default: return <div className="h-4 w-4 rounded-full border border-muted-foreground/30 flex-shrink-0" />;
