@@ -184,6 +184,7 @@ export default function Admin() {
             <p className="text-muted-foreground mt-1">Manage users and monitor connections <span className="font-mono text-xs opacity-50">v1.7.0</span></p>
           </div>
           <div className="flex gap-2">
+            <AccountResetButton />
             <Button variant="default" size="sm" onClick={() => setInviteOpen(true)}>
               <UserPlus className="h-4 w-4 mr-1" />
               Invite User
