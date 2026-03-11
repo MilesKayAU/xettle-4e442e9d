@@ -21,6 +21,29 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+interface SettlementEvidence {
+  settlement_id: string;
+  source: string;
+  marketplace: string;
+  period_start: string;
+  period_end: string;
+  bank_deposit: number;
+  net_ex_gst: number;
+  sales_principal: number;
+  seller_fees: number;
+  fba_fees: number;
+  refunds: number;
+  reimbursements: number;
+  gst_on_income: number;
+  is_split_month: boolean;
+  split_part: number | null;
+  split_net: number | null;
+  bank_verified: boolean;
+  xero_status: string | null;
+  xero_invoice_number: string | null;
+  status: string;
+}
+
 interface OutstandingRow {
   xero_invoice_id: string;
   xero_invoice_number: string;
@@ -35,6 +58,7 @@ interface OutstandingRow {
   has_settlement: boolean;
   settlement_id: string | null;
   settlement_status: string | null;
+  settlement_evidence: SettlementEvidence | null;
   has_bank_deposit: boolean;
   bank_match: {
     amount: number;
