@@ -364,7 +364,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* Main table */}
-      {data && data.rows.length > 0 && (
+      {data && filteredRows.length > 0 && (
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
