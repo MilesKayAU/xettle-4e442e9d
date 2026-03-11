@@ -183,28 +183,8 @@ export default function Dashboard() {
           return data[0].marketplace_code;
         });
       } else {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        if (authUser) {
-          const { error: insertErr } = await supabase
-            .from('marketplace_connections')
-            .insert({
-              user_id: authUser.id,
-              marketplace_code: 'amazon_au',
-              marketplace_name: 'Amazon AU',
-              country_code: 'AU',
-              connection_type: 'sp_api',
-              connection_status: 'active',
-            } as any);
-
-          if (!insertErr) {
-            const { data: reloaded } = await supabase
-              .from('marketplace_connections')
-              .select('*')
-              .order('created_at', { ascending: true });
-            if (reloaded) setUserMarketplaces(reloaded as UserMarketplace[]);
-          }
-        }
-        setSelectedMarketplace('amazon_au');
+        setUserMarketplaces([]);
+        setSelectedMarketplace('');
       }
     } catch {
       // silently fail
