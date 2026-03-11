@@ -63,9 +63,14 @@ async function loadRegistries(supabaseAdmin: any): Promise<void> {
 
 function isPaymentProcessor(code: string): boolean {
   if (_processorCodes) return _processorCodes.has(code)
-  // Fallback hardcoded list if registry not loaded
   const FALLBACK = ['paypal','stripe','afterpay','zip','zippay','klarna','laybuy','humm','openpay','latitude','square','tyro','braintree']
   return FALLBACK.some(p => (code || '').toLowerCase().includes(p))
+}
+
+function isAdvertisingPlatform(code: string): boolean {
+  if (!_registryCache) return false
+  const entry = _registryCache.find(e => e.code === code)
+  return entry?.processor_type === 'advertising_platform'
 }
 
 function matchesMarketplace(name: string): string | null {
