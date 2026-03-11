@@ -497,15 +497,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               Upload
                             </Button>
                           )}
-                          {(row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') && (
+                          {/* Evidence / Investigate — available for any non-no_settlement row */}
+                          {row.match_status !== 'no_settlement' && (
                             <Button
                               size="sm"
-                              variant="outline"
+                              variant="ghost"
                               onClick={() => setExpandedRow(isExpanded ? null : row.xero_invoice_id)}
                               className="gap-1 text-xs h-7"
                             >
-                              <AlertTriangle className="h-3 w-3" />
-                              Investigate
+                              <FileText className="h-3 w-3" />
+                              {row.has_settlement ? 'Evidence' : 'Details'}
                               {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                             </Button>
                           )}
