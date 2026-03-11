@@ -630,7 +630,7 @@ export default function AccountingDashboard() {
 
         // Add Account 612 balancing line: negative of rolloverAmount → invoice nets to $0
         lines1.push({
-          Description: `Split month rollover to ${m2.monthLabel}`,
+          Description: `Deferred revenue to ${m2.monthLabel}`,
           AccountCode: XERO_ACCOUNT_MAP['Split Month Rollover'].code,
           TaxType: 'BASEXCLUDED',
           UnitAmount: round2(-rolloverAmount),
