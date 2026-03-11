@@ -19,7 +19,6 @@ import {
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
-import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 
 // ─── Types ──────────────────────────────────────────────────────────
 type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped';
