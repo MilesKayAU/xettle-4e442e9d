@@ -216,11 +216,54 @@ Deno.serve(async (req) => {
 
       totalOutstanding += amount;
 
-      // Try to match with our settlement
-      const settlementId = extractSettlementId(reference);
-      const settlement = settlementId ? settlementMap.get(settlementId) : null;
+      // Try to match with our settlement (direct ID, then alias lookup)
+      const extracted = extractSettlementId(reference);
+      const settlementId = extracted.id;
+      const splitPart = extracted.part; // 1 or 2 for LMB/Xettle split-month refs
+      let settlement = settlementId ? settlementMap.get(settlementId) : null;
+      
+      // Try alias lookup if direct match failed
+      if (!settlement && settlementId) {
+        const canonical = aliasMap.get(settlementId);
+        if (canonical) settlement = settlementMap.get(canonical);
+      }
+      
       const hasSettlement = !!settlement;
       if (hasSettlement) matchedWithSettlement++;
+
+      // Build settlement evidence for the UI
+      let settlementEvidence: any = null;
+      if (settlement) {
+        // For split-month settlements, show the relevant part's data
+        let splitData = null;
+        if (settlement.is_split_month && splitPart) {
+          splitData = splitPart === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
+          if (typeof splitData === 'string') splitData = JSON.parse(splitData);
+        }
+
+        settlementEvidence = {
+          settlement_id: settlement.settlement_id,
+          source: settlement.source, // 'api', 'manual', 'csv'
+          marketplace: settlement.marketplace,
+          period_start: settlement.period_start,
+          period_end: settlement.period_end,
+          bank_deposit: settlement.bank_deposit,
+          net_ex_gst: settlement.net_ex_gst,
+          sales_principal: splitData?.salesPrincipal ?? settlement.sales_principal,
+          seller_fees: splitData?.sellerFees ?? settlement.seller_fees,
+          fba_fees: splitData?.fbaFees ?? settlement.fba_fees,
+          refunds: splitData?.refunds ?? settlement.refunds,
+          reimbursements: splitData?.reimbursements ?? settlement.reimbursements,
+          gst_on_income: splitData?.gstOnIncome ?? settlement.gst_on_income,
+          is_split_month: settlement.is_split_month,
+          split_part: splitPart,
+          split_net: splitData?.netExGst ?? null,
+          bank_verified: settlement.bank_verified,
+          xero_status: settlement.xero_status,
+          xero_invoice_number: settlement.xero_invoice_number,
+          status: settlement.status,
+        };
+      }
 
       // Try to find matching bank deposit
       const marketplace = detectMarketplace(reference, contactName);
