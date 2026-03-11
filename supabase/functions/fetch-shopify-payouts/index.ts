@@ -416,12 +416,15 @@ async function syncPayoutsForUser(
 }
 
 Deno.serve(async (req) => {
+  console.info(`[fetch-shopify-payouts] ${req.method} received`);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const action = req.headers.get("x-action");
+    console.info(`[fetch-shopify-payouts] action=${action}`);
+
 
     // ─── Multi-user sync mode (for cron / scheduled-sync) ───────────
     if (action === "sync") {
@@ -496,6 +499,7 @@ Deno.serve(async (req) => {
     );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.info(`[fetch-shopify-payouts] Auth: user=${user?.id}, error=${authError?.message}`);
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -514,6 +518,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (tokenError || !tokenRow) {
+      console.warn(`[fetch-shopify-payouts] No Shopify token found: ${tokenError?.message}`);
       return new Response(
         JSON.stringify({ error: "No Shopify connection found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
