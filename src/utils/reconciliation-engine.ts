@@ -82,7 +82,7 @@ export function runReconciliation(
 
   // ─── 3. GST Consistency ──────────────────────────────────────────
   const expectedGstIncome = round2(
-    (summary.salesPrincipal + summary.salesShipping + summary.promotionalDiscounts + summary.refunds + summary.reimbursements) / 11
+    (summary.salesPrincipal + summary.salesShipping + summary.promotionalDiscounts + summary.refunds) / 11
   );
   const gstDiff = round2(Math.abs(summary.gstOnIncome - expectedGstIncome));
 
