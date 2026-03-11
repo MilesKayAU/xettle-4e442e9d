@@ -123,6 +123,12 @@ export interface DebugBreakdownRow {
   gst: number;
 }
 
+export interface ReconciliationCheckResult {
+  name: string;
+  passed: boolean;
+  detail?: string;
+}
+
 export interface SettlementSummary {
   salesPrincipal: number;
   salesShipping: number;
