@@ -212,7 +212,7 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
                 'text-foreground',
                 stepStatuses[i] === 'skipped' && 'text-muted-foreground line-through'
               )}>
-                {stepStatuses[i] === 'skipped' || stepStatuses[i] === 'error'
+                {stepStatuses[i] === 'skipped'
                   ? stepMessages[i] || step.label
                   : step.label}
               </span>
