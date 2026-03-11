@@ -397,7 +397,12 @@ export default function KnowledgeBaseDashboard() {
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.processor_name}</TableCell>
                       <TableCell><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.processor_code}</code></TableCell>
-                      <TableCell><Badge variant="outline" className="text-[10px]">{p.type}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant={p.type === 'advertising_platform' ? 'destructive' : 'outline'} className="text-[10px] gap-1">
+                          {p.type === 'advertising_platform' && <Megaphone className="h-3 w-3" />}
+                          {p.type === 'advertising_platform' ? 'Ad Platform' : p.type}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1 max-w-[200px]">
                           {p.detection_keywords.slice(0, 3).map(k => (
