@@ -241,8 +241,8 @@ Return JSON only with this exact structure:
           : toolCall.function.arguments
         confidence = args.confidence || 'medium'
         notes = args.notes || ''
-        // Extract just the 8 category mappings
-        const categories = ['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees']
+        // Extract just the 9 category mappings
+        const categories = ['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
         for (const cat of categories) {
           if (args[cat]) mapping[cat] = args[cat]
         }
