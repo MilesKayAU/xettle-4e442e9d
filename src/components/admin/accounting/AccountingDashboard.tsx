@@ -1248,6 +1248,7 @@ export default function AccountingDashboard() {
                   setAmazonFetchStatus(status);
                 }} />
                 <XeroConnectionStatus />
+                <AccountMapperCard />
                 <ShopifyConnectionStatus />
                 <ChannelManagement />
                 <AutomationSettingsPanel userTier={userTier} />
