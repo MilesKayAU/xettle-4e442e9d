@@ -20,8 +20,8 @@ interface SetupWizardProps {
   justConnectedXero?: boolean;
 }
 
-const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Results'];
-const TOTAL_STEPS = 4;
+const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Scanning', 'Results'];
+const TOTAL_STEPS = 5;
 const STORAGE_KEY = 'xettle_setup_step';
 const SELECTED_MARKETPLACES_KEY = 'xettle_setup_marketplaces';
 
