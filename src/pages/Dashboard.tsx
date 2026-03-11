@@ -456,11 +456,30 @@ export default function Dashboard() {
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
 
-        {/* ─── Dashboard (Clean data-only view) ─────────────────────── */}
+        {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
+              <PostSetupBanner
+                onSwitchToUpload={() => switchView('smart_upload')}
+                hasXero={xeroConnected}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
+                onConnectXero={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
+                onConnectAmazon={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onConnectShopify={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onScanComplete={loadMarketplaces}
+              />
               <ReconciliationSummaryCard onNavigate={() => {
                 switchView('settlements');
                 switchSettlementsSubTab('reconciliation');
