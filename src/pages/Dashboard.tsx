@@ -141,9 +141,9 @@ export default function Dashboard() {
     } catch {}
   };
 
-  // Default to Upload tab instead of Dashboard
+  // Dashboard is always the default landing page
   const [activeView, setActiveView] = useState<DashboardView>(() => {
-    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'smart_upload';
+    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
   });
   const [settlementsSubTab, setSettlementsSubTab] = useState<SettlementsSubTab>(() => {
     return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'all';
@@ -382,14 +382,14 @@ export default function Dashboard() {
         <div className="container-custom">
           <nav className="flex gap-1 py-2">
             {([
-              { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
               { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
+              { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
               { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
-              const showDot = tab.key === 'smart_upload' && pendingChannelAlerts > 0;
+              const showDot = tab.key === 'dashboard' && pendingChannelAlerts > 0;
               return (
                 <button
                   key={tab.key}
@@ -456,11 +456,30 @@ export default function Dashboard() {
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
 
-        {/* ─── Dashboard (Clean data-only view) ─────────────────────── */}
+        {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
+              <PostSetupBanner
+                onSwitchToUpload={() => switchView('smart_upload')}
+                hasXero={xeroConnected}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
+                onConnectXero={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
+                onConnectAmazon={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onConnectShopify={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onScanComplete={loadMarketplaces}
+              />
               <ReconciliationSummaryCard onNavigate={() => {
                 switchView('settlements');
                 switchSettlementsSubTab('reconciliation');
@@ -501,33 +520,9 @@ export default function Dashboard() {
                 />
               </Suspense>
 
-              {/* Connection & sync status cards */}
-              <PostSetupBanner
-                onSwitchToUpload={() => {}} // already on upload tab
-                hasXero={xeroConnected}
-                hasAmazon={hasAmazon}
-                hasShopify={hasShopify}
-                onConnectXero={() => {
-                  setWizardInitialStep(1);
-                  setShowWizard(true);
-                }}
-                onConnectAmazon={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onConnectShopify={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onScanComplete={loadMarketplaces}
-              />
-
-              {/* Channel alerts on upload tab */}
-              <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
-
-              {/* Welcome guide — below connections */}
+              {/* Welcome guide — helps new users understand the workflow */}
               <WelcomeGuide
-                onUpload={() => {}} // already on upload tab
+                onUpload={() => {}}
                 onConnectStore={() => {
                   setWizardInitialStep(1);
                   setShowWizard(true);
