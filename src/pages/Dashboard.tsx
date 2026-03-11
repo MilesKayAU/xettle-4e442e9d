@@ -37,6 +37,26 @@ type DashboardView = 'dashboard' | 'smart_upload' | 'settlements' | 'insights';
 type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
+function SetupInProgressBanner() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const [dismissed, phase3] = await Promise.all([
+        supabase.from('app_settings').select('value').eq('key', 'setup_hub_dismissed').maybeSingle(),
+        supabase.from('app_settings').select('value').eq('key', 'setup_phase3_complete').maybeSingle(),
+      ]);
+      if (dismissed.data?.value !== 'true' && phase3.data?.value !== 'true') setShow(true);
+    })();
+  }, []);
+  if (!show) return null;
+  return (
+    <div className="mb-4 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
+      <span className="text-foreground">Your account setup is in progress</span>
+      <a href="/setup" className="font-medium text-primary hover:underline">Continue setup →</a>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
