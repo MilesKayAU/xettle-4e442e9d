@@ -12,6 +12,8 @@ interface Props {
   onSkip: () => void;
   hasAmazon: boolean;
   hasShopify: boolean;
+  hasXero?: boolean;
+  justConnectedXero?: boolean;
   selectedMarketplaces: string[];
   onMarketplacesChange: (marketplaces: string[]) => void;
 }
@@ -21,11 +23,12 @@ interface MarketplaceOption {
   label: string;
   icon: typeof Package;
   type: 'api' | 'csv';
+  benefit?: string;
 }
 
 const API_MARKETPLACES: MarketplaceOption[] = [
-  { id: 'amazon', label: 'Amazon', icon: Package, type: 'api' },
-  { id: 'shopify', label: 'Shopify', icon: ShoppingBag, type: 'api' },
+  { id: 'amazon', label: 'Amazon', icon: Package, type: 'api', benefit: 'Auto-fetch settlements every cycle — no more downloading CSVs' },
+  { id: 'shopify', label: 'Shopify', icon: ShoppingBag, type: 'api', benefit: 'Auto-sync payouts and detect sub-channels automatically' },
 ];
 
 const CSV_MARKETPLACES: MarketplaceOption[] = [
@@ -43,6 +46,8 @@ export default function SetupStepConnectStores({
   onSkip,
   hasAmazon,
   hasShopify,
+  hasXero,
+  justConnectedXero,
   selectedMarketplaces,
   onMarketplacesChange,
 }: Props) {
@@ -116,12 +121,25 @@ export default function SetupStepConnectStores({
 
   return (
     <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-bold text-foreground">Which marketplaces do you sell on?</h2>
-        <p className="text-sm text-muted-foreground">
-          Connect APIs for automatic sync, or toggle on CSV-only marketplaces — both work perfectly.
-        </p>
-      </div>
+      {/* Celebration header when Xero was just connected */}
+      {justConnectedXero && hasXero ? (
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-2">
+            <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+            <h2 className="text-xl font-bold text-foreground">Nice one — Xero is connected!</h2>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            You're on a roll. Now let's connect your sales channels so Xettle can automatically pull settlement data. The more you connect, the less manual work you'll have.
+          </p>
+        </div>
+      ) : (
+        <div className="text-center space-y-2">
+          <h2 className="text-xl font-bold text-foreground">Which marketplaces do you sell on?</h2>
+          <p className="text-sm text-muted-foreground">
+            Connect APIs for automatic sync, or toggle on CSV-only marketplaces — both work perfectly.
+          </p>
+        </div>
+      )}
 
       {/* API-connected marketplaces */}
       <div className="space-y-2">
@@ -145,7 +163,7 @@ export default function SetupStepConnectStores({
                         <CheckCircle2 className="h-3 w-3" /> Connected
                       </span>
                     ) : (
-                      <span className="text-[10px] text-muted-foreground">Auto-sync settlements</span>
+                      <span className="text-[10px] text-muted-foreground">{m.benefit || 'Auto-sync settlements'}</span>
                     )}
                   </div>
                 </div>

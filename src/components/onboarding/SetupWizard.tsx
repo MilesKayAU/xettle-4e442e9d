@@ -16,6 +16,7 @@ interface SetupWizardProps {
   hasAmazon?: boolean;
   hasShopify?: boolean;
   hasXero?: boolean;
+  justConnectedXero?: boolean;
 }
 
 const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Scan', 'Results'];
@@ -30,6 +31,7 @@ export default function SetupWizard({
   hasAmazon = false,
   hasShopify = false,
   hasXero = false,
+  justConnectedXero = false,
 }: SetupWizardProps) {
   const [step, setStep] = useState(() => {
     const saved = sessionStorage.getItem(STORAGE_KEY);
@@ -125,6 +127,8 @@ export default function SetupWizard({
                 }}
                 hasAmazon={hasAmazon}
                 hasShopify={hasShopify}
+                hasXero={hasXero}
+                justConnectedXero={justConnectedXero}
                 selectedMarketplaces={selectedMarketplaces}
                 onMarketplacesChange={setSelectedMarketplaces}
               />
@@ -148,6 +152,8 @@ export default function SetupWizard({
               <SetupStepResults
                 onNext={handleComplete}
                 hasXero={hasXero}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
               />
             )}
           </div>
