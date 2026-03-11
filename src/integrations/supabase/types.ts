@@ -224,6 +224,39 @@ export type Database = {
         }
         Relationships: []
       }
+      community_contact_classifications: {
+        Row: {
+          category: string | null
+          classification: string
+          confidence_pct: number | null
+          contact_name: string
+          created_at: string
+          id: string
+          last_voted_at: string
+          vote_count: number
+        }
+        Insert: {
+          category?: string | null
+          classification: string
+          confidence_pct?: number | null
+          contact_name: string
+          created_at?: string
+          id?: string
+          last_voted_at?: string
+          vote_count?: number
+        }
+        Update: {
+          category?: string | null
+          classification?: string
+          confidence_pct?: number | null
+          contact_name?: string
+          created_at?: string
+          id?: string
+          last_voted_at?: string
+          vote_count?: number
+        }
+        Relationships: []
+      }
       entity_library: {
         Row: {
           accounting_impact: string
@@ -1427,6 +1460,42 @@ export type Database = {
           settlement_id?: string | null
           severity?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_contact_classifications: {
+        Row: {
+          category: string | null
+          classification: string
+          contact_name: string
+          created_at: string
+          id: string
+          notes: string | null
+          updated_at: string
+          user_id: string
+          xero_contact_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          classification: string
+          contact_name: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+          xero_contact_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          classification?: string
+          contact_name?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+          xero_contact_id?: string | null
         }
         Relationships: []
       }
