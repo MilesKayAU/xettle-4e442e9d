@@ -510,6 +510,7 @@ export default function Dashboard() {
           <nav className="flex gap-1 py-2">
             {([
               { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
+              { key: 'outstanding' as DashboardView, label: 'Outstanding', icon: ClipboardList, badgeCount: outstandingCount },
               { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
               { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
