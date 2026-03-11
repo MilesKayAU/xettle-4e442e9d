@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import SetupStepConnectXero from './SetupStepConnectXero';
 import SetupStepConnectStores from './SetupStepConnectStores';
 import SetupStepUpload from './SetupStepUpload';
+import SetupStepScanning from './SetupStepScanning';
 import SetupStepResults from './SetupStepResults';
 
 interface SetupWizardProps {
