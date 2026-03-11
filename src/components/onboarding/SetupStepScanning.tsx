@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 
 interface Props {
   onNext: () => void;
@@ -24,8 +25,8 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
       { label: 'Fetching Shopify payouts...', fn: 'fetch-shopify-payouts' },
       { label: 'Fetching Shopify orders...', fn: 'fetch-shopify-orders' },
       { label: 'Scanning sub-channels...', fn: 'scan-shopify-channels' },
-      { label: 'Provisioning marketplace tabs...', fn: null, action: 'provision-channels' },
     ] : []),
+    { label: 'Setting up marketplace tabs...', fn: null, action: 'provision-all' },
     { label: 'Checking for uploaded files...', fn: null },
     { label: 'Running validation sweep...', fn: 'run-validation-sweep' },
   ];
@@ -68,28 +69,10 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           if (cancelled) return;
           const step = steps[i];
 
-          if (step.action === 'provision-channels') {
-            // Auto-provision marketplace connections from detected sub-channels
+          if (step.action === 'provision-all') {
+            // Dynamic provisioning: tokens + sub-channels + ghost cleanup
             try {
-              const { data: channels } = await supabase
-                .from('shopify_sub_channels')
-                .select('marketplace_code, marketplace_label, source_name')
-                .eq('user_id', session.user.id)
-                .eq('ignored', false)
-                .not('marketplace_code', 'is', null);
-
-              if (channels && channels.length > 0) {
-                for (const ch of channels) {
-                  if (!ch.marketplace_code) continue;
-                  await supabase.from('marketplace_connections').upsert({
-                    user_id: session.user.id,
-                    marketplace_code: ch.marketplace_code,
-                    marketplace_name: ch.marketplace_label,
-                    connection_type: 'shopify_sub_channel',
-                    connection_status: 'active',
-                  }, { onConflict: 'user_id,marketplace_code' });
-                }
-              }
+              await provisionAllMarketplaceConnections(session.user.id);
             } catch {
               // continue
             }

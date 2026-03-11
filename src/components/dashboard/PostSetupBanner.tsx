@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, CheckCircle2, X, Zap, ShoppingCart, BookOpen, ArrowRight, Sparkles, Shield } from 'lucide-react';
+import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 
 interface Props {
   onSwitchToUpload: () => void;
@@ -153,6 +154,10 @@ export default function PostSetupBanner({
           .eq('marketplace', 'amazon_au');
         setAmazonFound(count ?? 0);
 
+        // Provision all marketplace connections + clean ghosts
+        const { data: { session: amzSession } } = await supabase.auth.getSession();
+        if (amzSession) await provisionAllMarketplaceConnections(amzSession.user.id);
+
         await setAppFlag('amazon_scan_completed');
         setAmazonScanComplete(true);
         await callEdgeFunction('run-validation-sweep').catch(() => {});
@@ -197,6 +202,10 @@ export default function PostSetupBanner({
           .from('shopify_sub_channels')
           .select('id', { count: 'exact', head: true });
         setShopifyChannelsFound(count ?? 0);
+
+        // Provision all marketplace connections + clean ghosts
+        const { data: { session: shopSession } } = await supabase.auth.getSession();
+        if (shopSession) await provisionAllMarketplaceConnections(shopSession.user.id);
 
         await setAppFlag('shopify_scan_completed');
         setShopifyScanComplete(true);
