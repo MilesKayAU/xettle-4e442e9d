@@ -87,7 +87,7 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
                     marketplace_name: ch.marketplace_label,
                     connection_type: 'shopify_sub_channel',
                     connection_status: 'active',
-                  }, { onConflict: 'user_id,marketplace_code' }).throwOnError().catch(() => {});
+                  }, { onConflict: 'user_id,marketplace_code' });
                 }
               }
             } catch {
