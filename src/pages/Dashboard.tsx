@@ -325,6 +325,7 @@ export default function Dashboard() {
   const settlementSubTabs: { key: SettlementsSubTab; label: string }[] = [
     { key: 'all', label: 'All Settlements' },
     { key: 'overview', label: 'Overview' },
+    { key: 'reconciliation', label: 'Reconciliation Hub' },
   ];
 
   const insightsSubTabs: { key: InsightsSubTab; label: string; pro?: boolean }[] = [
