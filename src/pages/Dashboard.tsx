@@ -39,7 +39,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
-  const trialInfo = useTrialStatus(user?.id);
   const [isAdmin, setIsAdmin] = useState(false);
   const [xeroConnected, setXeroConnected] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
