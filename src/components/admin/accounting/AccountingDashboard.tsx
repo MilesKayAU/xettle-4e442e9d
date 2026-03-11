@@ -967,7 +967,12 @@ export default function AccountingDashboard() {
               <Badge variant="outline" className="text-blue-700 border-blue-300 shrink-0">In Progress</Badge>
             </div>
           )}
+            </TabsContent>
 
+            {/* INSIGHTS TAB */}
+            <TabsContent value="insights">
+              <InsightsTab />
+            </TabsContent>
 
           <Tabs value={activeTab} onValueChange={(tab) => {
             if (activeTab === 'upload' && tab !== 'upload' && bulkProcessing) {
