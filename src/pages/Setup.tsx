@@ -14,7 +14,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   CheckCircle2, AlertTriangle, SkipForward, RefreshCw, ArrowRight,
-  Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink, ArrowLeft, Copy, Check
+  Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink, ArrowLeft, Copy, Check,
+  Square
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import XettleLogo from '@/components/shared/XettleLogo';
@@ -146,6 +147,11 @@ export default function Setup() {
   const mountedRef = useRef(true);
   const phase1StartedRef = useRef(false);
 
+  // Abort controllers for stop/pause
+  const xeroAbortRef = useRef<AbortController | null>(null);
+  const shopifyAbortRef = useRef<AbortController | null>(null);
+  const amazonAbortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     return () => { mountedRef.current = false; };
   }, []);
@@ -227,10 +233,19 @@ export default function Setup() {
 
   // ─── Xero scan ────────────────────────────────────────────────────
   async function runXeroScan(token: string, userId: string) {
+    const ac = new AbortController();
+    xeroAbortRef.current = ac;
     setXeroStep({ status: 'running', message: 'Scanning Xero invoices, contacts & bank transactions...' });
-    const result = await callEdgeFunctionSafe('scan-xero-history', token);
+    const result = await callEdgeFunctionSafe('scan-xero-history', token, {}, { signal: ac.signal });
 
+    xeroAbortRef.current = null;
     if (!mountedRef.current) return;
+
+    if (result.aborted) {
+      setXeroStep({ status: 'error', message: 'Xero scan stopped', error: 'Stopped by user' });
+      setXeroProgress(0);
+      return;
+    }
 
     if (result.ok) {
       const d = result.data || {};
@@ -264,19 +279,26 @@ export default function Setup() {
 
   // ─── Shopify scan (enforced A→B→C sequence) ──────────────────────
   async function runShopifyScan(token: string, userId: string) {
+    const ac = new AbortController();
+    shopifyAbortRef.current = ac;
+
     setShopifyPayoutsStep({ status: 'running', message: 'Fetching payouts...' });
-    const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', token);
+    const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', token, {}, { signal: ac.signal });
     if (!mountedRef.current) return;
+    if (payoutsResult.aborted) {
+      shopifyAbortRef.current = null;
+      setShopifyPayoutsStep({ status: 'error', message: 'Stopped', error: 'Stopped by user' });
+      setShopifyProgress(0);
+      return;
+    }
 
     if (!payoutsResult.ok) {
-      // Cooldown (429) or timeout is non-fatal — existing data is valid, continue pipeline
       const isCooldown = payoutsResult.error?.includes('429');
       const isTimeout = payoutsResult.error?.includes('timed out');
       if (isCooldown || isTimeout) {
         setShopifyPayoutsStep({ status: 'success', message: '✅ Payouts already synced recently' });
       } else {
         setShopifyPayoutsStep({ status: 'error', message: 'Payouts fetch failed', error: payoutsResult.error });
-        // Don't halt — continue to orders & channels even if payouts fail
       }
     } else {
       const payoutCount = payoutsResult.data?.synced || payoutsResult.data?.count || 0;
@@ -290,12 +312,19 @@ export default function Setup() {
     }
 
     setShopifyOrdersStep({ status: 'running', message: 'Fetching orders (this may take a while)...' });
-    const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', token);
+    const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', token, {}, { signal: ac.signal });
     if (!mountedRef.current) return;
+    if (ordersResult.aborted) {
+      shopifyAbortRef.current = null;
+      setShopifyOrdersStep({ status: 'error', message: 'Stopped', error: 'Stopped by user' });
+      setShopifyProgress(0);
+      return;
+    }
 
     if (!ordersResult.ok) {
       setShopifyOrdersStep({ status: 'error', message: 'Orders fetch failed', error: ordersResult.error });
       setShopifyProgress(0);
+      shopifyAbortRef.current = null;
       return;
     }
     const ordersFetched = ordersResult.data?.orders_saved || ordersResult.data?.count || 0;
@@ -312,13 +341,20 @@ export default function Setup() {
       });
       setShopifyProgress(100);
       setPhase1Shopify(true);
+      shopifyAbortRef.current = null;
       await upsertSetting(userId, 'setup_phase1_shopify', 'true');
       return;
     }
 
     setShopifyChannelsStep({ status: 'running', message: 'Scanning for sales channels...' });
-    const channelsResult = await callEdgeFunctionSafe('scan-shopify-channels', token);
+    const channelsResult = await callEdgeFunctionSafe('scan-shopify-channels', token, {}, { signal: ac.signal });
+    shopifyAbortRef.current = null;
     if (!mountedRef.current) return;
+    if (channelsResult.aborted) {
+      setShopifyChannelsStep({ status: 'error', message: 'Stopped', error: 'Stopped by user' });
+      setShopifyProgress(0);
+      return;
+    }
 
     if (channelsResult.ok) {
       const { count: subChannelCount } = await supabase
@@ -339,9 +375,18 @@ export default function Setup() {
 
   // ─── Amazon scan ──────────────────────────────────────────────────
   async function runAmazonScan(token: string, userId: string) {
+    const ac = new AbortController();
+    amazonAbortRef.current = ac;
     setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements (this can take several minutes)...' });
-    const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token);
+    const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token, {}, { signal: ac.signal });
+    amazonAbortRef.current = null;
     if (!mountedRef.current) return;
+
+    if (result.aborted) {
+      setAmazonStep({ status: 'error', message: 'Amazon fetch stopped', error: 'Stopped by user' });
+      setAmazonProgress(0);
+      return;
+    }
 
     if (result.ok) {
       const { data: settlements } = await supabase
@@ -381,6 +426,20 @@ export default function Setup() {
       setAmazonProgress(0);
     }
   }
+
+  // ─── Stop scan helper ─────────────────────────────────────────────
+  const stopScan = useCallback((api: 'xero' | 'shopify' | 'amazon') => {
+    if (api === 'xero' && xeroAbortRef.current) {
+      xeroAbortRef.current.abort();
+      xeroAbortRef.current = null;
+    } else if (api === 'shopify' && shopifyAbortRef.current) {
+      shopifyAbortRef.current.abort();
+      shopifyAbortRef.current = null;
+    } else if (api === 'amazon' && amazonAbortRef.current) {
+      amazonAbortRef.current.abort();
+      amazonAbortRef.current = null;
+    }
+  }, []);
 
   // ─── Retry helper ─────────────────────────────────────────────────
   const retryStep = useCallback((api: 'xero' | 'shopify' | 'amazon') => {
@@ -766,9 +825,16 @@ export default function Setup() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Xero</span>
-                  <span className="text-xs text-muted-foreground">
-                    {progressStatus(xeroProgress, phase1Xero, 'Xero')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {xeroStep.status === 'running' && (
+                      <Button variant="ghost" size="sm" onClick={() => stopScan('xero')} className="h-6 px-2 text-xs text-destructive hover:text-destructive">
+                        <Square className="h-3 w-3 mr-1" /> Stop
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {progressStatus(xeroProgress, phase1Xero, 'Xero')}
+                    </span>
+                  </div>
                 </div>
                 <Progress value={xeroProgress} className="h-1.5" />
                 {xeroStep.status !== 'idle' && (
@@ -781,9 +847,16 @@ export default function Setup() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Shopify</span>
-                  <span className="text-xs text-muted-foreground">
-                    {progressStatus(shopifyProgress, phase1Shopify, 'Shopify')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {(shopifyPayoutsStep.status === 'running' || shopifyOrdersStep.status === 'running' || shopifyChannelsStep.status === 'running') && (
+                      <Button variant="ghost" size="sm" onClick={() => stopScan('shopify')} className="h-6 px-2 text-xs text-destructive hover:text-destructive">
+                        <Square className="h-3 w-3 mr-1" /> Stop
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {progressStatus(shopifyProgress, phase1Shopify, 'Shopify')}
+                    </span>
+                  </div>
                 </div>
                 <Progress value={shopifyProgress} className="h-1.5" />
                 {shopifyPayoutsStep.status !== 'idle' && (
@@ -802,9 +875,16 @@ export default function Setup() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm font-medium text-foreground">
                   <span>Amazon</span>
-                  <span className="text-xs text-muted-foreground">
-                    {progressStatus(amazonProgress, phase1Amazon, 'Amazon')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {amazonStep.status === 'running' && (
+                      <Button variant="ghost" size="sm" onClick={() => stopScan('amazon')} className="h-6 px-2 text-xs text-destructive hover:text-destructive">
+                        <Square className="h-3 w-3 mr-1" /> Stop
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {progressStatus(amazonProgress, phase1Amazon, 'Amazon')}
+                    </span>
+                  </div>
                 </div>
                 <Progress value={amazonProgress} className="h-1.5" />
                 {amazonStep.status !== 'idle' && (

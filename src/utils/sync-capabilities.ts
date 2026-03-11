@@ -57,12 +57,23 @@ export async function callEdgeFunctionSafe(
   name: string,
   accessToken: string,
   body: Record<string, unknown> = {},
-): Promise<{ ok: boolean; data?: any; error?: string }> {
+  options?: { signal?: AbortSignal },
+): Promise<{ ok: boolean; data?: any; error?: string; aborted?: boolean }> {
   try {
     const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
     const controller = new AbortController();
     const timeoutMs = name === 'scan-xero-history' ? 180000 : name === 'fetch-shopify-orders' ? 60000 : 45000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    // If an external signal is provided, listen for it to abort early
+    const externalSignal = options?.signal;
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        clearTimeout(timeout);
+        return { ok: false, error: 'Stopped by user', aborted: true };
+      }
+      externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
 
     const res = await fetch(
       `https://${projectId}.supabase.co/functions/v1/${name}`,
@@ -88,6 +99,11 @@ export async function callEdgeFunctionSafe(
     return { ok: true, data };
   } catch (err: any) {
     if (err.name === 'AbortError') {
+      // Check if it was user-initiated vs timeout
+      if (options?.signal?.aborted) {
+        console.warn(`[sync] ${name} stopped by user`);
+        return { ok: false, error: 'Stopped by user', aborted: true };
+      }
       console.warn(`[sync] ${name} timed out`);
       return { ok: false, error: `${name} timed out` };
     }
