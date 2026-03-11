@@ -220,6 +220,10 @@ export default function Admin() {
               <Rocket className="h-3.5 w-3.5" />
               Pre-Launch
             </TabsTrigger>
+            <TabsTrigger value="knowledge" className="flex items-center gap-1.5">
+              <BookOpen className="h-3.5 w-3.5" />
+              Knowledge Base
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
