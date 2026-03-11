@@ -134,6 +134,7 @@ Deno.serve(async (req) => {
           'Sales': '200', 'Refunds': '205', 'Reimbursements': '271',
           'Seller Fees': '407', 'FBA Fees': '408', 'Storage Fees': '409',
           'Promotional Discounts': '200', 'Other Fees': '405',
+          'Advertising Costs': '410',
         }[cat] || '405')
 
         let userPushed = 0
