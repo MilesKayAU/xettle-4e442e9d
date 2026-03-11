@@ -303,7 +303,7 @@ export default function KnowledgeBaseDashboard() {
                 <Store className="h-3.5 w-3.5" /> Marketplaces ({marketplaces.length})
               </TabsTrigger>
               <TabsTrigger value="processors" className="gap-1.5">
-                <CreditCard className="h-3.5 w-3.5" /> Payment Processors ({processors.length})
+                <CreditCard className="h-3.5 w-3.5" /> Gateways & Ad Platforms ({processors.length})
               </TabsTrigger>
             </TabsList>
 
