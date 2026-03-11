@@ -3166,16 +3166,16 @@ function SettlementReview({
       {/* Reconciliation Checks */}
       <ReconciliationCard result={reconResult} />
 
-      {/* Split Month Warning */}
+      {/* Deferred Revenue Recognition */}
       {splitMonth.isSplitMonth && splitMonth.month1 && splitMonth.month2 && (
         <Card className="border-2 border-purple-400 bg-purple-50/30">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-purple-800">
               <Scissors className="h-4 w-4" />
-              ⚠ Split Month Settlement — {formatDisplayDate(header.periodStart)} to {formatDisplayDate(header.periodEnd)}
+              ⚠ Deferred Revenue Recognition — {formatDisplayDate(header.periodStart)} to {formatDisplayDate(header.periodEnd)}
             </CardTitle>
             <CardDescription className="text-xs">
-              Uses Account 612 (Split Month Rollovers) to match Link My Books method. Lines split by actual posted dates. Journal 1 nets to $0, Journal 2 nets to full deposit.
+              Settlement spans two accounting periods. Revenue is deferred via Account 612 so each month reports correctly. Journal 1 nets to $0, Journal 2 nets to full deposit.
             </CardDescription>
           </CardHeader>
           <CardContent>
