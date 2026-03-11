@@ -486,7 +486,15 @@ export default function ActionCentre({
                         {expandedCards['bank'] ? '− Show less' : `+ ${grouped.length - 3} more`}
                       </button>
                     </li>
-          )}
+                  )}
+                </ul>
+                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
+                  <Search className="h-3 w-3" /> Check bank feed
+                </Button>
+              </CardContent>
+            </Card>
+            );
+          })()}
 
           {/* Unmatched Deposits */}
           {unmatchedDeposits.count > 0 && (
@@ -504,14 +512,7 @@ export default function ActionCentre({
                 </p>
               </CardContent>
             </Card>
-                </ul>
-                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
-                  <Search className="h-3 w-3" /> Check bank feed
-                </Button>
-              </CardContent>
-            </Card>
-            );
-          })()}
+          )}
 
           {/* All Clear */}
           {complete.length > 0 && (() => {
