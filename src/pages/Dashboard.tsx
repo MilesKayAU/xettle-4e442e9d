@@ -267,11 +267,12 @@ export default function Dashboard() {
 
           // Write scan completion flags
           const flagPromises: Promise<any>[] = [];
-          const writeFlag = (key: string) =>
-            supabase.from('app_settings').upsert(
+          const writeFlag = async (key: string) => {
+            await supabase.from('app_settings').upsert(
               { user_id: caps.userId!, key, value: 'true' },
               { onConflict: 'user_id,key' }
             );
+          };
           if (caps.hasXero) flagPromises.push(writeFlag('xero_scan_completed'));
           if (caps.hasAmazon) flagPromises.push(writeFlag('amazon_scan_completed'));
           if (caps.hasShopify) {
