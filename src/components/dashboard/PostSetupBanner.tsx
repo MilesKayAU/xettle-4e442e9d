@@ -200,6 +200,7 @@ export default function PostSetupBanner({
 
         await setAppFlag('shopify_scan_completed');
         setShopifyScanComplete(true);
+        await callEdgeFunction('run-validation-sweep').catch(() => {});
         onScanComplete?.();
       } catch (err) {
         console.error('Shopify scan trigger failed:', err);

@@ -397,6 +397,22 @@ Deno.serve(async (req) => {
 
     console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces, created ${marketplaces_created} connections, boundary: ${accounting_boundary_date}`)
 
+    // ─── 9. Trigger validation sweep server-side as backup ────────────
+    try {
+      const sweepUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/run-validation-sweep`
+      await fetch(sweepUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({}),
+      })
+      console.log(`[scan-xero-history] Validation sweep triggered for user ${userId}`)
+    } catch (sweepErr) {
+      console.warn('[scan-xero-history] Validation sweep failed (non-blocking):', sweepErr)
+    }
+
     return new Response(JSON.stringify({
       hasXero: true,
       accounting_boundary_date,
