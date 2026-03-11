@@ -110,7 +110,11 @@ export default function Dashboard() {
 
         const dismissCount = parseInt(sessionStorage.getItem('xettle_wizard_dismiss_count') || '0', 10);
 
-        if (hasSettlements || wizardComplete || dismissCount >= 3) {
+        // If user just connected via OAuth callback, always show wizard regardless of existing data
+        const connected = searchParams.get('connected');
+        if (connected) {
+          // Don't skip — let the wizard handle the post-connection flow
+        } else if (hasSettlements || wizardComplete || dismissCount >= 3) {
           setShowWizard(false);
           return;
         }

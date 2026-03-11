@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Step 4: Original scopes + banktransactions.read + payments.read + journals.read
+      // Final confirmed scopes — journals.read rejected by Xero for post-March 2026 apps
       const scopes = [
         'openid',
         'profile',
@@ -65,7 +65,6 @@ Deno.serve(async (req) => {
         'accounting.settings.read',
         'accounting.banktransactions.read',
         'accounting.payments.read',
-        'accounting.journals.read',
       ].join(' ')
 
       const authUrl = new URL(XERO_AUTH_URL)
