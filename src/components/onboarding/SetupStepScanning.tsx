@@ -122,13 +122,37 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           }
         }
 
-        // Write scan flags
+        // Write scan completion flags so PostSetupBanner doesn't re-run
+        const flagPromises: Promise<any>[] = [];
         if (caps.hasShopify) {
-          await supabase.from('app_settings').upsert(
-            { user_id: caps.userId, key: 'shopify_channel_scan_triggered', value: 'true' },
-            { onConflict: 'user_id,key' }
-          ).then(() => {});
+          flagPromises.push(
+            supabase.from('app_settings').upsert(
+              { user_id: caps.userId, key: 'shopify_channel_scan_triggered', value: 'true' },
+              { onConflict: 'user_id,key' }
+            ),
+            supabase.from('app_settings').upsert(
+              { user_id: caps.userId, key: 'shopify_scan_completed', value: 'true' },
+              { onConflict: 'user_id,key' }
+            ),
+          );
         }
+        if (caps.hasAmazon) {
+          flagPromises.push(
+            supabase.from('app_settings').upsert(
+              { user_id: caps.userId, key: 'amazon_scan_completed', value: 'true' },
+              { onConflict: 'user_id,key' }
+            ),
+          );
+        }
+        if (caps.hasXero) {
+          flagPromises.push(
+            supabase.from('app_settings').upsert(
+              { user_id: caps.userId, key: 'xero_scan_completed', value: 'true' },
+              { onConflict: 'user_id,key' }
+            ),
+          );
+        }
+        await Promise.allSettled(flagPromises);
 
         if (!cancelled) {
           setTimeout(() => { if (!cancelled) onNext(); }, 1200);
