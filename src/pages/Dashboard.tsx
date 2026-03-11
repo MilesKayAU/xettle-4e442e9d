@@ -617,6 +617,9 @@ export default function Dashboard() {
                 onSwitchToUpload={() => switchView('smart_upload')}
               />
 
+              {/* AI Account Mapper suggestion banner */}
+              <AiMapperBanner />
+
               {/* Channel alerts — accounting health info */}
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
 
