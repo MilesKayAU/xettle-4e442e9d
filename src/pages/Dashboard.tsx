@@ -197,6 +197,7 @@ export default function Dashboard() {
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
   const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
+  const [outstandingCount, setOutstandingCount] = useState(0);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
