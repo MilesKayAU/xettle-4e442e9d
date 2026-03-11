@@ -119,7 +119,7 @@ export default function PostSetupBanner({
       if (hasAmazon && caps.hasAmazon && !completedFlags.has('amazon_scan_completed')) {
         phase1Promises.push((async () => {
           setAmazonStatus('scanning');
-          const result = await callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken!);
+          const result = await callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken!, {}, { headers: { 'x-action': 'smart-sync' } });
           if (result.ok) {
             const { count } = await supabase
               .from('settlements')

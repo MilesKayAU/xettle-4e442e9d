@@ -68,10 +68,14 @@ export default function SetupWizard({
       if (!session) return;
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const baseUrl = `https://${projectId}.supabase.co/functions/v1`;
-      const headers = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
       };
+      // Amazon needs smart-sync action to actually import settlements
+      if (fnName === 'fetch-amazon-settlements') {
+        headers['x-action'] = 'smart-sync';
+      }
       await fetch(`${baseUrl}/${fnName}`, {
         method: 'POST',
         headers,
