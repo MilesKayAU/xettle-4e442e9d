@@ -14,6 +14,7 @@ interface RegistryEntry {
   xero_patterns: string[]
   bank_patterns: string[]
   is_processor: boolean
+  processor_type?: string // 'payment_gateway' | 'advertising_platform' etc.
 }
 
 let _registryCache: RegistryEntry[] | null = null
