@@ -207,6 +207,13 @@ Deno.serve(async (req) => {
 
     const userId = user.id
 
+    // Load marketplace & processor registries from DB
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
+    await loadRegistries(supabaseAdmin)
+
     const clientId = Deno.env.get('XERO_CLIENT_ID')!
     const clientSecret = Deno.env.get('XERO_CLIENT_SECRET')!
     const tokenRow = await refreshXeroToken(supabase, userId, clientId, clientSecret)
