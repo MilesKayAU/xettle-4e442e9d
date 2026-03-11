@@ -489,18 +489,26 @@ export default function Setup() {
     return () => clearInterval(id);
   }, [caps, loading, phase1Xero, phase1Shopify, phase1Amazon]);
 
-  // ─── B2: Phase 2 gate — ALL connected APIs must complete ──────────
-  const allConnectedPhase1Done =
-    (!caps?.hasXero || phase1Xero) &&
-    (!caps?.hasShopify || phase1Shopify) &&
-    (!caps?.hasAmazon || phase1Amazon);
+  // ─── B2: Phase 2 gate — proceed if enough data exists ──────────
+  // At least one critical source (Xero or Amazon) must complete, OR all connected are done/failed
+  const xeroTerminal = !caps?.hasXero || phase1Xero || xeroStep.status === 'error';
+  const shopifyTerminal = !caps?.hasShopify || phase1Shopify || shopifyOrdersStep.status === 'error';
+  const amazonTerminal = !caps?.hasAmazon || phase1Amazon || amazonStep.status === 'error';
+  const atLeastOneCriticalDone = phase1Xero || phase1Amazon;
+  const allTerminal = xeroTerminal && shopifyTerminal && amazonTerminal;
+  const allConnectedPhase1Done = allTerminal && (atLeastOneCriticalDone || phase1Shopify);
+
+  const hasFailedSteps = (caps?.hasXero && !phase1Xero && xeroStep.status === 'error') ||
+    (caps?.hasShopify && !phase1Shopify && shopifyOrdersStep.status === 'error') ||
+    (caps?.hasAmazon && !phase1Amazon && amazonStep.status === 'error');
 
   const phase2GateReason = (): string | null => {
     if (!caps) return 'Initialising...';
+    if (allConnectedPhase1Done) return null;
     const waiting: string[] = [];
-    if (caps.hasXero && !phase1Xero) waiting.push('Xero');
-    if (caps.hasShopify && !phase1Shopify) waiting.push('Shopify');
-    if (caps.hasAmazon && !phase1Amazon) waiting.push('Amazon');
+    if (caps.hasXero && !phase1Xero && xeroStep.status !== 'error') waiting.push('Xero');
+    if (caps.hasShopify && !phase1Shopify && shopifyOrdersStep.status !== 'error') waiting.push('Shopify');
+    if (caps.hasAmazon && !phase1Amazon && amazonStep.status !== 'error') waiting.push('Amazon');
     if (waiting.length === 0) return null;
     return `Waiting for ${waiting.join(' and ')} to finish...`;
   };
