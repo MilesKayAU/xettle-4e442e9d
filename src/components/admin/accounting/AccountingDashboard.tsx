@@ -642,7 +642,7 @@ export default function AccountingDashboard() {
         // Invoice 2: DR 612 (clear rollover) + Month-2 actual lines
         const lines2Month2 = buildInvoiceLineItems(month2Lines, `${m2.monthLabel}`, header.settlementId);
         const rolloverLine = {
-          Description: `Split month rollover from ${m1.monthLabel}`,
+          Description: `Deferred revenue from ${m1.monthLabel}`,
           AccountCode: XERO_ACCOUNT_MAP['Split Month Rollover'].code,
           TaxType: 'BASEXCLUDED',
           UnitAmount: round2(rolloverAmount),
