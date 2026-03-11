@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Step 1: Original working scopes only
+      // Step 2: Original scopes + accounting.banktransactions.read
       const scopes = [
         'openid',
         'profile',
@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
         'accounting.contacts',
         'accounting.settings',
         'accounting.settings.read',
+        'accounting.banktransactions.read',
       ].join(' ')
 
       const authUrl = new URL(XERO_AUTH_URL)
