@@ -44,6 +44,8 @@ const CATEGORY_MAP: Record<string, string> = {
   // Storage Fees
   'other-transaction|other-transaction|StorageRenewalBilling': 'Storage Fees',
   'other-transaction|other-transaction|Storage Fee': 'Storage Fees',
+  // Advertising Costs (Sponsored Products, PPC)
+  'other-transaction|other-transaction|CostOfAdvertising': 'Advertising Costs',
   // Seller Fees
   'other-transaction|other-transaction|Subscription Fee': 'Seller Fees',
   'AmazonFees|Vine Enrollment Fee|Base fee': 'Seller Fees',
@@ -63,6 +65,7 @@ const EXPECTED_SIGNS: Record<string, 1 | -1> = {
   'Seller Fees': -1,         // always negative
   'FBA Fees': -1,            // always negative
   'Storage Fees': -1,        // always negative
+  'Advertising Costs': -1,   // always negative (Sponsored Products spend)
   'Refunds': -1,             // always negative
   'Reimbursements': 1,       // always positive
   'Tax Collected by Amazon': 1, // nets to zero across settlement
@@ -128,6 +131,7 @@ export interface SettlementSummary {
   storageFees: number;
   refunds: number;
   reimbursements: number;
+  advertisingCosts: number;
   otherFees: number;
   grossTotal: number;
   netExGst: number;
@@ -159,6 +163,7 @@ export interface SplitMonthData {
   storageFees: number;
   refunds: number;
   reimbursements: number;
+  advertisingCosts: number;
   otherFees: number;
   grossTotal: number;
   netExGst: number;
@@ -274,7 +279,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   let firstNonAuMarketplaceName: string | null = null;
 
   const INCOME_CATEGORIES = new Set(['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
-  const EXPENSE_CATEGORIES = new Set(['Seller Fees', 'FBA Fees', 'Storage Fees']);
+  const EXPENSE_CATEGORIES = new Set(['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs']);
 
   const normaliseOrderId = (value: string): string => value.trim().replace(/\s+/g, '').toLowerCase();
   const getOrderIdentifiers = (row: string[]): string[] => {
@@ -448,19 +453,20 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const sellerFees = normaliseAggregate(round2(totals['Seller Fees'] || 0), 'Seller Fees');
   const fbaFees = normaliseAggregate(round2(totals['FBA Fees'] || 0), 'FBA Fees');
   const storageFees = normaliseAggregate(round2(totals['Storage Fees'] || 0), 'Storage Fees');
+  const advertisingCosts = normaliseAggregate(round2(totals['Advertising Costs'] || 0), 'Advertising Costs');
   const refunds = normaliseAggregate(round2(totals['Refunds'] || 0), 'Refunds');
   const reimbursements = normaliseAggregate(round2(totals['Reimbursements'] || 0), 'Reimbursements');
   const taxCollectedByAmazon = round2(totals['Tax Collected by Amazon'] || 0); // nets to ~zero
   const unmappedTotal = round2(unmapped.reduce((sum, u) => sum + u.amount, 0));
 
   // Gross total = sum of ALL mapped + unmapped amounts (tax pass-through included for reconciliation)
-  const grossTotal = round2(totalSales + promotionalDiscounts + sellerFees + fbaFees + storageFees + refunds + reimbursements + taxCollectedByAmazon + unmappedTotal);
+  const grossTotal = round2(totalSales + promotionalDiscounts + sellerFees + fbaFees + storageFees + advertisingCosts + refunds + reimbursements + taxCollectedByAmazon + unmappedTotal);
 
   // Rule 4 — GST calculation (v1.4.8)
   // GST on income base = AU principal + AU shipping + AU promotional discounts (contra-revenue).
   // This matches Link My Books: promos reduce the GST income base. Refunds/reimbursements excluded.
   const auIncome = round2(auSalesGstBaseTotal);
-  const expenseTotal = round2(sellerFees + fbaFees + storageFees);
+  const expenseTotal = round2(sellerFees + fbaFees + storageFees + advertisingCosts);
 
   const gstOnIncome = round2(auIncome / gstDivisor);
   const gstOnExpenses = round2(expenseTotal / gstDivisor); // negative result (expenses are negative)
@@ -509,6 +515,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     storageFees,
     refunds,
     reimbursements,
+    advertisingCosts,
     otherFees: unmappedTotal,
     grossTotal,
     netExGst,
@@ -576,7 +583,7 @@ function detectSplitMonth(
   const formatDateStr = (d: Date) => d.toISOString().split('T')[0];
   const lastDayMonth1Str = formatDateStr(lastDayMonth1); // YYYY-MM-DD
   const aggregateLines = (monthLines: SettlementLine[]) => {
-    let sp = 0, ss = 0, pd = 0, sf = 0, ff = 0, stf = 0, ref = 0, reim = 0, oth = 0;
+    let sp = 0, ss = 0, pd = 0, sf = 0, ff = 0, stf = 0, ad = 0, ref = 0, reim = 0, oth = 0;
     for (const line of monthLines) {
       const cat = line.accountingCategory;
       const amt = line.amount;
@@ -587,20 +594,21 @@ function detectSplitMonth(
       else if (cat === 'Seller Fees') sf += amt;
       else if (cat === 'FBA Fees') ff += amt;
       else if (cat === 'Storage Fees') stf += amt;
+      else if (cat === 'Advertising Costs') ad += amt;
       else if (cat === 'Refunds') ref += amt;
       else if (cat === 'Reimbursements') reim += amt;
       else oth += amt;
     }
     const ts = round2(sp + ss);
-    const gross = round2(ts + pd + sf + ff + stf + ref + reim + oth);
-    const expenseTotal = round2(sf + ff + stf);
+    const gross = round2(ts + pd + sf + ff + stf + ad + ref + reim + oth);
+    const expenseTotal = round2(sf + ff + stf + ad);
     const gstInc = round2(round2(sp + ss) / gstDivisor); // simplified
     const gstExp = round2(expenseTotal / gstDivisor);
     const net = round2(gross - gstInc - gstExp);
     return {
       salesPrincipal: round2(sp), salesShipping: round2(ss), totalSales: ts,
       promotionalDiscounts: round2(pd), sellerFees: round2(sf), fbaFees: round2(ff),
-      storageFees: round2(stf), refunds: round2(ref), reimbursements: round2(reim),
+      storageFees: round2(stf), advertisingCosts: round2(ad), refunds: round2(ref), reimbursements: round2(reim),
       otherFees: round2(oth), grossTotal: gross, netExGst: net,
       gstOnIncome: gstInc, gstOnExpenses: gstExp,
     };
