@@ -146,7 +146,7 @@ export default function Dashboard() {
     return (localStorage.getItem('xettle_insights_subtab') as InsightsSubTab) || 'overview';
   });
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
-  const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
+  const [selectedMarketplace, setSelectedMarketplace] = useState<string>('');
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
   const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
@@ -183,28 +183,8 @@ export default function Dashboard() {
           return data[0].marketplace_code;
         });
       } else {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        if (authUser) {
-          const { error: insertErr } = await supabase
-            .from('marketplace_connections')
-            .insert({
-              user_id: authUser.id,
-              marketplace_code: 'amazon_au',
-              marketplace_name: 'Amazon AU',
-              country_code: 'AU',
-              connection_type: 'sp_api',
-              connection_status: 'active',
-            } as any);
-
-          if (!insertErr) {
-            const { data: reloaded } = await supabase
-              .from('marketplace_connections')
-              .select('*')
-              .order('created_at', { ascending: true });
-            if (reloaded) setUserMarketplaces(reloaded as UserMarketplace[]);
-          }
-        }
-        setSelectedMarketplace('amazon_au');
+        setUserMarketplaces([]);
+        setSelectedMarketplace('');
       }
     } catch {
       // silently fail
@@ -361,7 +341,6 @@ export default function Dashboard() {
             </Button>
             <Button variant="ghost" size="sm" onClick={() => {
               switchView('settlements');
-              setSelectedMarketplace('amazon_au');
               setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
             }}>
               <Settings className="h-4 w-4 mr-1" />
@@ -377,7 +356,6 @@ export default function Dashboard() {
             )}
             <ConnectionStatusBar onNavigateToSettings={() => {
               switchView('settlements');
-              setSelectedMarketplace('amazon_au');
               setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
             }} />
             <span className="text-sm text-muted-foreground hidden sm:inline">
@@ -543,7 +521,16 @@ export default function Dashboard() {
               </div>
 
               {/* Marketplace Dashboard Content */}
-              {isAmazonAU ? (
+              {userMarketplaces.length === 0 ? (
+                <div className="rounded-lg border border-border bg-card p-8 text-center space-y-3">
+                  <h3 className="text-lg font-semibold text-foreground">No marketplaces connected yet</h3>
+                  <p className="text-sm text-muted-foreground">Upload a settlement file or connect a store to get started. Xettle will auto-detect your marketplace.</p>
+                  <Button onClick={() => switchView('smart_upload')} className="mt-2">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Your First File
+                  </Button>
+                </div>
+              ) : isAmazonAU ? (
                 <AccountingDashboard />
               ) : isShopifyOrders && selectedUserMarketplace ? (
                 <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
