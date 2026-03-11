@@ -168,14 +168,12 @@ export function buildAmazonInvoiceLineItems(
   if (bankDeposit !== undefined && !ratio) {
     let xeroTotal = 0;
     for (const item of lineItems) {
-      if (item.TaxType === 'OUTPUT') {
-        xeroTotal += round2(round2(item.UnitAmount) * 1.1);
-      } else if (item.TaxType === 'INPUT') {
-        xeroTotal += round2(round2(item.UnitAmount) * 1.1);
-      } else if (item.TaxType === 'EXEMPTOUTPUT') {
-        xeroTotal += round2(item.UnitAmount);
+      const amt = item.UnitAmount;
+      const sign = amt < 0 ? -1 : 1;
+      if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
+        xeroTotal += round2(round2(Math.abs(amt)) * 1.1) * sign;
       } else {
-        xeroTotal += round2(item.UnitAmount);
+        xeroTotal += round2(amt);
       }
     }
     xeroTotal = round2(xeroTotal);
