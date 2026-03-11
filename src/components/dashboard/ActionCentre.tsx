@@ -14,7 +14,7 @@ import {
   ArrowRight, Clock, PartyPopper, Loader2, Search,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
+import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS, GATEWAY_CODES, MARKETPLACE_ALIASES } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -196,19 +196,36 @@ export default function ActionCentre({
   };
 
   // ─── Computed ──────────────────────────────────────────────────────
-  const uploadNeeded = rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+
+  // Normalise alias codes (e.g. 'ebay' → 'ebay_au') and deduplicate
+  const normalisedRows = useMemo(() => {
+    const seen = new Map<string, ValidationRow>();
+    for (const r of rows) {
+      const code = MARKETPLACE_ALIASES[r.marketplace_code] || r.marketplace_code;
+      // Skip gateway codes — they're not settlement sources
+      if (GATEWAY_CODES.has(code)) continue;
+      const key = `${code}_${r.period_start}`;
+      const existing = seen.get(key);
+      if (!existing || (r.settlement_net || 0) > (existing.settlement_net || 0)) {
+        seen.set(key, { ...r, marketplace_code: code });
+      }
+    }
+    return Array.from(seen.values());
+  }, [rows]);
+
+  const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
   // Filter out API-synced marketplaces from the "needs upload" list — they sync automatically
   const uploadNeededManual = uploadNeeded.filter(r => !apiSyncedMarketplaces.has(r.marketplace_code));
-  const readyToPush = rows.filter(r => r.overall_status === 'ready_to_push');
+  const readyToPush = normalisedRows.filter(r => r.overall_status === 'ready_to_push');
   // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
-  const awaitingBank = rows.filter(r =>
+  const awaitingBank = normalisedRows.filter(r =>
     r.settlement_id &&
     r.overall_status !== 'already_recorded' &&
     (r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || (r.xero_pushed && !r.bank_matched))
   );
-  const complete = rows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
-  const preBoundary = rows.filter(r => r.overall_status === 'already_recorded');
-  const gapDetected = rows.filter(r => r.overall_status === 'gap_detected');
+  const complete = normalisedRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
+  const preBoundary = normalisedRows.filter(r => r.overall_status === 'already_recorded');
+  const gapDetected = normalisedRows.filter(r => r.overall_status === 'gap_detected');
   const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && (complete.length > 0);
 
   // Build a lookup of last known settlement amount per marketplace
@@ -248,14 +265,17 @@ export default function ActionCentre({
     }
 
     // Combine marketplaces from validation rows AND connected marketplaces
-    const allMps = new Set([
-      ...rows.map(r => r.marketplace_code),
-      ...connectedMarketplaces,
-    ]);
+    // Normalise aliases and exclude gateways
+    const allMps = new Set<string>();
+    for (const r of normalisedRows) allMps.add(r.marketplace_code);
+    for (const c of connectedMarketplaces) {
+      const code = MARKETPLACE_ALIASES[c] || c;
+      if (!GATEWAY_CODES.has(code)) allMps.add(code);
+    }
     const marketplaces = [...allMps].sort();
 
     return { months, marketplaces };
-  }, [rows, connectedMarketplaces]);
+  }, [normalisedRows, connectedMarketplaces]);
 
   const getStatusForCell = (marketplace: string, monthKey: string): { status: string; tooltip: string } => {
     // Before accounting boundary — don't assume, just mark as not tracked
@@ -267,7 +287,7 @@ export default function ActionCentre({
     }
 
     // Find ALL validation rows for this marketplace + month
-    const matchingRows = rows.filter(r => {
+    const matchingRows = normalisedRows.filter(r => {
       const rowMonth = r.period_start?.substring(0, 7); // YYYY-MM from YYYY-MM-DD
       return r.marketplace_code === marketplace && rowMonth === monthKey;
     });
@@ -399,19 +419,12 @@ export default function ActionCentre({
                   {refreshingUploads ? 'Checking...' : `${uploadNeededManual.length} marketplace settlement${uploadNeededManual.length > 1 ? 's' : ''} missing`}
                 </p>
                 <ul className="space-y-1">
-                  {(expandedCards['upload'] ? uploadNeededManual : uploadNeededManual.slice(0, 3)).map(r => (
+                  {uploadNeededManual.map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-amber-500">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
                     </li>
                   ))}
-                  {uploadNeededManual.length > 3 && (
-                    <li>
-                      <button onClick={() => setExpandedCards(prev => ({ ...prev, upload: !prev.upload }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                        {expandedCards['upload'] ? '− Show less' : `+ ${uploadNeededManual.length - 3} more`}
-                      </button>
-                    </li>
-                  )}
                 </ul>
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
                   onSwitchToUpload(buildMissingList());
@@ -711,7 +724,14 @@ function formatEventLabel(event: SystemEvent): string {
   const period = event.period_label || '';
 
   switch (event.event_type) {
-    case 'validation_sweep_complete': return 'Status refresh completed';
+    case 'validation_sweep_complete': {
+      const checked = event.details?.marketplaces_checked;
+      const ready = event.details?.ready_to_push;
+      const parts: string[] = ['Status refresh completed'];
+      if (checked) parts[0] += ` — ${checked} marketplaces checked`;
+      if (ready) parts.push(`${ready} ready to push`);
+      return parts.join(', ');
+    }
     case 'settlement_saved': return `Settlement saved: ${mp} ${period}`;
     case 'xero_push_success': return `Pushed to Xero: ${mp} ${period}`;
     case 'xero_push_failed': return `Xero push failed: ${mp} ${period}`;

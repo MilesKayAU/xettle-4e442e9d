@@ -56,7 +56,7 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   woolworths_marketplus: 'Woolworths MarketPlus',
   everyday_market: 'Everyday Market',
   ebay_au: 'eBay AU',
-  ebay: 'eBay',
+  ebay: 'eBay AU',           // Alias — canonical code is ebay_au
   etsy: 'Etsy',
   paypal: 'PayPal',
   manual_orders: 'Manual Orders',
@@ -66,6 +66,20 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   woolworths_marketplus_woolworths: 'Everyday Market',
   woolworths_marketplus_mydeal: 'MyDeal',
   woolworths_marketplus_everyday_market: 'Everyday Market',
+};
+
+/**
+ * Marketplace codes that are payment gateways, not settlement sources.
+ * These should NOT appear in the settlement timeline or validation table.
+ */
+export const GATEWAY_CODES = new Set(['paypal', 'afterpay', 'stripe_gateway', 'zip_pay']);
+
+/**
+ * Normalise duplicate marketplace codes to their canonical version.
+ * e.g. 'ebay' → 'ebay_au'
+ */
+export const MARKETPLACE_ALIASES: Record<string, string> = {
+  ebay: 'ebay_au',
 };
 
 // ─── Xero Invoice Line Builder ──────────────────────────────────────────────
