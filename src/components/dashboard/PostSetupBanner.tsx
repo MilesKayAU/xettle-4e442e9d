@@ -118,6 +118,7 @@ export default function PostSetupBanner({
         onScanComplete?.();
       } catch (err) {
         console.error('Xero scan trigger failed:', err);
+        setScanComplete(true);
       } finally {
         setScanning(false);
       }
