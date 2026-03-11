@@ -413,10 +413,13 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       hasXero: true,
       accounting_boundary_date,
+      hasXero: true,
+      accounting_boundary_date,
       detected_settlements,
       marketplaces_created,
       confidence,
       confidence_reason,
+      bank_scan_error: bankScanError,
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
