@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { BookOpen, CheckCircle2, Loader2 } from 'lucide-react';
+import { BookOpen, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
 
 export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props) {
   const [connecting, setConnecting] = useState(false);
+  const [showSkipWarning, setShowSkipWarning] = useState(false);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -36,45 +37,82 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props)
   return (
     <div className="space-y-6">
       <div className="text-center space-y-2">
-        <h2 className="text-xl font-bold text-foreground">Connect your accounting software</h2>
+        <h2 className="text-xl font-bold text-foreground">First, connect your Xero account</h2>
         <p className="text-sm text-muted-foreground">
-          Xettle will safely check your existing accounting so we don't duplicate anything.
+          Xettle pushes your marketplace settlements directly to Xero. This is the core of what we do.
         </p>
       </div>
 
-      <Card className={`border transition-colors ${hasXero ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/10' : 'border-border'}`}>
-        <CardContent className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <BookOpen className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="font-medium text-foreground">Xero</p>
-              {hasXero ? (
-                <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" /> Connected
-                </span>
-              ) : (
-                <span className="text-[10px] text-muted-foreground">Accounting software</span>
-              )}
-            </div>
+      <Card className={`border-2 transition-colors ${hasXero ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/10' : 'border-primary/30 hover:border-primary/50'}`}>
+        <CardContent className="p-6 flex flex-col items-center gap-4">
+          <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center">
+            {hasXero ? (
+              <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+            ) : (
+              <BookOpen className="h-7 w-7 text-primary" />
+            )}
           </div>
-          {!hasXero && (
-            <Button size="sm" disabled={connecting} onClick={handleConnect}>
-              {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Connect Xero'}
-            </Button>
+          {hasXero ? (
+            <div className="text-center">
+              <p className="font-semibold text-foreground">Xero Connected</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">Your accounting is linked and ready</p>
+            </div>
+          ) : (
+            <>
+              <div className="text-center">
+                <p className="font-semibold text-foreground">Xero</p>
+                <p className="text-xs text-muted-foreground">Accounting software</p>
+              </div>
+              <Button size="lg" disabled={connecting} onClick={handleConnect} className="w-full max-w-xs">
+                {connecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Connect Xero
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>
 
+      {/* Trust signal */}
+      <p className="text-xs text-muted-foreground text-center">
+        Xettle never changes your Xero data without your explicit approval.
+      </p>
+
+      {/* Actions */}
       <div className="flex flex-col items-center gap-2">
-        <Button onClick={onNext} variant={hasXero ? 'default' : 'outline'} className="w-full">
-          {hasXero ? 'Continue' : 'Skip for now'}
-        </Button>
-        {!hasXero && (
-          <button onClick={onSkip} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            I'll connect later
-          </button>
+        {hasXero ? (
+          <Button onClick={onNext} className="w-full">
+            Continue
+          </Button>
+        ) : (
+          <>
+            {showSkipWarning ? (
+              <Card className="w-full border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/10">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-foreground">
+                      Without Xero, settlements can't be pushed to your accounts. You can connect it anytime in Settings.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => setShowSkipWarning(false)}>
+                      Go back
+                    </Button>
+                    <Button variant="ghost" size="sm" className="flex-1 text-muted-foreground" onClick={onSkip}>
+                      Skip anyway
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <button
+                onClick={() => setShowSkipWarning(true)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                I'll connect Xero later →
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -12,10 +12,11 @@ interface Props {
 
 export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXero }: Props) {
   const steps = [
-    ...(hasAmazon ? ['Checking Amazon settlements...'] : []),
-    ...(hasShopify ? ['Scanning Shopify orders...', 'Detecting marketplaces...'] : []),
-    ...(hasXero ? ['Checking Xero history...'] : []),
-    'Checking bank deposits...',
+    ...(hasXero ? ['Scanning Xero for existing invoices...'] : []),
+    ...(hasAmazon ? ['Fetching recent Amazon settlements...'] : []),
+    ...(hasShopify ? ['Fetching Shopify payouts...', 'Scanning sub-channels...'] : []),
+    'Checking for uploaded files...',
+    'Detecting gaps...',
   ];
 
   const [completedSteps, setCompletedSteps] = useState<number>(0);
@@ -103,7 +104,7 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
 
       {timedOut && (
         <div className="text-center space-y-1">
-          <div className="flex items-center justify-center gap-2 text-sm text-warning">
+          <div className="flex items-center justify-center gap-2 text-sm text-amber-600 dark:text-amber-400">
             <AlertTriangle className="h-4 w-4" />
             Scanning is taking longer than expected.
           </div>

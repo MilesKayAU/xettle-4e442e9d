@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Clock, PartyPopper, Send, Upload, ArrowRight } from 'lucide-react';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 
 interface Props {
   onNext: () => void;
+  hasXero?: boolean;
 }
 
 interface MarketplaceSummary {
@@ -15,48 +16,52 @@ interface MarketplaceSummary {
   count: number;
   totalRevenue: number;
   hasMissing: boolean;
+  externalCount: number;
 }
 
-export default function SetupStepResults({ onNext }: Props) {
+export default function SetupStepResults({ onNext, hasXero }: Props) {
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<MarketplaceSummary[]>([]);
+  const [readyToPush, setReadyToPush] = useState(0);
 
   useEffect(() => {
     const load = async () => {
       try {
-        // Try marketplace_validation first
         const { data: valRows } = await supabase
           .from('marketplace_validation')
           .select('marketplace_code, overall_status, settlement_net, settlement_uploaded');
 
         if (valRows && valRows.length > 0) {
           const grouped: Record<string, MarketplaceSummary> = {};
+          let pushReady = 0;
           for (const row of valRows) {
             const code = row.marketplace_code;
             if (!grouped[code]) {
-              grouped[code] = { marketplace_code: code, count: 0, totalRevenue: 0, hasMissing: false };
+              grouped[code] = { marketplace_code: code, count: 0, totalRevenue: 0, hasMissing: false, externalCount: 0 };
             }
             if (row.settlement_uploaded) {
               grouped[code].count++;
               grouped[code].totalRevenue += Number(row.settlement_net) || 0;
             }
+            if (row.overall_status === 'ready_to_push') pushReady++;
+            if (row.overall_status === 'already_recorded') grouped[code].externalCount++;
             if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing' || row.overall_status === 'gap_detected') {
               grouped[code].hasMissing = true;
             }
           }
           setSummaries(Object.values(grouped));
+          setReadyToPush(pushReady);
         } else {
           // Fallback to settlements table
           const { data: settlements } = await supabase
             .from('settlements')
             .select('marketplace, bank_deposit');
-
           if (settlements && settlements.length > 0) {
             const grouped: Record<string, MarketplaceSummary> = {};
             for (const s of settlements) {
               const code = s.marketplace || 'unknown';
               if (!grouped[code]) {
-                grouped[code] = { marketplace_code: code, count: 0, totalRevenue: 0, hasMissing: false };
+                grouped[code] = { marketplace_code: code, count: 0, totalRevenue: 0, hasMissing: false, externalCount: 0 };
               }
               grouped[code].count++;
               grouped[code].totalRevenue += Math.abs(Number(s.bank_deposit) || 0);
@@ -79,6 +84,11 @@ export default function SetupStepResults({ onNext }: Props) {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }).format(Math.abs(n));
 
+  const totalSettlements = summaries.reduce((sum, s) => sum + s.count, 0);
+  const totalExternal = summaries.reduce((sum, s) => sum + s.externalCount, 0);
+  const anyGaps = summaries.some(s => s.hasMissing);
+  const isEmpty = summaries.length === 0;
+
   if (loading) {
     return (
       <div className="space-y-4 py-4">
@@ -92,26 +102,64 @@ export default function SetupStepResults({ onNext }: Props) {
   return (
     <div className="space-y-6">
       <div className="text-center space-y-2">
-        <h2 className="text-xl font-bold text-foreground">Here's what we found</h2>
-        {summaries.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No data detected yet. You can upload settlements manually from the dashboard.
-          </p>
+        {isEmpty ? (
+          <>
+            <h2 className="text-xl font-bold text-foreground">You're all set up!</h2>
+            <p className="text-sm text-muted-foreground">
+              No settlement data detected yet — upload your first files from the dashboard.
+            </p>
+          </>
+        ) : (
+          <>
+            <PartyPopper className="h-8 w-8 text-emerald-500 mx-auto" />
+            <h2 className="text-xl font-bold text-foreground">Here's what we found</h2>
+          </>
         )}
       </div>
 
+      {/* Summary stats */}
+      {!isEmpty && (
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <Card className="border-border">
+            <CardContent className="p-3">
+              <p className="text-2xl font-bold text-foreground">{totalSettlements}</p>
+              <p className="text-[10px] text-muted-foreground">Settlements ready</p>
+            </CardContent>
+          </Card>
+          {totalExternal > 0 && (
+            <Card className="border-border">
+              <CardContent className="p-3">
+                <p className="text-2xl font-bold text-foreground">{totalExternal}</p>
+                <p className="text-[10px] text-muted-foreground">Already in Xero</p>
+              </CardContent>
+            </Card>
+          )}
+          {anyGaps && (
+            <Card className="border-amber-200 dark:border-amber-800">
+              <CardContent className="p-3">
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                  {summaries.filter(s => s.hasMissing).length}
+                </p>
+                <p className="text-[10px] text-muted-foreground">Gaps detected</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Per-marketplace breakdown */}
       {summaries.length > 0 && (
         <div className="space-y-2">
           {summaries.map((s) => (
             <Card key={s.marketplace_code} className={`border ${s.hasMissing && s.count === 0 ? 'border-amber-300 dark:border-amber-800' : 'border-border'}`}>
-              <CardContent className="p-4 flex items-center justify-between">
+              <CardContent className="p-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {s.count > 0 ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
                   ) : s.hasMissing ? (
-                    <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
                   ) : (
-                    <Clock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   )}
                   <div>
                     <p className="font-medium text-foreground text-sm">{getLabel(s.marketplace_code)}</p>
@@ -119,7 +167,8 @@ export default function SetupStepResults({ onNext }: Props) {
                       {s.count > 0
                         ? `${s.count} settlement${s.count > 1 ? 's' : ''}`
                         : 'Settlements missing'}
-                      {s.totalRevenue > 0 && ` · ${formatCurrency(s.totalRevenue)} revenue detected`}
+                      {s.totalRevenue > 0 && ` · ${formatCurrency(s.totalRevenue)}`}
+                      {s.externalCount > 0 && ` · ${s.externalCount} already in Xero`}
                     </p>
                   </div>
                 </div>
@@ -129,8 +178,26 @@ export default function SetupStepResults({ onNext }: Props) {
         </div>
       )}
 
+      {/* Suggested action */}
+      {hasXero && readyToPush > 0 && (
+        <Card className="border-primary/30 bg-primary/5 cursor-pointer hover:border-primary/50 transition-colors" onClick={onNext}>
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Send className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-foreground text-sm">Push {readyToPush} settlement{readyToPush > 1 ? 's' : ''} to Xero</p>
+                <p className="text-xs text-muted-foreground">Your recommended first action</p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      )}
+
       <Button onClick={onNext} className="w-full">
-        Continue
+        Go to Dashboard
       </Button>
     </div>
   );
