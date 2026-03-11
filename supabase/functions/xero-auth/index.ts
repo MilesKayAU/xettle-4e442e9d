@@ -53,20 +53,17 @@ Deno.serve(async (req) => {
         )
       }
 
-      // App created after March 2, 2026 — must use granular scopes.
-      // accounting.transactions (broad) is NOT available for new apps.
+      // MINIMAL SCOPE TEST — isolating whether OAuth flow works at all.
+      // If this fails, issue is redirect URI or client credentials, not scopes.
+      // If it succeeds, we add scopes incrementally.
       const scopes = [
         'openid',
         'profile',
         'email',
         'offline_access',
-        'accounting.invoices',
-        'accounting.payments.read',
-        'accounting.banktransactions.read',
+        'accounting.invoices.read',
         'accounting.contacts.read',
         'accounting.settings.read',
-        'accounting.journals.read',
-        'accounting.attachments.read',
       ].join(' ')
 
       const authUrl = new URL(XERO_AUTH_URL)
