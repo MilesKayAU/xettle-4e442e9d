@@ -453,19 +453,20 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const sellerFees = normaliseAggregate(round2(totals['Seller Fees'] || 0), 'Seller Fees');
   const fbaFees = normaliseAggregate(round2(totals['FBA Fees'] || 0), 'FBA Fees');
   const storageFees = normaliseAggregate(round2(totals['Storage Fees'] || 0), 'Storage Fees');
+  const advertisingCosts = normaliseAggregate(round2(totals['Advertising Costs'] || 0), 'Advertising Costs');
   const refunds = normaliseAggregate(round2(totals['Refunds'] || 0), 'Refunds');
   const reimbursements = normaliseAggregate(round2(totals['Reimbursements'] || 0), 'Reimbursements');
   const taxCollectedByAmazon = round2(totals['Tax Collected by Amazon'] || 0); // nets to ~zero
   const unmappedTotal = round2(unmapped.reduce((sum, u) => sum + u.amount, 0));
 
   // Gross total = sum of ALL mapped + unmapped amounts (tax pass-through included for reconciliation)
-  const grossTotal = round2(totalSales + promotionalDiscounts + sellerFees + fbaFees + storageFees + refunds + reimbursements + taxCollectedByAmazon + unmappedTotal);
+  const grossTotal = round2(totalSales + promotionalDiscounts + sellerFees + fbaFees + storageFees + advertisingCosts + refunds + reimbursements + taxCollectedByAmazon + unmappedTotal);
 
   // Rule 4 — GST calculation (v1.4.8)
   // GST on income base = AU principal + AU shipping + AU promotional discounts (contra-revenue).
   // This matches Link My Books: promos reduce the GST income base. Refunds/reimbursements excluded.
   const auIncome = round2(auSalesGstBaseTotal);
-  const expenseTotal = round2(sellerFees + fbaFees + storageFees);
+  const expenseTotal = round2(sellerFees + fbaFees + storageFees + advertisingCosts);
 
   const gstOnIncome = round2(auIncome / gstDivisor);
   const gstOnExpenses = round2(expenseTotal / gstDivisor); // negative result (expenses are negative)
