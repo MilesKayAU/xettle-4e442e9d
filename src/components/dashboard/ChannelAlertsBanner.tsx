@@ -12,6 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Tag, Link as LinkIcon, Banknote, Eye, Calendar, FileText, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
+import GatewayDepositEvidence from '@/components/dashboard/GatewayDepositEvidence';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 import { toast } from 'sonner';
 
