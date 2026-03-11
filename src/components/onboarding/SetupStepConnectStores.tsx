@@ -66,7 +66,8 @@ export default function SetupStepConnectStores({
         body: {},
       });
       if (error || data?.error) throw new Error(data?.error || 'Failed to get Amazon auth URL');
-      if (data?.url) window.location.href = data.url;
+      const authUrl = data?.authUrl || data?.url;
+      if (authUrl) window.location.href = authUrl;
     } catch (err: any) {
       toast.error(err.message || 'Failed to start Amazon connection');
       setConnectingAmazon(false);
