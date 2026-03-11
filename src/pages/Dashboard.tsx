@@ -521,7 +521,16 @@ export default function Dashboard() {
               </div>
 
               {/* Marketplace Dashboard Content */}
-              {isAmazonAU ? (
+              {userMarketplaces.length === 0 ? (
+                <div className="rounded-lg border border-border bg-card p-8 text-center space-y-3">
+                  <h3 className="text-lg font-semibold text-foreground">No marketplaces connected yet</h3>
+                  <p className="text-sm text-muted-foreground">Upload a settlement file or connect a store to get started. Xettle will auto-detect your marketplace.</p>
+                  <Button onClick={() => switchView('smart_upload')} className="mt-2">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Your First File
+                  </Button>
+                </div>
+              ) : isAmazonAU ? (
                 <AccountingDashboard />
               ) : isShopifyOrders && selectedUserMarketplace ? (
                 <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
