@@ -431,6 +431,36 @@ serve(async (req) => {
     if (!date) throw new Error('Missing date');
     if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
 
+    // ─── Fetch user account code overrides ──────────────────────────
+    const DEFAULT_ACCOUNT_CODES: Record<string, string> = {
+      'Sales': '200',
+      'Refunds': '205',
+      'Reimbursements': '271',
+      'Seller Fees': '407',
+      'FBA Fees': '408',
+      'Storage Fees': '409',
+      'Promotional Discounts': '200',
+      'Other Fees': '405',
+    };
+
+    let userAccountCodes: Record<string, string> = {};
+    try {
+      const { data: acSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', userId)
+        .eq('key', 'accounting_xero_account_codes')
+        .maybeSingle();
+      if (acSetting?.value) {
+        userAccountCodes = JSON.parse(acSetting.value);
+      }
+    } catch (e) {
+      console.error('Failed to load user account codes, using defaults:', e);
+    }
+
+    const getCode = (category: string): string =>
+      userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
+
     let token = await getXeroToken(supabase, userId);
     console.log('Found Xero token for tenant:', token.tenant_name);
 
@@ -461,7 +491,7 @@ serve(async (req) => {
       LineItems: isNegativeSettlement
         ? [{
             Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
-            AccountCode: "405",
+            AccountCode: getCode('Other Fees'),
             TaxType: "OUTPUT",
             UnitAmount: Math.round(Math.abs(netAmount) * 100) / 100,
             Quantity: 1,
