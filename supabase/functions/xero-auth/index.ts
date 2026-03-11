@@ -53,17 +53,16 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Use broad scopes for apps created before March 2, 2026.
-      // Granular scopes (accounting.invoices, accounting.payments.read, etc.)
-      // will be available from April 2026 — switch then.
-      // accounting.transactions covers: Invoices, CreditNotes, BankTransactions,
-      // BankTransfers, BatchPayments, ManualJournals, Payments, etc. (read + write)
+      // App created after March 2, 2026 — must use granular scopes.
+      // accounting.transactions (broad) is NOT available for new apps.
       const scopes = [
         'openid',
         'profile',
         'email',
         'offline_access',
-        'accounting.transactions',
+        'accounting.invoices',
+        'accounting.payments.read',
+        'accounting.banktransactions.read',
         'accounting.contacts.read',
         'accounting.settings.read',
         'accounting.journals.read',
