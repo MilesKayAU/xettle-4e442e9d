@@ -95,7 +95,7 @@ export default function SetupWizard({
     });
   };
 
-  const nav = useNavigate();
+
 
   const handleComplete = () => {
     sessionStorage.removeItem(STORAGE_KEY);
