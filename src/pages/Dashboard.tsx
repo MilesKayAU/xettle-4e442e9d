@@ -91,6 +91,7 @@ export default function Dashboard() {
       setShowWizard(true);
       return;
     }
+    const connected = searchParams.get('connected');
     const checkWizard = async () => {
       try {
         const [settRes, amazonRes, shopifyRes, wizardRes] = await Promise.all([
