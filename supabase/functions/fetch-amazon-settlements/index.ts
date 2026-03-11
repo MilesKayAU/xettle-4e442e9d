@@ -476,7 +476,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         if (i > 0) await new Promise(r => setTimeout(r, 3000));
 
         try {
-          const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId);
+          const content = await downloadReport(baseUrl, accessToken, report.reportDocumentId, supabaseAdmin, userId);
           const parsed = parseSettlementTSV(content, gstRate);
 
           if (existingIds.has(parsed.header.settlementId)) {
