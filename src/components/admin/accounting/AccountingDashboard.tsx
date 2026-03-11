@@ -2449,7 +2449,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
             </h3>
             <p className="text-sm text-muted-foreground">
               {rollbackConfirm.scope === 'all' ? (
-                <>This will <strong>void</strong> {rollbackConfirm.settlement.is_split_month ? 'both split month invoices' : 'the Xero invoice'} for settlement <span className="font-mono">{rollbackConfirm.settlement.settlement_id}</span> and reset the status to "Saved".</>
+                <>This will <strong>void</strong> {rollbackConfirm.settlement.is_split_month ? 'both deferred revenue invoices' : 'the Xero invoice'} for settlement <span className="font-mono">{rollbackConfirm.settlement.settlement_id}</span> and reset the status to "Saved".</>
               ) : (
                 <>This will <strong>void</strong> only {rollbackConfirm.scope === 'journal_1' ? 'Invoice 1 (Month 1)' : 'Invoice 2 (Month 2)'} for settlement <span className="font-mono">{rollbackConfirm.settlement.settlement_id}</span>. The other invoice will remain posted.</>
               )}
