@@ -207,6 +207,31 @@ Deno.serve(async (req) => {
 
       console.log('Tokens stored successfully for', connections.length, 'tenant(s)')
 
+      // Auto-trigger AI Account Mapper (non-blocking)
+      try {
+        const mapperRes = await supabase.functions.invoke('ai-account-mapper', {
+          body: { action: 'scan_and_match' }
+        })
+        const mapperStatus = mapperRes.error ? 'fail' : 'success'
+        console.log('AI Account Mapper auto-trigger:', mapperStatus)
+        await supabaseAdmin.from('system_events').insert({
+          user_id: userId,
+          event_type: 'ai_mapper_auto_trigger',
+          severity: mapperRes.error ? 'warning' : 'info',
+          details: mapperRes.error
+            ? { status: 'fail', error: String(mapperRes.error) }
+            : { status: 'success' }
+        })
+      } catch (mapperErr) {
+        console.error('AI Account Mapper auto-trigger failed:', mapperErr)
+        await supabaseAdmin.from('system_events').insert({
+          user_id: userId,
+          event_type: 'ai_mapper_auto_trigger',
+          severity: 'warning',
+          details: { status: 'fail', error: String(mapperErr) }
+        }).catch(() => {}) // swallow logging errors
+      }
+
       return new Response(
         JSON.stringify({ 
           success: true,
