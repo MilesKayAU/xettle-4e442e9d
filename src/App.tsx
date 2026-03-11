@@ -45,8 +45,6 @@ function App() {
               }>
                 <Routes>
                   <Route path="/" element={<Landing />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/admin" element={<Admin />} />
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/xero/callback" element={<XeroCallback />} />
                   <Route path="/amazon/callback" element={<AmazonCallback />} />
@@ -55,6 +53,11 @@ function App() {
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/pricing" element={<Pricing />} />
+                  {/* Authenticated routes — trial banner renders on all */}
+                  <Route element={<AuthenticatedLayout />}>
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/admin" element={<Admin />} />
+                  </Route>
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
