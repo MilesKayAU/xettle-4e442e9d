@@ -5,6 +5,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
+// Payment processors / gateways — NOT marketplaces. Deposits from these are
+// tracked as channel_alerts (payment_gateway_deposit) instead of marketplace_connections.
+const PAYMENT_PROCESSORS = [
+  'paypal', 'stripe', 'afterpay', 'zip', 'zippay', 'klarna',
+  'laybuy', 'humm', 'openpay', 'latitude', 'commbank', 'anz',
+  'westpac', 'nab', 'square', 'tyro', 'braintree',
+]
+
+function isPaymentProcessor(code: string): boolean {
+  const lower = (code || '').toLowerCase()
+  return PAYMENT_PROCESSORS.some(p => lower.includes(p))
+}
+
 const MARKETPLACE_CONTACT_PATTERNS = [
   'amazon', 'amazon au', 'amazon australia', 'amazon.com.au',
   'kogan', 'big w', 'bigw', 'bunnings',

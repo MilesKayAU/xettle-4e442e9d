@@ -6,6 +6,21 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Payment processors / gateways — NOT marketplaces.
+ * These should never become marketplace_connections or settlement tabs.
+ */
+export const PAYMENT_PROCESSORS = [
+  'paypal', 'stripe', 'afterpay', 'zip', 'zippay', 'klarna',
+  'laybuy', 'humm', 'openpay', 'latitude', 'commbank', 'anz',
+  'westpac', 'nab', 'square', 'tyro', 'braintree',
+];
+
+export function isPaymentProcessor(code: string): boolean {
+  const lower = (code || '').toLowerCase();
+  return PAYMENT_PROCESSORS.some(p => lower.includes(p));
+}
+
 export interface TokenMarketplaceEntry {
   table: 'amazon_tokens' | 'shopify_tokens';
   code: string;
