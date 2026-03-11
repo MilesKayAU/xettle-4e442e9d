@@ -102,7 +102,11 @@ function statusBadge(status: string) {
   }
 }
 
-export default function ShopifyOrdersDashboard() {
+interface ShopifyOrdersDashboardProps {
+  onMarketplacesChanged?: () => void;
+}
+
+export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: ShopifyOrdersDashboardProps) {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
   const [file, setFile] = useState<File | null>(null);
@@ -883,6 +887,7 @@ export default function ShopifyOrdersDashboard() {
           onSetupComplete={() => {
             setDetectedSubChannels([]);
             loadHistory();
+            onMarketplacesChanged?.();
           }}
         />
       )}
