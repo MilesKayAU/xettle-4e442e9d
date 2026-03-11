@@ -208,6 +208,10 @@ Deno.serve(async (req) => {
       console.log('Tokens stored successfully for', connections.length, 'tenant(s)')
 
       // Auto-trigger AI Account Mapper (non-blocking)
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
       try {
         const mapperRes = await supabase.functions.invoke('ai-account-mapper', {
           body: { action: 'scan_and_match' }
