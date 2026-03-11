@@ -260,7 +260,7 @@ Return JSON only with this exact structure:
           const parsed = JSON.parse(jsonMatch[0])
           confidence = parsed.confidence || 'medium'
           notes = parsed.notes || ''
-          const categories = ['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees']
+          const categories = ['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
           for (const cat of categories) {
             if (parsed[cat]) mapping[cat] = parsed[cat]
           }
