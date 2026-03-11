@@ -349,6 +349,11 @@ Deno.serve(async (req) => {
         const marketplace = matchesMarketplace(contactName)
 
         if (marketplace && !detectedMap.has(marketplace)) {
+          // Skip advertising platforms — they're expenses, not revenue sources
+          if (isAdvertisingPlatform(marketplace)) {
+            console.log(`[scan-xero-history] Advertising platform contact ${contactName} → ignored`)
+            continue
+          }
           // This marketplace exists as a Xero contact but has no invoices or bank txns yet
           standaloneContacts.push(contactName)
           detectedMap.set(marketplace, {
