@@ -214,6 +214,8 @@ export async function parseBunningsSummaryPdf(
 
     // ─── Net fees (commission minus refund on commission) ───────────
     const netFeesExGst = negCommExGst + refundCommExGst;
+    // Ensure fees never become positive — if refund commission exceeds commission, net is $0 not positive
+    const normalisedFeesExGst = netFeesExGst > 0 ? 0 : netFeesExGst;
     const netFeesGst = Math.abs(negCommGst) - refundCommGst; // Absolute GST on fees
 
     // ─── Total / net payout ────────────────────────────────────────
