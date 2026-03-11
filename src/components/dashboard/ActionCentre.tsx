@@ -14,7 +14,7 @@ import {
   ArrowRight, Clock, PartyPopper, Loader2, Search,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
+import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS, GATEWAY_CODES, MARKETPLACE_ALIASES } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
