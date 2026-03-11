@@ -307,7 +307,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
                     ? stepMessages[i] || step.label
                     : step.label}
                 </span>
-                {(stepStatuses[i] || 'pending') === 'error' && stepMessages[i] && (
+                {((stepStatuses[i] || 'pending') === 'error' || (stepStatuses[i] || 'pending') === 'rate_limited') && stepMessages[i] && (
                   <span className="text-xs text-amber-500">{stepMessages[i]}</span>
                 )}
               </div>
