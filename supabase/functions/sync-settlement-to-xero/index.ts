@@ -455,7 +455,7 @@ serve(async (req) => {
       Date: date,
       DueDate: dueDate || date,
       CurrencyCode: "AUD",
-      Status: "AUTHORISED",
+      Status: "DRAFT",
       LineAmountTypes: "Exclusive",
       Reference: reference,
       LineItems: isNegativeSettlement

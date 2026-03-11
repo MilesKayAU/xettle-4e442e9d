@@ -105,7 +105,7 @@ export default function MonthlyReconciliationStatus({
 
   // Counts
   const readyToPush = settlements.filter(s => s.status === 'saved' || s.status === 'parsed').length;
-  const pushed = settlements.filter(s => s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external').length;
+  const pushed = settlements.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
   const failed = settlements.filter(s => s.status === 'push_failed').length;
 
   const handlePushAll = async () => {

@@ -2,15 +2,17 @@
  * SettlementStatusBadge — Consistent status badge for all marketplace dashboards.
  * Part of the BaseMarketplaceDashboard architecture pattern.
  *
- * Status Matrix:
- * ready_to_push              → 🟡 Amber  "Ready for Xero"
- * already_recorded           → ⚫ Secondary "Pre-accounting boundary"
- * push_failed                → 🔴 Red "Push failed"
- * synced_external            → ⚪ Outline "Already in Xero (legacy)"
- * pushed_to_xero DRAFT       → 🟠 Orange "In Xero — Draft"
- * pushed_to_xero AUTHORISED  → 🔵 Blue "In Xero — Awaiting Payment"
- * pushed_to_xero PAID        → 🟢 Green "Fully Reconciled ✓"
- * pushed_to_xero (no status) → 🔵 Blue "In Xero ✓"
+ * Status Matrix (full lifecycle):
+ * ready_to_push / saved / parsed  → 🟡 Amber  "Ready for Xero"
+ * draft_in_xero                   → 🟠 Orange "Draft in Xero — Approve"
+ * authorised_in_xero              → 🔵 Blue   "Awaiting Reconciliation"
+ * reconciled_in_xero              → 🟢 Green  "Reconciled ✓"
+ * pushed_to_xero DRAFT            → 🟠 Orange "Draft in Xero"
+ * pushed_to_xero AUTHORISED       → 🔵 Blue   "Awaiting Reconciliation"
+ * pushed_to_xero PAID             → 🟢 Green  "Reconciled ✓"
+ * synced_external                 → ⚪ Outline "Already in Xero (legacy)"
+ * already_recorded                → ⚫ Secondary "Pre-accounting boundary"
+ * push_failed                     → 🔴 Red "Push failed"
  */
 
 import React from 'react';
@@ -28,32 +30,53 @@ export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroT
   const refSuffix = xeroInvoiceNumber ? ` (${typeLabel}: ${xeroInvoiceNumber})` : '';
 
   switch (status) {
+    // ─── New lifecycle statuses ─────────────────────────────────────
+    case 'draft_in_xero':
+      return (
+        <Badge className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 text-[10px]">
+          Draft in Xero — Approve{refSuffix}
+        </Badge>
+      );
+
+    case 'authorised_in_xero':
+      return (
+        <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+          Awaiting Reconciliation{refSuffix}
+        </Badge>
+      );
+
+    case 'reconciled_in_xero':
+      return (
+        <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+          Reconciled{refSuffix} ✓
+        </Badge>
+      );
+
+    // ─── Legacy pushed_to_xero with granular xeroStatus ────────────
     case 'synced':
     case 'pushed_to_xero': {
-      // Granular Xero status
       const xs = (xeroStatus || '').toUpperCase();
       if (xs === 'DRAFT') {
         return (
           <Badge className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 text-[10px]">
-            In Xero — Draft{refSuffix}
+            Draft in Xero{refSuffix}
           </Badge>
         );
       }
       if (xs === 'AUTHORISED') {
         return (
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-            In Xero — Awaiting Payment{refSuffix}
+            Awaiting Reconciliation{refSuffix}
           </Badge>
         );
       }
       if (xs === 'PAID') {
         return (
           <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
-            Fully Reconciled{refSuffix} ✓
+            Reconciled{refSuffix} ✓
           </Badge>
         );
       }
-      // Fallback — pushed but no granular status
       return (
         <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
           In Xero{refSuffix} ✓

@@ -194,11 +194,16 @@ serve(async (req) => {
       const ref = inv.Reference || '';
       const isXettleFormat = ref.startsWith('Xettle-');
 
-      // Xettle-pushed: use granular Xero status
+      // Xettle-pushed: use granular lifecycle status
       // Legacy (AMZN-/LMB-/old Settlement): always synced_external
       let derivedStatus: string;
       if (isXettleFormat) {
-        derivedStatus = (inv.Status === 'PAID' || inv.Status === 'AUTHORISED') ? 'pushed_to_xero' : 'synced';
+        switch (inv.Status) {
+          case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
+          case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
+          case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
+          default: derivedStatus = 'pushed_to_xero'; break;
+        }
       } else {
         derivedStatus = 'synced_external';
       }

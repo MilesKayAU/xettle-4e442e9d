@@ -76,7 +76,7 @@ export default function ActionControlPanel({ userMarketplaces, onSwitchToUpload,
   const missingNames = missingCodes.map(c => MARKETPLACE_CATALOG.find(m => m.code === c)?.name || c);
 
   const readySettlements = settlements.filter(s => s.status === 'saved' || s.status === 'parsed');
-  const syncedSettlements = settlements.filter(s => s.status === 'synced' || s.status === 'pushed_to_xero' || s.status === 'synced_external');
+  const syncedSettlements = settlements.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || ''));
 
   const allClear = missingCodes.length === 0 && readySettlements.length === 0 && syncedSettlements.length > 0;
 

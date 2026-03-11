@@ -712,7 +712,7 @@ export default function AccountingDashboard() {
         await supabase
           .from('settlements')
           .update({
-            status: 'pushed_to_xero',
+            status: 'draft_in_xero',
             xero_journal_id_1: invoice1Id,
             xero_journal_id_2: invoice2Id,
           } as any)
@@ -733,11 +733,11 @@ export default function AccountingDashboard() {
 
         await supabase
           .from('settlements')
-          .update({ status: 'pushed_to_xero', xero_journal_id: data.invoiceId || data.journalId })
+          .update({ status: 'draft_in_xero', xero_journal_id: data.invoiceId || data.journalId, xero_status: 'DRAFT' })
           .eq('settlement_id', header.settlementId);
 
         setPushed(true);
-        toast.success(`Settlement posted to Xero as Invoice (AUTHORISED) ✓ (${data.invoiceId || data.journalId})`);
+        toast.success(`Draft invoice created in Xero ✓ Next: approve in Xero, then match against Amazon bank deposit.`);
       }
 
       await loadSettlements();
@@ -884,7 +884,7 @@ export default function AccountingDashboard() {
 
       setParsed({ header, lines: reconstructedLines, unmapped: reconstructedUnmapped, summary, splitMonth });
       setSaved(true);
-      setPushed(s.status === 'pushed_to_xero' || s.status === 'synced');
+      setPushed(['pushed_to_xero', 'synced', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status));
       setActiveTab('review');
       toast.success(`Loaded settlement ${settlementTextId} for review`);
     } catch (err: any) {
@@ -2301,7 +2301,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                             )}
 
                             {/* Posted: View in Xero + Rollback */}
-                            {s.status === 'pushed_to_xero' && (
+                            {['pushed_to_xero', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'synced'].includes(s.status || '') && (
                               <>
                                 <DropdownMenuSeparator />
                                 {(() => {
