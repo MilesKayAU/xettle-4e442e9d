@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, AlertTriangle, Loader2, ArrowRight, Search, PartyPopper, SkipForward, Upload } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, ArrowRight, Search, PartyPopper, SkipForward, Upload, Clock3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
@@ -25,7 +25,7 @@ interface ScanStep {
   flagKey?: string;
 }
 
-type StepStatus = 'pending' | 'running' | 'success' | 'skipped' | 'error';
+type StepStatus = 'pending' | 'running' | 'success' | 'skipped' | 'rate_limited' | 'error';
 
 interface PhaseBData {
   amazonCount: number;
@@ -152,6 +152,8 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
                 );
               } catch {}
               }
+            } else if (result.rateLimited || result.statusCode === 429) {
+              updateStep(i, 'rate_limited', 'Rate limited — retrying automatically in background');
             } else {
               updateStep(i, 'error', result.error || 'Failed');
             }
@@ -253,6 +255,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
     switch (status) {
       case 'success': return <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />;
       case 'skipped': return <SkipForward className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
+      case 'rate_limited': return <Clock3 className="h-4 w-4 text-amber-500 flex-shrink-0" />;
       case 'error': return <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />;
       case 'running': return <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />;
       default: return <div className="h-4 w-4 rounded-full border border-muted-foreground/30 flex-shrink-0" />;
@@ -304,7 +307,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
                     ? stepMessages[i] || step.label
                     : step.label}
                 </span>
-                {(stepStatuses[i] || 'pending') === 'error' && stepMessages[i] && (
+                {((stepStatuses[i] || 'pending') === 'error' || (stepStatuses[i] || 'pending') === 'rate_limited') && stepMessages[i] && (
                   <span className="text-xs text-amber-500">{stepMessages[i]}</span>
                 )}
               </div>
