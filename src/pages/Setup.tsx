@@ -388,7 +388,7 @@ export default function Setup() {
     const userId = caps.userId!;
     if (api === 'xero') {
       setXeroProgress(0);
-      startProgressTimer(setXeroProgress, 60000);
+      startProgressTimer(setXeroProgress, 150000);
       runXeroScan(token, userId);
     } else if (api === 'shopify') {
       setShopifyProgress(0);
