@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,8 +28,67 @@ export default function PostSetupBanner({
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(DISMISS_KEY) === 'true');
   const [marketplacesFound, setMarketplacesFound] = useState(0);
   const [settlementCount, setSettlementCount] = useState<number | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanComplete, setScanComplete] = useState(false);
+  const [scanResult, setScanResult] = useState<{ marketplaces_created?: number; confidence?: string } | null>(null);
+  const scanTriggered = useRef(false);
 
-  // Poll for auto-detected marketplaces when scanning
+  // Trigger Xero scan immediately if connected and not yet scanned
+  useEffect(() => {
+    if (!hasXero || dismissed || scanTriggered.current) return;
+    scanTriggered.current = true;
+
+    const triggerScan = async () => {
+      try {
+        // Check if scan already completed
+        const { data: scanFlag } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'xero_scan_completed')
+          .maybeSingle();
+
+        if (scanFlag?.value) {
+          setScanComplete(true);
+          return;
+        }
+
+        // Trigger the scan
+        setScanning(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/scan-xero-history`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({}),
+          }
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+          setScanResult(data);
+          setScanComplete(true);
+          if (data.marketplaces_created > 0 || data.detected_settlements?.length > 0) {
+            setMarketplacesFound(data.detected_settlements?.length || data.marketplaces_created || 0);
+          }
+        }
+      } catch (err) {
+        console.error('Xero scan trigger failed:', err);
+      } finally {
+        setScanning(false);
+      }
+    };
+
+    triggerScan();
+  }, [hasXero, dismissed]);
+
+  // Poll for auto-detected marketplaces
   useEffect(() => {
     if (dismissed) return;
     const poll = async () => {
@@ -38,7 +97,7 @@ export default function PostSetupBanner({
           .from('marketplace_connections')
           .select('id')
           .eq('connection_type', 'auto_detected');
-        if (data) setMarketplacesFound(data.length);
+        if (data) setMarketplacesFound(prev => Math.max(prev, data.length));
 
         const { count } = await supabase
           .from('settlements')
@@ -56,17 +115,16 @@ export default function PostSetupBanner({
     setDismissed(true);
   };
 
-  // Show when: any connection exists, or no connections but no settlements yet (fresh account)
   const hasAnyConnection = hasXero || hasAmazon || hasShopify;
   const isFreshAccount = !hasAnyConnection && settlementCount === 0;
   const allConnected = hasXero && hasAmazon && hasShopify;
 
-  // Don't show if dismissed, or if user has all connections + marketplaces found
   if (dismissed) return null;
   if (!hasAnyConnection && !isFreshAccount) return null;
-  if (allConnected && marketplacesFound > 0 && settlementCount !== null && settlementCount > 3) return null;
+  if (allConnected && !scanning && scanComplete && marketplacesFound > 0 && settlementCount !== null && settlementCount > 3) return null;
 
   const connectedCount = [hasXero, hasAmazon, hasShopify].filter(Boolean).length;
+  const isActivelyScanning = scanning || (hasXero && !scanComplete) || (hasAmazon && settlementCount === 0) || (hasShopify && settlementCount === 0);
 
   const missingChannels = [
     {
@@ -109,8 +167,10 @@ export default function PostSetupBanner({
       {/* Section A: Active Scanning Status */}
       {hasAnyConnection && (
         <Card className="border-primary/20 bg-primary/5 relative overflow-hidden">
-          {/* Subtle animated gradient bar */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/40 via-primary to-primary/40 animate-pulse" />
+          {/* Animated gradient bar while scanning */}
+          {isActivelyScanning && (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/40 via-primary to-primary/40 animate-pulse" />
+          )}
           <button
             onClick={handleDismiss}
             className="absolute top-3 right-3 text-muted-foreground hover:text-foreground z-10"
@@ -121,31 +181,52 @@ export default function PostSetupBanner({
           <CardContent className="p-5">
             <div className="flex items-start gap-4">
               <div className="relative flex-shrink-0 mt-0.5">
-                <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                {isActivelyScanning ? (
+                  <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                )}
               </div>
               <div className="space-y-2 flex-1">
                 <h3 className="text-base font-semibold text-foreground">
-                  Xettle is scanning your accounts…
+                  {isActivelyScanning
+                    ? 'Xettle is scanning your accounts…'
+                    : 'Scan complete!'
+                  }
                 </h3>
                 <div className="space-y-1">
-                  {hasXero && (
+                  {hasXero && isActivelyScanning && (
                     <p className="text-sm text-foreground">
                       Scanning your Xero history to auto-detect marketplaces and build them into your dashboard.
                     </p>
                   )}
+                  {hasXero && scanComplete && (
+                    <p className="text-sm text-foreground">
+                      {marketplacesFound > 0
+                        ? `We found ${marketplacesFound} marketplace${marketplacesFound > 1 ? 's' : ''} in your Xero and set them up for you.`
+                        : scanResult?.confidence === 'low' || !scanResult?.confidence
+                          ? 'No marketplace invoices found in Xero yet — upload a settlement file to get started.'
+                          : 'Xero scan complete — your marketplaces are ready.'
+                      }
+                    </p>
+                  )}
                   {hasAmazon && (
                     <p className="text-sm text-muted-foreground">
-                      Importing your Amazon settlements — they'll appear in your Settlements tab shortly.
+                      {isActivelyScanning
+                        ? 'Importing your Amazon settlements — they\'ll appear in your Settlements tab shortly.'
+                        : 'Amazon settlements imported.'}
                     </p>
                   )}
                   {hasShopify && (
                     <p className="text-sm text-muted-foreground">
-                      Syncing your Shopify payouts and detecting sales channels automatically.
+                      {isActivelyScanning
+                        ? 'Syncing your Shopify payouts and detecting sales channels automatically.'
+                        : 'Shopify payouts synced.'}
                     </p>
                   )}
                 </div>
 
-                {marketplacesFound > 0 && (
+                {marketplacesFound > 0 && isActivelyScanning && (
                   <div className="flex items-center gap-2 mt-2">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                     <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
