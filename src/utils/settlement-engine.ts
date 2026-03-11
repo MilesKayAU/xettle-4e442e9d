@@ -367,21 +367,39 @@ export async function postInsertDuplicateCheck(
   userId: string,
 ): Promise<void> {
   try {
-    const { count } = await supabase
+    const { data: duplicates } = await supabase
       .from('settlements')
-      .select('*', { count: 'exact', head: true })
+      .select('id, created_at, status')
       .eq('settlement_id', settlementId)
       .eq('user_id', userId)
-      .eq('marketplace', marketplace);
+      .eq('marketplace', marketplace)
+      .order('created_at', { ascending: true });
 
-    if (count && count > 1) {
-      console.error(`[CRITICAL] Duplicate settlement detected post-insert: ${settlementId} (${marketplace}), count=${count}`);
+    if (duplicates && duplicates.length > 1) {
+      console.error(`[CRITICAL] Duplicate settlement detected post-insert: ${settlementId} (${marketplace}), count=${duplicates.length}`);
+
+      // Keep the oldest record, suppress all newer duplicates
+      const toSuppress = duplicates
+        .slice(1)
+        .filter((d) => d.status !== 'duplicate_suppressed');
+
+      for (const dup of toSuppress) {
+        await supabase
+          .from('settlements')
+          .update({ status: 'duplicate_suppressed' } as any)
+          .eq('id', dup.id);
+      }
+
       await supabase.from('system_events' as any).insert({
         user_id: userId,
         event_type: 'critical_duplicate_created',
         marketplace_code: marketplace,
         settlement_id: settlementId,
-        details: { count, detected_at: new Date().toISOString() },
+        details: {
+          count: duplicates.length,
+          detected_at: new Date().toISOString(),
+          suppressed_ids: toSuppress.map((d) => d.id),
+        },
         severity: 'critical',
       } as any);
     }
