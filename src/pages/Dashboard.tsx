@@ -591,6 +591,12 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
       </div>
+
+      {/* AI Assistant floating button — context-aware per active view */}
+      <AskAiButton
+        context={aiContext}
+        suggestedPrompts={aiSuggestedPrompts}
+      />
     </div>
   );
 }
