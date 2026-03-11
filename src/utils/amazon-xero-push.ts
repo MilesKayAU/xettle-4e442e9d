@@ -207,10 +207,12 @@ export function buildAmazonInvoiceLineItems(
 export function computeXeroInclusiveTotal(lineItems: XeroLineItem[]): number {
   let total = 0;
   for (const item of lineItems) {
+    const amt = item.UnitAmount;
+    const sign = amt < 0 ? -1 : 1;
     if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
-      total += round2(round2(item.UnitAmount) * 1.1);
+      total += round2(round2(Math.abs(amt)) * 1.1) * sign;
     } else {
-      total += round2(item.UnitAmount);
+      total += round2(amt);
     }
   }
   return round2(total);
