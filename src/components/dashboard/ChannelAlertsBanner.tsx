@@ -511,43 +511,139 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
             const depositDate = alert.deposit_date
               ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
               : null;
+            const depositDateFull = alert.deposit_date
+              ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+              : null;
+            const isDetailOpen = expandedAlertId === alert.id;
 
             return (
               <Card key={alert.id} className="border-primary/20 bg-primary/5">
-                <CardContent className="flex items-center gap-3 p-4">
-                  <Banknote className="h-5 w-5 text-primary shrink-0" />
-                  <div className="flex-1 text-sm">
-                    {isUnmatchedDeposit ? (
-                      <>
-                        <p className="font-medium text-foreground">
-                          💰 We spotted a possible {displayName} deposit — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
-                        </p>
-                        <p className="text-muted-foreground mt-0.5">
-                          Upload {displayName} settlements to reconcile it.
-                          {alert.match_confidence && (
-                            <span className="ml-1 text-xs opacity-60">({alert.match_confidence}% confidence)</span>
-                          )}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-medium text-foreground">
-                          💰 We found a deposit we couldn't match — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
-                        </p>
-                        <p className="text-muted-foreground mt-0.5">
-                          Is this a marketplace payment? Set up the marketplace to reconcile it.
-                        </p>
-                      </>
-                    )}
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-3 p-4">
+                    <Banknote className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 text-sm">
+                      {isUnmatchedDeposit ? (
+                        <>
+                          <p className="font-medium text-foreground">
+                            💰 We spotted a possible {displayName} deposit — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
+                          </p>
+                          <p className="text-muted-foreground mt-0.5">
+                            Upload {displayName} settlements to reconcile it.
+                            {alert.match_confidence && (
+                              <span className="ml-1 text-xs opacity-60">({alert.match_confidence}% confidence)</span>
+                            )}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-foreground">
+                            💰 We found a deposit we couldn't match — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
+                          </p>
+                          <p className="text-muted-foreground mt-0.5">
+                            Is this a marketplace payment? Set up the marketplace to reconcile it.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setExpandedAlertId(isDetailOpen ? null : alert.id)}
+                        className="gap-1 text-xs text-muted-foreground"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        {isDetailOpen ? 'Hide' : 'Details'}
+                        {isDetailOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
+                        Not now
+                      </Button>
+                      <Button size="sm" onClick={() => handleSetup(alert)} className="gap-1">
+                        {isUnmatchedDeposit ? `Set up ${displayName}` : 'Identify this deposit'} <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
-                      Not now
-                    </Button>
-                    <Button size="sm" onClick={() => handleSetup(alert)} className="gap-1">
-                      {isUnmatchedDeposit ? `Set up ${displayName}` : 'Identify this deposit'} <ArrowRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+
+                  {/* ─── Expandable evidence panel ─── */}
+                  {isDetailOpen && (
+                    <div className="border-t border-primary/10 bg-background/50 px-4 py-3 space-y-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Evidence — why we think this is {displayName}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* Deposit amount */}
+                        <div className="flex items-start gap-2 text-sm">
+                          <Banknote className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">Deposit amount</p>
+                            <p className="font-semibold text-foreground">{depositAmt}</p>
+                          </div>
+                        </div>
+
+                        {/* Date */}
+                        {depositDateFull && (
+                          <div className="flex items-start gap-2 text-sm">
+                            <Calendar className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Transaction date</p>
+                              <p className="font-semibold text-foreground">{depositDateFull}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Bank narration / reference */}
+                        {alert.deposit_description && (
+                          <div className="flex items-start gap-2 text-sm">
+                            <FileText className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Bank narration / reference</p>
+                              <p className="font-semibold text-foreground break-all">{alert.deposit_description}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Confidence */}
+                        {alert.match_confidence && (
+                          <div className="flex items-start gap-2 text-sm">
+                            <TrendingUp className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Match confidence</p>
+                              <p className="font-semibold text-foreground">{alert.match_confidence}%</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {alert.match_confidence >= 80 ? 'High — narration strongly matches known patterns' :
+                                 alert.match_confidence >= 65 ? 'Medium — partial keyword match in narration' :
+                                 'Low — weak signal, verify manually'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Detection method detail */}
+                      <div className="text-xs text-muted-foreground border-t border-primary/10 pt-2 space-y-1">
+                        <p>
+                          <span className="font-medium">Source:</span>{' '}
+                          {alert.detection_method === 'bank_transaction'
+                            ? 'Detected from a bank transaction in your accounting software'
+                            : alert.detection_method === 'xero_bank_deposit'
+                            ? 'Found in your Xero bank feed'
+                            : alert.detection_method === 'xero_contact'
+                            ? 'Matched to a Xero contact name'
+                            : `Detection method: ${alert.detection_method || 'automatic'}`}
+                        </p>
+                        {alert.deposit_description && (
+                          <p>
+                            <span className="font-medium">How we matched:</span>{' '}
+                            The bank narration "<span className="font-mono text-foreground">{alert.deposit_description}</span>" contains keywords associated with {displayName}.
+                          </p>
+                        )}
+                        <p className="italic">
+                          Review the amount and date above against your {displayName} seller portal to confirm this deposit matches a settlement period.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
