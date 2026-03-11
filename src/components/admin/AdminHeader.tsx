@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { LogOut, Key, ShieldAlert } from 'lucide-react';
+import AccountResetButton from './AccountResetButton';
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -27,6 +28,7 @@ export default function AdminHeader({ onSignOut, userEmail }: AdminHeaderProps) 
           )}
         </div>
         <div className="flex gap-2">
+          <AccountResetButton />
           <Button 
             variant="destructive"
             size="sm"
