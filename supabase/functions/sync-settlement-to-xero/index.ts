@@ -300,10 +300,30 @@ serve(async (req) => {
   }
 
   try {
-    const body: InvoiceRequest = await req.json();
-    const { userId, action = 'create' } = body;
+    // ─── JWT VERIFICATION ──────────────────────────────────────────────
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-    if (!userId) throw new Error('Missing userId');
+    const anonClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authHeader } }
+    });
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    const authenticatedUserId = claimsData.claims.sub as string;
+
+    const body: InvoiceRequest = await req.json();
+    const { action = 'create' } = body;
+    // Use the authenticated user's ID, ignore any userId in body
+    const userId = authenticatedUserId;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
