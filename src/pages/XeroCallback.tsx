@@ -59,6 +59,11 @@ const XeroCallback = () => {
         setStatus('success');
         setMessage('Successfully connected to Xero!');
         sessionStorage.removeItem('xero_oauth_state');
+        
+        // Auto-redirect after brief success display
+        setTimeout(() => {
+          navigate('/dashboard?connected=xero');
+        }, 2000);
       } catch (err: any) {
         console.error('Xero callback error:', err);
         setStatus('error');
