@@ -3529,6 +3529,82 @@ const REQUIRED_XERO_ACCOUNTS = Object.entries(DEFAULT_ACCOUNT_CODES).map(([, val
   taxType: val.taxType,
 }));
 
+// ─── Tracking Categories Toggle ─────────────────────────────────────
+function TrackingCategoriesToggle() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'xero_tracking_enabled')
+        .maybeSingle();
+      setEnabled(data?.value === 'true');
+    };
+    check();
+  }, []);
+
+  const handleToggle = async (newValue: boolean) => {
+    setToggling(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      await supabase.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'xero_tracking_enabled',
+        value: String(newValue),
+      } as any, { onConflict: 'user_id,key' });
+      setEnabled(newValue);
+      toast(newValue ? 'Tracking Categories enabled' : 'Tracking Categories disabled');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  if (enabled === null) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          📊 Xero Tracking Categories
+        </CardTitle>
+        <CardDescription>
+          Tag each settlement by sales channel — enables per-channel P&L reporting inside Xero
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            {enabled ? (
+              <span className="text-green-700 flex items-center gap-1">
+                <CheckCircle2 className="h-4 w-4" /> Enabled — line items tagged with "Sales Channel"
+              </span>
+            ) : (
+              'Disabled — line items will not include tracking'
+            )}
+          </div>
+          <Button
+            variant={enabled ? 'outline' : 'default'}
+            size="sm"
+            onClick={() => handleToggle(!enabled)}
+            disabled={toggling}
+          >
+            {toggling ? <Loader2 className="h-4 w-4 animate-spin" /> : enabled ? 'Disable' : 'Enable'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Reconciliation Settings ────────────────────────────────────────
 function ReconciliationSettingsCard() {
   const [threshold, setThreshold] = useState('50');
