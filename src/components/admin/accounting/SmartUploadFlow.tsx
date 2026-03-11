@@ -1249,10 +1249,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         </CardContent>
       </Card>
 
-      {/* Shopify Connection / Sync Banners */}
-      {!hasShopifyConnection && (
-        <ShopifyConnectBanner />
-      )}
+      {/* Shopify Sync/Reconnect Banners (connect card is in PostSetupBanner on Upload tab) */}
       {hasShopifyConnection && shopifyTokenInvalid && (
         <ShopifyReconnectBanner shopDomain={shopifyShopDomain} />
       )}
