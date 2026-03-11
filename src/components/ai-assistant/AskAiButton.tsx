@@ -55,7 +55,7 @@ export default function AskAiButton({ context, suggestedPrompts }: AskAiButtonPr
     <>
       <Button
         onClick={handleClick}
-        className="fixed bottom-4 right-4 z-50 shadow-lg gap-2"
+        className="fixed bottom-16 right-4 z-50 shadow-lg gap-2"
         size="sm"
       >
         <Sparkles className="h-4 w-4" />
