@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import XettleLogo from '@/components/shared/XettleLogo';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import { supabase } from '@/integrations/supabase/client';
 import LoadingSpinner from '@/components/ui/loading-spinner';
