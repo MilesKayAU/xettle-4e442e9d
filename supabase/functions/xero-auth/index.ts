@@ -622,8 +622,220 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Action: Get or create a Xero Tracking Category + Option
+    if (action === 'get_or_create_tracking') {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const supabaseUser = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+
+      const { data: { user }, error: authError } = await supabaseUser.auth.getUser()
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const userId = user.id
+
+      let body: any = parsedBody || {}
+      try { if (!parsedBody) body = await req.json() } catch {}
+
+      const categoryName = body?.categoryName || 'Sales Channel'
+      const optionName = body?.optionName
+      if (!optionName) {
+        return new Response(
+          JSON.stringify({ error: 'optionName is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+
+      // Check cache first
+      const cacheKey = `xero_tracking_${categoryName.toLowerCase().replace(/\s+/g, '_')}_${optionName.toLowerCase().replace(/\s+/g, '_')}`
+      const { data: cachedSetting } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', userId)
+        .eq('key', cacheKey)
+        .maybeSingle()
+
+      if (cachedSetting?.value) {
+        try {
+          const cached = JSON.parse(cachedSetting.value)
+          console.log('Returning cached tracking category:', cached)
+          return new Response(
+            JSON.stringify({ success: true, ...cached, cached: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        } catch { /* cache invalid, proceed to fetch */ }
+      }
+
+      // Get Xero token
+      const { data: tokens, error: tokenError } = await supabaseAdmin
+        .from('xero_tokens')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (tokenError || !tokens || tokens.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'No Xero connection found' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      let xeroToken = tokens[0]
+
+      // Refresh if expired
+      const expiresAt = new Date(xeroToken.expires_at)
+      if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
+        const tokenResponse = await fetch(XERO_TOKEN_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${btoa(`${XERO_CLIENT_ID}:${XERO_CLIENT_SECRET}`)}`
+          },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: xeroToken.refresh_token
+          })
+        })
+        if (tokenResponse.ok) {
+          const tokenData = await tokenResponse.json()
+          const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+          await supabaseAdmin.from('xero_tokens').update({
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+            expires_at: newExpiresAt,
+            updated_at: new Date().toISOString()
+          }).eq('id', xeroToken.id)
+          xeroToken = { ...xeroToken, access_token: tokenData.access_token }
+        }
+      }
+
+      // 1. GET all tracking categories
+      const tcResponse = await fetch('https://api.xero.com/api.xro/2.0/TrackingCategories', {
+        headers: {
+          'Authorization': `Bearer ${xeroToken.access_token}`,
+          'Accept': 'application/json',
+          'Xero-tenant-id': xeroToken.tenant_id
+        }
+      })
+
+      if (!tcResponse.ok) {
+        const errorText = await tcResponse.text()
+        console.error('Failed to fetch tracking categories:', tcResponse.status, errorText)
+        return new Response(
+          JSON.stringify({ error: `Xero API error: ${tcResponse.status}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const tcData = await tcResponse.json()
+      const allCategories = tcData.TrackingCategories || []
+
+      // 2. Find or create category
+      let category = allCategories.find((c: any) => c.Name.toLowerCase() === categoryName.toLowerCase())
+
+      if (!category) {
+        console.log('Creating tracking category:', categoryName)
+        const createResp = await fetch('https://api.xero.com/api.xro/2.0/TrackingCategories', {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${xeroToken.access_token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Xero-tenant-id': xeroToken.tenant_id
+          },
+          body: JSON.stringify({ Name: categoryName })
+        })
+
+        if (!createResp.ok) {
+          const errorText = await createResp.text()
+          console.error('Failed to create tracking category:', createResp.status, errorText)
+          return new Response(
+            JSON.stringify({ error: `Failed to create tracking category: ${errorText}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        const createData = await createResp.json()
+        category = createData.TrackingCategories?.[0]
+        console.log('Created tracking category:', category?.TrackingCategoryID)
+      }
+
+      const trackingCategoryId = category.TrackingCategoryID
+      const options = category.Options || []
+
+      // 3. Find or create option
+      let option = options.find((o: any) => o.Name.toLowerCase() === optionName.toLowerCase())
+
+      if (!option) {
+        console.log('Creating tracking option:', optionName, 'in category:', trackingCategoryId)
+        const optResp = await fetch(`https://api.xero.com/api.xro/2.0/TrackingCategories/${trackingCategoryId}/Options`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${xeroToken.access_token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Xero-tenant-id': xeroToken.tenant_id
+          },
+          body: JSON.stringify({ Name: optionName })
+        })
+
+        if (!optResp.ok) {
+          const errorText = await optResp.text()
+          console.error('Failed to create tracking option:', optResp.status, errorText)
+          return new Response(
+            JSON.stringify({ error: `Failed to create tracking option: ${errorText}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        const optData = await optResp.json()
+        option = optData.Options?.[0]
+        console.log('Created tracking option:', option?.TrackingOptionID)
+      }
+
+      const result = {
+        trackingCategoryId,
+        trackingOptionId: option.TrackingOptionID,
+        categoryName: category.Name,
+        optionName: option.Name,
+      }
+
+      // Cache in app_settings
+      await supabaseAdmin.from('app_settings').upsert({
+        user_id: userId,
+        key: cacheKey,
+        value: JSON.stringify(result),
+      }, { onConflict: 'user_id,key' })
+
+      console.log('Tracking category result:', result)
+
+      return new Response(
+        JSON.stringify({ success: true, ...result }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use: authorize, callback, status, disconnect, get_accounts, or create_accounts' }),
+      JSON.stringify({ error: 'Invalid action. Use: authorize, callback, status, disconnect, get_accounts, create_accounts, or get_or_create_tracking' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 

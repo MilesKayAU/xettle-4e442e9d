@@ -462,6 +462,69 @@ serve(async (req) => {
     const getCode = (category: string): string =>
       userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
 
+    // ─── Fetch tracking category setting ────────────────────────────
+    let trackingArray: any[] | null = null;
+    try {
+      const { data: trackingSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', userId)
+        .eq('key', 'xero_tracking_enabled')
+        .maybeSingle();
+
+      if (trackingSetting?.value === 'true' && contactName) {
+        // Resolve the marketplace display name for tracking
+        const trackingOptionName = contactName;
+        const cacheKey = `xero_tracking_sales_channel_${trackingOptionName.toLowerCase().replace(/\s+/g, '_')}`;
+        
+        const { data: cachedTracking } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', userId)
+          .eq('key', cacheKey)
+          .maybeSingle();
+
+        if (cachedTracking?.value) {
+          try {
+            const cached = JSON.parse(cachedTracking.value);
+            trackingArray = [{ Name: cached.categoryName, Option: cached.optionName }];
+            console.log('Using cached tracking:', trackingArray);
+          } catch { /* skip */ }
+        }
+
+        if (!trackingArray) {
+          // Call xero-auth get_or_create_tracking via internal fetch
+          try {
+            const trackingUrl = `${supabaseUrl}/functions/v1/xero-auth`;
+            const trackingResp = await fetch(trackingUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                'x-action': 'get_or_create_tracking',
+              },
+              body: JSON.stringify({
+                action: 'get_or_create_tracking',
+                categoryName: 'Sales Channel',
+                optionName: trackingOptionName,
+              }),
+            });
+            if (trackingResp.ok) {
+              const trackingResult = await trackingResp.json();
+              if (trackingResult.success) {
+                trackingArray = [{ Name: trackingResult.categoryName, Option: trackingResult.optionName }];
+                console.log('Resolved tracking:', trackingArray);
+              }
+            }
+          } catch (trackErr) {
+            console.error('Tracking category resolution failed (non-fatal):', trackErr);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Tracking category check failed (non-fatal):', e);
+    }
+
     let token = await getXeroToken(supabase, userId);
     console.log('Found Xero token for tenant:', token.tenant_name);
 
@@ -496,6 +559,7 @@ serve(async (req) => {
             TaxType: "INPUT",
             UnitAmount: Math.round(Math.abs(netAmount) * 100) / 100,
             Quantity: 1,
+            ...(trackingArray ? { Tracking: trackingArray } : {}),
           }]
         : lineItems.map(item => ({
             Description: item.Description,
@@ -503,6 +567,7 @@ serve(async (req) => {
             TaxType: item.TaxType,
             UnitAmount: Math.round(item.UnitAmount * 100) / 100,
             Quantity: item.Quantity || 1,
+            ...(trackingArray ? { Tracking: trackingArray } : {}),
           }))
     };
 
