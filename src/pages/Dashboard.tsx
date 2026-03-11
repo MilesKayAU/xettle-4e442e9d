@@ -146,7 +146,7 @@ export default function Dashboard() {
     return (localStorage.getItem('xettle_insights_subtab') as InsightsSubTab) || 'overview';
   });
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
-  const [selectedMarketplace, setSelectedMarketplace] = useState<string>('amazon_au');
+  const [selectedMarketplace, setSelectedMarketplace] = useState<string>('');
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
   const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
