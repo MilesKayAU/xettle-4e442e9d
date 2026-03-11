@@ -170,10 +170,23 @@ export function buildInvoiceDescription(settlement: StandardSettlement): string 
 // ─── Universal Duplicate Prevention ─────────────────────────────────────────
 
 /**
- * UNIVERSAL DEDUP — ALL settlement inserts must go through this function.
- * This applies to: CSV upload, API sync, manual entry, auto-sync, any future source.
- * When adding a new marketplace API integration, do NOT bypass this check.
- * The alias registry handles ID format differences between CSV and API paths.
+ * ⚠️ UNIVERSAL RULE — NO EXCEPTIONS:
+ * Every insert or upsert into the settlements table MUST call checkForDuplicate() first.
+ * This applies to:
+ * - Every marketplace (Amazon, Shopify, BigW, MyDeal, Kogan, Bunnings, any future marketplace)
+ * - Every source (CSV upload, API sync, manual entry, auto-sync, public demo)
+ * - Every function name (saveSettlement, saveAmazonSettlement, or any future variant)
+ *
+ * If you are adding a new settlement save function, you MUST:
+ * 1. Call checkForDuplicate() before insert
+ * 2. Register aliases after successful insert via registerAliases()
+ * 3. Return { success: false, reason: 'duplicate' } if duplicate detected
+ * 4. Never use delete + re-insert to 'update' a settlement
+ *
+ * Bypassing this check will cause duplicate Xero invoices for paying customers.
+ *
+ * Post-insert safety: after every insert, postInsertDuplicateCheck() verifies
+ * no duplicate was created (catches race conditions or future code that bypasses this).
  */
 export async function checkForDuplicate(params: {
   settlementId: string;
