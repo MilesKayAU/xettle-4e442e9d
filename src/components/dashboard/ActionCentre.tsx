@@ -486,7 +486,24 @@ export default function ActionCentre({
                         {expandedCards['bank'] ? '− Show less' : `+ ${grouped.length - 3} more`}
                       </button>
                     </li>
-                  )}
+          )}
+
+          {/* Unmatched Deposits */}
+          {unmatchedDeposits.count > 0 && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">💰</span>
+                  <h3 className="font-semibold text-sm">Unmatched Deposits</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {unmatchedDeposits.count} deposit{unmatchedDeposits.count > 1 ? 's' : ''} totalling {formatAUD(unmatchedDeposits.total)} couldn't be matched to any settlement
+                </p>
+                <p className="text-xs text-muted-foreground italic">
+                  These may be marketplace payments that aren't being tracked yet.
+                </p>
+              </CardContent>
+            </Card>
                 </ul>
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
                   <Search className="h-3 w-3" /> Check bank feed
