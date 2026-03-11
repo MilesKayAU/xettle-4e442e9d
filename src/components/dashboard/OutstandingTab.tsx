@@ -513,29 +513,57 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                       </td>
                     </tr>
 
-                    {/* Expanded investigation panel */}
+                    {/* Expanded evidence panel */}
                     {isExpanded && (
                       <tr>
                         <td colSpan={9} className="px-6 py-4 bg-muted/20 border-b border-border">
                           <div className="space-y-3">
-                            <h4 className="text-sm font-semibold text-foreground">Investigation Details</h4>
+                            <h4 className="text-sm font-semibold text-foreground">Match Evidence</h4>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                              <div className="space-y-1">
-                                <p className="font-medium text-muted-foreground">Xero Invoice</p>
-                                <p>{row.xero_invoice_number} — {row.contact_name}</p>
-                                <p>Ref: {row.xero_reference || '—'}</p>
-                                <p>Amount: {formatAUD(row.amount)}</p>
+                              {/* Xero Invoice */}
+                              <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
+                                <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <ExternalLink className="h-3 w-3" /> Xero Invoice
+                                </p>
+                                <p className="font-medium">{row.xero_invoice_number} — {row.contact_name}</p>
+                                <p>Ref: <span className="font-mono">{row.xero_reference || '—'}</span></p>
+                                <p>Amount: <span className="font-bold">{formatAUD(row.amount)}</span></p>
                                 <p>Date: {row.invoice_date || '—'}</p>
                               </div>
-                              <div className="space-y-1">
-                                <p className="font-medium text-muted-foreground">Our Settlement</p>
-                                {row.has_settlement ? (
+
+                              {/* Settlement Evidence */}
+                              <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
+                                <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <FileText className="h-3 w-3" /> Settlement Data
+                                </p>
+                                {row.settlement_evidence ? (
                                   <>
                                     <p className="flex items-center gap-1">
                                       <CheckCircle2 className="h-3 w-3 text-green-600" />
-                                      Found: {row.settlement_id}
+                                      <span className="font-medium">
+                                        {row.settlement_evidence.source === 'api' ? '🔗 Amazon API' : 
+                                         row.settlement_evidence.source === 'csv' ? '📄 Uploaded CSV' : '✏️ Manual'}
+                                      </span>
                                     </p>
-                                    <p>Status: {row.settlement_status || '—'}</p>
+                                    <p className="font-mono text-[10px] text-muted-foreground">{row.settlement_evidence.settlement_id}</p>
+                                    <p>Period: {row.settlement_evidence.period_start} → {row.settlement_evidence.period_end}</p>
+                                    {row.settlement_evidence.is_split_month && (
+                                      <Badge variant="outline" className="text-[10px]">
+                                        Split-month Part {row.settlement_evidence.split_part}
+                                      </Badge>
+                                    )}
+                                    <div className="border-t border-border pt-1.5 mt-1.5 space-y-0.5">
+                                      <p>Sales: <span className="font-medium text-green-600">{formatAUD(Math.abs(row.settlement_evidence.sales_principal))}</span></p>
+                                      <p>Fees: <span className="font-medium text-destructive">{formatAUD(Math.abs(row.settlement_evidence.seller_fees + row.settlement_evidence.fba_fees))}</span></p>
+                                      <p>Refunds: <span className="font-medium">{formatAUD(Math.abs(row.settlement_evidence.refunds))}</span></p>
+                                      <p>Net ex GST: <span className="font-bold">{formatAUD(row.settlement_evidence.split_net ?? row.settlement_evidence.net_ex_gst)}</span></p>
+                                      <p>Bank deposit: <span className="font-bold">{formatAUD(row.settlement_evidence.bank_deposit)}</span></p>
+                                    </div>
+                                    {row.settlement_evidence.bank_verified && (
+                                      <p className="flex items-center gap-1 text-green-600 mt-1">
+                                        <Banknote className="h-3 w-3" /> Bank verified ✓
+                                      </p>
+                                    )}
                                   </>
                                 ) : (
                                   <p className="flex items-center gap-1 text-destructive">
@@ -544,8 +572,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                   </p>
                                 )}
                               </div>
-                              <div className="space-y-1">
-                                <p className="font-medium text-muted-foreground">Bank Deposit</p>
+
+                              {/* Bank Deposit */}
+                              <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
+                                <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <Banknote className="h-3 w-3" /> Bank Deposit (Xero)
+                                </p>
                                 {row.has_bank_deposit && row.bank_match ? (
                                   <>
                                     <p className="flex items-center gap-1">
@@ -554,13 +586,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                       ) : (
                                         <CheckCircle2 className="h-3 w-3 text-green-600" />
                                       )}
-                                      {formatAUD(row.bank_match.amount)} on {row.bank_match.date || '—'}
+                                      <span className="font-bold">{formatAUD(row.bank_match.amount)}</span> on {row.bank_match.date || '—'}
                                     </p>
+                                    {row.bank_match.fuzzy && (
+                                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">Fuzzy match</Badge>
+                                    )}
                                     {row.bank_match.narration && (
-                                      <p>Narration: {row.bank_match.narration}</p>
+                                      <p className="text-muted-foreground">Narration: {row.bank_match.narration}</p>
                                     )}
                                     {row.bank_difference != null && row.bank_difference > 0.05 && (
-                                      <p className="text-amber-600">Difference: {formatAUD(row.bank_difference)}</p>
+                                      <p className="text-amber-600 font-medium">Difference: {formatAUD(row.bank_difference)}</p>
                                     )}
                                   </>
                                 ) : (
