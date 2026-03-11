@@ -513,7 +513,16 @@ export default function AccountingDashboard() {
       if (result.summary.reconciliationMatch) {
         toast.success(`Settlement ${result.header.settlementId} parsed & reconciled ✓`);
       } else {
-        toast.warning(`Settlement parsed but reconciliation FAILED — diff: ${formatAUD(result.summary.reconciliationDiff)}`);
+        const failedChecks = (result.summary.reconciliationChecks || [])
+          .filter(c => !c.passed)
+          .map(c => `• ${c.name}: FAIL${c.detail ? ` — ${c.detail}` : ''}`)
+          .join('\n');
+        const passedCount = (result.summary.reconciliationChecks || []).filter(c => c.passed).length;
+        const totalCount = (result.summary.reconciliationChecks || []).length;
+        toast.warning(
+          `Settlement parsed but reconciliation FAILED — diff: ${formatAUD(result.summary.reconciliationDiff)}\n` +
+          `Checks: ${passedCount}/${totalCount} passed\n${failedChecks}`
+        );
       }
     } catch (err: any) {
       toast.error(`Parse error: ${err.message}`);
@@ -864,6 +873,7 @@ export default function AccountingDashboard() {
         reconciliationMatch: s.reconciliation_status === 'matched',
         reconciliationDiff: round2((s.bank_deposit || 0) - grossTotal),
         debugBreakdown: [],
+        reconciliationChecks: [],
         auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0)),
         auFees: round2((s.seller_fees || 0) + (s.fba_fees || 0) + (s.storage_fees || 0)),
         internationalSales: 0,

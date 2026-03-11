@@ -123,6 +123,12 @@ export interface DebugBreakdownRow {
   gst: number;
 }
 
+export interface ReconciliationCheckResult {
+  name: string;
+  passed: boolean;
+  detail?: string;
+}
+
 export interface SettlementSummary {
   salesPrincipal: number;
   salesShipping: number;
@@ -142,6 +148,7 @@ export interface SettlementSummary {
   bankDeposit: number;
   reconciliationMatch: boolean;
   reconciliationDiff: number;
+  reconciliationChecks: ReconciliationCheckResult[];
   debugBreakdown: DebugBreakdownRow[];
   // Marketplace-aware totals (AU vs international)
   auSales: number;
@@ -494,6 +501,52 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const reconciliationDiff = round2(header.totalAmount - grossTotal);
   const reconciliationMatch = Math.abs(reconciliationDiff) < 0.01;
 
+  // ─── 5-point reconciliation diagnostics ─────────────────────────
+  const reconciliationChecks: ReconciliationCheckResult[] = [];
+
+  // 1. Balance check: bank deposit vs sum of all line items
+  reconciliationChecks.push({
+    name: 'Balance check',
+    passed: Math.abs(reconciliationDiff) < 0.01,
+    detail: `Bank ${formatAUD(header.totalAmount)} vs Calculated ${formatAUD(grossTotal)} (diff ${formatAUD(reconciliationDiff)})`,
+  });
+
+  // 2. Column totals: income + expenses should equal gross total
+  const reconIncomeTotal = round2(salesPrincipal + salesShipping + promotionalDiscounts + refunds + reimbursements);
+  const reconExpenseTotal = round2(sellerFees + fbaFees + storageFees + advertisingCosts + unmappedTotal);
+  const columnSum = round2(reconIncomeTotal + reconExpenseTotal);
+  reconciliationChecks.push({
+    name: 'Column totals',
+    passed: Math.abs(columnSum - grossTotal) < 0.01,
+    detail: `Income ${formatAUD(reconIncomeTotal)} + Expenses ${formatAUD(reconExpenseTotal)} = ${formatAUD(columnSum)} vs Gross ${formatAUD(grossTotal)}`,
+  });
+
+  // 3. GST consistency: GST on income + GST on expenses should be plausible
+  const expectedGstOnIncome = round2((salesPrincipal + salesShipping + promotionalDiscounts) / gstDivisor);
+  const gstIncDiff = Math.abs(gstOnIncome - expectedGstOnIncome);
+  reconciliationChecks.push({
+    name: 'GST consistency',
+    passed: gstIncDiff < 0.02,
+    detail: `GST on income ${formatAUD(gstOnIncome)} vs expected ${formatAUD(expectedGstOnIncome)} (diff ${formatAUD(gstIncDiff)})`,
+  });
+
+  // 4. Sanity check: net ex GST + all GST = bank deposit
+  const sanityTotal = round2(netExGst + gstOnIncome + gstOnExpenses);
+  const sanityDiff = round2(header.totalAmount - sanityTotal);
+  reconciliationChecks.push({
+    name: 'Sanity check',
+    passed: Math.abs(sanityDiff) < 0.02,
+    detail: `Net ${formatAUD(netExGst)} + GST Inc ${formatAUD(gstOnIncome)} + GST Exp ${formatAUD(gstOnExpenses)} = ${formatAUD(sanityTotal)} vs Bank ${formatAUD(header.totalAmount)}`,
+  });
+
+  // 5. Historical: fees should be negative (EXPECTED_SIGNS compliance)
+  const feesPositive = sellerFees > 0 || fbaFees > 0 || storageFees > 0;
+  reconciliationChecks.push({
+    name: 'Sign convention',
+    passed: !feesPositive,
+    detail: feesPositive ? `Fee sign violation: seller=${formatAUD(sellerFees)} fba=${formatAUD(fbaFees)} storage=${formatAUD(storageFees)}` : 'All fees correctly signed',
+  });
+
   // Debug breakdown table
   const debugBreakdown = buildDebugBreakdown(
     salesPrincipal, salesShipping, promotionalDiscounts,
@@ -526,6 +579,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     bankDeposit: header.totalAmount,
     reconciliationMatch,
     reconciliationDiff,
+    reconciliationChecks,
     debugBreakdown,
     auSales,
     auFees,
