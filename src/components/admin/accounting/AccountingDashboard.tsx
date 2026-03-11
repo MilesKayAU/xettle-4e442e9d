@@ -733,11 +733,11 @@ export default function AccountingDashboard() {
 
         await supabase
           .from('settlements')
-          .update({ status: 'pushed_to_xero', xero_journal_id: data.invoiceId || data.journalId })
+          .update({ status: 'draft_in_xero', xero_journal_id: data.invoiceId || data.journalId, xero_status: 'DRAFT' })
           .eq('settlement_id', header.settlementId);
 
         setPushed(true);
-        toast.success(`Settlement posted to Xero as Invoice (AUTHORISED) ✓ (${data.invoiceId || data.journalId})`);
+        toast.success(`Draft invoice created in Xero ✓ Next: approve in Xero, then match against Amazon bank deposit.`);
       }
 
       await loadSettlements();
