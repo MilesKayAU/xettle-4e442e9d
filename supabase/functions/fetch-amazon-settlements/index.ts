@@ -419,12 +419,12 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         .from('app_settings')
         .select('key, value')
         .eq('user_id', userId)
-        .in('key', ['accounting_gst_rate', 'sync_cutoff_date']);
+        .in('key', ['accounting_gst_rate', 'accounting_boundary_date']);
 
       const settingsMap: Record<string, string> = {};
       (settingsData || []).forEach((s: any) => { settingsMap[s.key] = s.value; });
       const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
-      const syncCutoffDate = settingsMap['sync_cutoff_date'] || null;
+      const accountingBoundary = settingsMap['accounting_boundary_date'] || null;
 
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 90);
