@@ -146,6 +146,11 @@ export default function Setup() {
   const mountedRef = useRef(true);
   const phase1StartedRef = useRef(false);
 
+  // Abort controllers for stop/pause
+  const xeroAbortRef = useRef<AbortController | null>(null);
+  const shopifyAbortRef = useRef<AbortController | null>(null);
+  const amazonAbortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     return () => { mountedRef.current = false; };
   }, []);
