@@ -353,7 +353,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* No data */}
-      {data && data.rows.length === 0 && (
+      {data && filteredRows.length === 0 && (
         <Card>
           <CardContent className="p-8 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-3" />
