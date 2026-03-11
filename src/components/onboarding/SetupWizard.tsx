@@ -94,10 +94,17 @@ export default function SetupWizard({
     });
   };
 
+  const nav = useNavigate();
+
   const handleComplete = () => {
     sessionStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SELECTED_MARKETPLACES_KEY);
-    onComplete();
+    // API-connected users → Setup Hub; CSV-only → Dashboard
+    if (hasXero || hasAmazon || hasShopify) {
+      nav('/setup');
+    } else {
+      onComplete();
+    }
   };
 
   const handleCloseAttempt = () => {

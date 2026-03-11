@@ -57,6 +57,7 @@ function App() {
                   {/* Authenticated routes — trial banner renders on all */}
                   <Route element={<AuthenticatedLayout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/setup" element={<Setup />} />
                     <Route path="/admin" element={<Admin />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
