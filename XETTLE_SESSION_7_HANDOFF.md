@@ -253,6 +253,24 @@ Non-blocking — attachment failure logged but doesn't fail the push.
 Needs real Amazon AU settlement data to identify exact field names.
 Speculative build risks BAS errors. Current ACCPAY flagging is safe.
 
+### 🐛 Bug Found & Fixed: Advertising Costs Tax Type
+**Problem:** Advertising Costs was getting `BASEXCLUDED` instead of `INPUT`.
+
+**Cause:** The expense bucket filter in 5 locations only included 
+`['Seller Fees', 'FBA Fees', 'Storage Fees']` — Advertising Costs was missing,
+so it fell through to `otherBuckets` and got `BASEXCLUDED` tax type.
+
+**Impact:** Sellers could NOT claim GST input credits on ad spend. Real money
+left on the table (~$454/month for a $5K/month ad spender).
+
+**Fix:** Added `'Advertising Costs'` to the expense category array in all
+5 locations across 2 files:
+- `src/utils/amazon-xero-push.ts` — buildAmazonInvoiceLineItems(), buildJournalPreviewRows(), computeSplitMonthRollover()
+- `src/components/admin/accounting/AccountingDashboard.tsx` — rollover computation, journal preview
+
+**After fix:** Advertising Costs now correctly gets `INPUT` tax type,
+allowing sellers to claim GST credits on Amazon advertising spend.
+
 ### 🧪 Task 4: Real-world push test — TESTING MONTH
 Part of the upcoming testing month. First real push will validate
 all Session 6+7 features end-to-end.
