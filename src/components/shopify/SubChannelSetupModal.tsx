@@ -52,6 +52,9 @@ export default function SubChannelSetupModal({
 }: SubChannelSetupModalProps) {
   const isNumeric = channel.is_numeric_id || isNumericChannelId(channel.source_name);
 
+  // Confident tag-based detection: we know what this is
+  const isConfidentDetection = channel.detection_method === 'tag' && !!channel.suggested_label;
+
   // Pre-fill from suggested values or derive from source_name
   const defaultLabel = channel.suggested_label
     || (isNumeric ? '' : channel.source_name.charAt(0).toUpperCase() + channel.source_name.slice(1));
@@ -114,8 +117,18 @@ export default function SubChannelSetupModal({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Numeric ID helper */}
-          {isNumeric && (
+          {/* Confident tag-based detection: green confirmation */}
+          {isConfidentDetection && (
+            <div className="flex items-start gap-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 p-3">
+              <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                ✓ Identified as <span className="font-medium text-foreground">{channel.suggested_label}</span> based on order tags
+              </p>
+            </div>
+          )}
+
+          {/* Numeric ID helper — only show when NOT confidently detected */}
+          {isNumeric && !isConfidentDetection && (
             <div className="flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 p-3">
               <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
               <p className="text-xs text-muted-foreground">

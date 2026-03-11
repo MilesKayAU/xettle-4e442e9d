@@ -241,6 +241,11 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const handleSetup = (alert: ChannelAlert) => {
     const hasDetectedLabel = !!alert.detected_label;
 
+    // Resolve detected_label to a marketplace code for auto-selection
+    const resolvedCode = hasDetectedLabel
+      ? resolveMarketplaceCode(alert.detected_label, alert.source_name)
+      : undefined;
+
     setSetupChannel({
       source_name: alert.source_name,
       order_count: alert.order_count,
@@ -248,8 +253,10 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       sample_order_names: [],
       is_new: true,
       ...(hasDetectedLabel ? { suggested_label: alert.detected_label } : {}),
+      ...(resolvedCode ? { suggested_code: resolvedCode } : {}),
       ...(isNumericChannelId(alert.source_name) ? { is_numeric_id: true } : {}),
       candidate_tags: alert.candidate_tags || [],
+      detection_method: alert.detection_method || undefined,
     });
   };
 
