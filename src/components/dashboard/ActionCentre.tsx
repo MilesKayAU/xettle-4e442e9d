@@ -196,7 +196,24 @@ export default function ActionCentre({
   };
 
   // ─── Computed ──────────────────────────────────────────────────────
-  const uploadNeeded = rows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+
+  // Normalise alias codes (e.g. 'ebay' → 'ebay_au') and deduplicate
+  const normalisedRows = useMemo(() => {
+    const seen = new Map<string, ValidationRow>();
+    for (const r of rows) {
+      const code = MARKETPLACE_ALIASES[r.marketplace_code] || r.marketplace_code;
+      // Skip gateway codes — they're not settlement sources
+      if (GATEWAY_CODES.has(code)) continue;
+      const key = `${code}_${r.period_start}`;
+      const existing = seen.get(key);
+      if (!existing || (r.settlement_net || 0) > (existing.settlement_net || 0)) {
+        seen.set(key, { ...r, marketplace_code: code });
+      }
+    }
+    return Array.from(seen.values());
+  }, [rows]);
+
+  const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
   // Filter out API-synced marketplaces from the "needs upload" list — they sync automatically
   const uploadNeededManual = uploadNeeded.filter(r => !apiSyncedMarketplaces.has(r.marketplace_code));
   const readyToPush = rows.filter(r => r.overall_status === 'ready_to_push');
