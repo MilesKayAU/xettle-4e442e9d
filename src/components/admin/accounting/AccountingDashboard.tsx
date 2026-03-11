@@ -712,7 +712,7 @@ export default function AccountingDashboard() {
         await supabase
           .from('settlements')
           .update({
-            status: 'pushed_to_xero',
+            status: 'draft_in_xero',
             xero_journal_id_1: invoice1Id,
             xero_journal_id_2: invoice2Id,
           } as any)
