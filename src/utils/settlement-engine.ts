@@ -258,8 +258,9 @@ export async function checkForDuplicate(params: {
 
 /**
  * Register settlement ID aliases for cross-source dedup.
+ * Exported so any settlement save function (including legacy ones) can register aliases.
  */
-async function registerAliases(
+export async function registerAliases(
   settlementId: string,
   userId: string,
   source: string,
@@ -291,6 +292,40 @@ async function registerAliases(
       .then(({ error }) => {
         if (error) console.error('[alias-registry] upsert error:', error);
       });
+  }
+}
+
+/**
+ * Post-insert safety check — catches duplicates created by race conditions
+ * or future code that bypasses checkForDuplicate().
+ * Fire-and-forget: logs critical alert to system_events if duplicate found.
+ */
+export async function postInsertDuplicateCheck(
+  settlementId: string,
+  marketplace: string,
+  userId: string,
+): Promise<void> {
+  try {
+    const { count } = await supabase
+      .from('settlements')
+      .select('*', { count: 'exact', head: true })
+      .eq('settlement_id', settlementId)
+      .eq('user_id', userId)
+      .eq('marketplace', marketplace);
+
+    if (count && count > 1) {
+      console.error(`[CRITICAL] Duplicate settlement detected post-insert: ${settlementId} (${marketplace}), count=${count}`);
+      await supabase.from('system_events' as any).insert({
+        user_id: userId,
+        event_type: 'critical_duplicate_created',
+        marketplace_code: marketplace,
+        settlement_id: settlementId,
+        details: { count, detected_at: new Date().toISOString() },
+        severity: 'critical',
+      } as any);
+    }
+  } catch (err) {
+    console.error('[postInsertDuplicateCheck] error:', err);
   }
 }
 
