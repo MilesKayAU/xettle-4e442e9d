@@ -674,6 +674,36 @@ serve(async (req) => {
     const invoiceNumber = result.Invoices?.[0]?.InvoiceNumber;
     console.log('Invoice created successfully:', invoiceId, 'Number:', invoiceNumber);
 
+    // ─── Attach audit CSV (non-blocking) ──────────────────────────
+    let attachmentResult: { success: boolean; error?: string } | null = null;
+    if (invoiceId && body.settlementData) {
+      try {
+        const sd = body.settlementData;
+        const mp = (sd.marketplace || 'unknown').replace(/_/g, '-');
+        const periodLabel = `${(sd.period_start || '').slice(0, 7)}`;
+        const sid = sd.settlement_id || reference?.replace('Xettle-', '') || 'unknown';
+        const filename = `xettle-${mp}-${periodLabel}-${sid}.csv`;
+        attachmentResult = await attachSettlementToXero(token, invoiceId, sd, filename);
+
+        // Log attachment result to system_events
+        await supabase.from('system_events').insert({
+          user_id: userId,
+          event_type: 'xero_csv_attachment',
+          severity: attachmentResult.success ? 'info' : 'warning',
+          settlement_id: sd.settlement_id || null,
+          marketplace_code: sd.marketplace || null,
+          details: {
+            xero_invoice_id: invoiceId,
+            filename,
+            success: attachmentResult.success,
+            error: attachmentResult.error || null,
+          },
+        });
+      } catch (attachErr: any) {
+        console.error('Attachment logging failed (non-fatal):', attachErr.message);
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       invoiceId,
@@ -683,7 +713,8 @@ serve(async (req) => {
       journalId: invoiceId,
       reference,
       date,
-      lineCount: lineItems.length
+      lineCount: lineItems.length,
+      attachmentSuccess: attachmentResult?.success ?? null,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
