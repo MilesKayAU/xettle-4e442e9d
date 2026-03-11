@@ -620,6 +620,14 @@ export default function Setup() {
   }
 
   function StepRow({ step: s, onRetry }: { step: StepState; onRetry?: () => void }) {
+    const [copied, setCopied] = useState(false);
+    const copyError = () => {
+      if (s.error) {
+        navigator.clipboard.writeText(s.error);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    };
     return (
       <div className="space-y-1">
         <div className="flex items-start gap-3 py-1.5">
@@ -632,9 +640,15 @@ export default function Setup() {
           )}
         </div>
         {s.status === 'error' && s.error && (
-          <div className="ml-7 rounded bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive space-y-1">
-            <p className="font-medium">Error details (share with support):</p>
-            <code className="block whitespace-pre-wrap break-all font-mono text-[11px]">{s.error}</code>
+          <div className="ml-7 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-destructive">Error details (share with support):</p>
+              <Button variant="ghost" size="sm" onClick={copyError} className="h-5 px-1.5 text-[10px] text-destructive hover:text-destructive">
+                {copied ? <Check className="h-3 w-3 mr-0.5" /> : <Copy className="h-3 w-3 mr-0.5" />}
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+            <code className="block whitespace-pre-wrap break-all font-mono text-[11px] text-destructive/80">{s.error}</code>
           </div>
         )}
       </div>
