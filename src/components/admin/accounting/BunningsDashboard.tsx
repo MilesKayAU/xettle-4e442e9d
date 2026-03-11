@@ -1014,7 +1014,17 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 </CardHeader>
                 <CardContent>
                   {(() => {
-                    const invoiceLines = buildSimpleInvoiceLines(parsed);
+                    // Synchronous preview — actual push uses async buildSimpleInvoiceLines with user overrides
+                    const previewLines: Array<{Description: string; AccountCode: string; TaxType: string; UnitAmount: number; Quantity: number}> = [
+                      { Description: 'Marketplace Sales', AccountCode: '200', TaxType: 'OUTPUT', UnitAmount: Math.round(parsed.sales_ex_gst * 100) / 100, Quantity: 1 },
+                      { Description: 'Marketplace Commission', AccountCode: '407', TaxType: 'INPUT', UnitAmount: -Math.abs(Math.round(parsed.fees_ex_gst * 100) / 100), Quantity: 1 },
+                    ].filter(l => Math.round(l.UnitAmount * 100) !== 0);
+                    const meta = parsed.metadata || {};
+                    if (meta.refundsExGst && meta.refundsExGst !== 0) previewLines.push({ Description: 'Customer Refunds', AccountCode: '205', TaxType: 'OUTPUT', UnitAmount: Math.round((meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) * 100) / 100, Quantity: 1 });
+                    if (meta.refundCommissionExGst && meta.refundCommissionExGst !== 0) previewLines.push({ Description: 'Commission Refund', AccountCode: '407', TaxType: 'INPUT', UnitAmount: Math.round(Math.abs(meta.refundCommissionExGst) * 100) / 100, Quantity: 1 });
+                    if (meta.shippingExGst && meta.shippingExGst !== 0) previewLines.push({ Description: 'Shipping Revenue', AccountCode: '200', TaxType: 'OUTPUT', UnitAmount: Math.round(meta.shippingExGst * 100) / 100, Quantity: 1 });
+                    if (meta.subscriptionAmount && meta.subscriptionAmount !== 0) previewLines.push({ Description: 'Marketplace Subscription', AccountCode: '407', TaxType: 'INPUT', UnitAmount: Math.round(meta.subscriptionAmount * 100) / 100, Quantity: 1 });
+                    const invoiceLines = previewLines.filter(l => Math.round(l.UnitAmount * 100) !== 0);
                     const invoiceTotal = invoiceLines.reduce((sum, l) => sum + l.UnitAmount * l.Quantity, 0);
                     const gstTotal = invoiceLines.reduce((sum, l) => {
                       const gst = l.TaxType === 'OUTPUT' || l.TaxType === 'INPUT' ? l.UnitAmount / 10 : 0;
