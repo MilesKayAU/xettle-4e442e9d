@@ -18,9 +18,8 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
     || window.location.search.includes('test_mode=true')
   ) && isAllowedDomain;
 
-  if (isTestMode) return <>{children}</>;
-
   const [verified, setVerified] = useState(() => {
+    if (isTestMode) return true;
     return sessionStorage.getItem(STORAGE_KEY) === 'true';
   });
   const [pin, setPin] = useState(['', '', '', '']);
@@ -45,7 +44,6 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-submit when all 4 digits entered
     if (digit && index === 3) {
       const fullPin = newPin.join('');
       if (fullPin === SITE_PIN) {
