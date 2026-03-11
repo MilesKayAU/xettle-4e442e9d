@@ -268,6 +268,21 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     toast.info(`"${getDisplayName(alert)}" ignored — you can re-enable in Settings.`);
   };
 
+  /** Mark a gateway deposit as "included in Shopify payout" — confirmed by bookkeeper */
+  const handleConfirmGatewayIncluded = async (alert: ChannelAlert) => {
+    await supabase
+      .from('channel_alerts' as any)
+      .update({
+        status: 'confirmed_included',
+        actioned_at: new Date().toISOString(),
+      } as any)
+      .eq('id', alert.id);
+
+    setAlerts(prev => prev.filter(a => a.id !== alert.id));
+    onAlertCountChange?.(alerts.length - 1);
+    toast.success(`${getDisplayName(alert)} deposit confirmed as included in your Shopify Payments payout.`);
+  };
+
   const handleSetup = (alert: ChannelAlert) => {
     const hasDetectedLabel = !!alert.detected_label;
 
