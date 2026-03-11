@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
-import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload, ArrowRight } from 'lucide-react';
+import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload, ArrowRight, ChevronDown, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
@@ -267,91 +268,132 @@ export default function SetupStepConnectStores({
         </Card>
       )}
 
-      {/* ── Step 3: CSV Marketplaces ── */}
+      {/* ── Step 3: CSV Marketplaces (context-aware) ── */}
       {step === 3 && (
         <div className="space-y-4">
-          <div className="text-center space-y-1">
-            <h3 className="font-semibold text-foreground text-lg">Any other marketplaces?</h3>
-            <p className="text-xs text-muted-foreground">
-              Toggle on the ones you sell through — you'll upload their settlement CSVs in the next step.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {CSV_MARKETPLACES.map((m) => {
-              const isSelected = selectedMarketplaces.includes(m.id);
-              return (
-                <Card
-                  key={m.id}
-                  className={`border transition-colors cursor-pointer ${
-                    isSelected
-                      ? 'border-primary/40 bg-primary/5'
-                      : 'border-border hover:border-primary/20'
-                  }`}
-                  onClick={() => toggleMarketplace(m.id)}
-                >
-                  <CardContent className="p-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Store className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium text-foreground">{m.label}</span>
-                    </div>
-                    <Switch
-                      checked={isSelected}
-                      onCheckedChange={() => toggleMarketplace(m.id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-
-          {/* Custom marketplace */}
-          {showCustomInput ? (
-            <div className="flex gap-2">
-              <Input
-                placeholder="e.g. Woolworths MarketPlus"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()}
-                className="text-sm"
-                autoFocus
-              />
-              <Button size="sm" onClick={handleAddCustom} disabled={!customName.trim()}>
-                Add
-              </Button>
+          {/* Dynamic header based on connection state */}
+          {hasXero ? (
+            <div className="text-center space-y-2">
+              <div className="flex items-center justify-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold text-foreground text-lg">You're all set</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                We'll automatically detect your marketplaces from Xero.
+                {(hasShopify || hasAmazon) && ' Your connected stores will sync too.'}
+              </p>
+            </div>
+          ) : (hasShopify || hasAmazon) ? (
+            <div className="text-center space-y-1">
+              <h3 className="font-semibold text-foreground text-lg">Any CSV-only marketplaces?</h3>
+              <p className="text-xs text-muted-foreground">
+                Your connected stores will auto-detect channels. Toggle on any marketplaces that use CSV settlements.
+              </p>
             </div>
           ) : (
-            <button
-              onClick={() => setShowCustomInput(true)}
-              className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
-            >
-              <Plus className="h-3 w-3" /> I don't see my marketplace
-            </button>
+            <div className="text-center space-y-1">
+              <h3 className="font-semibold text-foreground text-lg">Which marketplaces do you sell on?</h3>
+              <p className="text-xs text-muted-foreground">
+                Toggle on the ones you sell through — you'll upload their settlement CSVs in the next step.
+              </p>
+            </div>
           )}
 
-          {/* Trust signal */}
+          {/* CSV grid — collapsed when Xero connected, visible otherwise */}
+          {hasXero ? (
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors mx-auto">
+                <Plus className="h-3 w-3" /> Add a marketplace not in Xero yet
+                <ChevronDown className="h-3 w-3" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  {CSV_MARKETPLACES.map((m) => {
+                    const isSelected = selectedMarketplaces.includes(m.id);
+                    return (
+                      <Card
+                        key={m.id}
+                        className={`border transition-colors cursor-pointer ${
+                          isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/20'
+                        }`}
+                        onClick={() => toggleMarketplace(m.id)}
+                      >
+                        <CardContent className="p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Store className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium text-foreground">{m.label}</span>
+                          </div>
+                          <Switch checked={isSelected} onCheckedChange={() => toggleMarketplace(m.id)} onClick={(e) => e.stopPropagation()} />
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+                {showCustomInput ? (
+                  <div className="flex gap-2">
+                    <Input placeholder="e.g. Woolworths MarketPlus" value={customName} onChange={(e) => setCustomName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()} className="text-sm" autoFocus />
+                    <Button size="sm" onClick={handleAddCustom} disabled={!customName.trim()}>Add</Button>
+                  </div>
+                ) : (
+                  <button onClick={() => setShowCustomInput(true)} className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+                    <Plus className="h-3 w-3" /> I don't see my marketplace
+                  </button>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {CSV_MARKETPLACES.map((m) => {
+                  const isSelected = selectedMarketplaces.includes(m.id);
+                  return (
+                    <Card
+                      key={m.id}
+                      className={`border transition-colors cursor-pointer ${
+                        isSelected ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/20'
+                      }`}
+                      onClick={() => toggleMarketplace(m.id)}
+                    >
+                      <CardContent className="p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Store className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium text-foreground">{m.label}</span>
+                        </div>
+                        <Switch checked={isSelected} onCheckedChange={() => toggleMarketplace(m.id)} onClick={(e) => e.stopPropagation()} />
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+              {showCustomInput ? (
+                <div className="flex gap-2">
+                  <Input placeholder="e.g. Woolworths MarketPlus" value={customName} onChange={(e) => setCustomName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()} className="text-sm" autoFocus />
+                  <Button size="sm" onClick={handleAddCustom} disabled={!customName.trim()}>Add</Button>
+                </div>
+              ) : (
+                <button onClick={() => setShowCustomInput(true)} className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+                  <Plus className="h-3 w-3" /> I don't see my marketplace
+                </button>
+              )}
+            </>
+          )}
+
           <p className="text-xs text-muted-foreground text-center">
             Every platform is optional. You can add or remove marketplaces anytime.
           </p>
 
-          {/* Actions */}
           <div className="flex flex-col items-center gap-2">
             <Button onClick={onNext} className="w-full">
               Continue
             </Button>
-            <button
-              onClick={() => setStep(2)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button onClick={() => setStep(2)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
               ← Back to Amazon
             </button>
-            <button
-              onClick={onSkip}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              <Upload className="h-3 w-3" /> Skip all — I'll upload files manually
-            </button>
+            {!hasXero && !hasShopify && !hasAmazon && (
+              <button onClick={onSkip} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                <Upload className="h-3 w-3" /> Skip all — I'll upload files manually
+              </button>
+            )}
           </div>
         </div>
       )}
