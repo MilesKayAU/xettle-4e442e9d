@@ -21,6 +21,22 @@ const REFERENCE_PATTERNS = [
   'mydeal', 'woolworths', 'everyday market',
 ]
 
+const MARKETPLACE_NAMES: Record<string, string> = {
+  amazon_au: 'Amazon Australia',
+  kogan: 'Kogan',
+  bigw: 'Big W',
+  bunnings: 'Bunnings',
+  mydeal: 'MyDeal',
+  woolworths: 'Woolworths Everyday Market',
+  mirakl: 'Mirakl',
+  shopify_payments: 'Shopify Payments',
+  catch: 'Catch',
+  ebay_au: 'eBay Australia',
+  paypal: 'PayPal',
+  theiconic: 'The Iconic',
+  etsy: 'Etsy',
+}
+
 function matchesMarketplace(name: string): string | null {
   const lower = name.toLowerCase().trim()
   for (const pattern of MARKETPLACE_CONTACT_PATTERNS) {
@@ -287,10 +303,105 @@ Deno.serve(async (req) => {
       confidence_reason = 'No marketplace history found in Xero.'
     }
 
+    // ─── 5. PERSIST detected marketplaces as marketplace_connections ───
+    let marketplaces_created = 0
+    for (const det of detected_settlements) {
+      if (det.marketplace === 'unknown') continue
+
+      // Check if already exists
+      const { data: existing } = await supabase
+        .from('marketplace_connections')
+        .select('id')
+        .eq('marketplace_code', det.marketplace)
+        .maybeSingle()
+
+      if (!existing) {
+        const displayName = MARKETPLACE_NAMES[det.marketplace] || det.marketplace.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+        const { error: insertErr } = await supabase
+          .from('marketplace_connections')
+          .insert({
+            user_id: userId,
+            marketplace_code: det.marketplace,
+            marketplace_name: displayName,
+            country_code: 'AU',
+            connection_type: 'auto_detected',
+            connection_status: 'active',
+            settings: {
+              detected_from: 'xero_scan',
+              last_xero_date: det.last_recorded_date,
+              last_xero_amount: det.last_amount,
+              xero_source: det.source,
+              xero_reference: det.reference,
+            },
+          })
+        if (!insertErr) marketplaces_created++
+        else console.error(`Failed to create marketplace_connection for ${det.marketplace}:`, insertErr)
+      }
+    }
+
+    // ─── 6. PERSIST accounting boundary date ───────────────────────────
+    if (accounting_boundary_date) {
+      const { data: existingBoundary } = await supabase
+        .from('app_settings')
+        .select('id')
+        .eq('key', 'accounting_boundary_date')
+        .maybeSingle()
+
+      if (existingBoundary) {
+        await supabase.from('app_settings')
+          .update({ value: accounting_boundary_date })
+          .eq('id', existingBoundary.id)
+      } else {
+        await supabase.from('app_settings')
+          .insert({
+            user_id: userId,
+            key: 'accounting_boundary_date',
+            value: accounting_boundary_date,
+          })
+      }
+    }
+
+    // ─── 7. Mark scan as completed ────────────────────────────────────
+    const { data: existingScanFlag } = await supabase
+      .from('app_settings')
+      .select('id')
+      .eq('key', 'xero_scan_completed')
+      .maybeSingle()
+
+    if (existingScanFlag) {
+      await supabase.from('app_settings')
+        .update({ value: new Date().toISOString() })
+        .eq('id', existingScanFlag.id)
+    } else {
+      await supabase.from('app_settings')
+        .insert({
+          user_id: userId,
+          key: 'xero_scan_completed',
+          value: new Date().toISOString(),
+        })
+    }
+
+    // ─── 8. Log system event ──────────────────────────────────────────
+    await supabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'xero_scan_completed',
+      severity: 'info',
+      details: {
+        marketplaces_detected: detected_settlements.length,
+        marketplaces_created,
+        accounting_boundary_date,
+        confidence,
+        confidence_reason,
+      },
+    })
+
+    console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces, created ${marketplaces_created} connections, boundary: ${accounting_boundary_date}`)
+
     return new Response(JSON.stringify({
       hasXero: true,
       accounting_boundary_date,
       detected_settlements,
+      marketplaces_created,
       confidence,
       confidence_reason,
     }), {
