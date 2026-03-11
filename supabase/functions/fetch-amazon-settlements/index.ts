@@ -41,6 +41,7 @@ const CATEGORY_MAP: Record<string, string> = {
   'other-transaction|other-transaction|DisposalComplete': 'FBA Fees',
   'other-transaction|other-transaction|StorageRenewalBilling': 'Storage Fees',
   'other-transaction|other-transaction|Storage Fee': 'Storage Fees',
+  'other-transaction|other-transaction|CostOfAdvertising': 'Advertising Costs',
   'other-transaction|other-transaction|Subscription Fee': 'Seller Fees',
   'AmazonFees|Vine Enrollment Fee|Base fee': 'Seller Fees',
   'AmazonFees|Vine Enrollment Fee|Tax on fee': 'Seller Fees',
