@@ -113,6 +113,7 @@ export default function PostSetupBanner({
         if (data.marketplaces_created > 0 || data.detected_settlements?.length > 0) {
           setMarketplacesFound(data.detected_settlements?.length || data.marketplaces_created || 0);
         }
+        await callEdgeFunction('run-validation-sweep').catch(() => {});
         onScanComplete?.();
       } catch (err) {
         console.error('Xero scan trigger failed:', err);
