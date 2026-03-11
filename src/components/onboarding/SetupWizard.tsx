@@ -114,8 +114,17 @@ export default function SetupWizard({
   );
   const shouldShowUpload = hasCsvMarketplaces || skippedAllApis;
 
-  // If step 3 (Upload) should be skipped, auto-advance to Results (step 4)
-  const effectiveStep = step === 3 && !shouldShowUpload ? 4 : step;
+  // Determine if scanning step should show (any API connected)
+  const hasAnyApi = hasAmazon || hasShopify || hasXero;
+  const shouldShowScanning = hasAnyApi && !skippedAllApis;
+
+  // Calculate effective step, skipping Upload (3) and/or Scanning (4) as needed
+  let effectiveStep = step;
+  if (step === 3 && !shouldShowUpload) {
+    effectiveStep = shouldShowScanning ? 4 : 5;
+  } else if (step === 4 && !shouldShowScanning) {
+    effectiveStep = 5;
+  }
 
   const progressValue = (effectiveStep / TOTAL_STEPS) * 100;
 
