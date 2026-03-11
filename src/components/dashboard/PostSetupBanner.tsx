@@ -118,6 +118,7 @@ export default function PostSetupBanner({
         onScanComplete?.();
       } catch (err) {
         console.error('Xero scan trigger failed:', err);
+        setScanComplete(true);
       } finally {
         setScanning(false);
       }
@@ -164,6 +165,7 @@ export default function PostSetupBanner({
         onScanComplete?.();
       } catch (err) {
         console.error('Amazon scan trigger failed:', err);
+        setAmazonScanComplete(true);
       } finally {
         setAmazonScanning(false);
       }
@@ -213,6 +215,7 @@ export default function PostSetupBanner({
         onScanComplete?.();
       } catch (err) {
         console.error('Shopify scan trigger failed:', err);
+        setShopifyScanComplete(true);
       } finally {
         setShopifyScanning(false);
       }
