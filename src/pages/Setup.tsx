@@ -984,6 +984,11 @@ export default function Setup() {
                         <>Identify my marketplaces <ArrowRight className="h-4 w-4 ml-2" /></>
                       )}
                     </Button>
+                    {hasFailedSteps && allConnectedPhase1Done && (
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
+                        Continuing with available data — failed steps can be retried later
+                      </p>
+                    )}
                   </span>
                 </TooltipTrigger>
                 {gateReason && (
