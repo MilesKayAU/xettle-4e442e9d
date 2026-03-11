@@ -380,7 +380,7 @@ export default function Setup() {
     const ac = new AbortController();
     amazonAbortRef.current = ac;
     setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements (this can take several minutes)...' });
-    const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token, {}, { signal: ac.signal });
+    const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token, {}, { signal: ac.signal, headers: { 'x-action': 'smart-sync' } });
     amazonAbortRef.current = null;
     if (!mountedRef.current) return;
 
