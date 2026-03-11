@@ -24,7 +24,7 @@ interface ChannelAlert {
   detection_method?: string;
   detected_label?: string;
   candidate_tags?: string[];
-  alert_type?: string; // 'new' | 'unlinked' | 'already_linked' | 'unmatched_deposit' | 'unknown_deposit'
+  alert_type?: string; // 'new' | 'unlinked' | 'already_linked' | 'unmatched_deposit' | 'unknown_deposit' | 'payment_gateway_deposit'
   deposit_amount?: number | null;
   deposit_date?: string | null;
   deposit_description?: string | null;
