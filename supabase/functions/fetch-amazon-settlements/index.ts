@@ -41,6 +41,7 @@ const CATEGORY_MAP: Record<string, string> = {
   'other-transaction|other-transaction|DisposalComplete': 'FBA Fees',
   'other-transaction|other-transaction|StorageRenewalBilling': 'Storage Fees',
   'other-transaction|other-transaction|Storage Fee': 'Storage Fees',
+  'other-transaction|other-transaction|CostOfAdvertising': 'Advertising Costs',
   'other-transaction|other-transaction|Subscription Fee': 'Seller Fees',
   'AmazonFees|Vine Enrollment Fee|Base fee': 'Seller Fees',
   'AmazonFees|Vine Enrollment Fee|Tax on fee': 'Seller Fees',
@@ -53,8 +54,8 @@ const CATEGORY_MAP: Record<string, string> = {
 
 const EXPECTED_SIGNS: Record<string, 1 | -1> = {
   'Sales': 1, 'Promotional Discounts': -1, 'Seller Fees': -1,
-  'FBA Fees': -1, 'Storage Fees': -1, 'Refunds': -1,
-  'Reimbursements': 1, 'Tax Collected by Amazon': 1,
+  'FBA Fees': -1, 'Storage Fees': -1, 'Advertising Costs': -1,
+  'Refunds': -1, 'Reimbursements': 1, 'Tax Collected by Amazon': 1,
 };
 
 function round2(n: number): number { return Math.round(n * 100) / 100; }
@@ -187,14 +188,15 @@ function parseSettlementTSV(tsvContent: string, gstRate = 10): ParsedSettlement 
   const sellerFees = normaliseAggregate(round2(totals['Seller Fees'] || 0), 'Seller Fees');
   const fbaFees = normaliseAggregate(round2(totals['FBA Fees'] || 0), 'FBA Fees');
   const storageFees = normaliseAggregate(round2(totals['Storage Fees'] || 0), 'Storage Fees');
+  const advertisingCosts = normaliseAggregate(round2(totals['Advertising Costs'] || 0), 'Advertising Costs');
   const refunds = normaliseAggregate(round2(totals['Refunds'] || 0), 'Refunds');
   const reimbursements = normaliseAggregate(round2(totals['Reimbursements'] || 0), 'Reimbursements');
   const taxCollectedByAmazon = round2(totals['Tax Collected by Amazon'] || 0);
   const unmappedTotal = round2(unmapped.reduce((s: number, u: any) => s + u.amount, 0));
 
-  const grossTotal = round2(totalSales + promotionalDiscounts + sellerFees + fbaFees + storageFees + refunds + reimbursements + taxCollectedByAmazon + unmappedTotal);
+  const grossTotal = round2(totalSales + promotionalDiscounts + sellerFees + fbaFees + storageFees + advertisingCosts + refunds + reimbursements + taxCollectedByAmazon + unmappedTotal);
   const auIncome = round2(auSalesGstBaseTotal);
-  const expenseTotal = round2(sellerFees + fbaFees + storageFees);
+  const expenseTotal = round2(sellerFees + fbaFees + storageFees + advertisingCosts);
   const gstOnIncome = round2(auIncome / gstDivisor);
   const gstOnExpenses = round2(expenseTotal / gstDivisor);
   const netExGst = round2(grossTotal - gstOnIncome - gstOnExpenses);
@@ -203,7 +205,7 @@ function parseSettlementTSV(tsvContent: string, gstRate = 10): ParsedSettlement 
 
   const summary = {
     salesPrincipal: round2(salesPrincipal), salesShipping: round2(salesShipping), totalSales,
-    promotionalDiscounts, sellerFees, fbaFees, storageFees, refunds, reimbursements,
+    promotionalDiscounts, sellerFees, fbaFees, storageFees, advertisingCosts, refunds, reimbursements,
     otherFees: unmappedTotal, grossTotal, netExGst, gstOnIncome, gstOnExpenses,
     bankDeposit: header.totalAmount, reconciliationMatch, reconciliationDiff,
   };
@@ -232,7 +234,7 @@ function detectSplitMonth(header: any, allLines: any[], gstDivisor: number): any
   const lastDayMonth1Str = formatDateStr(lastDayMonth1);
 
   const aggregateLines = (monthLines: any[]) => {
-    let sp = 0, ss = 0, pd = 0, sf = 0, ff = 0, stf = 0, ref = 0, reim = 0, oth = 0;
+    let sp = 0, ss = 0, pd = 0, sf = 0, ff = 0, stf = 0, ad = 0, ref = 0, reim = 0, oth = 0;
     for (const line of monthLines) {
       const cat = line.accountingCategory, amt = line.amount;
       if (cat === 'Sales' && line.amountDescription === 'Principal') sp += amt;
@@ -242,15 +244,16 @@ function detectSplitMonth(header: any, allLines: any[], gstDivisor: number): any
       else if (cat === 'Seller Fees') sf += amt;
       else if (cat === 'FBA Fees') ff += amt;
       else if (cat === 'Storage Fees') stf += amt;
+      else if (cat === 'Advertising Costs') ad += amt;
       else if (cat === 'Refunds') ref += amt;
       else if (cat === 'Reimbursements') reim += amt;
       else oth += amt;
     }
-    const ts = round2(sp + ss), gross = round2(ts + pd + sf + ff + stf + ref + reim + oth);
-    const expTotal = round2(sf + ff + stf);
+    const ts = round2(sp + ss), gross = round2(ts + pd + sf + ff + stf + ad + ref + reim + oth);
+    const expTotal = round2(sf + ff + stf + ad);
     const gstInc = round2(round2(sp + ss) / gstDivisor), gstExp = round2(expTotal / gstDivisor);
     const net = round2(gross - gstInc - gstExp);
-    return { salesPrincipal: round2(sp), salesShipping: round2(ss), totalSales: ts, promotionalDiscounts: round2(pd), sellerFees: round2(sf), fbaFees: round2(ff), storageFees: round2(stf), refunds: round2(ref), reimbursements: round2(reim), otherFees: round2(oth), grossTotal: gross, netExGst: net, gstOnIncome: gstInc, gstOnExpenses: gstExp };
+    return { salesPrincipal: round2(sp), salesShipping: round2(ss), totalSales: ts, promotionalDiscounts: round2(pd), sellerFees: round2(sf), fbaFees: round2(ff), storageFees: round2(stf), advertisingCosts: round2(ad), refunds: round2(ref), reimbursements: round2(reim), otherFees: round2(oth), grossTotal: gross, netExGst: net, gstOnIncome: gstInc, gstOnExpenses: gstExp };
   };
 
   const month1Lines = allLines.filter((l: any) => !l.postedDate || l.postedDate <= lastDayMonth1Str);
@@ -506,6 +509,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
             storage_fees: summary.storageFees,
             refunds: summary.refunds,
             reimbursements: summary.reimbursements,
+            advertising_costs: summary.advertisingCosts,
             other_fees: summary.otherFees,
             net_ex_gst: summary.netExGst,
             gst_on_income: summary.gstOnIncome,
@@ -811,6 +815,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         storage_fees: summary.storageFees,
         refunds: summary.refunds,
         reimbursements: summary.reimbursements,
+        advertising_costs: summary.advertisingCosts,
         other_fees: summary.otherFees,
         net_ex_gst: summary.netExGst,
         gst_on_income: summary.gstOnIncome,
