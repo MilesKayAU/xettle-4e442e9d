@@ -887,6 +887,7 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
           onSetupComplete={() => {
             setDetectedSubChannels([]);
             loadHistory();
+            onMarketplacesChanged?.();
           }}
         />
       )}
