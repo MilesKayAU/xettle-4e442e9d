@@ -265,14 +265,17 @@ export default function ActionCentre({
     }
 
     // Combine marketplaces from validation rows AND connected marketplaces
-    const allMps = new Set([
-      ...rows.map(r => r.marketplace_code),
-      ...connectedMarketplaces,
-    ]);
+    // Normalise aliases and exclude gateways
+    const allMps = new Set<string>();
+    for (const r of normalisedRows) allMps.add(r.marketplace_code);
+    for (const c of connectedMarketplaces) {
+      const code = MARKETPLACE_ALIASES[c] || c;
+      if (!GATEWAY_CODES.has(code)) allMps.add(code);
+    }
     const marketplaces = [...allMps].sort();
 
     return { months, marketplaces };
-  }, [rows, connectedMarketplaces]);
+  }, [normalisedRows, connectedMarketplaces]);
 
   const getStatusForCell = (marketplace: string, monthKey: string): { status: string; tooltip: string } => {
     // Before accounting boundary — don't assume, just mark as not tracked
