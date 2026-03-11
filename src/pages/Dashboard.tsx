@@ -25,16 +25,17 @@ import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
+const OutstandingTab = lazy(() => import('@/components/dashboard/OutstandingTab'));
 
 import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
 const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
 
-type DashboardView = 'dashboard' | 'smart_upload' | 'settlements' | 'insights';
+type DashboardView = 'dashboard' | 'outstanding' | 'smart_upload' | 'settlements' | 'insights';
 type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
@@ -196,6 +197,7 @@ export default function Dashboard() {
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
   const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
+  const [outstandingCount, setOutstandingCount] = useState(0);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -508,13 +510,15 @@ export default function Dashboard() {
           <nav className="flex gap-1 py-2">
             {([
               { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
+              { key: 'outstanding' as DashboardView, label: 'Outstanding', icon: ClipboardList, badgeCount: outstandingCount },
               { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
               { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
-              const showDot = tab.key === 'dashboard' && pendingChannelAlerts > 0;
+              const showDot = (tab.key === 'dashboard' && pendingChannelAlerts > 0) || ((tab as any).badgeCount > 0);
+              const badgeNum = tab.key === 'dashboard' ? pendingChannelAlerts : (tab as any).badgeCount || 0;
               return (
                 <button
                   key={tab.key}
@@ -527,9 +531,9 @@ export default function Dashboard() {
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
-                  {showDot && (
+                  {showDot && badgeNum > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
-                      {pendingChannelAlerts}
+                      {badgeNum}
                     </span>
                   )}
                 </button>
@@ -634,6 +638,15 @@ export default function Dashboard() {
                 onSwitchToUpload={() => switchView('smart_upload')}
               />
             </div>
+          </ErrorBoundary>
+        )}
+
+        {/* ─── Outstanding (Xero reconciliation action tab) ────────── */}
+        {activeView === 'outstanding' && (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+              <OutstandingTab onSwitchToUpload={() => switchView('smart_upload')} />
+            </Suspense>
           </ErrorBoundary>
         )}
 
