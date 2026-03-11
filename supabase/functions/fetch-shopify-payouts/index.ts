@@ -416,12 +416,15 @@ async function syncPayoutsForUser(
 }
 
 Deno.serve(async (req) => {
+  console.info(`[fetch-shopify-payouts] ${req.method} received`);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const action = req.headers.get("x-action");
+    console.info(`[fetch-shopify-payouts] action=${action}`);
+
 
     // ─── Multi-user sync mode (for cron / scheduled-sync) ───────────
     if (action === "sync") {
