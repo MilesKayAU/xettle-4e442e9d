@@ -186,7 +186,15 @@ export default function SetupWizard({
                 selectedMarketplaces={selectedMarketplaces}
               />
             )}
-            {effectiveStep === 4 && (
+            {effectiveStep === 4 && shouldShowScanning && (
+              <SetupStepScanning
+                onNext={handleNext}
+                hasXero={hasXero}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
+              />
+            )}
+            {effectiveStep === 5 && (
               <SetupStepResults
                 onNext={handleComplete}
                 hasXero={hasXero}

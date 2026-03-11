@@ -469,6 +469,27 @@ export default function Dashboard() {
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              {/* Post-setup scan banner — triggers adaptive sync on first load */}
+              <PostSetupBanner
+                onSwitchToUpload={() => switchView('smart_upload')}
+                hasXero={xeroConnected}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
+                onConnectXero={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
+                onConnectAmazon={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onConnectShopify={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onScanComplete={loadMarketplaces}
+              />
+
               {/* Compact connection health strip */}
               <DashboardConnectionStrip
                 onSwitchToUpload={() => switchView('smart_upload')}
