@@ -106,9 +106,9 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
         <div className="text-center space-y-1">
           <div className="flex items-center justify-center gap-2 text-sm text-amber-600 dark:text-amber-400">
             <AlertTriangle className="h-4 w-4" />
-            Scanning is taking longer than expected.
+            Almost there — just finishing up.
           </div>
-          <p className="text-xs text-muted-foreground">We'll continue in the background.</p>
+          <p className="text-xs text-muted-foreground">We'll keep syncing in the background if needed.</p>
         </div>
       )}
     </div>
