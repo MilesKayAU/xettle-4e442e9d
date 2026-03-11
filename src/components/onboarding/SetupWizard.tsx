@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import SetupStepConnectXero from './SetupStepConnectXero';
 import SetupStepConnectStores from './SetupStepConnectStores';
 import SetupStepUpload from './SetupStepUpload';
+import SetupStepScanning from './SetupStepScanning';
 import SetupStepResults from './SetupStepResults';
 
 interface SetupWizardProps {
@@ -19,8 +20,8 @@ interface SetupWizardProps {
   justConnectedXero?: boolean;
 }
 
-const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Results'];
-const TOTAL_STEPS = 4;
+const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Scanning', 'Results'];
+const TOTAL_STEPS = 5;
 const STORAGE_KEY = 'xettle_setup_step';
 const SELECTED_MARKETPLACES_KEY = 'xettle_setup_marketplaces';
 
@@ -113,8 +114,17 @@ export default function SetupWizard({
   );
   const shouldShowUpload = hasCsvMarketplaces || skippedAllApis;
 
-  // If step 3 (Upload) should be skipped, auto-advance to Results (step 4)
-  const effectiveStep = step === 3 && !shouldShowUpload ? 4 : step;
+  // Determine if scanning step should show (any API connected)
+  const hasAnyApi = hasAmazon || hasShopify || hasXero;
+  const shouldShowScanning = hasAnyApi && !skippedAllApis;
+
+  // Calculate effective step, skipping Upload (3) and/or Scanning (4) as needed
+  let effectiveStep = step;
+  if (step === 3 && !shouldShowUpload) {
+    effectiveStep = shouldShowScanning ? 4 : 5;
+  } else if (step === 4 && !shouldShowScanning) {
+    effectiveStep = 5;
+  }
 
   const progressValue = (effectiveStep / TOTAL_STEPS) * 100;
 
@@ -176,7 +186,15 @@ export default function SetupWizard({
                 selectedMarketplaces={selectedMarketplaces}
               />
             )}
-            {effectiveStep === 4 && (
+            {effectiveStep === 4 && shouldShowScanning && (
+              <SetupStepScanning
+                onNext={handleNext}
+                hasXero={hasXero}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
+              />
+            )}
+            {effectiveStep === 5 && (
               <SetupStepResults
                 onNext={handleComplete}
                 hasXero={hasXero}
