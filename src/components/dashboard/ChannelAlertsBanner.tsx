@@ -94,9 +94,11 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [expanded, setExpanded] = useState(true);
   const [setupChannel, setSetupChannel] = useState<DetectedSubChannel | null>(null);
   const [needsInitialSync, setNeedsInitialSync] = useState(false);
+  const [scanAlreadyTriggered, setScanAlreadyTriggered] = useState(false);
   const [syncDismissed, setSyncDismissed] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [shopDomain, setShopDomain] = useState<string | null>(null);
+  const [autoRefreshCount, setAutoRefreshCount] = useState(0);
   const [namingAlertId, setNamingAlertId] = useState<string | null>(null);
   const [customName, setCustomName] = useState('');
   const [linkingAlertId, setLinkingAlertId] = useState<string | null>(null);
