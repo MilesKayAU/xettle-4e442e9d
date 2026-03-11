@@ -462,6 +462,12 @@ export default function Dashboard() {
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              <PostSetupBanner
+                onSwitchToUpload={() => switchView('smart_upload')}
+                hasXero={xeroConnected}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
+              />
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
               <ReconciliationSummaryCard onNavigate={() => {
                 switchView('settlements');
