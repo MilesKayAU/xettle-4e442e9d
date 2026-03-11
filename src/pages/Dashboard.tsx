@@ -641,6 +641,15 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
 
+        {/* ─── Outstanding (Xero reconciliation action tab) ────────── */}
+        {activeView === 'outstanding' && (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+              <OutstandingTab onSwitchToUpload={() => switchView('smart_upload')} />
+            </Suspense>
+          </ErrorBoundary>
+        )}
+
         {/* ─── Upload Hub (connections, guide, upload zone) ───────── */}
         {activeView === 'smart_upload' && (
           <ErrorBoundary>
