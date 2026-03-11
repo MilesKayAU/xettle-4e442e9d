@@ -501,6 +501,14 @@ async function sweepUser(adminSupabase: any, userId: string) {
     await logEvent(adminSupabase, userId, 'dedup_pass_error', { error: String(e) }, 'error');
   }
 
+  // P3: Unmatched bank deposit detection
+  try {
+    await unmatchedDepositPass(adminSupabase, userId, xeroBankTxns, settlements || [], connections)
+  } catch (e) {
+    console.error('[validation-sweep] unmatched deposit pass error:', e)
+    await logEvent(adminSupabase, userId, 'unmatched_deposit_pass_error', { error: String(e) }, 'error')
+  }
+
   // Log sweep completion
   await logEvent(adminSupabase, userId, 'validation_sweep_complete', summary, 'info')
 
