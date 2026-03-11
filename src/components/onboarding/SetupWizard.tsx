@@ -35,9 +35,10 @@ export default function SetupWizard({
   justConnectedXero = false,
 }: SetupWizardProps) {
   const [step, setStep] = useState(() => {
+    // If an explicit initialStep was provided (e.g. OAuth return), use it directly
+    if (initialStep > 1) return Math.min(initialStep, TOTAL_STEPS);
     const saved = sessionStorage.getItem(STORAGE_KEY);
-    const parsed = saved ? parseInt(saved, 10) : initialStep;
-    // Clamp to new max
+    const parsed = saved ? parseInt(saved, 10) : 1;
     return Math.min(parsed, TOTAL_STEPS);
   });
   const [showCloseWarning, setShowCloseWarning] = useState(false);
