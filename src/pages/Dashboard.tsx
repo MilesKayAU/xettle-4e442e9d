@@ -468,15 +468,15 @@ export default function Dashboard() {
                 hasAmazon={hasAmazon}
                 hasShopify={hasShopify}
                 onConnectXero={() => {
-                  setWizardInitialStep(3);
+                  setWizardInitialStep(1);
                   setShowWizard(true);
                 }}
                 onConnectAmazon={() => {
-                  setWizardInitialStep(1);
+                  setWizardInitialStep(2);
                   setShowWizard(true);
                 }}
                 onConnectShopify={() => {
-                  setWizardInitialStep(1);
+                  setWizardInitialStep(2);
                   setShowWizard(true);
                 }}
                 onScanComplete={loadMarketplaces}
