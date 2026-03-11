@@ -5,6 +5,7 @@ import SetupWizard from '@/components/onboarding/SetupWizard';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
+import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
 import ActionCentre, { type MissingSettlement } from '@/components/dashboard/ActionCentre';
