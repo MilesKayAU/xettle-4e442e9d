@@ -70,6 +70,8 @@ export default function DashboardConnectionStrip({ onSwitchToUpload }: Props) {
 
   if (connections.length === 0) return null;
 
+  const hasDisconnected = connections.some(c => !c.connected);
+
   return (
     <div className="rounded-lg border border-border bg-card px-4 py-2.5 flex items-center gap-1 flex-wrap text-sm">
       {connections.map((conn, i) => (
@@ -78,31 +80,31 @@ export default function DashboardConnectionStrip({ onSwitchToUpload }: Props) {
           {conn.connected ? (
             <span className="text-foreground">
               <span className="text-emerald-500">🟢</span>{' '}
-              <span className="font-medium">{conn.label}</span>{' '}
-              <span className="text-muted-foreground">
-                connected{conn.lastSync ? ` · synced ${conn.lastSync}` : ''}
-              </span>
+              <span className="font-medium">{conn.label}</span>
+              {conn.lastSync && (
+                <span className="text-muted-foreground"> synced {conn.lastSync}</span>
+              )}
             </span>
           ) : (
             <span className="text-foreground">
               <span className="text-amber-500">⚠️</span>{' '}
               <span className="font-medium">{conn.label}</span>{' '}
               <span className="text-muted-foreground">not connected</span>
-              {onSwitchToUpload && (
-                <>
-                  {' — '}
-                  <button
-                    onClick={onSwitchToUpload}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Connect →
-                  </button>
-                </>
-              )}
             </span>
           )}
         </React.Fragment>
       ))}
+      {hasDisconnected && onSwitchToUpload && (
+        <>
+          <span className="text-muted-foreground mx-1">—</span>
+          <button
+            onClick={onSwitchToUpload}
+            className="text-primary hover:underline font-medium"
+          >
+            Go to Upload to connect →
+          </button>
+        </>
+      )}
     </div>
   );
 }

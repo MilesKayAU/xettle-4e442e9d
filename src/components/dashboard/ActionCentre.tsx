@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import WelcomeGuide from './WelcomeGuide';
+
 
 interface ValidationRow {
   id: string;
@@ -334,13 +334,6 @@ export default function ActionCentre({
 
   return (
     <div className="space-y-6">
-      {/* Welcome guide for first-time users */}
-      {rows.length === 0 && (
-        <WelcomeGuide
-          onUpload={() => onSwitchToUpload()}
-          onConnectStore={() => onSwitchToSettlements()}
-        />
-      )}
       {/* Greeting header */}
       <div className="flex items-start justify-between">
         <div>
