@@ -109,7 +109,7 @@ async function removeExistingSettlementForUser(userId: string, settlementId: str
 
 /**
  * saveAmazonSettlement — shared save utility for all Amazon settlement save paths.
- * Handles dedup check, overwrite, insert settlement + lines + unmapped, and optional fee extraction.
+ * Uses universal checkForDuplicate() before insert. Never uses delete+re-insert overwrite.
  */
 interface SaveAmazonSettlementOptions {
   parsed: ParsedSettlement;
@@ -125,17 +125,21 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
   const { header, summary, lines, unmapped } = parsed;
   const splitMonth = parsed.splitMonth;
 
-  // Duplicate check: overwrite existing with fresh parse
-  const { data: existingData } = await supabase
-    .from('settlements')
-    .select('id')
-    .eq('settlement_id', header.settlementId)
-    .eq('user_id', user.id)
-    .limit(1);
+  // ─── Universal Duplicate Check (replaces old delete+re-insert overwrite) ───
+  const dupCheck = await checkForDuplicate({
+    settlementId: header.settlementId,
+    marketplace,
+    userId: user.id,
+    periodStart: header.periodStart,
+    periodEnd: header.periodEnd,
+    bankDeposit: summary.bankDeposit,
+  });
 
-  const isOverwrite = !!(existingData && existingData.length > 0);
-  if (isOverwrite) {
-    await removeExistingSettlementForUser(user.id, header.settlementId, marketplace);
+  if (dupCheck.isDuplicate) {
+    return {
+      success: false,
+      error: `This settlement already exists in your account (matched by ${dupCheck.matchMethod}).`,
+    };
   }
 
   // Split-month rollover debug logging
@@ -180,6 +184,10 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
     parser_version: PARSER_VERSION,
   } as any);
   if (settError) throw settError;
+
+  // Register aliases + post-insert safety check
+  registerAliases(header.settlementId, user.id, 'csv_upload');
+  postInsertDuplicateCheck(header.settlementId, marketplace, user.id);
 
   // Fire-and-forget: extract fee observations for intelligence engine
   if (extractFees) {
@@ -235,7 +243,7 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
     if (unmappedErr) throw unmappedErr;
   }
 
-  return { success: true, overwritten: isOverwrite };
+  return { success: true, overwritten: false };
 }
 
 export default function AccountingDashboard() {
