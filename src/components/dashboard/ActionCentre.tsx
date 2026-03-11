@@ -287,7 +287,7 @@ export default function ActionCentre({
     }
 
     // Find ALL validation rows for this marketplace + month
-    const matchingRows = rows.filter(r => {
+    const matchingRows = normalisedRows.filter(r => {
       const rowMonth = r.period_start?.substring(0, 7); // YYYY-MM from YYYY-MM-DD
       return r.marketplace_code === marketplace && rowMonth === monthKey;
     });
