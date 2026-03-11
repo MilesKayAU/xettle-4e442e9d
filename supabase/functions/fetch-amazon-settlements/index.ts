@@ -54,8 +54,8 @@ const CATEGORY_MAP: Record<string, string> = {
 
 const EXPECTED_SIGNS: Record<string, 1 | -1> = {
   'Sales': 1, 'Promotional Discounts': -1, 'Seller Fees': -1,
-  'FBA Fees': -1, 'Storage Fees': -1, 'Refunds': -1,
-  'Reimbursements': 1, 'Tax Collected by Amazon': 1,
+  'FBA Fees': -1, 'Storage Fees': -1, 'Advertising Costs': -1,
+  'Refunds': -1, 'Reimbursements': 1, 'Tax Collected by Amazon': 1,
 };
 
 function round2(n: number): number { return Math.round(n * 100) / 100; }
