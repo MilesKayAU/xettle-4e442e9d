@@ -518,7 +518,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   reconciliationChecks.push({
     name: 'Column totals',
     passed: Math.abs(columnSum - grossTotal) < 0.01,
-    detail: `Income ${formatAUD(incomeTotal)} + Expenses ${formatAUD(expenseTotal)} = ${formatAUD(columnSum)} vs Gross ${formatAUD(grossTotal)}`,
+    detail: `Income ${formatAUD(reconIncomeTotal)} + Expenses ${formatAUD(reconExpenseTotal)} = ${formatAUD(columnSum)} vs Gross ${formatAUD(grossTotal)}`,
   });
 
   // 3. GST consistency: GST on income + GST on expenses should be plausible
