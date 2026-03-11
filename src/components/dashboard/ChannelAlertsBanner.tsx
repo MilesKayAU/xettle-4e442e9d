@@ -202,7 +202,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       toast.info('Syncing Shopify orders — this may take a moment...');
 
       const { data, error } = await supabase.functions.invoke('fetch-shopify-orders', {
-        body: { shopDomain: tokenRow.shop_domain },
+        body: { shopDomain: tokenRow.shop_domain, channelDetectionOnly: true },
       });
 
       if (error) throw error;

@@ -65,30 +65,34 @@ Deno.serve(async (req) => {
     } catch {
       console.error("[fetch-shopify-orders] Failed to parse request body");
     }
-    const { userId, dateFrom, dateTo, limit } = body;
+    const { userId, dateFrom, dateTo, limit, channelDetectionOnly } = body;
     let shopDomain = body.shopDomain;
-    console.log("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit });
+    console.log("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit, channelDetectionOnly });
 
     const resolvedUserId = userId || authenticatedUserId;
     const effectiveLimit = Math.min(limit || 250, 250);
 
-    // ─── Enforce accounting boundary ────────────────────────────────
+    // ─── Enforce accounting boundary (skip for channel detection scans) ─
     let effectiveDateFrom = dateFrom;
-    console.log("[fetch-shopify-orders] Querying accounting boundary...");
-    const { data: boundarySetting } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "accounting_boundary_date")
-      .eq("user_id", resolvedUserId)
-      .maybeSingle();
+    if (!channelDetectionOnly) {
+      console.log("[fetch-shopify-orders] Querying accounting boundary...");
+      const { data: boundarySetting } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "accounting_boundary_date")
+        .eq("user_id", resolvedUserId)
+        .maybeSingle();
 
-    if (boundarySetting?.value) {
-      const boundaryDate = boundarySetting.value;
-      if (!effectiveDateFrom || effectiveDateFrom < boundaryDate) {
-        effectiveDateFrom = boundaryDate + "T00:00:00Z";
+      if (boundarySetting?.value) {
+        const boundaryDate = boundarySetting.value;
+        if (!effectiveDateFrom || effectiveDateFrom < boundaryDate) {
+          effectiveDateFrom = boundaryDate + "T00:00:00Z";
+        }
       }
+      console.log("[fetch-shopify-orders] Boundary resolved, effectiveDateFrom:", effectiveDateFrom);
+    } else {
+      console.log("[fetch-shopify-orders] Channel detection mode — skipping accounting boundary");
     }
-    console.log("[fetch-shopify-orders] Boundary resolved, effectiveDateFrom:", effectiveDateFrom);
 
     // 1. Get access token from shopify_tokens
     // If shopDomain not provided, look up the user's token by user_id alone

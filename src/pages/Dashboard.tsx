@@ -325,6 +325,7 @@ export default function Dashboard() {
             scanPromises.push(callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken));
             scanPromises.push(callEdgeFunctionSafe('fetch-shopify-orders', caps.accessToken, {
               ...(caps.shopDomain ? { shopDomain: caps.shopDomain } : {}),
+              channelDetectionOnly: true,
             }));
           }
 
