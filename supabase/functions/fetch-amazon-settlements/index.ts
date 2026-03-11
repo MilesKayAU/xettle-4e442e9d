@@ -815,6 +815,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         storage_fees: summary.storageFees,
         refunds: summary.refunds,
         reimbursements: summary.reimbursements,
+        advertising_costs: summary.advertisingCosts,
         other_fees: summary.otherFees,
         net_ex_gst: summary.netExGst,
         gst_on_income: summary.gstOnIncome,
