@@ -1414,7 +1414,15 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user" | "paid" | "starter" | "pro"
+      app_role:
+        | "admin"
+        | "moderator"
+        | "user"
+        | "paid"
+        | "starter"
+        | "pro"
+        | "trial"
+        | "free"
       fee_observation_type:
         | "commission"
         | "referral"
@@ -1551,7 +1559,16 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user", "paid", "starter", "pro"],
+      app_role: [
+        "admin",
+        "moderator",
+        "user",
+        "paid",
+        "starter",
+        "pro",
+        "trial",
+        "free",
+      ],
       fee_observation_type: [
         "commission",
         "referral",
