@@ -3522,6 +3522,89 @@ const REQUIRED_XERO_ACCOUNTS = Object.entries(DEFAULT_ACCOUNT_CODES).map(([, val
   taxType: val.taxType,
 }));
 
+// ─── Reconciliation Settings ────────────────────────────────────────
+function ReconciliationSettingsCard() {
+  const [threshold, setThreshold] = useState('50');
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'unmatched_deposit_threshold')
+        .maybeSingle();
+      if (data?.value) setThreshold(data.value);
+      setLoaded(true);
+    }
+    load();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const numVal = parseFloat(threshold);
+      if (isNaN(numVal) || numVal < 0) {
+        toast.error('Please enter a valid amount');
+        return;
+      }
+      const { data: existing } = await supabase
+        .from('app_settings')
+        .select('id')
+        .eq('key', 'unmatched_deposit_threshold')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (existing) {
+        await supabase.from('app_settings').update({ value: String(numVal) }).eq('key', 'unmatched_deposit_threshold').eq('user_id', user.id);
+      } else {
+        await supabase.from('app_settings').insert({ user_id: user.id, key: 'unmatched_deposit_threshold', value: String(numVal) });
+      }
+      toast.success('Threshold saved');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold">Reconciliation</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-3">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">
+            Minimum deposit amount to flag as unmatched:
+          </label>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm text-muted-foreground">$</span>
+            <Input
+              type="number"
+              min="0"
+              step="10"
+              value={threshold}
+              onChange={e => setThreshold(e.target.value)}
+              className="w-24 h-8 text-sm"
+            />
+          </div>
+          <Button size="sm" variant="outline" onClick={handleSave} disabled={saving} className="h-8 text-xs">
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Bank deposits below this amount won't be flagged as potential marketplace payments. Set lower if you receive many small marketplace payouts.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Settings Screen ────────────────────────────────────────────────
 
 function SettlementSettings({ onGstRateChanged, onSyncCutoffChanged }: { onGstRateChanged?: (rate: number) => void; onSyncCutoffChanged?: (date: string) => void }) {
