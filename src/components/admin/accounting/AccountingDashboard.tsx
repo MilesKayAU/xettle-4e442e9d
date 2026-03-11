@@ -2393,7 +2393,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                           {s.is_split_month && (
                             <div className="mt-3 pt-2 border-t border-purple-200 space-y-2">
                               <p className="text-xs font-medium text-purple-800 flex items-center gap-1">
-                                <Scissors className="h-3 w-3" /> Split Month Journals (Account 612 Rollover)
+                                <Scissors className="h-3 w-3" /> Deferred Revenue Recognition (Account 612)
                               </p>
                               {(() => {
                                 const m1 = s.split_month_1_data ? JSON.parse(s.split_month_1_data as string) : null;
