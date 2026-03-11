@@ -67,8 +67,9 @@ in app_settings via getCode(). Falls back to above defaults.
 - Reimbursements: OUTPUT (Session 7 audit correction — code uses OUTPUT, not NONE.
   Conservative/safe. ATO guidance on compensation is ambiguous, taxable income treatment
   overpays slightly but avoids BAS risk. LMB claims NONE but verify with your accountant.)
-- International sales: GST base correctly excludes non-AU
-  orders at calculation level (presentation split = Phase 2)
+- International sales: ✅ **LIVE** — AU marketplace gets OUTPUT, international gets
+  EXEMPTOUTPUT (GST Free Income). GST base correctly calculated. Two separate Xero
+  lines generated automatically. Was marked "Phase 2" but already shipped.
 - ACCPAY bill: INPUT fixed (was OUTPUT — critical BAS bug)
 - Advertising Costs: INPUT (GST on purchases)
 
