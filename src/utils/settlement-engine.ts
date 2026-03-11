@@ -108,6 +108,7 @@ const DEFAULT_ACCOUNT_CODES: Record<string, string> = {
   'Storage Fees': '409',
   'Promotional Discounts': '200',
   'Other Fees': '405',
+  'Advertising Costs': '410',
 };
 
 /**

@@ -441,6 +441,7 @@ serve(async (req) => {
       'Storage Fees': '409',
       'Promotional Discounts': '200',
       'Other Fees': '405',
+      'Advertising Costs': '410',
     };
 
     let userAccountCodes: Record<string, string> = {};

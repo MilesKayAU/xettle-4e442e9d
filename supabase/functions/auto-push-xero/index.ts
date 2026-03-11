@@ -134,6 +134,7 @@ Deno.serve(async (req) => {
           'Sales': '200', 'Refunds': '205', 'Reimbursements': '271',
           'Seller Fees': '407', 'FBA Fees': '408', 'Storage Fees': '409',
           'Promotional Discounts': '200', 'Other Fees': '405',
+          'Advertising Costs': '410',
         }[cat] || '405')
 
         let userPushed = 0
@@ -174,6 +175,7 @@ Deno.serve(async (req) => {
             { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.seller_fees || 0)), Quantity: 1 },
             { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.fba_fees || 0)), Quantity: 1 },
             { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.storage_fees || 0)), Quantity: 1 },
+            { Description: `${contactName} Advertising Costs`, AccountCode: getCode('Advertising Costs'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(s.advertising_costs || 0)), Quantity: 1 },
             { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(Math.max(round2(s.other_fees || 0), 0)), Quantity: 1 },
           ].filter(item => Math.abs(item.UnitAmount) > 0.01)
 
