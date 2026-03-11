@@ -230,7 +230,7 @@ Deno.serve(async (req) => {
       console.error('Invoice scan error:', e)
     }
 
-    // 2. Scan Bank Transactions
+    let bankScanError: string | null = null
     try {
       const bankData = await xeroGet(
         `https://api.xero.com/api.xro/2.0/BankTransactions?order=Date DESC&pageSize=100`,
@@ -269,7 +269,13 @@ Deno.serve(async (req) => {
         }
       }
     } catch (e) {
+      const errMsg = String(e)
       console.error('Bank transaction scan error:', e)
+      if (errMsg.includes('401')) {
+        bankScanError = 'Xero bank feed access denied — your connection may need to be re-authorised with bank transaction scopes.'
+      } else {
+        bankScanError = `Bank scan failed: ${errMsg}`
+      }
     }
 
     // 3. Determine boundary
