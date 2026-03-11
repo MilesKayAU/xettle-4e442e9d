@@ -25,7 +25,7 @@ interface ScanStep {
   flagKey?: string;
 }
 
-type StepStatus = 'pending' | 'running' | 'success' | 'skipped' | 'error';
+type StepStatus = 'pending' | 'running' | 'success' | 'skipped' | 'rate_limited' | 'error';
 
 interface PhaseBData {
   amazonCount: number;
