@@ -632,7 +632,16 @@ export default function Setup() {
                   ))}
                 </div>
                 <button
-                  onClick={() => setShowAddManual(true)}
+                  onClick={() => {
+                    setManualChannel({
+                      source_name: '',
+                      order_count: 0,
+                      total_revenue: 0,
+                      sample_order_names: [],
+                      is_new: true,
+                    });
+                    setShowAddManual(true);
+                  }}
                   className="text-xs text-primary hover:underline flex items-center gap-1"
                 >
                   <Plus className="h-3 w-3" /> Missing something? Add manually
