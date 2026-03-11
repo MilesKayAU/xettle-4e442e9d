@@ -116,7 +116,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, depositAlertsRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -124,6 +124,7 @@ export default function ActionCentre({
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('channel_alerts').select('deposit_amount, total_revenue, alert_type').eq('status', 'pending').in('alert_type', ['unmatched_deposit', 'unknown_deposit']),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -142,6 +143,13 @@ export default function ActionCentre({
       }
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
+      }
+      // Unmatched deposit alerts
+      if (depositAlertsRes.data && depositAlertsRes.data.length > 0) {
+        const total = (depositAlertsRes.data as any[]).reduce((sum: number, a: any) => sum + (a.deposit_amount || a.total_revenue || 0), 0);
+        setUnmatchedDeposits({ count: depositAlertsRes.data.length, total });
+      } else {
+        setUnmatchedDeposits({ count: 0, total: 0 });
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
