@@ -202,7 +202,13 @@ export default function Dashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (user) loadMarketplaces();
+    if (user) {
+      loadMarketplaces();
+      // Clean stale/ghost marketplace connections on dashboard mount
+      provisionAllMarketplaceConnections(user.id).catch(err =>
+        console.warn('[dashboard] ghost cleanup failed:', err)
+      );
+    }
   }, [user, loadMarketplaces]);
 
   // ─── Claim demo session (post-signup from landing page) ───────────────────
