@@ -604,7 +604,7 @@ function detectSplitMonth(
     const ts = round2(sp + ss);
     const gross = round2(ts + pd + sf + ff + stf + ad + ref + reim + oth);
     const expenseTotal = round2(sf + ff + stf + ad);
-    const gstInc = round2(round2(sp + ss) / gstDivisor); // simplified
+    const gstInc = round2(round2(sp + ss + pd) / gstDivisor);
     const gstExp = round2(expenseTotal / gstDivisor);
     const net = round2(gross - gstInc - gstExp);
     return {
