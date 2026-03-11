@@ -361,6 +361,29 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
   // Show "needs initial sync" prompt
   if (needsInitialSync && !syncDismissed && alerts.length === 0) {
+    // If scan was already triggered during onboarding, show "still syncing" message
+    if (scanAlreadyTriggered) {
+      return (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex items-center gap-3 p-4">
+            <RefreshCw className="h-5 w-5 text-primary shrink-0 animate-spin" />
+            <div className="flex-1 text-sm">
+              <p className="font-medium text-foreground">
+                Channel scan in progress — orders are still syncing
+              </p>
+              <p className="text-muted-foreground mt-0.5">
+                This usually takes 30–60 seconds. We'll detect your sales channels automatically.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => { loadAlerts(); }} className="gap-1 shrink-0">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="flex items-center gap-3 p-4">
