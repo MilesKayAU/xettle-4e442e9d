@@ -212,6 +212,10 @@ export default function Admin() {
               <ShieldCheck className="h-3.5 w-3.5" />
               Data Integrity
             </TabsTrigger>
+            <TabsTrigger value="prelaunch" className="flex items-center gap-1.5">
+              <Rocket className="h-3.5 w-3.5" />
+              Pre-Launch
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
