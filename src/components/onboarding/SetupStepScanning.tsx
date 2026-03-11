@@ -61,11 +61,11 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
       onNext();
     }, steps.length * 1500 + 1000);
 
-    // 30s timeout safety
+    // 60s timeout safety
     const timeout = setTimeout(() => {
       setTimedOut(true);
-      setTimeout(onNext, 2000);
-    }, 30000);
+      setTimeout(onNext, 3000);
+    }, 60000);
 
     return () => {
       clearInterval(interval);
