@@ -520,33 +520,9 @@ export default function Dashboard() {
                 />
               </Suspense>
 
-              {/* Connection & sync status cards */}
-              <PostSetupBanner
-                onSwitchToUpload={() => {}} // already on upload tab
-                hasXero={xeroConnected}
-                hasAmazon={hasAmazon}
-                hasShopify={hasShopify}
-                onConnectXero={() => {
-                  setWizardInitialStep(1);
-                  setShowWizard(true);
-                }}
-                onConnectAmazon={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onConnectShopify={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onScanComplete={loadMarketplaces}
-              />
-
-              {/* Channel alerts on upload tab */}
-              <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
-
-              {/* Welcome guide — below connections */}
+              {/* Welcome guide — helps new users understand the workflow */}
               <WelcomeGuide
-                onUpload={() => {}} // already on upload tab
+                onUpload={() => {}}
                 onConnectStore={() => {
                   setWizardInitialStep(1);
                   setShowWizard(true);
