@@ -192,7 +192,7 @@ export default function Setup() {
     const userId = caps.userId!;
 
     // B1: Realistic timers — Xero 60s, Shopify 120s, Amazon 180s
-    if (caps.hasXero && !phase1Xero) startProgressTimer(setXeroProgress, 60000);
+    if (caps.hasXero && !phase1Xero) startProgressTimer(setXeroProgress, 150000);
     if (caps.hasShopify && !phase1Shopify) startProgressTimer(setShopifyProgress, 120000);
     if (caps.hasAmazon && !phase1Amazon) startProgressTimer(setAmazonProgress, 180000);
 
