@@ -120,7 +120,6 @@ export default function Dashboard() {
         }
 
         if (!hasAmz || !hasShp || !xeroConnected) {
-          const connected = searchParams.get('connected');
           if (connected === 'amazon' || connected === 'shopify') {
             setWizardInitialStep(2);
             if (connected === 'amazon') setHasAmazon(true);
