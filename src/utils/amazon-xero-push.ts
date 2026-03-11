@@ -80,7 +80,7 @@ export function buildAmazonInvoiceLineItems(
       } else {
         intlBuckets[cat] = (intlBuckets[cat] || 0) + line.amount;
       }
-    } else if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs'].includes(cat)) {
+    } else if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees'].includes(cat)) {
       expenseBuckets[cat] = (expenseBuckets[cat] || 0) + line.amount;
     } else {
       otherBuckets[cat] = (otherBuckets[cat] || 0) + line.amount;
@@ -246,7 +246,7 @@ export function buildJournalPreviewRows(
       } else {
         intlBuckets[cat] = (intlBuckets[cat] || 0) + line.amount;
       }
-    } else if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs'].includes(cat)) {
+    } else if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees'].includes(cat)) {
       expenseBuckets[cat] = (expenseBuckets[cat] || 0) + line.amount;
     } else {
       otherBuckets[cat] = (otherBuckets[cat] || 0) + line.amount;
@@ -256,7 +256,7 @@ export function buildJournalPreviewRows(
   const getTaxInfo = (cat: string, marketplace: 'au' | 'intl'): { taxRate: string; hasGst: boolean } => {
     if (cat === 'Reimbursements') return { taxRate: 'BAS Excluded', hasGst: false };
     if (marketplace === 'intl') return { taxRate: 'GST Free Income', hasGst: false };
-    if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs'].includes(cat)) {
+    if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees'].includes(cat)) {
       return { taxRate: 'GST on Expenses', hasGst: true };
     }
     if (['Sales - Principal', 'Sales - Shipping', 'Refunds', 'Promotional Discounts'].includes(cat)) {
@@ -384,7 +384,7 @@ export function computeSplitMonthRollover(
     if (INCOME_CATS.has(cat)) {
       if (line.isAuMarketplace) auBuckets[cat] = (auBuckets[cat] || 0) + line.amount;
       else intlBuckets[cat] = (intlBuckets[cat] || 0) + line.amount;
-    } else if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs'].includes(cat)) {
+    } else if (['Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees'].includes(cat)) {
       expenseBuckets[cat] = (expenseBuckets[cat] || 0) + line.amount;
     } else {
       otherBuckets[cat] = (otherBuckets[cat] || 0) + line.amount;
