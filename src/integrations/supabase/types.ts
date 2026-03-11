@@ -515,6 +515,60 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_registry: {
+        Row: {
+          added_by: string | null
+          bank_narration_patterns: Json | null
+          country: string | null
+          created_at: string | null
+          detection_keywords: Json | null
+          id: string
+          is_active: boolean | null
+          marketplace_code: string
+          marketplace_name: string
+          notes: string | null
+          settlement_file_patterns: Json | null
+          shopify_source_names: Json | null
+          type: string | null
+          updated_at: string | null
+          xero_contact_patterns: Json | null
+        }
+        Insert: {
+          added_by?: string | null
+          bank_narration_patterns?: Json | null
+          country?: string | null
+          created_at?: string | null
+          detection_keywords?: Json | null
+          id?: string
+          is_active?: boolean | null
+          marketplace_code: string
+          marketplace_name: string
+          notes?: string | null
+          settlement_file_patterns?: Json | null
+          shopify_source_names?: Json | null
+          type?: string | null
+          updated_at?: string | null
+          xero_contact_patterns?: Json | null
+        }
+        Update: {
+          added_by?: string | null
+          bank_narration_patterns?: Json | null
+          country?: string | null
+          created_at?: string | null
+          detection_keywords?: Json | null
+          id?: string
+          is_active?: boolean | null
+          marketplace_code?: string
+          marketplace_name?: string
+          notes?: string | null
+          settlement_file_patterns?: Json | null
+          shopify_source_names?: Json | null
+          type?: string | null
+          updated_at?: string | null
+          xero_contact_patterns?: Json | null
+        }
+        Relationships: []
+      }
       marketplace_shipping_costs: {
         Row: {
           cost_per_order: number
@@ -698,6 +752,51 @@ export type Database = {
           settlement_frequency?: string
           settlement_type?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      payment_processor_registry: {
+        Row: {
+          added_by: string | null
+          bank_narration_patterns: Json | null
+          country: string | null
+          created_at: string | null
+          detection_keywords: Json | null
+          id: string
+          is_active: boolean | null
+          notes: string | null
+          processor_code: string
+          processor_name: string
+          type: string | null
+          xero_contact_patterns: Json | null
+        }
+        Insert: {
+          added_by?: string | null
+          bank_narration_patterns?: Json | null
+          country?: string | null
+          created_at?: string | null
+          detection_keywords?: Json | null
+          id?: string
+          is_active?: boolean | null
+          notes?: string | null
+          processor_code: string
+          processor_name: string
+          type?: string | null
+          xero_contact_patterns?: Json | null
+        }
+        Update: {
+          added_by?: string | null
+          bank_narration_patterns?: Json | null
+          country?: string | null
+          created_at?: string | null
+          detection_keywords?: Json | null
+          id?: string
+          is_active?: boolean | null
+          notes?: string | null
+          processor_code?: string
+          processor_name?: string
+          type?: string | null
+          xero_contact_patterns?: Json | null
         }
         Relationships: []
       }

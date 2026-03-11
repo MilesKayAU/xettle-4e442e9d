@@ -5,27 +5,90 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-// Payment processors / gateways — NOT marketplaces. Deposits from these are
-// tracked as channel_alerts (payment_gateway_deposit) instead of marketplace_connections.
-const PAYMENT_PROCESSORS = [
-  'paypal', 'stripe', 'afterpay', 'zip', 'zippay', 'klarna',
-  'laybuy', 'humm', 'openpay', 'latitude', 'commbank', 'anz',
-  'westpac', 'nab', 'square', 'tyro', 'braintree',
-]
+// ─── Registry-powered detection (loaded from DB at runtime) ─────────────────
 
-function isPaymentProcessor(code: string): boolean {
-  const lower = (code || '').toLowerCase()
-  return PAYMENT_PROCESSORS.some(p => lower.includes(p))
+interface RegistryEntry {
+  code: string
+  name: string
+  keywords: string[]
+  xero_patterns: string[]
+  bank_patterns: string[]
+  is_processor: boolean
 }
 
-const MARKETPLACE_CONTACT_PATTERNS = [
-  'amazon', 'amazon au', 'amazon australia', 'amazon.com.au',
-  'kogan', 'big w', 'bigw', 'bunnings',
-  'mydeal', 'everyday market', 'everydaymarket',
-  'mirakl', 'shopify', 'shopify payments',
-  'catch', 'ebay', 'paypal', 'woolworths',
-  'the iconic', 'etsy',
-]
+let _registryCache: RegistryEntry[] | null = null
+let _processorCodes: Set<string> | null = null
+
+async function loadRegistries(supabaseAdmin: any): Promise<void> {
+  if (_registryCache) return // already loaded this invocation
+
+  const [mpRes, ppRes] = await Promise.all([
+    supabaseAdmin.from('marketplace_registry').select('marketplace_code, marketplace_name, detection_keywords, xero_contact_patterns, bank_narration_patterns, is_active'),
+    supabaseAdmin.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords, xero_contact_patterns, bank_narration_patterns, is_active'),
+  ])
+
+  const entries: RegistryEntry[] = []
+  const procCodes = new Set<string>()
+
+  for (const m of (mpRes.data || [])) {
+    if (!m.is_active) continue
+    entries.push({
+      code: m.marketplace_code,
+      name: m.marketplace_name,
+      keywords: (m.detection_keywords || []) as string[],
+      xero_patterns: (m.xero_contact_patterns || []) as string[],
+      bank_patterns: (m.bank_narration_patterns || []) as string[],
+      is_processor: false,
+    })
+  }
+
+  for (const p of (ppRes.data || [])) {
+    if (!p.is_active) continue
+    entries.push({
+      code: p.processor_code,
+      name: p.processor_name,
+      keywords: (p.detection_keywords || []) as string[],
+      xero_patterns: (p.xero_contact_patterns || []) as string[],
+      bank_patterns: (p.bank_narration_patterns || []) as string[],
+      is_processor: true,
+    })
+    procCodes.add(p.processor_code)
+  }
+
+  _registryCache = entries
+  _processorCodes = procCodes
+}
+
+function isPaymentProcessor(code: string): boolean {
+  if (_processorCodes) return _processorCodes.has(code)
+  // Fallback hardcoded list if registry not loaded
+  const FALLBACK = ['paypal','stripe','afterpay','zip','zippay','klarna','laybuy','humm','openpay','latitude','square','tyro','braintree']
+  return FALLBACK.some(p => (code || '').toLowerCase().includes(p))
+}
+
+function matchesMarketplace(name: string): string | null {
+  const lower = name.toLowerCase().trim()
+  if (!_registryCache) return null
+
+  for (const entry of _registryCache) {
+    // Check all detection keywords and xero contact patterns
+    const allPatterns = [...entry.keywords, ...entry.xero_patterns.map(p => p.toLowerCase())]
+    for (const pattern of allPatterns) {
+      if (lower.includes(pattern.toLowerCase())) {
+        return entry.code
+      }
+    }
+  }
+  return null
+}
+
+function getRegistryName(code: string): string {
+  if (_registryCache) {
+    const entry = _registryCache.find(e => e.code === code)
+    if (entry) return entry.name
+  }
+  return code.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+}
 
 const REFERENCE_PATTERNS = [
   'xettle-', 'settlement', 'payout',
@@ -33,45 +96,6 @@ const REFERENCE_PATTERNS = [
   'bunnings', 'shopify', 'catch', 'ebay',
   'mydeal', 'woolworths', 'everyday market',
 ]
-
-const MARKETPLACE_NAMES: Record<string, string> = {
-  amazon_au: 'Amazon Australia',
-  kogan: 'Kogan',
-  bigw: 'Big W',
-  bunnings: 'Bunnings',
-  mydeal: 'MyDeal',
-  woolworths: 'Woolworths Everyday Market',
-  mirakl: 'Mirakl',
-  shopify_payments: 'Shopify Payments',
-  catch: 'Catch',
-  ebay_au: 'eBay Australia',
-  paypal: 'PayPal',
-  theiconic: 'The Iconic',
-  etsy: 'Etsy',
-}
-
-function matchesMarketplace(name: string): string | null {
-  const lower = name.toLowerCase().trim()
-  for (const pattern of MARKETPLACE_CONTACT_PATTERNS) {
-    if (lower.includes(pattern)) {
-      if (lower.includes('amazon')) return 'amazon_au'
-      if (lower.includes('kogan')) return 'kogan'
-      if (lower.includes('big w') || lower.includes('bigw')) return 'bigw'
-      if (lower.includes('bunnings')) return 'bunnings'
-      if (lower.includes('mydeal')) return 'mydeal'
-      if (lower.includes('everyday') || lower.includes('woolworths')) return 'woolworths'
-      if (lower.includes('mirakl')) return 'mirakl'
-      if (lower.includes('shopify')) return 'shopify_payments'
-      if (lower.includes('catch')) return 'catch'
-      if (lower.includes('ebay')) return 'ebay_au'
-      if (lower.includes('paypal')) return 'paypal'
-      if (lower.includes('iconic')) return 'theiconic'
-      if (lower.includes('etsy')) return 'etsy'
-      return pattern.replace(/\s+/g, '_')
-    }
-  }
-  return null
-}
 
 function referenceMatchesMarketplace(ref: string): boolean {
   const lower = (ref || '').toLowerCase()
@@ -182,6 +206,13 @@ Deno.serve(async (req) => {
     }
 
     const userId = user.id
+
+    // Load marketplace & processor registries from DB
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
+    await loadRegistries(supabaseAdmin)
 
     const clientId = Deno.env.get('XERO_CLIENT_ID')!
     const clientSecret = Deno.env.get('XERO_CLIENT_SECRET')!
@@ -381,7 +412,7 @@ Deno.serve(async (req) => {
     for (const det of detected_settlements) {
       if (det.marketplace === 'unknown') continue
 
-      const displayName = MARKETPLACE_NAMES[det.marketplace] || det.marketplace.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+      const displayName = getRegistryName(det.marketplace)
 
       // Payment processors → channel_alert, NOT marketplace_connection
       if (isPaymentProcessor(det.marketplace)) {

@@ -28,13 +28,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen } from 'lucide-react';
 import AccountResetButton from '@/components/admin/AccountResetButton';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
 import BugReportsDashboard from '@/components/admin/BugReportsDashboard';
 import DataIntegrityDashboard from '@/components/admin/DataIntegrityDashboard';
 import PreLaunchChecklist from '@/components/admin/PreLaunchChecklist';
+import KnowledgeBaseDashboard from '@/components/admin/KnowledgeBaseDashboard';
 
 interface UserRow {
   id: string;
@@ -219,6 +220,10 @@ export default function Admin() {
               <Rocket className="h-3.5 w-3.5" />
               Pre-Launch
             </TabsTrigger>
+            <TabsTrigger value="knowledge" className="flex items-center gap-1.5">
+              <BookOpen className="h-3.5 w-3.5" />
+              Knowledge Base
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -351,6 +356,10 @@ export default function Admin() {
 
           <TabsContent value="prelaunch">
             <PreLaunchChecklist />
+          </TabsContent>
+
+          <TabsContent value="knowledge">
+            <KnowledgeBaseDashboard />
           </TabsContent>
         </Tabs>
       </div>
