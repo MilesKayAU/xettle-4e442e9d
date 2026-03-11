@@ -452,9 +452,10 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
     } as any);
 
-    // Register aliases after successful insert
+    // Register aliases + post-insert safety check after successful insert
     if (!error) {
       registerAliases(settlement.settlement_id, user.id, settlement.source, meta.sourceReference);
+      postInsertDuplicateCheck(settlement.settlement_id, settlement.marketplace, user.id);
     }
 
     if (error) return { success: false, error: error.message };
