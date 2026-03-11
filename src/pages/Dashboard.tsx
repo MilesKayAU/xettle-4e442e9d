@@ -543,6 +543,7 @@ export default function Dashboard() {
 
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
+        <SetupInProgressBanner />
 
         {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
         {/* ─── Dashboard (always useful — strip, actions, validation) ──── */}
