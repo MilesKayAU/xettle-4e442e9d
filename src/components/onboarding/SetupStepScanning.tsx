@@ -21,7 +21,9 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
     ...(hasAmazon ? [{ label: 'Fetching recent Amazon settlements...', fn: 'fetch-amazon-settlements' }] : []),
     ...(hasShopify ? [
       { label: 'Fetching Shopify payouts...', fn: 'fetch-shopify-payouts' },
+      { label: 'Fetching Shopify orders...', fn: 'fetch-shopify-orders' },
       { label: 'Scanning sub-channels...', fn: 'scan-shopify-channels' },
+      { label: 'Provisioning marketplace tabs...', fn: null, action: 'provision-channels' },
     ] : []),
     { label: 'Checking for uploaded files...', fn: null },
     { label: 'Running validation sweep...', fn: 'run-validation-sweep' },
