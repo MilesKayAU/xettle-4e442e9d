@@ -68,7 +68,7 @@ export default function ResetPassword() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-block">
-            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-10 mx-auto" />
+            <XettleLogo height={40} />
           </Link>
         </div>
 

@@ -49,7 +49,7 @@ export default function Landing() {
       <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
         <div className="container-custom flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/lovable-uploads/xettle-logo.png" alt="Xettle" className="h-8" />
+            <XettleLogo height={32} />
             <span className="hidden sm:inline text-xs text-muted-foreground border-l border-border pl-2">
               Marketplace settlements → Xero, automatically
             </span>
