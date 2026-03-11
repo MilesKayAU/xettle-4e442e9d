@@ -345,6 +345,10 @@ export default function Admin() {
           <TabsContent value="integrity">
             <DataIntegrityDashboard />
           </TabsContent>
+
+          <TabsContent value="prelaunch">
+            <PreLaunchChecklist />
+          </TabsContent>
         </Tabs>
       </div>
 
