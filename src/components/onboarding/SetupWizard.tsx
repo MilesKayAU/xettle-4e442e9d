@@ -47,6 +47,7 @@ export default function SetupWizard({
     return saved ? JSON.parse(saved) : [];
   });
   const [skippedAllApis, setSkippedAllApis] = useState(false);
+  const nav = useNavigate();
 
   useEffect(() => {
     if (initialStep > 1) setStep(Math.min(initialStep, TOTAL_STEPS));
@@ -94,7 +95,7 @@ export default function SetupWizard({
     });
   };
 
-  const nav = useNavigate();
+
 
   const handleComplete = () => {
     sessionStorage.removeItem(STORAGE_KEY);
