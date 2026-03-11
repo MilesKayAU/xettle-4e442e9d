@@ -51,9 +51,19 @@ function SetupInProgressBanner() {
   }, []);
   if (!show) return null;
   return (
-    <div className="mb-4 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
-      <span className="text-foreground">Your account setup is in progress</span>
-      <a href="/setup" className="font-medium text-primary hover:underline">Continue setup →</a>
+    <div className="mb-4 flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 px-5 py-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span className="text-lg">⚙️</span>
+        <span className="text-sm font-medium text-foreground">
+          Your account setup is still in progress — see what's been found so far
+        </span>
+      </div>
+      <a
+        href="/setup"
+        className="inline-flex items-center gap-1.5 rounded-md bg-background text-primary font-semibold text-sm px-4 py-2 shadow-sm border border-primary/20 hover:bg-primary hover:text-primary-foreground transition-colors"
+      >
+        Continue setup →
+      </a>
     </div>
   );
 }
