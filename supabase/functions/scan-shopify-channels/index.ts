@@ -318,6 +318,25 @@ Deno.serve(async (req) => {
         );
         newAlerts++;
       }
+
+      // ─── Auto-provision shopify_sub_channels for detected marketplaces ───
+      const resolvedCode = resolveMarketplaceCode(analysis.detectedLabel, src);
+      const subChannelPayload = {
+        user_id: userId,
+        source_name: src,
+        marketplace_label: analysis.detectedLabel || src.charAt(0).toUpperCase() + src.slice(1),
+        marketplace_code: resolvedCode || null,
+        order_count: data.count,
+        total_revenue: Math.round(data.revenue * 100) / 100,
+        settlement_type: "separate_file",
+        ignored: false,
+        first_seen_at: new Date().toISOString(),
+      };
+
+      await adminClient.from("shopify_sub_channels").upsert(
+        subChannelPayload,
+        { onConflict: "user_id,source_name" }
+      );
     }
 
     return new Response(
