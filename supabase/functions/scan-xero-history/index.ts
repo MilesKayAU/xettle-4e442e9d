@@ -25,7 +25,7 @@ async function loadRegistries(supabaseAdmin: any): Promise<void> {
 
   const [mpRes, ppRes] = await Promise.all([
     supabaseAdmin.from('marketplace_registry').select('marketplace_code, marketplace_name, detection_keywords, xero_contact_patterns, bank_narration_patterns, is_active'),
-    supabaseAdmin.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords, xero_contact_patterns, bank_narration_patterns, is_active'),
+    supabaseAdmin.from('payment_processor_registry').select('processor_code, processor_name, type, detection_keywords, xero_contact_patterns, bank_narration_patterns, is_active'),
   ])
 
   const entries: RegistryEntry[] = []
