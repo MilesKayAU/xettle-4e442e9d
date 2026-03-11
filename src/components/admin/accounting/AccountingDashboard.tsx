@@ -36,6 +36,7 @@ import { useXeroSync } from '@/hooks/use-xero-sync';
 import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
 import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplicateCheck } from '@/utils/settlement-engine';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
+import InsightsTab from '@/components/admin/accounting/InsightsTab';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
