@@ -282,7 +282,7 @@ export default function Dashboard() {
             scanPromises.push(callEdgeFunctionSafe('scan-xero-history', caps.accessToken));
           }
           if (caps.hasAmazon) {
-            scanPromises.push(callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken));
+            scanPromises.push(callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken, {}, { headers: { 'x-action': 'smart-sync' } }));
           }
           if (caps.hasShopify) {
             scanPromises.push(callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken));
