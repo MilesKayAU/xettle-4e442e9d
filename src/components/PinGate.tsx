@@ -8,7 +8,18 @@ const SITE_PIN = '1941';
 const STORAGE_KEY = 'xettle_pin_verified';
 
 export default function PinGate({ children }: { children: React.ReactNode }) {
+  // Secure test-mode bypass: only on localhost / Lovable preview domains
+  const isAllowedDomain = window.location.hostname === 'localhost'
+    || window.location.hostname.includes('lovable.app')
+    || window.location.hostname.includes('lovableproject.com');
+
+  const isTestMode = (
+    import.meta.env.VITE_TEST_MODE === 'true'
+    || window.location.search.includes('test_mode=true')
+  ) && isAllowedDomain;
+
   const [verified, setVerified] = useState(() => {
+    if (isTestMode) return true;
     return sessionStorage.getItem(STORAGE_KEY) === 'true';
   });
   const [pin, setPin] = useState(['', '', '', '']);
@@ -33,7 +44,6 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-submit when all 4 digits entered
     if (digit && index === 3) {
       const fullPin = newPin.join('');
       if (fullPin === SITE_PIN) {
