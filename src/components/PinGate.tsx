@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import XettleLogo from '@/components/shared/XettleLogo';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
