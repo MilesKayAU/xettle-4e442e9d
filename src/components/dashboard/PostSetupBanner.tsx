@@ -155,6 +155,7 @@ export default function PostSetupBanner({
 
         await setAppFlag('amazon_scan_completed');
         setAmazonScanComplete(true);
+        await callEdgeFunction('run-validation-sweep').catch(() => {});
         onScanComplete?.();
       } catch (err) {
         console.error('Amazon scan trigger failed:', err);
