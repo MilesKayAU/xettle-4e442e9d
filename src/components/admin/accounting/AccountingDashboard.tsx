@@ -630,7 +630,7 @@ export default function AccountingDashboard() {
 
         // Add Account 612 balancing line: negative of rolloverAmount → invoice nets to $0
         lines1.push({
-          Description: `Split month rollover to ${m2.monthLabel}`,
+          Description: `Deferred revenue to ${m2.monthLabel}`,
           AccountCode: XERO_ACCOUNT_MAP['Split Month Rollover'].code,
           TaxType: 'BASEXCLUDED',
           UnitAmount: round2(-rolloverAmount),
@@ -642,7 +642,7 @@ export default function AccountingDashboard() {
         // Invoice 2: DR 612 (clear rollover) + Month-2 actual lines
         const lines2Month2 = buildInvoiceLineItems(month2Lines, `${m2.monthLabel}`, header.settlementId);
         const rolloverLine = {
-          Description: `Split month rollover from ${m1.monthLabel}`,
+          Description: `Deferred revenue from ${m1.monthLabel}`,
           AccountCode: XERO_ACCOUNT_MAP['Split Month Rollover'].code,
           TaxType: 'BASEXCLUDED',
           UnitAmount: round2(rolloverAmount),
@@ -2393,7 +2393,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                           {s.is_split_month && (
                             <div className="mt-3 pt-2 border-t border-purple-200 space-y-2">
                               <p className="text-xs font-medium text-purple-800 flex items-center gap-1">
-                                <Scissors className="h-3 w-3" /> Split Month Journals (Account 612 Rollover)
+                                <Scissors className="h-3 w-3" /> Deferred Revenue Recognition (Account 612)
                               </p>
                               {(() => {
                                 const m1 = s.split_month_1_data ? JSON.parse(s.split_month_1_data as string) : null;
@@ -2449,7 +2449,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
             </h3>
             <p className="text-sm text-muted-foreground">
               {rollbackConfirm.scope === 'all' ? (
-                <>This will <strong>void</strong> {rollbackConfirm.settlement.is_split_month ? 'both split month invoices' : 'the Xero invoice'} for settlement <span className="font-mono">{rollbackConfirm.settlement.settlement_id}</span> and reset the status to "Saved".</>
+                <>This will <strong>void</strong> {rollbackConfirm.settlement.is_split_month ? 'both deferred revenue invoices' : 'the Xero invoice'} for settlement <span className="font-mono">{rollbackConfirm.settlement.settlement_id}</span> and reset the status to "Saved".</>
               ) : (
                 <>This will <strong>void</strong> only {rollbackConfirm.scope === 'journal_1' ? 'Invoice 1 (Month 1)' : 'Invoice 2 (Month 2)'} for settlement <span className="font-mono">{rollbackConfirm.settlement.settlement_id}</span>. The other invoice will remain posted.</>
               )}
@@ -3166,16 +3166,16 @@ function SettlementReview({
       {/* Reconciliation Checks */}
       <ReconciliationCard result={reconResult} />
 
-      {/* Split Month Warning */}
+      {/* Deferred Revenue Recognition */}
       {splitMonth.isSplitMonth && splitMonth.month1 && splitMonth.month2 && (
         <Card className="border-2 border-purple-400 bg-purple-50/30">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-purple-800">
               <Scissors className="h-4 w-4" />
-              ⚠ Split Month Settlement — {formatDisplayDate(header.periodStart)} to {formatDisplayDate(header.periodEnd)}
+              ⚠ Deferred Revenue Recognition — {formatDisplayDate(header.periodStart)} to {formatDisplayDate(header.periodEnd)}
             </CardTitle>
             <CardDescription className="text-xs">
-              Uses Account 612 (Split Month Rollovers) to match Link My Books method. Lines split by actual posted dates. Journal 1 nets to $0, Journal 2 nets to full deposit.
+              Settlement spans two accounting periods. Revenue is deferred via Account 612 so each month reports correctly. Journal 1 nets to $0, Journal 2 nets to full deposit.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -3192,7 +3192,7 @@ function SettlementReview({
                   {splitMonth.month1.reimbursements !== 0 && <div className="flex justify-between"><span>Reimbursements:</span><span className="font-mono">{formatAUD(splitMonth.month1.reimbursements)}</span></div>}
                   <div className="border-t border-purple-200 my-1" />
                   <div className="flex justify-between text-purple-700 font-medium">
-                    <span>Rollover to 612:</span>
+                    <span>Deferred to 612:</span>
                     <span className="font-mono">{formatAUD(-computedRolloverAmount)}</span>
                   </div>
                   <div className="border-t border-purple-200 my-1" />

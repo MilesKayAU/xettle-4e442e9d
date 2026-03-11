@@ -781,7 +781,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
-                            {s.is_split_month && <Badge variant="outline" className="text-[10px]">Split Month</Badge>}
+                            {s.is_split_month && <Badge variant="outline" className="text-[10px]">Deferred Revenue</Badge>}
                           </div>
                           <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
                             <span>{formatShortDate(s.period_start)} → {formatShortDate(s.period_end)}</span>
