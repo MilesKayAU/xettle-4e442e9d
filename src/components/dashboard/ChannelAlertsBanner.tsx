@@ -109,6 +109,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         .from('channel_alerts' as any)
         .select('*')
         .eq('status', 'pending')
+        .neq('alert_type', 'unknown_deposit')  // Never show raw unmatched bank transactions
         .order('order_count', { ascending: false });
 
       if (error) throw error;
