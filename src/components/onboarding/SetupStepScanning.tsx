@@ -112,9 +112,9 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
   return (
     <div className="space-y-6 py-4">
       <div className="text-center space-y-2">
-        <h2 className="text-xl font-bold text-foreground">Scanning your data...</h2>
+        <h2 className="text-xl font-bold text-foreground">Setting up your account...</h2>
         <p className="text-sm text-muted-foreground">
-          This usually takes 10–30 seconds depending on your connections. We're pulling real data from your accounts.
+          We're shortcutting your setup by scanning your connected accounts to auto-detect your marketplaces and build them into your dashboard. This usually takes 10–30 seconds.
         </p>
       </div>
 
