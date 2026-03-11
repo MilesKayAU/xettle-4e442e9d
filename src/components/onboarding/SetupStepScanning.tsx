@@ -79,7 +79,7 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
       <div className="text-center space-y-2">
         <h2 className="text-xl font-bold text-foreground">Scanning your data...</h2>
         <p className="text-sm text-muted-foreground">
-          This usually takes a few seconds.
+          This usually takes 10–20 seconds depending on your connections.
         </p>
       </div>
 
