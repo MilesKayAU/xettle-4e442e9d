@@ -65,7 +65,8 @@ Deno.serve(async (req) => {
     } catch {
       console.error("[fetch-shopify-orders] Failed to parse request body");
     }
-    const { userId, shopDomain, dateFrom, dateTo, limit } = body;
+    const { userId, dateFrom, dateTo, limit } = body;
+    let shopDomain = body.shopDomain;
     console.log("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit });
 
     const resolvedUserId = userId || authenticatedUserId;
@@ -90,13 +91,38 @@ Deno.serve(async (req) => {
     console.log("[fetch-shopify-orders] Boundary resolved, effectiveDateFrom:", effectiveDateFrom);
 
     // 1. Get access token from shopify_tokens
-    console.log("[fetch-shopify-orders] Querying shopify_tokens for:", shopDomain);
-    const { data: tokenRow, error: tokenError } = await supabase
-      .from("shopify_tokens")
-      .select("access_token")
-      .eq("user_id", resolvedUserId)
-      .eq("shop_domain", shopDomain)
-      .single();
+    // If shopDomain not provided, look up the user's token by user_id alone
+    let tokenRow: any = null;
+    let tokenError: any = null;
+
+    if (shopDomain) {
+      console.log("[fetch-shopify-orders] Querying shopify_tokens for domain:", shopDomain);
+      const result = await supabase
+        .from("shopify_tokens")
+        .select("access_token, shop_domain")
+        .eq("user_id", resolvedUserId)
+        .eq("shop_domain", shopDomain)
+        .single();
+      tokenRow = result.data;
+      tokenError = result.error;
+    }
+
+    // Fallback: no shopDomain or domain lookup failed — get any token for this user
+    if (!tokenRow) {
+      console.log("[fetch-shopify-orders] Falling back to user_id-only lookup");
+      const result = await supabase
+        .from("shopify_tokens")
+        .select("access_token, shop_domain")
+        .eq("user_id", resolvedUserId)
+        .limit(1)
+        .maybeSingle();
+      tokenRow = result.data;
+      tokenError = result.error;
+      if (tokenRow?.shop_domain) {
+        shopDomain = tokenRow.shop_domain;
+        console.log("[fetch-shopify-orders] Resolved shopDomain from DB:", shopDomain);
+      }
+    }
 
     console.log("[fetch-shopify-orders] Token query result:", { found: !!tokenRow, error: tokenError?.message });
 
