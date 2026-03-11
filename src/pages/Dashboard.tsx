@@ -133,8 +133,9 @@ export default function Dashboard() {
           }
           setShowWizard(true);
         }
-      } catch {
-        // silently fail
+      } catch (error) {
+        console.error("Wizard check failed, defaulting to show:", error);
+        setShowWizard(true);
       }
     };
     checkWizard();
