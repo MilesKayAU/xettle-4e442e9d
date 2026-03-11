@@ -718,6 +718,7 @@ export default function Setup() {
               </Button>
             </div>
             <code className="block whitespace-pre-wrap break-all font-mono text-[11px] text-destructive/80">{s.error}</code>
+            <p className="text-[11px] text-muted-foreground mt-1">This step failed but you can continue — it can be retried later.</p>
           </div>
         )}
       </div>
