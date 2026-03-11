@@ -132,10 +132,23 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const body = await req.json().catch(() => ({}));
-    const { userId } = body;
+    let userId = body.userId as string | undefined;
+
+    // Fallback: extract userId from JWT if not provided in body
+    if (!userId) {
+      const authHeader = req.headers.get("Authorization") || "";
+      if (authHeader.startsWith("Bearer ")) {
+        const userClient = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: authHeader } },
+        });
+        const { data: { user } } = await userClient.auth.getUser();
+        userId = user?.id;
+      }
+    }
 
     if (!userId) {
       return new Response(JSON.stringify({ error: "userId required" }), {
