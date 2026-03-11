@@ -123,34 +123,22 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
         }
 
         // Write scan completion flags so PostSetupBanner doesn't re-run
-        const flagPromises: Promise<any>[] = [];
+        const writeFlag = (key: string) =>
+          supabase.from('app_settings').upsert(
+            { user_id: caps.userId!, key, value: 'true' },
+            { onConflict: 'user_id,key' }
+          ).then(() => {});
+
+        const flagPromises: Promise<void>[] = [];
         if (caps.hasShopify) {
-          flagPromises.push(
-            supabase.from('app_settings').upsert(
-              { user_id: caps.userId, key: 'shopify_channel_scan_triggered', value: 'true' },
-              { onConflict: 'user_id,key' }
-            ),
-            supabase.from('app_settings').upsert(
-              { user_id: caps.userId, key: 'shopify_scan_completed', value: 'true' },
-              { onConflict: 'user_id,key' }
-            ),
-          );
+          flagPromises.push(writeFlag('shopify_channel_scan_triggered'));
+          flagPromises.push(writeFlag('shopify_scan_completed'));
         }
         if (caps.hasAmazon) {
-          flagPromises.push(
-            supabase.from('app_settings').upsert(
-              { user_id: caps.userId, key: 'amazon_scan_completed', value: 'true' },
-              { onConflict: 'user_id,key' }
-            ),
-          );
+          flagPromises.push(writeFlag('amazon_scan_completed'));
         }
         if (caps.hasXero) {
-          flagPromises.push(
-            supabase.from('app_settings').upsert(
-              { user_id: caps.userId, key: 'xero_scan_completed', value: 'true' },
-              { onConflict: 'user_id,key' }
-            ),
-          );
+          flagPromises.push(writeFlag('xero_scan_completed'));
         }
         await Promise.allSettled(flagPromises);
 
