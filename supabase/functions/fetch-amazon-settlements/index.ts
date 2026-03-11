@@ -491,7 +491,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
             continue;
           }
 
-          const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd <= syncCutoffDate;
+          const isBeforeCutoff = accountingBoundary && parsed.header.periodEnd && parsed.header.periodEnd <= accountingBoundary;
           const { header, summary, lines, unmapped, splitMonth } = parsed;
 
           const { error: settError } = await supabaseAdmin.from('settlements').insert({
