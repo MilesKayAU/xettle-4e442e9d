@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.ai-assistant]
 verify_jwt = false
+
+[functions.ai-account-mapper]
+verify_jwt = false

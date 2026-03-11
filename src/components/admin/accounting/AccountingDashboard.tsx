@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
+import AccountMapperCard from '@/components/settings/AccountMapperCard';
 import ShopifyConnectionStatus from '@/components/admin/ShopifyConnectionStatus';
 import ChannelManagement from '@/components/shopify/ChannelManagement';
 import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
