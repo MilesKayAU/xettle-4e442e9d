@@ -2301,7 +2301,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                             )}
 
                             {/* Posted: View in Xero + Rollback */}
-                            {s.status === 'pushed_to_xero' && (
+                            {['pushed_to_xero', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'synced'].includes(s.status || '') && (
                               <>
                                 <DropdownMenuSeparator />
                                 {(() => {
