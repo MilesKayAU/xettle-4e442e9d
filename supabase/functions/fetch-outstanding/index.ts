@@ -365,6 +365,7 @@ Deno.serve(async (req) => {
         has_settlement: hasSettlement,
         settlement_id: settlementId,
         settlement_status: settlement?.status || null,
+        settlement_evidence: settlementEvidence,
         has_bank_deposit: hasBankDeposit,
         bank_match: bankMatch,
         bank_difference: bankDifference,
