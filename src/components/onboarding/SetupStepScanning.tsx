@@ -80,7 +80,8 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           } else if (step.fn) {
             try {
               const controller = new AbortController();
-              const timeout = setTimeout(() => controller.abort(), 45000);
+              const timeoutMs = step.fn === 'fetch-shopify-orders' ? 60000 : 45000;
+              const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
               // Pass shopDomain for fetch-shopify-orders
               const body = step.fn === 'fetch-shopify-orders' && shopDomain
@@ -100,7 +101,18 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
 
               clearTimeout(timeout);
             } catch {
-              // Step failed — continue to next
+              // Step failed — if it was fetch-shopify-orders, fire a background retry
+              if (step.fn === 'fetch-shopify-orders' && shopDomain) {
+                const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+                fetch(`https://${projectId}.supabase.co/functions/v1/fetch-shopify-orders`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({ shopDomain }),
+                }).catch(() => {});
+              }
             }
           } else {
             await new Promise(r => setTimeout(r, 800));
@@ -109,6 +121,14 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
           if (!cancelled) {
             setCompletedSteps(i + 1);
           }
+        }
+
+        // Write flag so Dashboard knows scan was already triggered
+        if (hasShopify) {
+          await supabase.from('app_settings').upsert(
+            { user_id: session.user.id, key: 'shopify_channel_scan_triggered', value: 'true' },
+            { onConflict: 'user_id,key' }
+          ).then(() => {});
         }
 
         if (!cancelled) {

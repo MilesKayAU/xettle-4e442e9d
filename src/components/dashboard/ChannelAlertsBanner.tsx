@@ -94,9 +94,11 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [expanded, setExpanded] = useState(true);
   const [setupChannel, setSetupChannel] = useState<DetectedSubChannel | null>(null);
   const [needsInitialSync, setNeedsInitialSync] = useState(false);
+  const [scanAlreadyTriggered, setScanAlreadyTriggered] = useState(false);
   const [syncDismissed, setSyncDismissed] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [shopDomain, setShopDomain] = useState<string | null>(null);
+  const [autoRefreshCount, setAutoRefreshCount] = useState(0);
   const [namingAlertId, setNamingAlertId] = useState<string | null>(null);
   const [customName, setCustomName] = useState('');
   const [linkingAlertId, setLinkingAlertId] = useState<string | null>(null);
@@ -132,6 +134,16 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
             .select('id', { count: 'exact', head: true }) as any;
 
           if (count === 0 || count === null) {
+            // Check if scan was already triggered during onboarding
+            const { data: flagRow } = await supabase
+              .from('app_settings')
+              .select('value')
+              .eq('key', 'shopify_channel_scan_triggered')
+              .maybeSingle();
+
+            if (flagRow?.value === 'true') {
+              setScanAlreadyTriggered(true);
+            }
             setNeedsInitialSync(true);
           }
         }
@@ -152,6 +164,16 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   useEffect(() => {
     loadAlerts();
   }, []);
+
+  // Auto-refresh when scan was triggered during onboarding but orders haven't arrived yet
+  useEffect(() => {
+    if (!scanAlreadyTriggered || !needsInitialSync || autoRefreshCount >= 4) return;
+    const timer = setTimeout(async () => {
+      await loadAlerts();
+      setAutoRefreshCount(prev => prev + 1);
+    }, 15000); // retry every 15s, up to 4 times (1 minute)
+    return () => clearTimeout(timer);
+  }, [scanAlreadyTriggered, needsInitialSync, autoRefreshCount]);
 
   const handleSyncNow = async () => {
     setSyncing(true);
@@ -339,6 +361,29 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
   // Show "needs initial sync" prompt
   if (needsInitialSync && !syncDismissed && alerts.length === 0) {
+    // If scan was already triggered during onboarding, show "still syncing" message
+    if (scanAlreadyTriggered) {
+      return (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex items-center gap-3 p-4">
+            <RefreshCw className="h-5 w-5 text-primary shrink-0 animate-spin" />
+            <div className="flex-1 text-sm">
+              <p className="font-medium text-foreground">
+                Channel scan in progress — orders are still syncing
+              </p>
+              <p className="text-muted-foreground mt-0.5">
+                This usually takes 30–60 seconds. We'll detect your sales channels automatically.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => { loadAlerts(); }} className="gap-1 shrink-0">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="flex items-center gap-3 p-4">
