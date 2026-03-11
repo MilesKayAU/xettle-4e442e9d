@@ -349,7 +349,7 @@ Deno.serve(async (req) => {
                 push_retry_count: 0,
                 xero_journal_id: pushResult.invoiceId,
                 xero_invoice_number: pushResult.invoiceNumber || null,
-                xero_status: 'AUTHORISED',
+                xero_status: 'DRAFT',
                 xero_type: pushResult.xeroType || 'invoice',
               } as any)
               .eq('id', s.id)
