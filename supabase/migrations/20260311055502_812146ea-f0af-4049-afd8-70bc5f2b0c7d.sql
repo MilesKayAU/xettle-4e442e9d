@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS marketplace_connections_user_marketplace_unique ON public.marketplace_connections (user_id, marketplace_code);
