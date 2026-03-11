@@ -545,6 +545,70 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
 // - Returns summary with totals for UI
 // ═══════════════════════════════════════════════════════════════
 async function handleSmartSync(supabase: any, userId: string): Promise<Response> {
+  // ─── Check rate limit cooldown (Amazon 429 backoff) ────────────
+  const { data: rateLimitSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'amazon_rate_limit_until')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (rateLimitSetting?.value) {
+    const rateLimitUntil = new Date(rateLimitSetting.value);
+    if (rateLimitUntil > new Date()) {
+      const minutesLeft = Math.ceil((rateLimitUntil.getTime() - Date.now()) / 60000);
+      return new Response(
+        JSON.stringify({
+          error: 'rate_limited',
+          error_type: 'rate_limit',
+          message: `Amazon API rate limited — this is temporary. Will retry automatically in ${minutesLeft} minutes.`,
+          retry_after: rateLimitSetting.value,
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // ─── Check sync mutex (prevent concurrent Amazon syncs) ────────
+  const { data: lockSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'amazon_sync_lock_expiry')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (lockSetting?.value) {
+    const lockExpiry = new Date(lockSetting.value);
+    if (lockExpiry > new Date()) {
+      return new Response(
+        JSON.stringify({
+          error: 'sync_in_progress',
+          error_type: 'mutex',
+          message: 'Amazon sync already running. Please wait for it to complete.',
+          retry_after: lockSetting.value,
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // ─── Acquire sync lock (10 minute expiry) ──────────────────────
+  await upsertSetting(supabase, userId, 'amazon_sync_lock_expiry',
+    new Date(Date.now() + 10 * 60 * 1000).toISOString()
+  );
+
+  try {
+    return await _executeSmartSync(supabase, userId);
+  } finally {
+    // ─── Always release lock when done ────────────────────────────
+    await supabase.from('app_settings')
+      .delete()
+      .eq('user_id', userId)
+      .eq('key', 'amazon_sync_lock_expiry');
+  }
+}
+
+async function _executeSmartSync(supabase: any, userId: string): Promise<Response> {
   // ─── Check cooldown (1 hour minimum between syncs) ────────────
   const { data: cooldownSetting } = await supabase
     .from('app_settings')
@@ -560,7 +624,8 @@ async function handleSmartSync(supabase: any, userId: string): Promise<Response>
       return new Response(
         JSON.stringify({
           error: 'Sync cooldown active',
-          message: `Last sync was ${Math.round((Date.now() - lastSync.getTime()) / 60000)} minutes ago. Please wait at least 1 hour between syncs.`,
+          error_type: 'cooldown',
+          message: `Amazon synced ${Math.round((Date.now() - lastSync.getTime()) / 60000)} minutes ago. Will retry automatically in 1 hour.`,
           last_sync: cooldownSetting.value,
         }),
         { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
