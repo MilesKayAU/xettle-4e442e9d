@@ -6,6 +6,21 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Payment processors / gateways — NOT marketplaces.
+ * These should never become marketplace_connections or settlement tabs.
+ */
+export const PAYMENT_PROCESSORS = [
+  'paypal', 'stripe', 'afterpay', 'zip', 'zippay', 'klarna',
+  'laybuy', 'humm', 'openpay', 'latitude', 'commbank', 'anz',
+  'westpac', 'nab', 'square', 'tyro', 'braintree',
+];
+
+export function isPaymentProcessor(code: string): boolean {
+  const lower = (code || '').toLowerCase();
+  return PAYMENT_PROCESSORS.some(p => lower.includes(p));
+}
+
 export interface TokenMarketplaceEntry {
   table: 'amazon_tokens' | 'shopify_tokens';
   code: string;
@@ -93,6 +108,13 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
 
   if (allConnections) {
     for (const conn of allConnections) {
+      // Always delete payment processor connections — they are gateways, not marketplaces
+      if (isPaymentProcessor(conn.marketplace_code)) {
+        console.log(`[ghost-cleanup] Removing payment processor connection: ${conn.marketplace_code}`);
+        await supabase.from('marketplace_connections').delete().eq('id', conn.id);
+        continue;
+      }
+
       if (connectedCodes.has(conn.marketplace_code)) continue;
 
       // Never delete manually-added connections

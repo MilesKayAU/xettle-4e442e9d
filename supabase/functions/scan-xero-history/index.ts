@@ -5,6 +5,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
+// Payment processors / gateways — NOT marketplaces. Deposits from these are
+// tracked as channel_alerts (payment_gateway_deposit) instead of marketplace_connections.
+const PAYMENT_PROCESSORS = [
+  'paypal', 'stripe', 'afterpay', 'zip', 'zippay', 'klarna',
+  'laybuy', 'humm', 'openpay', 'latitude', 'commbank', 'anz',
+  'westpac', 'nab', 'square', 'tyro', 'braintree',
+]
+
+function isPaymentProcessor(code: string): boolean {
+  const lower = (code || '').toLowerCase()
+  return PAYMENT_PROCESSORS.some(p => lower.includes(p))
+}
+
 const MARKETPLACE_CONTACT_PATTERNS = [
   'amazon', 'amazon au', 'amazon australia', 'amazon.com.au',
   'kogan', 'big w', 'bigw', 'bunnings',
@@ -362,11 +375,34 @@ Deno.serve(async (req) => {
     }
 
     // ─── 6. PERSIST detected marketplaces as marketplace_connections ─
+    // Payment processors get channel_alerts instead of marketplace_connections
     let marketplaces_created = 0
+    let gateway_alerts_created = 0
     for (const det of detected_settlements) {
       if (det.marketplace === 'unknown') continue
 
       const displayName = MARKETPLACE_NAMES[det.marketplace] || det.marketplace.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+
+      // Payment processors → channel_alert, NOT marketplace_connection
+      if (isPaymentProcessor(det.marketplace)) {
+        await supabase.from('channel_alerts').upsert({
+          user_id: userId,
+          source_name: det.marketplace,
+          detected_label: displayName,
+          detection_method: det.source === 'bank_transaction' ? 'xero_bank_deposit' : 'xero_contact',
+          alert_type: 'payment_gateway_deposit',
+          status: 'pending',
+          deposit_amount: det.last_amount || null,
+          deposit_date: det.last_recorded_date || null,
+          deposit_description: det.reference || null,
+          order_count: 0,
+          total_revenue: det.last_amount || 0,
+        }, { onConflict: 'user_id,source_name' })
+        gateway_alerts_created++
+        console.log(`[scan-xero-history] Payment processor ${det.marketplace} → channel_alert (not marketplace)`)
+        continue
+      }
+
       const { error: upsertErr } = await supabase
         .from('marketplace_connections')
         .upsert({
@@ -440,6 +476,7 @@ Deno.serve(async (req) => {
       details: {
         marketplaces_detected: detected_settlements.length,
         marketplaces_created,
+        gateway_alerts_created,
         standalone_contacts: standaloneContacts,
         accounting_boundary_date,
         confidence,
@@ -447,7 +484,7 @@ Deno.serve(async (req) => {
       },
     })
 
-    console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces (${standaloneContacts.length} from contacts only), created ${marketplaces_created} connections, boundary: ${accounting_boundary_date}`)
+    console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces, created ${marketplaces_created} connections + ${gateway_alerts_created} gateway alerts, boundary: ${accounting_boundary_date}`)
 
     // ─── 10. Trigger validation sweep server-side as backup ─────────
     try {
@@ -471,6 +508,7 @@ Deno.serve(async (req) => {
       detected_settlements,
       standalone_contacts: standaloneContacts,
       marketplaces_created,
+      gateway_alerts_created,
       confidence,
       confidence_reason,
       bank_scan_error: bankScanError,

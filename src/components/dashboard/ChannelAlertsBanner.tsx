@@ -24,7 +24,7 @@ interface ChannelAlert {
   detection_method?: string;
   detected_label?: string;
   candidate_tags?: string[];
-  alert_type?: string; // 'new' | 'unlinked' | 'already_linked' | 'unmatched_deposit' | 'unknown_deposit'
+  alert_type?: string; // 'new' | 'unlinked' | 'already_linked' | 'unmatched_deposit' | 'unknown_deposit' | 'payment_gateway_deposit'
   deposit_amount?: number | null;
   deposit_date?: string | null;
   deposit_description?: string | null;
@@ -467,6 +467,39 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
           const isUnmatchedDeposit = alert.alert_type === 'unmatched_deposit';
           const isUnknownDeposit = alert.alert_type === 'unknown_deposit';
+          const isGatewayDeposit = alert.alert_type === 'payment_gateway_deposit';
+
+          // ─── PAYMENT GATEWAY DEPOSIT — informational, not a marketplace ───
+          if (isGatewayDeposit) {
+            const depositAmt = alert.deposit_amount
+              ? formatCurrency(alert.deposit_amount)
+              : formatCurrency(alert.total_revenue);
+            const depositDate = alert.deposit_date
+              ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+              : null;
+
+            return (
+              <Card key={alert.id} className="border-muted bg-muted/30">
+                <CardContent className="flex items-center gap-3 p-4">
+                  <span className="text-lg shrink-0">💳</span>
+                  <div className="flex-1 text-sm">
+                    <p className="font-medium text-foreground">
+                      {displayName} deposit detected{depositAmt ? ` — ${depositAmt}` : ''}{depositDate ? ` on ${depositDate}` : ''}
+                    </p>
+                    <p className="text-muted-foreground mt-0.5">
+                      This appears to be a payment gateway deposit, not a marketplace settlement.
+                      {displayName} orders placed on your Shopify store are included in your Shopify Payments payout.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
+                      Dismiss
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          }
 
           // ─── DEPOSIT ALERTS — curious, not alarming ───
           if (isUnmatchedDeposit || isUnknownDeposit) {

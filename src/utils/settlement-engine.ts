@@ -71,8 +71,13 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
 /**
  * Marketplace codes that are payment gateways, not settlement sources.
  * These should NOT appear in the settlement timeline or validation table.
+ * Keep in sync with PAYMENT_PROCESSORS in marketplace-token-map.ts
  */
-export const GATEWAY_CODES = new Set(['paypal', 'afterpay', 'stripe_gateway', 'zip_pay']);
+export const GATEWAY_CODES = new Set([
+  'paypal', 'stripe', 'afterpay', 'zip', 'zippay', 'klarna',
+  'laybuy', 'humm', 'openpay', 'latitude', 'commbank', 'anz',
+  'westpac', 'nab', 'square', 'tyro', 'braintree', 'stripe_gateway', 'zip_pay',
+]);
 
 /**
  * Normalise duplicate marketplace codes to their canonical version.
