@@ -419,12 +419,12 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
         .from('app_settings')
         .select('key, value')
         .eq('user_id', userId)
-        .in('key', ['accounting_gst_rate', 'sync_cutoff_date']);
+        .in('key', ['accounting_gst_rate', 'accounting_boundary_date']);
 
       const settingsMap: Record<string, string> = {};
       (settingsData || []).forEach((s: any) => { settingsMap[s.key] = s.value; });
       const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
-      const syncCutoffDate = settingsMap['sync_cutoff_date'] || null;
+      const accountingBoundary = settingsMap['accounting_boundary_date'] || null;
 
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 90);
@@ -491,7 +491,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
             continue;
           }
 
-          const isBeforeCutoff = syncCutoffDate && parsed.header.periodEnd && parsed.header.periodEnd <= syncCutoffDate;
+          const isBeforeCutoff = accountingBoundary && parsed.header.periodEnd && parsed.header.periodEnd <= accountingBoundary;
           const { header, summary, lines, unmapped, splitMonth } = parsed;
 
           const { error: settError } = await supabaseAdmin.from('settlements').insert({
@@ -516,7 +516,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
             gst_on_expenses: summary.gstOnExpenses,
             bank_deposit: summary.bankDeposit,
             reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
-            status: isBeforeCutoff ? 'synced_external' : 'saved',
+            status: isBeforeCutoff ? 'already_recorded' : 'saved',
             source: 'api',
             is_split_month: splitMonth.isSplitMonth,
             split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
