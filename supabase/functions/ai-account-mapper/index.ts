@@ -270,11 +270,11 @@ Return JSON only with this exact structure:
       }
     }
 
-    // Validate — ensure all 8 categories have a code
+    // Validate — ensure all 9 categories have a code
     const DEFAULT_CODES: Record<string, string> = {
       'Sales': '200', 'Promotional Discounts': '200', 'Refunds': '205',
       'Reimbursements': '271', 'Seller Fees': '407', 'FBA Fees': '408',
-      'Storage Fees': '409', 'Other Fees': '405',
+      'Storage Fees': '409', 'Advertising Costs': '410', 'Other Fees': '405',
     }
     for (const [cat, def] of Object.entries(DEFAULT_CODES)) {
       if (!mapping[cat]) {
@@ -283,8 +283,39 @@ Return JSON only with this exact structure:
       }
     }
 
+    // Validate that every mapped code actually exists in the user's Xero CoA
+    const existingCodes = new Set(xeroAccounts.map((a: any) => a.code || a.Code));
+    const invalidMappings = Object.entries(mapping)
+      .filter(([, code]) => !existingCodes.has(code));
+
+    let mapperStatus = 'suggested';
+    if (invalidMappings.length > 0) {
+      console.warn('[ai-account-mapper] Invalid codes detected:', invalidMappings);
+
+      // Log warning to system_events
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'ai_mapper_invalid_codes',
+        severity: 'warning',
+        details: {
+          invalid_categories: invalidMappings.map(([cat, code]) => ({ category: cat, suggested_code: code })),
+          total_invalid: invalidMappings.length,
+        },
+      });
+
+      // Fall back to defaults for invalid categories only
+      for (const [cat] of invalidMappings) {
+        if (DEFAULT_CODES[cat]) {
+          mapping[cat] = DEFAULT_CODES[cat];
+        }
+      }
+
+      confidence = 'low';
+      mapperStatus = 'needs_review';
+    }
+
     // Build enriched response with account names
-    const accountLookup = new Map(xeroAccounts.map((a: any) => [a.code, a.name]))
+    const accountLookup = new Map(xeroAccounts.map((a: any) => [a.code || a.Code, a.name || a.Name]))
     const enrichedMapping: Record<string, { code: string; name: string }> = {}
     for (const [cat, code] of Object.entries(mapping)) {
       enrichedMapping[cat] = {
