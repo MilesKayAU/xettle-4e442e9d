@@ -207,10 +207,12 @@ export function buildAmazonInvoiceLineItems(
 export function computeXeroInclusiveTotal(lineItems: XeroLineItem[]): number {
   let total = 0;
   for (const item of lineItems) {
+    const amt = item.UnitAmount;
+    const sign = amt < 0 ? -1 : 1;
     if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
-      total += round2(round2(item.UnitAmount) * 1.1);
+      total += round2(round2(Math.abs(amt)) * 1.1) * sign;
     } else {
-      total += round2(item.UnitAmount);
+      total += round2(amt);
     }
   }
   return round2(total);
@@ -309,15 +311,16 @@ export function buildJournalPreviewRows(
     const a = round2(amount);
     if (a === 0) continue;
     const map = XERO_ACCOUNT_MAP[category] || { code: '000', name: category };
-    const taxAmt = round2(a / 11);
+    const absA = Math.abs(a);
+    const taxAmt = round2(absA / 11);
     journalRows.push({
       description: `Amazon ${category}`,
       accountCode: map.code,
       accountName: `${map.code}: ${map.name}`,
       taxRate: 'GST on Expenses',
-      netAmount: round2(a - taxAmt),
-      taxAmount: taxAmt,
-      grossAmount: a,
+      netAmount: -round2(absA - taxAmt),
+      taxAmount: -taxAmt,
+      grossAmount: -absA,
     });
   }
 
