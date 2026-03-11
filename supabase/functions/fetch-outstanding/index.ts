@@ -54,18 +54,21 @@ function parseXeroDate(dateField: string | null | undefined): string | null {
   return raw.split('T')[0];
 }
 
-function extractSettlementId(reference: string): string | null {
-  if (reference.startsWith('Xettle-')) return reference.slice(7).replace(/-P[12]$/, '');
-  if (reference.startsWith('AMZN-')) return reference.slice(5);
-  const lmbMatch = reference.match(/^LMB-\w+-(\d+)-\d+$/);
-  if (lmbMatch) return lmbMatch[1];
+function extractSettlementId(reference: string): { id: string | null; part: number | null } {
+  if (reference.startsWith('Xettle-')) {
+    const partMatch = reference.match(/-P([12])$/);
+    return { id: reference.slice(7).replace(/-P[12]$/, ''), part: partMatch ? parseInt(partMatch[1]) : null };
+  }
+  if (reference.startsWith('AMZN-')) return { id: reference.slice(5), part: null };
+  const lmbMatch = reference.match(/^LMB-\w+-(\d+)-(\d+)$/);
+  if (lmbMatch) return { id: lmbMatch[1], part: parseInt(lmbMatch[2]) };
   const numericMatch = reference.match(/\b(\d{8,})\b/);
-  if (numericMatch) return numericMatch[1];
+  if (numericMatch) return { id: numericMatch[1], part: null };
   const shopifyMatch = reference.match(/(Shopify-[\w]+)/);
-  if (shopifyMatch) return shopifyMatch[1];
+  if (shopifyMatch) return { id: shopifyMatch[1], part: null };
   const genericMatch = reference.match(/(\d+_\w+)/);
-  if (genericMatch) return genericMatch[1];
-  return null;
+  if (genericMatch) return { id: genericMatch[1], part: null };
+  return { id: null, part: null };
 }
 
 function detectMarketplace(reference: string, contactName: string): string {
@@ -152,12 +155,23 @@ Deno.serve(async (req) => {
     // ─── Get user's settlements for matching ───
     const { data: settlements } = await supabase
       .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, bank_verified, bank_verified_amount, xero_journal_id, xero_status')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data')
       .eq('user_id', userId);
 
     const settlementMap = new Map<string, any>();
     for (const s of (settlements || [])) {
       settlementMap.set(s.settlement_id, s);
+    }
+
+    // ─── Also load aliases for cross-reference matching ───
+    const { data: aliases } = await supabase
+      .from('settlement_id_aliases')
+      .select('alias_id, canonical_settlement_id')
+      .eq('user_id', userId);
+    
+    const aliasMap = new Map<string, string>();
+    for (const a of (aliases || [])) {
+      aliasMap.set(a.alias_id, a.canonical_settlement_id);
     }
 
     // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
@@ -202,11 +216,54 @@ Deno.serve(async (req) => {
 
       totalOutstanding += amount;
 
-      // Try to match with our settlement
-      const settlementId = extractSettlementId(reference);
-      const settlement = settlementId ? settlementMap.get(settlementId) : null;
+      // Try to match with our settlement (direct ID, then alias lookup)
+      const extracted = extractSettlementId(reference);
+      const settlementId = extracted.id;
+      const splitPart = extracted.part; // 1 or 2 for LMB/Xettle split-month refs
+      let settlement = settlementId ? settlementMap.get(settlementId) : null;
+      
+      // Try alias lookup if direct match failed
+      if (!settlement && settlementId) {
+        const canonical = aliasMap.get(settlementId);
+        if (canonical) settlement = settlementMap.get(canonical);
+      }
+      
       const hasSettlement = !!settlement;
       if (hasSettlement) matchedWithSettlement++;
+
+      // Build settlement evidence for the UI
+      let settlementEvidence: any = null;
+      if (settlement) {
+        // For split-month settlements, show the relevant part's data
+        let splitData = null;
+        if (settlement.is_split_month && splitPart) {
+          splitData = splitPart === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
+          if (typeof splitData === 'string') splitData = JSON.parse(splitData);
+        }
+
+        settlementEvidence = {
+          settlement_id: settlement.settlement_id,
+          source: settlement.source, // 'api', 'manual', 'csv'
+          marketplace: settlement.marketplace,
+          period_start: settlement.period_start,
+          period_end: settlement.period_end,
+          bank_deposit: settlement.bank_deposit,
+          net_ex_gst: settlement.net_ex_gst,
+          sales_principal: splitData?.salesPrincipal ?? settlement.sales_principal,
+          seller_fees: splitData?.sellerFees ?? settlement.seller_fees,
+          fba_fees: splitData?.fbaFees ?? settlement.fba_fees,
+          refunds: splitData?.refunds ?? settlement.refunds,
+          reimbursements: splitData?.reimbursements ?? settlement.reimbursements,
+          gst_on_income: splitData?.gstOnIncome ?? settlement.gst_on_income,
+          is_split_month: settlement.is_split_month,
+          split_part: splitPart,
+          split_net: splitData?.netExGst ?? null,
+          bank_verified: settlement.bank_verified,
+          xero_status: settlement.xero_status,
+          xero_invoice_number: settlement.xero_invoice_number,
+          status: settlement.status,
+        };
+      }
 
       // Try to find matching bank deposit
       const marketplace = detectMarketplace(reference, contactName);
@@ -308,6 +365,7 @@ Deno.serve(async (req) => {
         has_settlement: hasSettlement,
         settlement_id: settlementId,
         settlement_status: settlement?.status || null,
+        settlement_evidence: settlementEvidence,
         has_bank_deposit: hasBankDeposit,
         bank_match: bankMatch,
         bank_difference: bankDifference,
