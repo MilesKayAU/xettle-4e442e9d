@@ -205,7 +205,7 @@ Deno.serve(async (req) => {
         total_discounts: parseFloat(o.total_discounts || "0") || 0,
         financial_status: o.financial_status || null,
         note_attributes: o.note_attributes && o.note_attributes.length > 0
-          ? JSON.stringify(o.note_attributes)
+          ? o.note_attributes
           : null,
         processed_at: o.processed_at || null,
         created_at_shopify: o.created_at || null,
