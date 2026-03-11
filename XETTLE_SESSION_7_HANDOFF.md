@@ -106,26 +106,37 @@ LMB AU GST defaults (our implementation matches):
 
 ## Known Gaps (priority order for Session 7+)
 
-### 🔴 High Priority
+### ✅ Completed in Session 7
 
-1. Xero Tracking Categories
-   - Built in this session (confirm status)
-   - opt-in toggle, "Sales Channel" category
+1. Xero Tracking Categories — **BUILT**
+   - Opt-in toggle, "Sales Channel" category
    - Per-marketplace option auto-created
    - Enables per-channel P&L inside Xero
+   - Caches category/option IDs to avoid repeat API calls
 
-2. Audit CSV attach to Xero invoice
-   - Not built
-   - LMB does this within 48hrs automatically  
-   - Xero API: PUT /Invoices/{id}/Attachments
-   - Attach raw settlement CSV to invoice on push
-   - Major accountant trust signal
+2. Audit CSV attach to Xero invoice — **BUILT**
+   - 16-column summary CSV generated from raw_payload
+   - PUT to Xero Attachments API on every successful push
+   - Both sync-settlement-to-xero and auto-push-xero paths
+   - Non-blocking: attachment failure doesn't fail the push
+   - Logged to system_events as xero_csv_attachment
 
-3. Negative rollover detection
+### ⏸️ Parked — Needs Real Data
+
+3. Negative rollover detection — **PARKED**
    - Small negative ACCPAY bills (<~$20) sit orphaned
    - Amazon rolls these into next settlement
    - Need: detect repayment line in following settlement
-   - Net the bill to $0.00 using Account 612
+   - **Why parked:** No real Amazon AU settlement data in DB yet.
+     Detection string unknown — could be "PreviousReserveAmountBalance",
+     "Repayment of negative Amazon balance", or something else.
+     Building speculatively risks silent non-firing (never matches)
+     or worse — partial match on wrong line causing BAS errors.
+   - **Current safety:** Negative settlements create ACCPAY bills
+     flagged for review. No auto-post, no auto-net. Safe default.
+   - **Unblock:** Push real Amazon AU settlements during testing month,
+     inspect raw_payload for exact reserve/repayment field names,
+     then build detection logic from real evidence.
 
 ### 🟡 Medium Priority
 
@@ -166,13 +177,13 @@ LMB AU GST defaults (our implementation matches):
 ✅ Advertising costs separated
 ✅ Reimbursements BAS-excluded
 ✅ Boundary date protection
+✅ Audit file attached to Xero invoice
+✅ Xero Tracking Categories (per-channel P&L)
 
 ### What LMB does that Xettle doesn't yet
 
-❌ Audit file attached to Xero invoice
-❌ Xero Tracking Categories (building)
 ❌ Reserved balance account
-❌ Negative rollover auto-detection
+❌ Negative rollover auto-detection (parked — needs real data)
 ❌ COGS tracking (deferred)
 ❌ Industry benchmarking
 ❌ Accountant partner dashboard
@@ -216,31 +227,51 @@ Xettle is flat rate — advantage grows with volume/channels.
 
 ---
 
-## Session 7 First Tasks
+## Session 7 Final Status
 
-✅ COMPLETED START OF SESSION 7:
-- Xero Tracking Categories fully built
-  Files: xero-auth, sync-settlement-to-xero, 
-         auto-push-xero, AccountingDashboard, 
-         AccountMapperCard
-  Opt-in toggle in Settings + Account Mapper card
-  Caches category/option IDs to avoid repeat API calls
-  Every line item tagged: Sales Channel → marketplace name
+### ✅ Task 1: Xero Tracking Categories — BUILT
+Files: xero-auth, sync-settlement-to-xero, auto-push-xero,
+AccountingDashboard, AccountMapperCard.
+Opt-in toggle in Settings + Account Mapper card.
+Caches category/option IDs to avoid repeat API calls.
+Every line item tagged: Sales Channel → marketplace name.
 
-1. Confirm Xero Tracking Categories build status
-   - ✅ CONFIRMED BUILT — see above
+### ✅ Task 2: Audit CSV attach to Xero invoice — BUILT
+Files: sync-settlement-to-xero (buildSettlementCsv + attachSettlementToXero),
+auto-push-xero (passes settlementData for CSV generation).
+PUT to /Invoices/{id}/Attachments/{filename} with Content-Type: text/csv.
+16-column summary: Date, Type, OrderID, SKU, Description, Amount, etc.
+Non-blocking — attachment failure logged but doesn't fail the push.
 
-2. Audit CSV attach to Xero invoice
-   - Write and send prompt
-   - Edge function: after successful push, 
-     PUT /api.xro/2.0/Invoices/{xeroId}/Attachments
-   - File: raw settlement CSV from settlements.raw_payload
+### ⏸️ Task 3: Negative rollover detection — PARKED
+Needs real Amazon AU settlement data to identify exact field names.
+Speculative build risks BAS errors. Current ACCPAY flagging is safe.
 
-3. Negative rollover detection
-   - Detect 'Repayment of negative Amazon Balance' line
-   - Auto-net the previous ACCPAY bill to $0.00
+### 🧪 Task 4: Real-world push test — TESTING MONTH
+Part of the upcoming testing month. First real push will validate
+all Session 6+7 features end-to-end.
 
-4. Real-world push test
-   - Push Big W $534.94 settlement to Xero
-   - Verify line items, GST, bank matching auto-triggers
-   - Check system_events for correct event logging
+---
+
+## Testing Month Roadmap
+
+### Primary Goal
+Push real settlements through all paths, validate Xero output,
+and collect the raw payload data needed to unblock Task 3.
+
+### While Waiting on Real Data
+
+1. **Deferred Revenue naming** — Surface the split-month feature
+   in the UI as "Deferred Revenue Recognition". This is the
+   language accountants use and what LMB charges extra for.
+
+2. **Dashboard Insights tab (basic)** — Show per-channel fee %
+   and margin from pushed settlements. First step toward the
+   benchmarking feature LMB highlights in their AU listing.
+
+### Task 3 Unblock Criteria
+- At least one real Amazon AU settlement pushed
+- Inspect raw_payload for reserve/repayment line items
+- Identify exact field names (likely PreviousReserveAmountBalance
+  or similar, but must confirm from real data)
+- Build detection logic from evidence, not speculation
