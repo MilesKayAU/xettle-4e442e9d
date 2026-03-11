@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { LogOut, Key, ShieldAlert } from 'lucide-react';
+import AccountResetButton from './AccountResetButton';
 import { Button } from "@/components/ui/button";
 import {
   Card,
