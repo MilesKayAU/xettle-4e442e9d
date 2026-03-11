@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
@@ -14,9 +14,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   CheckCircle2, AlertTriangle, SkipForward, RefreshCw, ArrowRight,
-  Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink
+  Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink, ArrowLeft, Copy, Check
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
+import XettleLogo from '@/components/shared/XettleLogo';
+import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 
 // ─── Types ──────────────────────────────────────────────────────────
