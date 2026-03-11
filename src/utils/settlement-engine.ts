@@ -296,7 +296,7 @@ export async function checkForDuplicate(params: {
     }
   }
 
-  // 3. Fingerprint match (marketplace + dates + amount ±$0.05)
+  // 3. Fingerprint match (marketplace + dates + amount ±$0.05 + settlement_id)
   const { data: fingerprints } = await supabase
     .from('settlements')
     .select('settlement_id, bank_deposit')
@@ -309,7 +309,37 @@ export async function checkForDuplicate(params: {
     for (const fp of fingerprints) {
       const existingAmount = parseFloat(String(fp.bank_deposit)) || 0;
       if (Math.abs(existingAmount - bankDeposit) <= 0.05) {
-        return { isDuplicate: true, canonicalId: fp.settlement_id, matchMethod: 'fingerprint_amount_date' };
+        // Only block if settlement_id matches or is a substring match
+        const idsMatch = fp.settlement_id === settlementId
+          || fp.settlement_id.includes(settlementId)
+          || settlementId.includes(fp.settlement_id);
+
+        if (idsMatch) {
+          return { isDuplicate: true, canonicalId: fp.settlement_id, matchMethod: 'fingerprint_amount_date' };
+        }
+
+        // Different settlement_id with similar fingerprint — warn but allow
+        console.warn(
+          `[dedup] Similar fingerprint but different settlement_id: existing=${fp.settlement_id} new=${settlementId} ` +
+          `amount_diff=$${Math.abs(existingAmount - bankDeposit).toFixed(2)}`
+        );
+        try {
+          await supabase.from('system_events').insert({
+            user_id: userId,
+            event_type: 'possible_duplicate_different_id',
+            severity: 'warning',
+            marketplace_code: marketplace,
+            settlement_id: settlementId,
+            details: {
+              existing_settlement_id: fp.settlement_id,
+              new_settlement_id: settlementId,
+              existing_amount: existingAmount,
+              new_amount: bankDeposit,
+              amount_diff: Math.abs(existingAmount - bankDeposit),
+              period: `${periodStart} → ${periodEnd}`,
+            },
+          });
+        } catch (_) { /* non-blocking */ }
       }
     }
   }

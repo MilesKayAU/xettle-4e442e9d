@@ -663,7 +663,7 @@ serve(async (req) => {
     const invoicePayload = { Invoices: [invoiceData] };
 
     // Validate TaxTypes before sending to Xero
-    const VALID_TAX_TYPES = ['OUTPUT', 'INPUT', 'EXEMPTOUTPUT', 'BASEXCLUDED'];
+    const VALID_TAX_TYPES = ['OUTPUT', 'INPUT', 'EXEMPTOUTPUT', 'BASEXCLUDED', 'NONE'];
     for (const item of invoiceData.LineItems) {
       if (!VALID_TAX_TYPES.includes(item.TaxType)) {
         throw new Error(
