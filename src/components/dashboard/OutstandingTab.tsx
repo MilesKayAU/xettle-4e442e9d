@@ -126,8 +126,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     return filteredRows.reduce((sum, r) => sum + r.amount, 0);
   }, [filteredRows]);
 
+  const [noXeroConnection, setNoXeroConnection] = useState(false);
+
   const fetchOutstanding = useCallback(async () => {
     setLoading(true);
+    setNoXeroConnection(false);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
@@ -135,6 +138,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
+
+      // Handle "No Xero connection" gracefully
+      if (resp.data?.error === 'No Xero connection') {
+        setNoXeroConnection(true);
+        setHasLoaded(true);
+        return;
+      }
 
       if (resp.error) throw resp.error;
       setData(resp.data as OutstandingSummary);
