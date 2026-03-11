@@ -531,6 +531,3 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     </div>
   );
 }
-
-// Fragment import at top
-import { Fragment } from 'react';
