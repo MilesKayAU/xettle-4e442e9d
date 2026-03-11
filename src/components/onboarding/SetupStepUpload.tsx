@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Upload, FileText, CheckCircle2, X } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, X, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
   onNext: () => void;
   onSkip: () => void;
+  onBack?: () => void;
   selectedMarketplaces: string[];
 }
 
@@ -20,12 +21,11 @@ const MARKETPLACE_LABELS: Record<string, string> = {
   ebay: 'eBay',
 };
 
-export default function SetupStepUpload({ onNext, onSkip, selectedMarketplaces }: Props) {
+export default function SetupStepUpload({ onNext, onSkip, onBack, selectedMarketplaces }: Props) {
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, File[]>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeMarketplace, setActiveMarketplace] = useState<string | null>(null);
 
-  // Filter to CSV-only marketplaces (not amazon/shopify which use API)
   const csvMarketplaces = selectedMarketplaces.filter(m => !['amazon', 'shopify'].includes(m));
 
   const handleFileSelect = (marketplace: string, files: FileList | null) => {
@@ -117,7 +117,6 @@ export default function SetupStepUpload({ onNext, onSkip, selectedMarketplaces }
         )}
       </div>
 
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -132,17 +131,26 @@ export default function SetupStepUpload({ onNext, onSkip, selectedMarketplaces }
         }}
       />
 
-      {/* Actions */}
       <div className="flex flex-col items-center gap-2">
         <Button onClick={onNext} className="w-full">
           {totalFiles > 0 ? `Continue with ${totalFiles} file${totalFiles > 1 ? 's' : ''}` : 'Continue'}
         </Button>
-        <button
-          onClick={onSkip}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          I'll upload later →
-        </button>
+        <div className="flex items-center justify-between w-full">
+          {onBack ? (
+            <button
+              onClick={onBack}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <ArrowLeft className="h-3 w-3" /> Back
+            </button>
+          ) : <div />}
+          <button
+            onClick={onSkip}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            I'll upload later →
+          </button>
+        </div>
       </div>
     </div>
   );

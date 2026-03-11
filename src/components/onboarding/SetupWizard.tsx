@@ -6,7 +6,6 @@ import { supabase } from '@/integrations/supabase/client';
 import SetupStepConnectXero from './SetupStepConnectXero';
 import SetupStepConnectStores from './SetupStepConnectStores';
 import SetupStepUpload from './SetupStepUpload';
-import SetupStepScanning from './SetupStepScanning';
 import SetupStepResults from './SetupStepResults';
 
 interface SetupWizardProps {
@@ -20,8 +19,8 @@ interface SetupWizardProps {
   justConnectedXero?: boolean;
 }
 
-const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Scanning', 'Results'];
-const TOTAL_STEPS = 5;
+const STEP_LABELS = ['Connect Xero', 'Marketplaces', 'Upload', 'Results'];
+const TOTAL_STEPS = 4;
 const STORAGE_KEY = 'xettle_setup_step';
 const SELECTED_MARKETPLACES_KEY = 'xettle_setup_marketplaces';
 
@@ -36,7 +35,6 @@ export default function SetupWizard({
   justConnectedXero = false,
 }: SetupWizardProps) {
   const [step, setStep] = useState(() => {
-    // If an explicit initialStep was provided (e.g. OAuth return), use it directly
     if (initialStep > 1) return Math.min(initialStep, TOTAL_STEPS);
     const saved = sessionStorage.getItem(STORAGE_KEY);
     const parsed = saved ? parseInt(saved, 10) : 1;
@@ -48,7 +46,6 @@ export default function SetupWizard({
     return saved ? JSON.parse(saved) : [];
   });
   const [skippedAllApis, setSkippedAllApis] = useState(false);
-  const [pendingScans, setPendingScans] = useState(0);
 
   useEffect(() => {
     if (initialStep > 1) setStep(Math.min(initialStep, TOTAL_STEPS));
@@ -64,7 +61,6 @@ export default function SetupWizard({
 
   // Fire-and-forget background scan orchestrator
   const fireBackgroundScan = useCallback(async (fnName: string) => {
-    setPendingScans(p => p + 1);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -74,25 +70,29 @@ export default function SetupWizard({
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
       };
-      // Fire the scan
       await fetch(`${baseUrl}/${fnName}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({}),
       }).catch(err => console.warn(`[wizard] ${fnName} failed:`, err));
-      // Follow up with validation sweep
-      await fetch(`${baseUrl}/run-validation-sweep`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({}),
-      }).catch(err => console.warn('[wizard] validation-sweep failed:', err));
-    } finally {
-      setPendingScans(p => p - 1);
+    } catch (err) {
+      console.warn('[wizard] background scan error:', err);
     }
   }, []);
 
   const handleNext = () => setStep(s => Math.min(s + 1, TOTAL_STEPS));
   const handleSkip = () => setStep(s => Math.min(s + 1, TOTAL_STEPS));
+
+  const handleBack = () => {
+    setStep(s => {
+      if (s <= 1) return 1;
+      const target = s - 1;
+      // If going back to Upload (3) but upload should be skipped, go to Marketplaces (2)
+      if (target === 3 && !shouldShowUpload) return 2;
+      return target;
+    });
+  };
+
   const handleComplete = () => {
     sessionStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SELECTED_MARKETPLACES_KEY);
@@ -114,16 +114,10 @@ export default function SetupWizard({
   );
   const shouldShowUpload = hasCsvMarketplaces || skippedAllApis;
 
-  // Determine if scanning step should show (any API connected)
-  const hasAnyApi = hasAmazon || hasShopify || hasXero;
-  const shouldShowScanning = hasAnyApi && !skippedAllApis;
-
-  // Calculate effective step, skipping Upload (3) and/or Scanning (4) as needed
+  // Calculate effective step, skipping Upload (3) if not needed
   let effectiveStep = step;
   if (step === 3 && !shouldShowUpload) {
-    effectiveStep = shouldShowScanning ? 4 : 5;
-  } else if (step === 4 && !shouldShowScanning) {
-    effectiveStep = 5;
+    effectiveStep = 4;
   }
 
   const progressValue = (effectiveStep / TOTAL_STEPS) * 100;
@@ -170,6 +164,7 @@ export default function SetupWizard({
                   setSkippedAllApis(true);
                   handleNext();
                 }}
+                onBack={handleBack}
                 hasAmazon={hasAmazon}
                 hasShopify={hasShopify}
                 hasXero={hasXero}
@@ -183,24 +178,16 @@ export default function SetupWizard({
               <SetupStepUpload
                 onNext={handleNext}
                 onSkip={handleSkip}
+                onBack={handleBack}
                 selectedMarketplaces={selectedMarketplaces}
               />
             )}
-            {effectiveStep === 4 && shouldShowScanning && (
-              <SetupStepScanning
-                onNext={handleNext}
-                hasXero={hasXero}
-                hasAmazon={hasAmazon}
-                hasShopify={hasShopify}
-              />
-            )}
-            {effectiveStep === 5 && (
+            {effectiveStep === 4 && (
               <SetupStepResults
                 onNext={handleComplete}
                 hasXero={hasXero}
                 hasAmazon={hasAmazon}
                 hasShopify={hasShopify}
-                scansInProgress={pendingScans > 0}
               />
             )}
           </div>
