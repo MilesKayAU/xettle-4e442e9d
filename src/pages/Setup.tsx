@@ -374,9 +374,18 @@ export default function Setup() {
 
   // ─── Amazon scan ──────────────────────────────────────────────────
   async function runAmazonScan(token: string, userId: string) {
+    const ac = new AbortController();
+    amazonAbortRef.current = ac;
     setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements (this can take several minutes)...' });
-    const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token);
+    const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token, {}, { signal: ac.signal });
+    amazonAbortRef.current = null;
     if (!mountedRef.current) return;
+
+    if (result.aborted) {
+      setAmazonStep({ status: 'error', message: 'Amazon fetch stopped', error: 'Stopped by user' });
+      setAmazonProgress(0);
+      return;
+    }
 
     if (result.ok) {
       const { data: settlements } = await supabase
@@ -416,6 +425,20 @@ export default function Setup() {
       setAmazonProgress(0);
     }
   }
+
+  // ─── Stop scan helper ─────────────────────────────────────────────
+  const stopScan = useCallback((api: 'xero' | 'shopify' | 'amazon') => {
+    if (api === 'xero' && xeroAbortRef.current) {
+      xeroAbortRef.current.abort();
+      xeroAbortRef.current = null;
+    } else if (api === 'shopify' && shopifyAbortRef.current) {
+      shopifyAbortRef.current.abort();
+      shopifyAbortRef.current = null;
+    } else if (api === 'amazon' && amazonAbortRef.current) {
+      amazonAbortRef.current.abort();
+      amazonAbortRef.current = null;
+    }
+  }, []);
 
   // ─── Retry helper ─────────────────────────────────────────────────
   const retryStep = useCallback((api: 'xero' | 'shopify' | 'amazon') => {
