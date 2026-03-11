@@ -1,7 +1,7 @@
 import { test } from '@playwright/test';
 import { percySnapshot } from '@percy/playwright';
 
-const BASE_URL = process.env.TEST_URL ?? 'http://localhost:5173';
+const BASE_URL = process.env.TEST_URL ?? 'http://localhost:8080';
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`${BASE_URL}/auth`);
