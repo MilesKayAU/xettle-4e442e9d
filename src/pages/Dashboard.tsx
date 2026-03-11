@@ -517,7 +517,8 @@ export default function Dashboard() {
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
-              const showDot = tab.key === 'dashboard' && pendingChannelAlerts > 0;
+              const showDot = (tab.key === 'dashboard' && pendingChannelAlerts > 0) || ((tab as any).badgeCount > 0);
+              const badgeNum = tab.key === 'dashboard' ? pendingChannelAlerts : (tab as any).badgeCount || 0;
               return (
                 <button
                   key={tab.key}
@@ -530,9 +531,9 @@ export default function Dashboard() {
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
-                  {showDot && (
+                  {showDot && badgeNum > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
-                      {pendingChannelAlerts}
+                      {badgeNum}
                     </span>
                   )}
                 </button>
