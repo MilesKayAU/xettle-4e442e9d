@@ -405,8 +405,6 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
       continue;
     }
 
-  for (const amazonToken of amazonTokens) {
-    const userId = amazonToken.user_id;
     const region = amazonToken.region || 'fe';
     const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe;
 
