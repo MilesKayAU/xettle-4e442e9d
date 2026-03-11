@@ -132,7 +132,19 @@ async function refreshXeroToken(supabase: any, token: XeroToken): Promise<XeroTo
     return token;
   }
 
-  console.log('Token expired or expiring soon, refreshing...');
+  console.log('Token expired or expiring soon, checking for concurrent refresh...');
+
+  // Optimistic locking: re-read token to detect concurrent refresh
+  const { data: freshTokens, error: rereadError } = await supabase
+    .from('xero_tokens')
+    .select('*')
+    .eq('id', token.id)
+    .single();
+
+  if (!rereadError && freshTokens && freshTokens.expires_at !== token.expires_at) {
+    console.log('Token already refreshed by another instance, using updated token');
+    return { ...token, ...freshTokens } as XeroToken;
+  }
 
   const tokenResponse = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
@@ -142,7 +154,7 @@ async function refreshXeroToken(supabase: any, token: XeroToken): Promise<XeroTo
     },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: token.refresh_token
+      refresh_token: freshTokens?.refresh_token || token.refresh_token
     })
   });
 
