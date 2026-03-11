@@ -99,10 +99,10 @@ in app_settings via getCode(). Falls back to above defaults.
 | LMB9 | Reserved Balances | Current Asset | ❌ not built |
 | LMB9A | Split Month Rollovers | Current Asset | 612 ✅ |
 
-LMB AU GST defaults (our implementation — see Session 7 corrections):
+LMB AU GST defaults (our implementation):
 - AU Sales → GST on Income (OUTPUT)
 - International Sales → GST Free (EXEMPTOUTPUT) ✅ LIVE
-- Reimbursements → OUTPUT (Session 7 correction — conservative/safe vs LMB's NONE)
+- Reimbursements → BASEXCLUDED (Session 7 correction — matches LMB AU exactly)
 - Fees → GST on Expenses (INPUT) ✅
 
 ---
