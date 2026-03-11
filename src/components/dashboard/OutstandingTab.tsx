@@ -279,6 +279,30 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     );
   }
 
+  // No Xero connection — show helpful message
+  if (noXeroConnection) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Outstanding</h2>
+          <p className="text-muted-foreground mt-1">
+            Xero invoices awaiting payment — matched against your settlements and bank deposits.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <FileText className="h-12 w-12 text-muted-foreground/40 mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No Xero Connection</h3>
+            <p className="text-muted-foreground max-w-md">
+              Connect your Xero account to see outstanding invoices. Go to the <strong>Setup</strong> tab to link Xero, 
+              then return here to reconcile your marketplace settlements.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const balancedCount = data?.rows.filter(r => r.match_status === 'balanced').length || 0;
   const selectedBalancedCount = data?.rows.filter(
     r => selected.has(r.xero_invoice_id) && r.match_status === 'balanced'
