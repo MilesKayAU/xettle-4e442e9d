@@ -355,6 +355,20 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       .maybeSingle();
 
     if (boundarySetting?.value && settlement.period_end < boundarySetting.value) {
+      // ─── Dedup check applies even for boundary settlements ─────────
+      const boundaryDupCheck = await checkForDuplicate({
+        settlementId: settlement.settlement_id,
+        marketplace: settlement.marketplace,
+        userId: user.id,
+        periodStart: settlement.period_start,
+        periodEnd: settlement.period_end,
+        bankDeposit: settlement.net_payout,
+      });
+
+      if (boundaryDupCheck.isDuplicate) {
+        return { success: false, error: `This settlement already exists (matched by ${boundaryDupCheck.matchMethod}).`, duplicate: true };
+      }
+
       // Save with special status — no Xero entry will be created
       const meta = settlement.metadata || {};
       const { error } = await supabase.from('settlements').insert({
@@ -380,8 +394,9 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
 
       if (error) return { success: false, error: error.message };
 
-      // Register aliases for boundary settlements too
+      // Register aliases + post-insert safety check
       registerAliases(settlement.settlement_id, user.id, settlement.source, meta.sourceReference);
+      postInsertDuplicateCheck(settlement.settlement_id, settlement.marketplace, user.id);
 
       return {
         success: true,
