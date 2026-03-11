@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Loader2, AlertTriangle, SkipForward } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
+import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
 
 interface Props {
   onNext: () => void;
@@ -15,128 +16,125 @@ interface ScanStep {
   label: string;
   fn: string | null;
   action?: string;
+  requiresCapability?: keyof SyncCapabilities;
+  /** If this step needs shopify orders to exist first */
+  requiresShopifyOrders?: boolean;
 }
 
+type StepStatus = 'pending' | 'running' | 'success' | 'skipped' | 'error';
+
 export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXero }: Props) {
-  const steps: ScanStep[] = [
-    ...(hasXero ? [{ label: 'Scanning Xero for existing invoices...', fn: 'scan-xero-history' }] : []),
-    ...(hasAmazon ? [{ label: 'Fetching recent Amazon settlements...', fn: 'fetch-amazon-settlements' }] : []),
+  const allSteps: ScanStep[] = [
+    // Phase 1 — parallel fetches (run sequentially in UI for progress, but we check caps)
+    ...(hasXero ? [{ label: 'Scanning Xero for existing invoices…', fn: 'scan-xero-history', requiresCapability: 'hasXero' as keyof SyncCapabilities }] : []),
+    ...(hasAmazon ? [{ label: 'Fetching Amazon settlements…', fn: 'fetch-amazon-settlements', requiresCapability: 'hasAmazon' as keyof SyncCapabilities }] : []),
     ...(hasShopify ? [
-      { label: 'Fetching Shopify payouts...', fn: 'fetch-shopify-payouts' },
-      { label: 'Fetching Shopify orders...', fn: 'fetch-shopify-orders' },
-      { label: 'Scanning sub-channels...', fn: 'scan-shopify-channels' },
+      { label: 'Fetching Shopify payouts…', fn: 'fetch-shopify-payouts', requiresCapability: 'hasShopify' as keyof SyncCapabilities },
+      { label: 'Fetching Shopify orders…', fn: 'fetch-shopify-orders', requiresCapability: 'hasShopify' as keyof SyncCapabilities },
+      { label: 'Scanning sales channels…', fn: 'scan-shopify-channels', requiresCapability: 'hasShopify' as keyof SyncCapabilities, requiresShopifyOrders: true },
     ] : []),
-    { label: 'Setting up marketplace tabs...', fn: null, action: 'provision-all' },
-    { label: 'Checking for uploaded files...', fn: null },
-    { label: 'Running validation sweep...', fn: 'run-validation-sweep' },
+    { label: 'Setting up marketplace tabs…', fn: null, action: 'provision-all' },
+    { label: 'Running validation sweep…', fn: 'run-validation-sweep' },
   ];
 
-  const [completedSteps, setCompletedSteps] = useState<number>(0);
+  const [stepStatuses, setStepStatuses] = useState<StepStatus[]>(allSteps.map(() => 'pending'));
+  const [stepMessages, setStepMessages] = useState<string[]>(allSteps.map(() => ''));
+  const [currentStep, setCurrentStep] = useState(0);
   const [timedOut, setTimedOut] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const hasStarted = useRef(false);
 
-  // Elapsed time counter
+  const updateStep = (idx: number, status: StepStatus, message?: string) => {
+    setStepStatuses(prev => { const n = [...prev]; n[idx] = status; return n; });
+    if (message) setStepMessages(prev => { const n = [...prev]; n[idx] = message; return n; });
+  };
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      setElapsedSeconds(prev => prev + 1);
-    }, 1000);
+    const interval = setInterval(() => setElapsedSeconds(prev => prev + 1), 1000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (hasStarted.current) return;
     hasStarted.current = true;
-
     let cancelled = false;
 
     const runScans = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session || cancelled) return;
+        // Step 0: Detect real capabilities from DB (not just props)
+        const caps = await detectCapabilities();
+        if (!caps.userId || !caps.accessToken || cancelled) return;
 
-        // Pre-fetch shopDomain for Shopify order calls
-        let shopDomain: string | null = null;
-        if (hasShopify) {
-          const { data: tokenRow } = await supabase
-            .from('shopify_tokens')
-            .select('shop_domain')
-            .single();
-          shopDomain = tokenRow?.shop_domain ?? null;
-        }
+        let shopifyOrdersFetched = caps.hasShopifyOrders;
 
-        for (let i = 0; i < steps.length; i++) {
+        for (let i = 0; i < allSteps.length; i++) {
           if (cancelled) return;
-          const step = steps[i];
+          const step = allSteps[i];
+          setCurrentStep(i);
+
+          // Check capability requirement
+          if (step.requiresCapability && !caps[step.requiresCapability]) {
+            const capName = step.requiresCapability.replace('has', '');
+            updateStep(i, 'skipped', `${capName} not connected — skipped`);
+            continue;
+          }
+
+          // Check if this step needs shopify orders data
+          if (step.requiresShopifyOrders && !shopifyOrdersFetched) {
+            updateStep(i, 'skipped', 'No Shopify orders to scan yet');
+            continue;
+          }
+
+          updateStep(i, 'running');
 
           if (step.action === 'provision-all') {
-            // Dynamic provisioning: tokens + sub-channels + ghost cleanup
             try {
-              await provisionAllMarketplaceConnections(session.user.id);
-            } catch {
-              // continue
+              await provisionAllMarketplaceConnections(caps.userId);
+              updateStep(i, 'success', 'Marketplace tabs configured');
+            } catch (err: any) {
+              console.error('[sync] provision failed:', err);
+              updateStep(i, 'error', 'Failed to configure tabs');
             }
-            await new Promise(r => setTimeout(r, 400));
-          } else if (step.fn) {
-            try {
-              const controller = new AbortController();
-              const timeoutMs = step.fn === 'fetch-shopify-orders' ? 60000 : 45000;
-              const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-              // Pass shopDomain for fetch-shopify-orders
-              const body = step.fn === 'fetch-shopify-orders' && shopDomain
-                ? { shopDomain }
-                : {};
-
-              const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-              await fetch(`https://${projectId}.supabase.co/functions/v1/${step.fn}`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify(body),
-                signal: controller.signal,
-              }).catch(() => {});
-
-              clearTimeout(timeout);
-            } catch {
-              // Step failed — if it was fetch-shopify-orders, fire a background retry
-              if (step.fn === 'fetch-shopify-orders' && shopDomain) {
-                const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-                fetch(`https://${projectId}.supabase.co/functions/v1/fetch-shopify-orders`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`,
-                  },
-                  body: JSON.stringify({ shopDomain }),
-                }).catch(() => {});
-              }
-            }
-          } else {
-            await new Promise(r => setTimeout(r, 800));
+            continue;
           }
 
-          if (!cancelled) {
-            setCompletedSteps(i + 1);
+          if (step.fn) {
+            const body: Record<string, unknown> = {};
+            if (step.fn === 'fetch-shopify-orders' && caps.shopDomain) {
+              body.shopDomain = caps.shopDomain;
+            }
+
+            const result = await callEdgeFunctionSafe(step.fn, caps.accessToken, body);
+
+            if (result.ok) {
+              updateStep(i, 'success');
+              // Track that shopify orders were fetched
+              if (step.fn === 'fetch-shopify-orders') {
+                shopifyOrdersFetched = true;
+              }
+            } else {
+              updateStep(i, 'error', result.error || 'Failed');
+            }
+          } else {
+            // Placeholder step
+            await new Promise(r => setTimeout(r, 400));
+            updateStep(i, 'success');
           }
         }
 
-        // Write flag so Dashboard knows scan was already triggered
-        if (hasShopify) {
+        // Write scan flags
+        if (caps.hasShopify) {
           await supabase.from('app_settings').upsert(
-            { user_id: session.user.id, key: 'shopify_channel_scan_triggered', value: 'true' },
+            { user_id: caps.userId, key: 'shopify_channel_scan_triggered', value: 'true' },
             { onConflict: 'user_id,key' }
           ).then(() => {});
         }
 
         if (!cancelled) {
-          setTimeout(() => {
-            if (!cancelled) onNext();
-          }, 1200);
+          setTimeout(() => { if (!cancelled) onNext(); }, 1200);
         }
-      } catch {
+      } catch (err) {
+        console.error('[sync] scan orchestration failed:', err);
         if (!cancelled) {
           setTimeout(onNext, 2000);
         }
@@ -148,77 +146,80 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
     const safetyTimeout = setTimeout(() => {
       if (!cancelled) {
         setTimedOut(true);
-        setTimeout(() => {
-          if (!cancelled) onNext();
-        }, 3000);
+        setTimeout(() => { if (!cancelled) onNext(); }, 3000);
       }
     }, 90000);
 
-    return () => {
-      cancelled = true;
-      clearTimeout(safetyTimeout);
-    };
+    return () => { cancelled = true; clearTimeout(safetyTimeout); };
   }, []);
 
-  const showSlowWarning = elapsedSeconds >= 20 && completedSteps < steps.length && !timedOut;
+  const completedCount = stepStatuses.filter(s => s !== 'pending' && s !== 'running').length;
+  const showSlowWarning = elapsedSeconds >= 20 && completedCount < allSteps.length && !timedOut;
+
+  const getStepIcon = (status: StepStatus) => {
+    switch (status) {
+      case 'success': return <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />;
+      case 'skipped': return <SkipForward className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
+      case 'error': return <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />;
+      case 'running': return <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />;
+      default: return <div className="h-4 w-4 rounded-full border border-muted-foreground/30 flex-shrink-0" />;
+    }
+  };
 
   return (
     <div className="space-y-6 py-4">
       <div className="text-center space-y-2">
         <h2 className="text-xl font-bold text-foreground">Setting up your account...</h2>
         <p className="text-sm text-muted-foreground">
-          We're shortcutting your setup by scanning your connected accounts to auto-detect your marketplaces and build them into your dashboard.
+          We're scanning your connected accounts to auto-detect your marketplaces and build your dashboard.
         </p>
-        <p className="text-xs text-muted-foreground">
-          Setup takes about 60 seconds
-        </p>
+        <p className="text-xs text-muted-foreground">Setup takes about 60 seconds</p>
       </div>
 
-      {/* Circular progress indicator */}
+      {/* Circular progress */}
       <div className="flex justify-center">
         <div className="relative h-16 w-16">
           <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="28" fill="none" className="stroke-muted" strokeWidth="4" />
             <circle
-              cx="32" cy="32" r="28"
-              fill="none"
-              className="stroke-muted"
-              strokeWidth="4"
-            />
-            <circle
-              cx="32" cy="32" r="28"
-              fill="none"
+              cx="32" cy="32" r="28" fill="none"
               className="stroke-primary transition-all duration-700"
-              strokeWidth="4"
-              strokeLinecap="round"
+              strokeWidth="4" strokeLinecap="round"
               strokeDasharray={`${2 * Math.PI * 28}`}
-              strokeDashoffset={`${2 * Math.PI * 28 * (1 - completedSteps / steps.length)}`}
+              strokeDashoffset={`${2 * Math.PI * 28 * (1 - completedCount / allSteps.length)}`}
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="text-xs font-semibold text-muted-foreground">
-              {Math.round((completedSteps / steps.length) * 100)}%
+              {Math.round((completedCount / allSteps.length) * 100)}%
             </span>
           </div>
         </div>
       </div>
 
       <div className="max-w-sm mx-auto space-y-3">
-        {steps.map((step, i) => (
+        {allSteps.map((step, i) => (
           <div
             key={i}
             className={cn(
               'flex items-center gap-3 text-sm transition-all duration-500',
-              i < completedSteps ? 'opacity-100' : i === completedSteps ? 'opacity-70' : 'opacity-30'
+              stepStatuses[i] === 'pending' ? 'opacity-30' : 'opacity-100'
             )}
           >
-            {i < completedSteps ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
-            ) : i === completedSteps ? (
-              <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />
-            ) : (
-              <div className="h-4 w-4 rounded-full border border-muted-foreground/30 flex-shrink-0" />
-            )}
-            <span className="text-foreground">{step.label}</span>
+            {getStepIcon(stepStatuses[i])}
+            <div className="flex flex-col">
+              <span className={cn(
+                'text-foreground',
+                stepStatuses[i] === 'skipped' && 'text-muted-foreground line-through'
+              )}>
+                {stepStatuses[i] === 'skipped' || stepStatuses[i] === 'error'
+                  ? stepMessages[i] || step.label
+                  : step.label}
+              </span>
+              {stepStatuses[i] === 'error' && stepMessages[i] && (
+                <span className="text-xs text-amber-500">{stepMessages[i]}</span>
+              )}
+            </div>
           </div>
         ))}
       </div>

@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, CheckCircle2, X, Zap, ShoppingCart, BookOpen, ArrowRight, Sparkles, Shield } from 'lucide-react';
+import { Loader2, CheckCircle2, X, Zap, ShoppingCart, BookOpen, ArrowRight, Sparkles, Shield, AlertTriangle } from 'lucide-react';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
+import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
 
 interface Props {
   onSwitchToUpload: () => void;
@@ -32,234 +33,214 @@ export default function PostSetupBanner({
   const [marketplacesFound, setMarketplacesFound] = useState(0);
   const [settlementCount, setSettlementCount] = useState<number | null>(null);
 
-  // Xero scan state
-  const [scanning, setScanning] = useState(false);
-  const [scanComplete, setScanComplete] = useState(false);
-  const [scanResult, setScanResult] = useState<{ marketplaces_created?: number; confidence?: string } | null>(null);
-  const scanTriggered = useRef(false);
+  // Unified scan state
+  const [scanPhase, setScanPhase] = useState<'idle' | 'detecting' | 'scanning' | 'done'>('idle');
+  const [xeroStatus, setXeroStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
+  const [amazonStatus, setAmazonStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
+  const [shopifyStatus, setShopifyStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
 
-  // Amazon scan state
-  const [amazonScanning, setAmazonScanning] = useState(false);
-  const [amazonScanComplete, setAmazonScanComplete] = useState(false);
+  const [xeroMessage, setXeroMessage] = useState('');
+  const [amazonMessage, setAmazonMessage] = useState('');
+  const [shopifyMessage, setShopifyMessage] = useState('');
+
   const [amazonFound, setAmazonFound] = useState(0);
-  const amazonScanTriggered = useRef(false);
-
-  // Shopify scan state
-  const [shopifyScanning, setShopifyScanning] = useState(false);
-  const [shopifyScanComplete, setShopifyScanComplete] = useState(false);
   const [shopifyChannelsFound, setShopifyChannelsFound] = useState(0);
-  const shopifyScanTriggered = useRef(false);
 
-  // Helper to call edge function
-  const callEdgeFunction = async (name: string, body: Record<string, unknown> = {}) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error('No session');
-    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-    const res = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/${name}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(body),
-      }
-    );
-    if (!res.ok) throw new Error(`${name} failed: ${res.status}`);
-    return res.json();
-  };
+  const scanTriggered = useRef(false);
 
   const setAppFlag = async (key: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    const { data: existing } = await supabase
-      .from('app_settings')
-      .select('id')
-      .eq('key', key)
-      .maybeSingle();
-    if (existing) {
-      await supabase.from('app_settings').update({ value: 'true' }).eq('id', existing.id);
-    } else {
-      await supabase.from('app_settings').insert({
-        user_id: session.user.id,
-        key,
-        value: 'true',
-      });
-    }
+    await supabase.from('app_settings').upsert(
+      { user_id: session.user.id, key, value: 'true' },
+      { onConflict: 'user_id,key' }
+    );
   };
 
-  // ─── Xero auto-scan ────────────────────────────────────────────
+  // ─── Universal adaptive scan ───────────────────────────────────
   useEffect(() => {
-    if (!hasXero || dismissed || scanTriggered.current) return;
+    if (dismissed || scanTriggered.current || (!hasXero && !hasAmazon && !hasShopify)) return;
     scanTriggered.current = true;
 
-    const triggerScan = async () => {
-      try {
-        const { data: scanFlag } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'xero_scan_completed')
-          .maybeSingle();
+    const runAdaptiveScan = async () => {
+      setScanPhase('detecting');
 
-        if (scanFlag?.value) {
-          setScanComplete(true);
-          return;
-        }
-
-        setScanning(true);
-        const data = await callEdgeFunction('scan-xero-history');
-        setScanResult(data);
-        setScanComplete(true);
-        if (data.marketplaces_created > 0 || data.detected_settlements?.length > 0) {
-          setMarketplacesFound(data.detected_settlements?.length || data.marketplaces_created || 0);
-        }
-        await callEdgeFunction('run-validation-sweep').catch(() => {});
-        onScanComplete?.();
-      } catch (err) {
-        console.error('Xero scan trigger failed:', err);
-        setScanComplete(true);
-      } finally {
-        setScanning(false);
+      // 1. Detect real capabilities from token tables
+      const caps = await detectCapabilities();
+      if (!caps.userId || !caps.accessToken) {
+        setScanPhase('done');
+        return;
       }
-    };
 
-    triggerScan();
-  }, [hasXero, dismissed]);
+      // Check if scans already completed
+      const { data: flags } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', ['xero_scan_completed', 'amazon_scan_completed', 'shopify_scan_completed']);
 
-  // ─── Amazon auto-scan ──────────────────────────────────────────
-  useEffect(() => {
-    if (!hasAmazon || dismissed || amazonScanTriggered.current) return;
-    amazonScanTriggered.current = true;
+      const completedFlags = new Set(flags?.filter(f => f.value === 'true').map(f => f.key) || []);
 
-    const triggerScan = async () => {
-      try {
-        const { data: scanFlag } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'amazon_scan_completed')
-          .maybeSingle();
+      setScanPhase('scanning');
 
-        if (scanFlag?.value) {
-          setAmazonScanComplete(true);
-          return;
-        }
+      // ─── Phase 1: Parallel API fetches (only for connected APIs with real tokens) ───
 
-        setAmazonScanning(true);
-        await callEdgeFunction('fetch-amazon-settlements');
+      const phase1Promises: Promise<void>[] = [];
 
-        // Count what was imported
-        const { count } = await supabase
-          .from('settlements')
-          .select('id', { count: 'exact', head: true })
-          .eq('marketplace', 'amazon_au');
+      // Xero scan
+      if (hasXero && caps.hasXero && !completedFlags.has('xero_scan_completed')) {
+        phase1Promises.push((async () => {
+          setXeroStatus('scanning');
+          const result = await callEdgeFunctionSafe('scan-xero-history', caps.accessToken!);
+          if (result.ok) {
+            const data = result.data;
+            const found = data?.detected_settlements?.length || data?.marketplaces_created || 0;
+            if (found > 0) setMarketplacesFound(prev => Math.max(prev, found));
+            setXeroMessage(found > 0
+              ? `Found ${found} marketplace${found > 1 ? 's' : ''} in your Xero history`
+              : 'No marketplace invoices found in Xero yet');
+            setXeroStatus('done');
+            await setAppFlag('xero_scan_completed');
+          } else {
+            setXeroMessage('Xero scan encountered an issue');
+            setXeroStatus('error');
+          }
+        })());
+      } else if (hasXero && !caps.hasXero) {
+        setXeroStatus('skipped');
+        setXeroMessage('Xero token not found — please reconnect');
+      } else if (hasXero && completedFlags.has('xero_scan_completed')) {
+        setXeroStatus('done');
+        setXeroMessage('Xero scan already completed');
+      } else if (!hasXero) {
+        setXeroStatus('skipped');
+      }
+
+      // Amazon scan
+      if (hasAmazon && caps.hasAmazon && !completedFlags.has('amazon_scan_completed')) {
+        phase1Promises.push((async () => {
+          setAmazonStatus('scanning');
+          const result = await callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken!);
+          if (result.ok) {
+            const { count } = await supabase
+              .from('settlements')
+              .select('id', { count: 'exact', head: true })
+              .eq('marketplace', 'amazon_au');
+            const found = count ?? 0;
+            setAmazonFound(found);
+            setAmazonMessage(found > 0 ? `${found} settlement${found > 1 ? 's' : ''} imported` : 'No settlements found yet');
+            setAmazonStatus('done');
+            await setAppFlag('amazon_scan_completed');
+          } else {
+            setAmazonMessage('Amazon sync encountered an issue — check your connection');
+            setAmazonStatus('error');
+          }
+        })());
+      } else if (hasAmazon && !caps.hasAmazon) {
+        setAmazonStatus('skipped');
+        setAmazonMessage('Amazon token not found — please reconnect');
+      } else if (hasAmazon && completedFlags.has('amazon_scan_completed')) {
+        setAmazonStatus('done');
+        const { count } = await supabase.from('settlements').select('id', { count: 'exact', head: true }).eq('marketplace', 'amazon_au');
         setAmazonFound(count ?? 0);
-
-        // Provision all marketplace connections + clean ghosts
-        const { data: { session: amzSession } } = await supabase.auth.getSession();
-        if (amzSession) await provisionAllMarketplaceConnections(amzSession.user.id);
-
-        await setAppFlag('amazon_scan_completed');
-        setAmazonScanComplete(true);
-        await callEdgeFunction('run-validation-sweep').catch(() => {});
-        onScanComplete?.();
-      } catch (err) {
-        console.error('Amazon scan trigger failed:', err);
-        setAmazonScanComplete(true);
-      } finally {
-        setAmazonScanning(false);
+        setAmazonMessage(`${count ?? 0} settlements ready`);
+      } else if (!hasAmazon) {
+        setAmazonStatus('skipped');
       }
-    };
 
-    triggerScan();
-  }, [hasAmazon, dismissed]);
+      // Shopify scan (sequential: payouts → orders → channels)
+      if (hasShopify && caps.hasShopify && !completedFlags.has('shopify_scan_completed')) {
+        phase1Promises.push((async () => {
+          setShopifyStatus('scanning');
 
-  // ─── Shopify auto-scan ─────────────────────────────────────────
-  useEffect(() => {
-    if (!hasShopify || dismissed || shopifyScanTriggered.current) return;
-    shopifyScanTriggered.current = true;
+          // Step 1: Payouts
+          const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken!);
+          if (!payoutsResult.ok) {
+            console.warn('[sync] Shopify payouts issue:', payoutsResult.error);
+          }
 
-    const triggerScan = async () => {
-      try {
-        const { data: scanFlag } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'shopify_scan_completed')
-          .maybeSingle();
+          // Step 2: Orders
+          const body = caps.shopDomain ? { shopDomain: caps.shopDomain } : {};
+          const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', caps.accessToken!, body);
+          if (!ordersResult.ok) {
+            console.warn('[sync] Shopify orders issue:', ordersResult.error);
+          }
 
-        if (scanFlag?.value) {
-          setShopifyScanComplete(true);
-          return;
-        }
+          // Step 3: Channel scan — only if orders exist now
+          const { count: orderCount } = await supabase
+            .from('shopify_orders')
+            .select('id', { count: 'exact', head: true });
 
-        setShopifyScanning(true);
+          if (orderCount && orderCount > 0) {
+            await callEdgeFunctionSafe('scan-shopify-channels', caps.accessToken!);
+          } else {
+            console.warn('[sync] Skipping scan-shopify-channels — no orders found');
+          }
 
-        // Run in sequence: payouts → orders → channel scan
-        await callEdgeFunction('fetch-shopify-payouts').catch(e => console.warn('fetch-shopify-payouts:', e));
-        await callEdgeFunction('fetch-shopify-orders').catch(e => console.warn('fetch-shopify-orders:', e));
-        await callEdgeFunction('scan-shopify-channels').catch(e => console.warn('scan-shopify-channels:', e));
-
-        // Count discovered channels
-        const { count } = await supabase
-          .from('shopify_sub_channels')
-          .select('id', { count: 'exact', head: true });
+          // Count results
+          const { count: channelCount } = await supabase
+            .from('shopify_sub_channels')
+            .select('id', { count: 'exact', head: true });
+          setShopifyChannelsFound(channelCount ?? 0);
+          setShopifyMessage(channelCount && channelCount > 0
+            ? `${channelCount} sales channel${channelCount > 1 ? 's' : ''} detected`
+            : 'Payouts synced');
+          setShopifyStatus('done');
+          await setAppFlag('shopify_scan_completed');
+        })());
+      } else if (hasShopify && !caps.hasShopify) {
+        setShopifyStatus('skipped');
+        setShopifyMessage('Shopify token not found — please reconnect');
+      } else if (hasShopify && completedFlags.has('shopify_scan_completed')) {
+        setShopifyStatus('done');
+        const { count } = await supabase.from('shopify_sub_channels').select('id', { count: 'exact', head: true });
         setShopifyChannelsFound(count ?? 0);
-
-        // Provision all marketplace connections + clean ghosts
-        const { data: { session: shopSession } } = await supabase.auth.getSession();
-        if (shopSession) await provisionAllMarketplaceConnections(shopSession.user.id);
-
-        await setAppFlag('shopify_scan_completed');
-        setShopifyScanComplete(true);
-        await callEdgeFunction('run-validation-sweep').catch(() => {});
-        onScanComplete?.();
-      } catch (err) {
-        console.error('Shopify scan trigger failed:', err);
-        setShopifyScanComplete(true);
-      } finally {
-        setShopifyScanning(false);
+        setShopifyMessage('Shopify scan already completed');
+      } else if (!hasShopify) {
+        setShopifyStatus('skipped');
       }
+
+      // Wait for all Phase 1 to complete
+      await Promise.allSettled(phase1Promises);
+
+      // ─── Phase 2: Provision all marketplace connections ───
+      if (caps.userId) {
+        try {
+          await provisionAllMarketplaceConnections(caps.userId);
+        } catch (err) {
+          console.error('[sync] provision failed:', err);
+        }
+      }
+
+      // ─── Phase 3: Validation sweep ───
+      await callEdgeFunctionSafe('run-validation-sweep', caps.accessToken!);
+
+      setScanPhase('done');
+      onScanComplete?.();
     };
 
-    triggerScan();
-  }, [hasShopify, dismissed]);
+    runAdaptiveScan().catch(err => {
+      console.error('[sync] adaptive scan failed:', err);
+      setScanPhase('done');
+    });
+  }, [hasXero, hasAmazon, hasShopify, dismissed]);
 
   // ─── Polling for live counts ───────────────────────────────────
   useEffect(() => {
     if (dismissed) return;
     const poll = async () => {
       try {
-        const { data } = await supabase
-          .from('marketplace_connections')
-          .select('id')
-          .eq('connection_type', 'auto_detected');
-        if (data) setMarketplacesFound(prev => Math.max(prev, data.length));
-
         const { count } = await supabase
           .from('settlements')
           .select('id', { count: 'exact', head: true });
         setSettlementCount(count ?? 0);
-
-        if (hasAmazon && amazonScanning) {
-          const { count: amzCount } = await supabase
-            .from('settlements')
-            .select('id', { count: 'exact', head: true })
-            .eq('marketplace', 'amazon_au');
-          setAmazonFound(amzCount ?? 0);
-        }
-
-        if (hasShopify && shopifyScanning) {
-          const { count: shopCount } = await supabase
-            .from('shopify_sub_channels')
-            .select('id', { count: 'exact', head: true });
-          setShopifyChannelsFound(shopCount ?? 0);
-        }
-      } catch {}
+      } catch (err) {
+        console.warn('[poll] settlement count error:', err);
+      }
     };
     poll();
     const interval = setInterval(poll, 10000);
     return () => clearInterval(interval);
-  }, [dismissed, amazonScanning, shopifyScanning, hasAmazon, hasShopify]);
+  }, [dismissed]);
 
   const handleDismiss = () => {
     sessionStorage.setItem(DISMISS_KEY, 'true');
@@ -267,16 +248,29 @@ export default function PostSetupBanner({
   };
 
   const hasAnyConnection = hasXero || hasAmazon || hasShopify;
-  const isFreshAccount = !hasAnyConnection && settlementCount === 0;
   const allConnected = hasXero && hasAmazon && hasShopify;
+  const isActivelyScanning = scanPhase === 'detecting' || scanPhase === 'scanning';
 
   if (dismissed) return null;
 
-  const allScansComplete = (!hasXero || scanComplete) && (!hasAmazon || amazonScanComplete) && (!hasShopify || shopifyScanComplete);
-  if (allConnected && allScansComplete && marketplacesFound > 0 && settlementCount !== null && settlementCount > 3) return null;
+  // Auto-dismiss when fully synced with enough data
+  const allScansTerminal =
+    (xeroStatus === 'done' || xeroStatus === 'skipped') &&
+    (amazonStatus === 'done' || amazonStatus === 'skipped') &&
+    (shopifyStatus === 'done' || shopifyStatus === 'skipped');
+  if (allConnected && allScansTerminal && scanPhase === 'done' && settlementCount !== null && settlementCount > 3) return null;
 
   const connectedCount = [hasXero, hasAmazon, hasShopify].filter(Boolean).length;
-  const isActivelyScanning = scanning || amazonScanning || shopifyScanning || (hasXero && !scanComplete) || (hasAmazon && !amazonScanComplete) || (hasShopify && !shopifyScanComplete);
+
+  const renderStatusIcon = (status: string) => {
+    switch (status) {
+      case 'scanning': return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary inline mr-1.5" />;
+      case 'done': return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 inline mr-1.5" />;
+      case 'error': return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline mr-1.5" />;
+      case 'skipped': return null;
+      default: return null;
+    }
+  };
 
   const missingChannels = [
     {
@@ -341,66 +335,71 @@ export default function PostSetupBanner({
               <div className="space-y-2 flex-1">
                 <h3 className="text-base font-semibold text-foreground">
                   {isActivelyScanning
-                    ? 'Xettle is scanning your accounts…'
+                    ? scanPhase === 'detecting' ? 'Checking your connections…' : 'Xettle is scanning your accounts…'
                     : 'Scan complete!'
                   }
                 </h3>
-                <div className="space-y-1">
-                  {hasXero && (
+                <div className="space-y-1.5">
+                  {hasXero && xeroStatus !== 'skipped' && (
                     <p className="text-sm text-foreground">
-                      {scanning
-                        ? 'Scanning your Xero history to auto-detect marketplaces and build them into your dashboard.'
-                        : scanComplete
-                          ? marketplacesFound > 0
-                            ? `We found ${marketplacesFound} marketplace${marketplacesFound > 1 ? 's' : ''} in your Xero and set them up for you.`
-                            : scanResult?.confidence === 'low' || !scanResult?.confidence
-                              ? 'No marketplace invoices found in Xero yet — upload a settlement file to get started.'
-                              : 'Xero scan complete — your marketplaces are ready.'
-                          : 'Preparing to scan your Xero…'
-                      }
+                      {renderStatusIcon(xeroStatus)}
+                      {xeroStatus === 'scanning'
+                        ? 'Scanning your Xero history to auto-detect marketplaces…'
+                        : xeroMessage || 'Xero scan complete.'}
                     </p>
                   )}
-                  {hasAmazon && (
+                  {hasXero && xeroStatus === 'skipped' && xeroMessage && (
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="h-3.5 w-3.5 inline mr-1.5" />
+                      {xeroMessage}
+                    </p>
+                  )}
+                  {hasAmazon && amazonStatus !== 'skipped' && (
                     <p className="text-sm text-muted-foreground">
-                      {amazonScanning
+                      {renderStatusIcon(amazonStatus)}
+                      {amazonStatus === 'scanning'
                         ? amazonFound > 0
-                          ? `Importing your Amazon settlements — ${amazonFound} found so far…`
+                          ? `Importing Amazon settlements — ${amazonFound} found so far…`
                           : 'Importing your Amazon settlements…'
-                        : amazonScanComplete
-                          ? amazonFound > 0
-                            ? `✅ ${amazonFound} Amazon settlement${amazonFound > 1 ? 's' : ''} imported and ready.`
-                            : 'Amazon scan complete — no settlements found yet.'
-                          : 'Preparing to scan Amazon…'}
+                        : amazonMessage
+                          ? amazonStatus === 'done'
+                            ? `✅ ${amazonMessage}`
+                            : amazonMessage
+                          : 'Amazon scan complete.'}
                     </p>
                   )}
-                  {hasShopify && (
+                  {hasAmazon && amazonStatus === 'skipped' && amazonMessage && (
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="h-3.5 w-3.5 inline mr-1.5" />
+                      {amazonMessage}
+                    </p>
+                  )}
+                  {hasShopify && shopifyStatus !== 'skipped' && (
                     <p className="text-sm text-muted-foreground">
-                      {shopifyScanning
+                      {renderStatusIcon(shopifyStatus)}
+                      {shopifyStatus === 'scanning'
                         ? shopifyChannelsFound > 0
                           ? `Syncing Shopify — detected ${shopifyChannelsFound} sales channel${shopifyChannelsFound > 1 ? 's' : ''} so far…`
                           : 'Syncing your Shopify payouts and detecting sales channels…'
-                        : shopifyScanComplete
-                          ? shopifyChannelsFound > 0
-                            ? `✅ ${shopifyChannelsFound} Shopify sales channel${shopifyChannelsFound > 1 ? 's' : ''} detected and synced.`
-                            : 'Shopify sync complete — payouts imported.'
-                          : 'Preparing to scan Shopify…'}
+                        : shopifyMessage
+                          ? shopifyStatus === 'done'
+                            ? `✅ ${shopifyMessage}`
+                            : shopifyMessage
+                          : 'Shopify sync complete.'}
+                    </p>
+                  )}
+                  {hasShopify && shopifyStatus === 'skipped' && shopifyMessage && (
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="h-3.5 w-3.5 inline mr-1.5" />
+                      {shopifyMessage}
                     </p>
                   )}
                 </div>
 
-                {marketplacesFound > 0 && isActivelyScanning && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                      ✨ Found {marketplacesFound} marketplace{marketplacesFound > 1 ? 's' : ''} so far
-                    </p>
-                  </div>
-                )}
-
                 <div className="flex items-center gap-2 pt-1">
                   <Shield className="h-3.5 w-3.5 text-muted-foreground" />
                   <p className="text-xs text-muted-foreground">
-                    Read-only — we never push or change anything in your Xero, Amazon, or Shopify accounts. Everything is built inside Xettle for you.
+                    Read-only — we never push or change anything in your Xero, Amazon, or Shopify accounts.
                   </p>
                 </div>
               </div>
@@ -436,61 +435,64 @@ export default function PostSetupBanner({
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                {[hasXero, hasAmazon, hasShopify].map((connected, i) => (
-                  <div
-                    key={i}
-                    className={`h-2.5 w-2.5 rounded-full transition-all ${
-                      connected ? 'bg-primary scale-110' : 'bg-muted-foreground/20'
-                    }`}
-                  />
-                ))}
+            {/* Progress bar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{connectedCount} of 3 connected</span>
+                <span>{Math.round((connectedCount / 3) * 100)}% automated</span>
               </div>
-              <span className="text-xs font-medium text-muted-foreground">
-                {connectedCount} of 3 connected
-              </span>
-              {connectedCount > 0 && connectedCount < 3 && (
-                <span className="text-xs text-primary font-medium">
-                  — keep going!
-                </span>
-              )}
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-700"
+                  style={{ width: `${(connectedCount / 3) * 100}%` }}
+                />
+              </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {missingChannels.filter(c => !c.connected).map((channel) => {
-                const Icon = channel.icon;
+            {/* Channel cards */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              {missingChannels.map(ch => {
+                const Icon = ch.icon;
                 return (
                   <div
-                    key={channel.key}
-                    className={`rounded-xl border-2 ${channel.borderColor} ${channel.bgColor} p-4 space-y-3 transition-all hover:shadow-md`}
+                    key={ch.key}
+                    className={`rounded-lg border p-4 transition-all ${
+                      ch.connected
+                        ? 'border-emerald-500/30 bg-emerald-500/5'
+                        : `${ch.borderColor} ${ch.bgColor} hover:shadow-md cursor-pointer`
+                    }`}
+                    onClick={!ch.connected ? ch.onConnect : undefined}
                   >
-                    <div className="flex items-center gap-2">
-                      <Icon className={`h-5 w-5 ${channel.color}`} />
-                      <span className="font-semibold text-foreground">{channel.label}</span>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon className={`h-5 w-5 ${ch.connected ? 'text-emerald-500' : ch.color}`} />
+                      <span className={`font-semibold text-sm ${ch.connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
+                        {ch.label}
+                      </span>
+                      {ch.connected && <CheckCircle2 className="h-4 w-4 text-emerald-500 ml-auto" />}
                     </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {channel.description}
-                    </p>
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      onClick={channel.onConnect}
-                    >
-                      Connect {channel.label}
-                      <ArrowRight className="h-4 w-4 ml-1" />
-                    </Button>
+                    {!ch.connected ? (
+                      <>
+                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{ch.description}</p>
+                        <Button size="sm" variant="outline" className="w-full text-xs gap-1.5" onClick={ch.onConnect}>
+                          Connect {ch.label} <ArrowRight className="h-3 w-3" />
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400">Connected ✓</p>
+                    )}
                   </div>
                 );
               })}
             </div>
 
-            <div className="flex items-center gap-2 pt-1">
-              <Shield className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              <p className="text-xs text-muted-foreground">
-                We only read your data to build your marketplaces inside Xettle. Nothing is ever pushed or changed in your accounts.
-              </p>
-            </div>
+            {/* CSV fallback */}
+            {connectedCount === 0 && (
+              <div className="text-center pt-2">
+                <Button variant="ghost" size="sm" onClick={onSwitchToUpload} className="text-xs text-muted-foreground">
+                  Or upload a CSV settlement file manually
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
