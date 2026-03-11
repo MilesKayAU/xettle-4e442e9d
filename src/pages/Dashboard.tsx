@@ -474,6 +474,10 @@ export default function Dashboard() {
           <ErrorBoundary>
             <div className="space-y-6">
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
+              <ReconciliationSummaryCard onNavigate={() => {
+                switchView('settlements');
+                switchSettlementsSubTab('reconciliation');
+              }} />
               <ActionCentre
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);
