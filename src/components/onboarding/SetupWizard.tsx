@@ -78,13 +78,13 @@ export default function SetupWizard({
         method: 'POST',
         headers,
         body: JSON.stringify({}),
-      }).catch(() => {});
+      }).catch(err => console.warn(`[wizard] ${fnName} failed:`, err));
       // Follow up with validation sweep
       await fetch(`${baseUrl}/run-validation-sweep`, {
         method: 'POST',
         headers,
         body: JSON.stringify({}),
-      }).catch(() => {});
+      }).catch(err => console.warn('[wizard] validation-sweep failed:', err));
     } finally {
       setPendingScans(p => p - 1);
     }
