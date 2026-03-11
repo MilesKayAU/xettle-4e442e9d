@@ -106,6 +106,7 @@ export default function ActionCentre({
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const [unmatchedDeposits, setUnmatchedDeposits] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
