@@ -27,8 +27,11 @@ import { supabase } from '@/integrations/supabase/client';
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
 
+import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
+const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
+
 type DashboardView = 'dashboard' | 'smart_upload' | 'settlements' | 'insights';
-type SettlementsSubTab = 'all' | 'overview';
+type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
 export default function Dashboard() {
