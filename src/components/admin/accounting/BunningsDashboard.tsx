@@ -462,7 +462,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
     setPushing(true);
     // Build proper invoice lines including refunds
-    const lineItems = dataToCheck ? buildSimpleInvoiceLines(dataToCheck) : undefined;
+    const lineItems = dataToCheck ? await buildSimpleInvoiceLines(dataToCheck) : undefined;
     const result = await syncSettlementToXero(targetId, 'bunnings', lineItems ? { lineItems } : undefined);
     if (result.success) {
       clearParsedStorage();

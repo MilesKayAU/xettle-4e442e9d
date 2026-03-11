@@ -182,7 +182,7 @@ export default function SettlementsOverview({
             refundCommissionExGst: s.reimbursements || 0,
           },
         };
-        const lineItems = buildSimpleInvoiceLines(std);
+        const lineItems = await buildSimpleInvoiceLines(std);
         const result = await syncSettlementToXero(s.settlement_id, s.marketplace || code, { lineItems });
         if (result.success) ok++;
         else fail++;

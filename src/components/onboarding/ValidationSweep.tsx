@@ -225,7 +225,7 @@ export default function ValidationSweep({
           refundCommissionExGst: settlement.reimbursements || 0,
         },
       };
-      const lineItems = buildSimpleInvoiceLines(std);
+      const lineItems = await buildSimpleInvoiceLines(std);
       const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace || row.marketplace_code, { lineItems });
       
       if (result.success) {

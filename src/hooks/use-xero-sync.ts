@@ -64,7 +64,7 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
         toast.warning('Reconciliation warnings exist — proceeding with sync.');
       }
 
-      const lineItems = buildSimpleInvoiceLines(stdSettlement);
+      const lineItems = await buildSimpleInvoiceLines(stdSettlement);
       const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace, { lineItems });
 
       if (result.success) {
