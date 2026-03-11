@@ -53,16 +53,15 @@ Deno.serve(async (req) => {
         )
       }
 
-      // MINIMAL SCOPE TEST — isolating whether OAuth flow works at all.
-      // If this fails, issue is redirect URI or client credentials, not scopes.
-      // If it succeeds, we add scopes incrementally.
+      // Step 1: Original working scopes only
       const scopes = [
         'openid',
         'profile',
         'email',
         'offline_access',
-        'accounting.invoices.read',
-        'accounting.contacts.read',
+        'accounting.invoices',
+        'accounting.contacts',
+        'accounting.settings',
         'accounting.settings.read',
       ].join(' ')
 
