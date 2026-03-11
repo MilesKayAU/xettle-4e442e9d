@@ -155,12 +155,23 @@ Deno.serve(async (req) => {
     // ─── Get user's settlements for matching ───
     const { data: settlements } = await supabase
       .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, bank_verified, bank_verified_amount, xero_journal_id, xero_status')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data')
       .eq('user_id', userId);
 
     const settlementMap = new Map<string, any>();
     for (const s of (settlements || [])) {
       settlementMap.set(s.settlement_id, s);
+    }
+
+    // ─── Also load aliases for cross-reference matching ───
+    const { data: aliases } = await supabase
+      .from('settlement_id_aliases')
+      .select('alias_id, canonical_settlement_id')
+      .eq('user_id', userId);
+    
+    const aliasMap = new Map<string, string>();
+    for (const a of (aliases || [])) {
+      aliasMap.set(a.alias_id, a.canonical_settlement_id);
     }
 
     // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
