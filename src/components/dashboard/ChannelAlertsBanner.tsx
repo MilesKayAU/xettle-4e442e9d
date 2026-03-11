@@ -165,6 +165,16 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     loadAlerts();
   }, []);
 
+  // Auto-refresh when scan was triggered during onboarding but orders haven't arrived yet
+  useEffect(() => {
+    if (!scanAlreadyTriggered || !needsInitialSync || autoRefreshCount >= 4) return;
+    const timer = setTimeout(async () => {
+      await loadAlerts();
+      setAutoRefreshCount(prev => prev + 1);
+    }, 15000); // retry every 15s, up to 4 times (1 minute)
+    return () => clearTimeout(timer);
+  }, [scanAlreadyTriggered, needsInitialSync, autoRefreshCount]);
+
   const handleSyncNow = async () => {
     setSyncing(true);
     try {
