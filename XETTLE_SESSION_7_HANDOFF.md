@@ -12,7 +12,7 @@
 |---|---|---|---|
 | Sales | 200 | OUTPUT | AU domestic + international blended |
 | Refunds | 205 | OUTPUT | Revenue contra |
-| Reimbursements | 271 | OUTPUT | ATO classifies as taxable income — conservative/safe |
+| Reimbursements | 271 | BASEXCLUDED | Compensation payments, not taxable supplies |
 | Promotional Discounts | 200 | OUTPUT | Reduces sales base |
 | Seller Fees | 407 | INPUT | GST on purchases |
 | FBA Fees | 408 | INPUT | GST on purchases |
@@ -63,10 +63,10 @@ in app_settings via getCode(). Falls back to above defaults.
 
 ### GST / BAS
 
-- AU hardcoded: OUTPUT / INPUT / NONE — correct for all paths
-- Reimbursements: OUTPUT (Session 7 audit correction — code uses OUTPUT, not NONE.
-  Conservative/safe. ATO guidance on compensation is ambiguous, taxable income treatment
-  overpays slightly but avoids BAS risk. LMB claims NONE but verify with your accountant.)
+- AU hardcoded: OUTPUT / INPUT / BASEXCLUDED — correct for all paths
+- Reimbursements: BASEXCLUDED (Session 7 correction — FBA reimbursements for 
+  lost/damaged inventory are compensation payments, not taxable supplies under ATO rules.
+  Matches UK/EU VAT logic directly: compensation does not attract GST.)
 - International sales: ✅ **LIVE** — AU marketplace gets OUTPUT, international gets
   EXEMPTOUTPUT (GST Free Income). GST base correctly calculated. Two separate Xero
   lines generated automatically. Was marked "Phase 2" but already shipped.
@@ -99,10 +99,10 @@ in app_settings via getCode(). Falls back to above defaults.
 | LMB9 | Reserved Balances | Current Asset | ❌ not built |
 | LMB9A | Split Month Rollovers | Current Asset | 612 ✅ |
 
-LMB AU GST defaults (our implementation — see Session 7 corrections):
+LMB AU GST defaults (our implementation):
 - AU Sales → GST on Income (OUTPUT)
 - International Sales → GST Free (EXEMPTOUTPUT) ✅ LIVE
-- Reimbursements → OUTPUT (Session 7 correction — conservative/safe vs LMB's NONE)
+- Reimbursements → BASEXCLUDED (Session 7 correction — matches LMB AU exactly)
 - Fees → GST on Expenses (INPUT) ✅
 
 ---
@@ -181,7 +181,7 @@ LMB AU GST defaults (our implementation — see Session 7 corrections):
 ✅ Split-month rollover invoices
 ✅ Rollback and resend
 ✅ Advertising costs separated
-✅ Reimbursements BAS-excluded
+✅ Reimbursements BAS-excluded (BASEXCLUDED — matches LMB exactly)
 ✅ Boundary date protection
 ✅ Audit file attached to Xero invoice
 ✅ Xero Tracking Categories (per-channel P&L)

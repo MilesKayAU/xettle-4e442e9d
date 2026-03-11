@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
     const systemPrompt = `You are an Australian ecommerce accounting assistant. 
 You will be given a list of Xero account codes from an Australian business and must match each of 9 ecommerce settlement categories to the most appropriate account.
 Always prefer existing accounts over creating new ones.
-Australian GST applies — revenue accounts use OUTPUT tax, expense/fee accounts use INPUT tax, reimbursements use NONE.
+Australian GST applies — revenue accounts use OUTPUT tax, expense/fee accounts use INPUT tax, reimbursements use BASEXCLUDED (compensation payments, not taxable supplies).
 Advertising Costs (Sponsored Products, PPC ads) MUST be separated from Other Fees for BAS accuracy.
 Return only valid JSON, no explanation.`
 

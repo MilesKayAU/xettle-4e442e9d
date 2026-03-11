@@ -40,7 +40,7 @@ const TAX_SUBCAT_MAP: Record<string, string> = {
 };
 
 function getTaxType(cat: string, marketplace: 'au' | 'intl'): string {
-  if (cat === 'Reimbursements') return 'OUTPUT';
+  if (cat === 'Reimbursements') return 'BASEXCLUDED';
   if (marketplace === 'intl') return 'EXEMPTOUTPUT';
   return 'OUTPUT';
 }
