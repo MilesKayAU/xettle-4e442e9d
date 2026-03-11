@@ -163,6 +163,7 @@ export interface SplitMonthData {
   storageFees: number;
   refunds: number;
   reimbursements: number;
+  advertisingCosts: number;
   otherFees: number;
   grossTotal: number;
   netExGst: number;
