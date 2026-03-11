@@ -357,6 +357,10 @@ export default function Admin() {
           <TabsContent value="prelaunch">
             <PreLaunchChecklist />
           </TabsContent>
+
+          <TabsContent value="knowledge">
+            <KnowledgeBaseDashboard />
+          </TabsContent>
         </Tabs>
       </div>
 
