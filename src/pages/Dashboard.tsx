@@ -467,6 +467,18 @@ export default function Dashboard() {
                 hasXero={xeroConnected}
                 hasAmazon={hasAmazon}
                 hasShopify={hasShopify}
+                onConnectXero={() => {
+                  setWizardInitialStep(3);
+                  setShowWizard(true);
+                }}
+                onConnectAmazon={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
+                onConnectShopify={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
               />
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
               <ReconciliationSummaryCard onNavigate={() => {
