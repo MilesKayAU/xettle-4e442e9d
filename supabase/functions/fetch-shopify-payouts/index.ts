@@ -518,6 +518,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (tokenError || !tokenRow) {
+      console.warn(`[fetch-shopify-payouts] No Shopify token found: ${tokenError?.message}`);
       return new Response(
         JSON.stringify({ error: "No Shopify connection found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
