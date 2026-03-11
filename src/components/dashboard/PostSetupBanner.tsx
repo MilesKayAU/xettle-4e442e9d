@@ -12,6 +12,7 @@ interface Props {
   onConnectXero?: () => void;
   onConnectAmazon?: () => void;
   onConnectShopify?: () => void;
+  onScanComplete?: () => void;
 }
 
 const DISMISS_KEY = 'xettle_post_setup_dismissed';
@@ -24,23 +25,76 @@ export default function PostSetupBanner({
   onConnectXero,
   onConnectAmazon,
   onConnectShopify,
+  onScanComplete,
 }: Props) {
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(DISMISS_KEY) === 'true');
   const [marketplacesFound, setMarketplacesFound] = useState(0);
   const [settlementCount, setSettlementCount] = useState<number | null>(null);
+
+  // Xero scan state
   const [scanning, setScanning] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);
   const [scanResult, setScanResult] = useState<{ marketplaces_created?: number; confidence?: string } | null>(null);
   const scanTriggered = useRef(false);
 
-  // Trigger Xero scan immediately if connected and not yet scanned
+  // Amazon scan state
+  const [amazonScanning, setAmazonScanning] = useState(false);
+  const [amazonScanComplete, setAmazonScanComplete] = useState(false);
+  const [amazonFound, setAmazonFound] = useState(0);
+  const amazonScanTriggered = useRef(false);
+
+  // Shopify scan state
+  const [shopifyScanning, setShopifyScanning] = useState(false);
+  const [shopifyScanComplete, setShopifyScanComplete] = useState(false);
+  const [shopifyChannelsFound, setShopifyChannelsFound] = useState(0);
+  const shopifyScanTriggered = useRef(false);
+
+  // Helper to call edge function
+  const callEdgeFunction = async (name: string, body: Record<string, unknown> = {}) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('No session');
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const res = await fetch(
+      `https://${projectId}.supabase.co/functions/v1/${name}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(body),
+      }
+    );
+    if (!res.ok) throw new Error(`${name} failed: ${res.status}`);
+    return res.json();
+  };
+
+  const setAppFlag = async (key: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { data: existing } = await supabase
+      .from('app_settings')
+      .select('id')
+      .eq('key', key)
+      .maybeSingle();
+    if (existing) {
+      await supabase.from('app_settings').update({ value: 'true' }).eq('id', existing.id);
+    } else {
+      await supabase.from('app_settings').insert({
+        user_id: session.user.id,
+        key,
+        value: 'true',
+      });
+    }
+  };
+
+  // ─── Xero auto-scan ────────────────────────────────────────────
   useEffect(() => {
     if (!hasXero || dismissed || scanTriggered.current) return;
     scanTriggered.current = true;
 
     const triggerScan = async () => {
       try {
-        // Check if scan already completed
         const { data: scanFlag } = await supabase
           .from('app_settings')
           .select('value')
@@ -52,32 +106,14 @@ export default function PostSetupBanner({
           return;
         }
 
-        // Trigger the scan
         setScanning(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-
-        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-        const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/scan-xero-history`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({}),
-          }
-        );
-
-        if (res.ok) {
-          const data = await res.json();
-          setScanResult(data);
-          setScanComplete(true);
-          if (data.marketplaces_created > 0 || data.detected_settlements?.length > 0) {
-            setMarketplacesFound(data.detected_settlements?.length || data.marketplaces_created || 0);
-          }
+        const data = await callEdgeFunction('scan-xero-history');
+        setScanResult(data);
+        setScanComplete(true);
+        if (data.marketplaces_created > 0 || data.detected_settlements?.length > 0) {
+          setMarketplacesFound(data.detected_settlements?.length || data.marketplaces_created || 0);
         }
+        onScanComplete?.();
       } catch (err) {
         console.error('Xero scan trigger failed:', err);
       } finally {
@@ -88,7 +124,92 @@ export default function PostSetupBanner({
     triggerScan();
   }, [hasXero, dismissed]);
 
-  // Poll for auto-detected marketplaces
+  // ─── Amazon auto-scan ──────────────────────────────────────────
+  useEffect(() => {
+    if (!hasAmazon || dismissed || amazonScanTriggered.current) return;
+    amazonScanTriggered.current = true;
+
+    const triggerScan = async () => {
+      try {
+        const { data: scanFlag } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'amazon_scan_completed')
+          .maybeSingle();
+
+        if (scanFlag?.value) {
+          setAmazonScanComplete(true);
+          return;
+        }
+
+        setAmazonScanning(true);
+        await callEdgeFunction('fetch-amazon-settlements');
+
+        // Count what was imported
+        const { count } = await supabase
+          .from('settlements')
+          .select('id', { count: 'exact', head: true })
+          .eq('marketplace', 'amazon_au');
+        setAmazonFound(count ?? 0);
+
+        await setAppFlag('amazon_scan_completed');
+        setAmazonScanComplete(true);
+        onScanComplete?.();
+      } catch (err) {
+        console.error('Amazon scan trigger failed:', err);
+      } finally {
+        setAmazonScanning(false);
+      }
+    };
+
+    triggerScan();
+  }, [hasAmazon, dismissed]);
+
+  // ─── Shopify auto-scan ─────────────────────────────────────────
+  useEffect(() => {
+    if (!hasShopify || dismissed || shopifyScanTriggered.current) return;
+    shopifyScanTriggered.current = true;
+
+    const triggerScan = async () => {
+      try {
+        const { data: scanFlag } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'shopify_scan_completed')
+          .maybeSingle();
+
+        if (scanFlag?.value) {
+          setShopifyScanComplete(true);
+          return;
+        }
+
+        setShopifyScanning(true);
+
+        // Run in sequence: payouts → orders → channel scan
+        await callEdgeFunction('fetch-shopify-payouts').catch(e => console.warn('fetch-shopify-payouts:', e));
+        await callEdgeFunction('fetch-shopify-orders').catch(e => console.warn('fetch-shopify-orders:', e));
+        await callEdgeFunction('scan-shopify-channels').catch(e => console.warn('scan-shopify-channels:', e));
+
+        // Count discovered channels
+        const { count } = await supabase
+          .from('shopify_sub_channels')
+          .select('id', { count: 'exact', head: true });
+        setShopifyChannelsFound(count ?? 0);
+
+        await setAppFlag('shopify_scan_completed');
+        setShopifyScanComplete(true);
+        onScanComplete?.();
+      } catch (err) {
+        console.error('Shopify scan trigger failed:', err);
+      } finally {
+        setShopifyScanning(false);
+      }
+    };
+
+    triggerScan();
+  }, [hasShopify, dismissed]);
+
+  // ─── Polling for live counts ───────────────────────────────────
   useEffect(() => {
     if (dismissed) return;
     const poll = async () => {
@@ -103,12 +224,27 @@ export default function PostSetupBanner({
           .from('settlements')
           .select('id', { count: 'exact', head: true });
         setSettlementCount(count ?? 0);
+
+        if (hasAmazon && amazonScanning) {
+          const { count: amzCount } = await supabase
+            .from('settlements')
+            .select('id', { count: 'exact', head: true })
+            .eq('marketplace', 'amazon_au');
+          setAmazonFound(amzCount ?? 0);
+        }
+
+        if (hasShopify && shopifyScanning) {
+          const { count: shopCount } = await supabase
+            .from('shopify_sub_channels')
+            .select('id', { count: 'exact', head: true });
+          setShopifyChannelsFound(shopCount ?? 0);
+        }
       } catch {}
     };
     poll();
     const interval = setInterval(poll, 10000);
     return () => clearInterval(interval);
-  }, [dismissed]);
+  }, [dismissed, amazonScanning, shopifyScanning, hasAmazon, hasShopify]);
 
   const handleDismiss = () => {
     sessionStorage.setItem(DISMISS_KEY, 'true');
@@ -121,10 +257,12 @@ export default function PostSetupBanner({
 
   if (dismissed) return null;
   if (!hasAnyConnection && !isFreshAccount) return null;
-  if (allConnected && !scanning && scanComplete && marketplacesFound > 0 && settlementCount !== null && settlementCount > 3) return null;
+
+  const allScansComplete = (!hasXero || scanComplete) && (!hasAmazon || amazonScanComplete) && (!hasShopify || shopifyScanComplete);
+  if (allConnected && allScansComplete && marketplacesFound > 0 && settlementCount !== null && settlementCount > 3) return null;
 
   const connectedCount = [hasXero, hasAmazon, hasShopify].filter(Boolean).length;
-  const isActivelyScanning = scanning || (hasXero && !scanComplete) || (hasAmazon && settlementCount === 0) || (hasShopify && settlementCount === 0);
+  const isActivelyScanning = scanning || amazonScanning || shopifyScanning || (hasXero && !scanComplete) || (hasAmazon && !amazonScanComplete) || (hasShopify && !shopifyScanComplete);
 
   const missingChannels = [
     {
@@ -167,7 +305,6 @@ export default function PostSetupBanner({
       {/* Section A: Active Scanning Status */}
       {hasAnyConnection && (
         <Card className="border-primary/20 bg-primary/5 relative overflow-hidden">
-          {/* Animated gradient bar while scanning */}
           {isActivelyScanning && (
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/40 via-primary to-primary/40 animate-pulse" />
           )}
@@ -195,33 +332,44 @@ export default function PostSetupBanner({
                   }
                 </h3>
                 <div className="space-y-1">
-                  {hasXero && isActivelyScanning && (
+                  {hasXero && (
                     <p className="text-sm text-foreground">
-                      Scanning your Xero history to auto-detect marketplaces and build them into your dashboard.
-                    </p>
-                  )}
-                  {hasXero && scanComplete && (
-                    <p className="text-sm text-foreground">
-                      {marketplacesFound > 0
-                        ? `We found ${marketplacesFound} marketplace${marketplacesFound > 1 ? 's' : ''} in your Xero and set them up for you.`
-                        : scanResult?.confidence === 'low' || !scanResult?.confidence
-                          ? 'No marketplace invoices found in Xero yet — upload a settlement file to get started.'
-                          : 'Xero scan complete — your marketplaces are ready.'
+                      {scanning
+                        ? 'Scanning your Xero history to auto-detect marketplaces and build them into your dashboard.'
+                        : scanComplete
+                          ? marketplacesFound > 0
+                            ? `We found ${marketplacesFound} marketplace${marketplacesFound > 1 ? 's' : ''} in your Xero and set them up for you.`
+                            : scanResult?.confidence === 'low' || !scanResult?.confidence
+                              ? 'No marketplace invoices found in Xero yet — upload a settlement file to get started.'
+                              : 'Xero scan complete — your marketplaces are ready.'
+                          : 'Preparing to scan your Xero…'
                       }
                     </p>
                   )}
                   {hasAmazon && (
                     <p className="text-sm text-muted-foreground">
-                      {isActivelyScanning
-                        ? 'Importing your Amazon settlements — they\'ll appear in your Settlements tab shortly.'
-                        : 'Amazon settlements imported.'}
+                      {amazonScanning
+                        ? amazonFound > 0
+                          ? `Importing your Amazon settlements — ${amazonFound} found so far…`
+                          : 'Importing your Amazon settlements…'
+                        : amazonScanComplete
+                          ? amazonFound > 0
+                            ? `✅ ${amazonFound} Amazon settlement${amazonFound > 1 ? 's' : ''} imported and ready.`
+                            : 'Amazon scan complete — no settlements found yet.'
+                          : 'Preparing to scan Amazon…'}
                     </p>
                   )}
                   {hasShopify && (
                     <p className="text-sm text-muted-foreground">
-                      {isActivelyScanning
-                        ? 'Syncing your Shopify payouts and detecting sales channels automatically.'
-                        : 'Shopify payouts synced.'}
+                      {shopifyScanning
+                        ? shopifyChannelsFound > 0
+                          ? `Syncing Shopify — detected ${shopifyChannelsFound} sales channel${shopifyChannelsFound > 1 ? 's' : ''} so far…`
+                          : 'Syncing your Shopify payouts and detecting sales channels…'
+                        : shopifyScanComplete
+                          ? shopifyChannelsFound > 0
+                            ? `✅ ${shopifyChannelsFound} Shopify sales channel${shopifyChannelsFound > 1 ? 's' : ''} detected and synced.`
+                            : 'Shopify sync complete — payouts imported.'
+                          : 'Preparing to scan Shopify…'}
                     </p>
                   )}
                 </div>
@@ -258,7 +406,6 @@ export default function PostSetupBanner({
             <X className="h-4 w-4" />
           </button>
           <CardContent className="p-5 space-y-5">
-            {/* Header with progress */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/10">
@@ -275,7 +422,6 @@ export default function PostSetupBanner({
               </div>
             </div>
 
-            {/* Progress dots */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
                 {[hasXero, hasAmazon, hasShopify].map((connected, i) => (
@@ -297,7 +443,6 @@ export default function PostSetupBanner({
               )}
             </div>
 
-            {/* Channel cards */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {missingChannels.filter(c => !c.connected).map((channel) => {
                 const Icon = channel.icon;
@@ -326,7 +471,6 @@ export default function PostSetupBanner({
               })}
             </div>
 
-            {/* Reassurance */}
             <div className="flex items-center gap-2 pt-1">
               <Shield className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
               <p className="text-xs text-muted-foreground">

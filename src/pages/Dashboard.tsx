@@ -479,6 +479,7 @@ export default function Dashboard() {
                   setWizardInitialStep(1);
                   setShowWizard(true);
                 }}
+                onScanComplete={loadMarketplaces}
               />
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
               <ReconciliationSummaryCard onNavigate={() => {
