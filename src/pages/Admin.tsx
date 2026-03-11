@@ -32,6 +32,7 @@ import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
 import BugReportsDashboard from '@/components/admin/BugReportsDashboard';
 import DataIntegrityDashboard from '@/components/admin/DataIntegrityDashboard';
+import PreLaunchChecklist from '@/components/admin/PreLaunchChecklist';
 
 interface UserRow {
   id: string;
