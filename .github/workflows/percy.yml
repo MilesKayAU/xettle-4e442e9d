@@ -25,8 +25,8 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Create screenshots directory
-        run: mkdir -p tests/screenshots
+      - name: Create test directories
+        run: mkdir -p tests/screenshots playwright-report
 
       - name: Start dev server
         run: npm run dev &
@@ -35,7 +35,7 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_TEST_MODE: 'true'
 
-      - name: Wait for dev server
+      - name: Wait for server
         run: npx wait-on http://localhost:8080 --timeout 120000 --interval 2000
 
       - name: Run Percy visual tests
