@@ -97,8 +97,10 @@ export default function SetupStepConnectStores({
     setConnectingShopify(true);
     try {
       const domain = shopDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
       const { data, error } = await supabase.functions.invoke('shopify-auth', {
-        body: { action: 'install', shop: domain },
+        body: { action: 'initiate', shop: domain, userId: user.id },
       });
       if (error || data?.error) throw new Error(data?.error || 'Failed to start Shopify connection');
       const authUrl = data?.authUrl || data?.url;
