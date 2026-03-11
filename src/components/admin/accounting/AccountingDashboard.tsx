@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon } from "lucide-react";
+import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon, BarChart3 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseSettlementTSV, formatDisplayDate, formatAUD, XERO_ACCOUNT_MAP, round2, PARSER_VERSION, type ParsedSettlement, type DebugBreakdownRow, type ParserOptions, type SplitMonthData } from '@/utils/settlement-parser';
