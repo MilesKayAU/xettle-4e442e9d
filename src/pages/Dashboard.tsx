@@ -44,9 +44,16 @@ export default function Dashboard() {
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
   const [hasAmazon, setHasAmazon] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
+  const [justConnectedXero, setJustConnectedXero] = useState(false);
 
   useEffect(() => {
     if (!user) return;
+    // Immediately set xero if returning from OAuth
+    const connected = searchParams.get('connected');
+    if (connected === 'xero') {
+      setXeroConnected(true);
+      setJustConnectedXero(true);
+    }
     supabase.from('xero_tokens').select('id').limit(1)
       .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
   }, [user]);
