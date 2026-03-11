@@ -86,7 +86,8 @@ export default function SetupStepConnectStores({
         body: { action: 'install', shop: domain },
       });
       if (error || data?.error) throw new Error(data?.error || 'Failed to start Shopify connection');
-      if (data?.url) window.location.href = data.url;
+      const authUrl = data?.authUrl || data?.url;
+      if (authUrl) window.location.href = authUrl;
     } catch (err: any) {
       toast.error(err.message || 'Failed to start Shopify connection');
       setConnectingShopify(false);
