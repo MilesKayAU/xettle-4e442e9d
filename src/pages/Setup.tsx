@@ -733,10 +733,23 @@ export default function Setup() {
   // ─── Render ───────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-2xl mx-auto px-4 py-12 space-y-8">
+      {/* App header — matches Dashboard */}
+      <header className="border-b border-border bg-card">
+        <div className="max-w-4xl mx-auto flex items-center justify-between h-14 px-4">
+          <Link to="/" className="flex items-center">
+            <XettleLogo height={28} />
+          </Link>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back to Dashboard
+          </Button>
+        </div>
+      </header>
+
+      <div className="max-w-2xl mx-auto px-4 py-10 space-y-8">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-foreground">Setting up your Xettle account</h1>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold text-foreground">Setting up your account</h1>
           <p className="text-muted-foreground text-sm">
             Some steps run automatically — others wait until your data is ready. You can leave and come back.
           </p>
