@@ -133,6 +133,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
             const headers: Record<string, string> = {};
             if (step.fn === 'fetch-shopify-orders' && caps.shopDomain) {
               body.shopDomain = caps.shopDomain;
+              body.channelDetectionOnly = true;
             }
             if (step.fn === 'fetch-amazon-settlements') {
               headers['x-action'] = 'smart-sync';
