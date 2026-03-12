@@ -382,11 +382,20 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Needs attention</p>
-              <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
-                {data.invoice_count - data.ready_to_reconcile}
-              </p>
-              <p className="text-xs text-muted-foreground">gaps or missing</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Awaiting payment</p>
+                    <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
+                      {data.invoice_count - data.ready_to_reconcile}
+                    </p>
+                    <p className="text-xs text-muted-foreground">to action</p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-center">
+                  Xero invoices awaiting payment — approve and reconcile these in Xero
+                </TooltipContent>
+              </Tooltip>
             </CardContent>
           </Card>
         </div>
