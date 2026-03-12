@@ -699,6 +699,14 @@ export default function Dashboard() {
               {/* AI Account Mapper suggestion banner */}
               <AiMapperBanner />
 
+              {/* CoA-detected channels awaiting confirmation */}
+              {suggestedConnections.length > 0 && (
+                <CoaDetectedPanel
+                  suggestedConnections={suggestedConnections}
+                  onChanged={loadMarketplaces}
+                />
+              )}
+
               {/* Channel alerts — accounting health info */}
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
 
