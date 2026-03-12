@@ -918,9 +918,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           if (user && marketplace === 'bunnings') {
             try {
               const summaryLines = [
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Bunnings sales total (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'sales' },
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Bunnings commission (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'fees' },
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.gst_on_sales, amount_type: 'tax', transaction_type: 'Summary', amount_description: 'GST on sales', marketplace_name: 'Bunnings Marketplace', accounting_category: 'gst' },
+                { user_id: user.id, settlement_id: s.settlement_id, amount: s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Bunnings sales total (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'revenue' },
+                { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Bunnings commission (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'marketplace_fee' },
+                { user_id: user.id, settlement_id: s.settlement_id, amount: s.gst_on_sales, amount_type: 'tax', transaction_type: 'Summary', amount_description: 'GST on sales', marketplace_name: 'Bunnings Marketplace', accounting_category: 'gst_income' },
               ].filter(l => l.amount !== 0);
               if (summaryLines.length > 0) {
                 await supabase.from('settlement_lines').insert(summaryLines as any);
