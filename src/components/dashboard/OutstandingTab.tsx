@@ -1120,6 +1120,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               </div>
                             )}
 
+                            {/* Payment verification badges (Rule #11 — verification only) */}
+                            {Object.keys(paymentVerifications).length > 0 && row.settlement_id && (
+                              <div className="mb-3 p-3 rounded-lg bg-muted/30 border border-border">
+                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-2">
+                                  <Shield className="h-3 w-3" /> Payment Verification
+                                </p>
+                                {renderPaymentVerificationBadges(row)}
+                              </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                               {/* Xero Invoice */}
                               <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
