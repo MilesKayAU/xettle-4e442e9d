@@ -672,6 +672,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       return `Gap: $${gap}`;
     }
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
+      if (isAmazon(row) && row.settlement_status === 'synced_external') return 'In Xero — awaiting deposit';
       return isAmazon(row) ? 'Awaiting deposit' : 'No deposit found';
     }
     if (row.match_status === 'no_bank_deposit') return 'No deposit found';
