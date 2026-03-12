@@ -315,18 +315,27 @@ export default function Dashboard() {
           return activeConnections.length > 0 ? activeConnections[0].marketplace_code : '';
         });
 
-        // Fetch settlement counts per marketplace
-        const codes = activeConnections.map((m: any) => m.marketplace_code);
-        const { data: countData } = await supabase
-          .from('settlements')
-          .select('marketplace')
-          .in('marketplace', codes);
-        if (countData) {
+        // Fetch settlement counts per marketplace (lightweight count-only queries)
+        const codes = activeConnections.map((m: any) => m.marketplace_code).filter(Boolean);
+        if (codes.length > 0) {
+          const countPairs = await Promise.all(
+            codes.map(async (code: string) => {
+              const { count } = await supabase
+                .from('settlements')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('marketplace', code);
+              return [code, count ?? 0] as const;
+            })
+          );
+
           const counts: Record<string, number> = {};
-          for (const row of countData) {
-            counts[row.marketplace || ''] = (counts[row.marketplace || ''] || 0) + 1;
+          for (const [code, count] of countPairs) {
+            counts[code] = count;
           }
           setSettlementCounts(counts);
+        } else {
+          setSettlementCounts({});
         }
       } else {
         setUserMarketplaces([]);
