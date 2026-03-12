@@ -801,24 +801,16 @@ Deno.serve(async (req) => {
     }
 
     // ─── 9. Mark scan as completed ──────────────────────────────────
-    const { data: existingScanFlag } = await supabase
-      .from('app_settings')
-      .select('id')
-      .eq('key', 'xero_scan_completed')
-      .maybeSingle()
+    await supabase.from('app_settings').upsert(
+      { user_id: userId, key: 'xero_scan_completed', value: new Date().toISOString() },
+      { onConflict: 'user_id,key' }
+    )
 
-    if (existingScanFlag) {
-      await supabase.from('app_settings')
-        .update({ value: new Date().toISOString() })
-        .eq('id', existingScanFlag.id)
-    } else {
-      await supabase.from('app_settings')
-        .insert({
-          user_id: userId,
-          key: 'xero_scan_completed',
-          value: new Date().toISOString(),
-        })
-    }
+    // Also mark discovery status complete (full scan implies discovery is done)
+    await supabase.from('app_settings').upsert(
+      { user_id: userId, key: 'xero_discovery_status', value: 'complete' },
+      { onConflict: 'user_id,key' }
+    )
 
     // ─── 9. Log system event ────────────────────────────────────────
     await supabase.from('system_events').insert({
@@ -887,6 +879,26 @@ Deno.serve(async (req) => {
     })
   } catch (err) {
     console.error('scan-xero-history error:', err)
+
+    // Even on error, mark discovery as complete so the client stops polling
+    try {
+      const authHeader = req.headers.get('Authorization')
+      if (authHeader) {
+        const errClient = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_ANON_KEY')!,
+          { global: { headers: { Authorization: authHeader } } }
+        )
+        const { data: { user: errUser } } = await errClient.auth.getUser()
+        if (errUser) {
+          await errClient.from('app_settings').upsert(
+            { user_id: errUser.id, key: 'xero_discovery_status', value: 'complete' },
+            { onConflict: 'user_id,key' }
+          )
+        }
+      }
+    } catch (_) { /* best effort */ }
+
     return new Response(JSON.stringify({ error: 'Internal server error', detail: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
