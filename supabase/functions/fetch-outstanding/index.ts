@@ -127,7 +127,7 @@ function isLikelyMarketplaceInvoice(reference: string, contactName: string): boo
   return ref.startsWith('xettle-') || ref.startsWith('amzn-') || ref.startsWith('lmb-') || ref.includes('settlement') || ref.includes('payout');
 }
 
-async function loadOutstandingCache(supabase: any, userId: string) {
+async function loadOutstandingCache(supabase: any, userId: string): Promise<{ payload: any; cached_at: string | null } | null> {
   try {
     const { data } = await supabase
       .from('app_settings')
@@ -137,8 +137,22 @@ async function loadOutstandingCache(supabase: any, userId: string) {
       .maybeSingle();
 
     if (!data?.value) return null;
+
     const parsed = JSON.parse(data.value);
-    return parsed?.payload || null;
+
+    // Current cache shape
+    if (parsed?.payload) {
+      return {
+        payload: parsed.payload,
+        cached_at: parsed.cached_at || null,
+      };
+    }
+
+    // Backward-compatible fallback (legacy payload-only cache)
+    return {
+      payload: parsed,
+      cached_at: null,
+    };
   } catch {
     return null;
   }
@@ -185,6 +199,27 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const cachedRecord = await loadOutstandingCache(supabase, userId);
+    const cachedPayload = cachedRecord?.payload || null;
+    const cacheAgeSeconds = cachedRecord?.cached_at
+      ? Math.max(0, Math.floor((Date.now() - new Date(cachedRecord.cached_at).getTime()) / 1000))
+      : null;
+
+    // Serve warm cache for a short window to reduce Xero API pressure
+    if (cachedPayload && cacheAgeSeconds !== null && cacheAgeSeconds < 90) {
+      return new Response(JSON.stringify({
+        ...cachedPayload,
+        sync_info: {
+          ...(cachedPayload.sync_info || {}),
+          from_cache: true,
+          cache_age_seconds: cacheAgeSeconds,
+        },
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Get Xero token
     const { data: tokens } = await supabase
       .from('xero_tokens')
@@ -194,11 +229,14 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (!tokens?.length) {
-      // No Xero connection — return empty result instead of error
       return new Response(JSON.stringify({
-        invoices: [],
-        summary: { total_outstanding: 0, matched_with_settlement: 0, bank_deposit_found: 0, ready_to_reconcile: 0, total_invoices: 0 },
-        aggregate_groups: [],
+        error: 'No Xero connection',
+        rows: [],
+        total_outstanding: 0,
+        invoice_count: 0,
+        matched_with_settlement: 0,
+        bank_deposit_found: 0,
+        ready_to_reconcile: 0,
       }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -216,10 +254,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const accountingBoundary = boundaryRow?.value || null;
 
-    // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
-    // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
-    const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
+    // ─── Fetch only outstanding sales invoices (ACCREC + AUTHORISED + AmountDue>0) ───
+    // Keep this query narrow to avoid hitting Xero rate limits.
+    const invoiceWhere = encodeURIComponent(`Type=="ACCREC" AND Status=="AUTHORISED" AND AmountDue>0`);
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${invoiceWhere}&order=Date DESC`;
     const xeroResp = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token.access_token}`,
@@ -236,7 +274,7 @@ Deno.serve(async (req) => {
       const retryAfter = xeroResp.headers.get('Retry-After') || '60';
       const isRateLimited = xeroResp.status === 429;
       const isAuthError = xeroResp.status === 401 || xeroResp.status === 403;
-      const cached = await loadOutstandingCache(supabase, userId);
+      const cached = cachedPayload;
 
       const syncInfo = {
         xero_rate_limited: isRateLimited,
@@ -335,28 +373,33 @@ Deno.serve(async (req) => {
     const amazonRateLimitUntil = amazonRateLimitSetting?.value || null;
     const amazonRateLimited = !!amazonRateLimitUntil && new Date(amazonRateLimitUntil) > new Date();
 
-    // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
+    // ─── Use cached bank transactions from our local ingestion pipeline (last 90 days) ───
+    // This avoids an extra live Xero call per request and reduces rate-limit pressure.
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const [y, m, d] = ninetyDaysAgo.toISOString().split('T')[0].split('-');
-    const bankWhere = `Type=="RECEIVE" AND Date>=DateTime(${y}, ${m}, ${d})`;
+    const ninetyDaysAgoIso = ninetyDaysAgo.toISOString().split('T')[0];
 
     let bankTxns: any[] = [];
     try {
-      const bankUrl = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(bankWhere)}`;
-      const bankResp = await fetch(bankUrl, {
-        headers: {
-          'Authorization': `Bearer ${token.access_token}`,
-          'Accept': 'application/json',
-          'Xero-tenant-id': token.tenant_id,
-        },
-      });
-      if (bankResp.ok) {
-        const bankData = await bankResp.json();
-        bankTxns = bankData?.BankTransactions || [];
-      }
+      const { data: bankRows } = await supabase
+        .from('bank_transactions')
+        .select('xero_transaction_id, amount, date, reference, description, contact_name, bank_account_name')
+        .eq('user_id', userId)
+        .gte('date', ninetyDaysAgoIso)
+        .order('date', { ascending: false })
+        .limit(1000);
+
+      bankTxns = (bankRows || []).map((row: any) => ({
+        BankTransactionID: row.xero_transaction_id,
+        Total: row.amount || 0,
+        Date: row.date,
+        Reference: row.reference || '',
+        LineItems: [{ Description: row.description || '' }],
+        Contact: { Name: row.contact_name || '' },
+        BankAccount: { Name: row.bank_account_name || '' },
+      }));
     } catch (e) {
-      console.error('Bank txn fetch error:', e);
+      console.error('Bank txn cache read error:', e);
     }
 
     // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
