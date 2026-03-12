@@ -287,8 +287,11 @@ async function syncPayoutsForUser(
       const feesExGst = Math.abs(totalFees) - gstOnExpenses;
       const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
+      // API-fetched payouts default to 'saved' — sync-xero-status determines
+      // the real status by checking if an invoice already exists in Xero.
+      // Only user-uploaded settlements get 'ready_to_push'.
       const isBeforeBoundary = dateMin && payoutDate < dateMin;
-      const settlementStatus = isBeforeBoundary ? "already_recorded" : "ready_to_push";
+      const settlementStatus = isBeforeBoundary ? "already_recorded" : "saved";
 
       // ─── Insert settlement ───────────────────────────────────
       const { error: insertError } = await supabase.from("settlements").insert({
