@@ -572,6 +572,7 @@ export default function Setup() {
             code,
             orderCount: ch.order_count ?? undefined,
             source: 'Shopify orders (source_name)',
+            isConfirmed: knownCodes.has(code.toLowerCase()),
           });
         }
       }
@@ -589,6 +590,7 @@ export default function Setup() {
             code,
             orderCount: alert.order_count ?? undefined,
             source: method,
+            isConfirmed: knownCodes.has(code.toLowerCase()),
           });
         }
       }
@@ -607,6 +609,7 @@ export default function Setup() {
             name: conn.marketplace_name,
             code: conn.marketplace_code,
             source,
+            isConfirmed: knownCodes.has(conn.marketplace_code.toLowerCase()),
           });
         }
       }
@@ -620,6 +623,7 @@ export default function Setup() {
             name: displayName(code),
             code,
             source: 'Existing settlement data',
+            isConfirmed: knownCodes.has(code.toLowerCase()),
           });
         }
       }
@@ -632,6 +636,7 @@ export default function Setup() {
             name: displayName(fp.marketplace_code),
             code: fp.marketplace_code,
             source: 'Previous CSV upload',
+            isConfirmed: knownCodes.has(fp.marketplace_code.toLowerCase()),
           });
         }
       }
