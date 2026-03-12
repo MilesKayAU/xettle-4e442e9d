@@ -107,6 +107,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [customName, setCustomName] = useState('');
   const [linkingAlertId, setLinkingAlertId] = useState<string | null>(null);
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
+  const [classifyingAlert, setClassifyingAlert] = useState<ChannelAlert | null>(null);
 
   const loadAlerts = async () => {
     try {
