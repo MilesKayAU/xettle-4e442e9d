@@ -8,6 +8,19 @@
  * STATE 3 — no_bank_deposit: No match found, manual reconciliation
  * STATE 4 — confirmed_manual: User manually confirmed a deposit
  * STATE 5 — confirmed / balanced: Deposit matched and confirmed
+ *
+ * Payment verification states (PayPal, Shopify Payments, etc.):
+ * ✅ "Payment confirmed" (green)
+ * ⚠️ "Confirm payment match" (amber)
+ * 🔗 "Find in Xero →" (grey)
+ * 🔧 "Manually confirmed" (blue)
+ * ❓ "No feed detected" (yellow — links to settings)
+ *
+ * PAYMENT VERIFICATION LAYER ONLY
+ * Payment matching never creates accounting entries.
+ * No invoice. No journal. No Xero push.
+ * Settlements are the only accounting source.
+ * See: architecture rule #11
  */
 
 import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
