@@ -24,6 +24,18 @@ interface ReconItem {
   status: string;
   sourceId: string; // original row ID for notes
   resolvedAt?: string;
+  // Extended settlement details for bookkeeper review
+  settlementId?: string;
+  depositDate?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  xeroStatus?: string;
+  reconStatus?: string;
+  salesPrincipal?: number;
+  sellerFees?: number;
+  fbaFees?: number;
+  refunds?: number;
+  otherFees?: number;
 }
 
 interface ReconNote {
@@ -98,7 +110,7 @@ export default function ReconciliationHub() {
         // Settlements with issues
         supabase
           .from('settlements')
-          .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, reconciliation_status, deposit_date')
+          .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, reconciliation_status, deposit_date, sales_principal, seller_fees, fba_fees, refunds, other_fees')
           .gte('period_start', effectiveStartStr)
           .in('status', ['parsed', 'saved', 'push_failed', 'ready_to_push'])
           .order('period_start', { ascending: false }),
@@ -151,6 +163,17 @@ export default function ReconciliationHub() {
           date: s.period_start,
           status: s.status || 'unknown',
           sourceId: s.id,
+          settlementId: s.settlement_id,
+          depositDate: s.deposit_date || undefined,
+          periodStart: s.period_start,
+          periodEnd: s.period_end,
+          xeroStatus: s.xero_status || undefined,
+          reconStatus: s.reconciliation_status || undefined,
+          salesPrincipal: s.sales_principal || undefined,
+          sellerFees: s.seller_fees || undefined,
+          fbaFees: s.fba_fees || undefined,
+          refunds: s.refunds || undefined,
+          otherFees: s.other_fees || undefined,
         });
       }
 
@@ -377,6 +400,36 @@ export default function ReconciliationHub() {
                     {getUrgencyBadge(item.urgencyTier)}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{item.subtitle}</p>
+
+                  {/* Extended settlement details for bookkeeper review */}
+                  {item.type === 'settlement' && (
+                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs border-t border-border/50 pt-2">
+                      {item.settlementId && (
+                        <div><span className="text-muted-foreground">ID:</span> <span className="font-mono text-foreground">{item.settlementId.length > 16 ? item.settlementId.slice(0, 16) + '…' : item.settlementId}</span></div>
+                      )}
+                      {item.depositDate && (
+                        <div><span className="text-muted-foreground">Deposit:</span> <span className="text-foreground">{item.depositDate}</span></div>
+                      )}
+                      {item.amount != null && (
+                        <div><span className="text-muted-foreground">Net payout:</span> <span className="font-medium text-foreground">{formatAUD(item.amount)}</span></div>
+                      )}
+                      {item.xeroStatus && (
+                        <div><span className="text-muted-foreground">Xero:</span> <span className="text-foreground">{item.xeroStatus.replace(/_/g, ' ')}</span></div>
+                      )}
+                      {item.salesPrincipal != null && (
+                        <div><span className="text-muted-foreground">Sales:</span> <span className="text-foreground">{formatAUD(item.salesPrincipal)}</span></div>
+                      )}
+                      {(item.sellerFees != null || item.fbaFees != null) && (
+                        <div><span className="text-muted-foreground">Fees:</span> <span className="text-foreground">{formatAUD((item.sellerFees || 0) + (item.fbaFees || 0) + (item.otherFees || 0))}</span></div>
+                      )}
+                      {item.refunds != null && item.refunds !== 0 && (
+                        <div><span className="text-muted-foreground">Refunds:</span> <span className="text-destructive">{formatAUD(item.refunds)}</span></div>
+                      )}
+                      {item.reconStatus && (
+                        <div><span className="text-muted-foreground">Recon:</span> <span className="text-foreground">{item.reconStatus.replace(/_/g, ' ')}</span></div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Notes */}
                   {notes[item.sourceId] && notes[item.sourceId].length > 0 && (
