@@ -214,6 +214,17 @@ Deno.serve(async (req) => {
       preSeededSet.add(m.settlement_id);
     }
 
+    // ─── Read Amazon rate-limit cooldown (for UI messaging) ───
+    const { data: amazonRateLimitSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'amazon_rate_limit_until')
+      .maybeSingle();
+
+    const amazonRateLimitUntil = amazonRateLimitSetting?.value || null;
+    const amazonRateLimited = !!amazonRateLimitUntil && new Date(amazonRateLimitUntil) > new Date();
+
     // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
