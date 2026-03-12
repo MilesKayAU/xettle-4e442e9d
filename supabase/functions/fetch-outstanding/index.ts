@@ -310,7 +310,10 @@ Deno.serve(async (req) => {
         matched_with_settlement: 0,
         bank_deposit_found: 0,
         ready_to_reconcile: 0,
-        sync_info: syncInfo,
+        sync_info: {
+          ...syncInfo,
+          status: 'rate_limited_no_cache',
+        },
       }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

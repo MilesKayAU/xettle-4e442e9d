@@ -940,7 +940,10 @@ export default function Dashboard() {
         {activeView === 'outstanding' && (
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-              <OutstandingTab onSwitchToUpload={() => switchView('smart_upload')} />
+              <OutstandingTab
+                onSwitchToUpload={() => switchView('smart_upload')}
+                discoveryComplete={!showDiscoveryBanner}
+              />
             </Suspense>
           </ErrorBoundary>
         )}

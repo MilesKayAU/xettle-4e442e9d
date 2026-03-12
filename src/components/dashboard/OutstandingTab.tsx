@@ -23,7 +23,7 @@
  * See: architecture rule #11
  */
 
-import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
+import { useState, useCallback, useEffect, Fragment, useMemo, useRef } from 'react';
 import { Switch } from '@/components/ui/switch';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -165,6 +165,7 @@ interface OutstandingSummary {
 
 interface Props {
   onSwitchToUpload: () => void;
+  discoveryComplete?: boolean;
 }
 
 const GATEWAY_LABELS: Record<string, string> = {
@@ -194,10 +195,12 @@ const MARKETPLACE_LABELS: Record<string, string> = {
   unknown: 'Unknown',
 };
 
-export default function OutstandingTab({ onSwitchToUpload }: Props) {
+export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = true }: Props) {
   const [data, setData] = useState<OutstandingSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [rateLimitRetrySeconds, setRateLimitRetrySeconds] = useState<number | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<Set<string>>(new Set());
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -278,6 +281,30 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         setXeroSyncMessage(syncInfo.message || 'Xero temporarily unavailable');
       }
 
+      // Auto-retry on rate limit with no cache (empty rows)
+      const rows = resp.data?.rows || [];
+      if (syncInfo?.xero_rate_limited && rows.length === 0 && syncInfo?.retry_after_seconds) {
+        const retryIn = Math.min(syncInfo.retry_after_seconds, 90);
+        setRateLimitRetrySeconds(retryIn);
+        // Start countdown
+        if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+        retryTimerRef.current = setInterval(() => {
+          setRateLimitRetrySeconds(prev => {
+            if (prev === null || prev <= 1) {
+              if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+              retryTimerRef.current = null;
+              // Auto-retry
+              setTimeout(() => fetchOutstanding(), 500);
+              return null;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        setRateLimitRetrySeconds(null);
+        if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+      }
+
       setData(resp.data as OutstandingSummary);
       setHasLoaded(true);
       setSelected(new Set());
@@ -289,7 +316,19 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, []);
 
-  useEffect(() => { fetchOutstanding(); }, []);
+  // Only auto-fetch when discovery is complete (prevents Xero API call storm)
+  useEffect(() => {
+    if (discoveryComplete) {
+      fetchOutstanding();
+    }
+  }, [discoveryComplete]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+    };
+  }, []);
 
   // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
   // PAYMENT VERIFICATION LAYER ONLY
@@ -1141,11 +1180,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         <Card>
           <CardContent className="p-8 text-center">
             <Clock3 className="h-12 w-12 text-amber-500 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-foreground">Sync paused</h3>
-            <p className="text-sm text-muted-foreground mt-1">We’re waiting for Xero API capacity to return.</p>
+            <h3 className="text-lg font-semibold text-foreground">
+              {rateLimitRetrySeconds !== null ? 'Waiting for Xero API\u2026' : 'Sync paused'}
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {rateLimitRetrySeconds !== null
+                ? `Retrying automatically in ${rateLimitRetrySeconds}s — this is normal.`
+                : "We're waiting for Xero API capacity to return."}
+            </p>
             <p className="text-xs text-muted-foreground mt-2">
               Your data is not cleared — it will appear automatically once the API window reopens.
             </p>
+            {rateLimitRetrySeconds === null && (
+              <Button variant="outline" size="sm" className="mt-4" onClick={fetchOutstanding}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Retry now
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
