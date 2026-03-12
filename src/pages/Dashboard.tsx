@@ -258,6 +258,7 @@ export default function Dashboard() {
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
   const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
   const [outstandingCount, setOutstandingCount] = useState(0);
+  const [settlementCounts, setSettlementCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
