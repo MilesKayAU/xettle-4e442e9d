@@ -356,21 +356,53 @@ serve(async (req) => {
     console.log(`[step-3] ${uncachedSettlements.length} settlements have no cache entry (of ${allSettlements?.length || 0} total)`);
 
     // ════════════════════════════════════════════════════════════════════
-    // STEP 3b: ALWAYS run outstanding discovery (Xero is the priority source of truth)
-    // This ensures Outstanding tab reflects Xero's Awaiting Payment invoices even when
-    // local settlement data is incomplete or hasn't been fetched yet.
+    // STEP 3b: Outstanding discovery — with per-user rate-limit cooldown guard
     // ════════════════════════════════════════════════════════════════════
     {
-      console.log(`[step-3b] Running outstanding discovery (always — Xero-first priority)`);
-
-      const { data: cursorSetting } = await supabase
+      // Check cooldown before making heavy Xero API calls
+      const { data: cooldownSetting } = await supabase
         .from('app_settings').select('value')
-        .eq('user_id', userId).eq('key', `xero_last_invoice_scan_at_${token.tenant_id}`)
+        .eq('user_id', userId).eq('key', 'xero_api_cooldown_until')
         .maybeSingle();
-      const modifiedAfter = cursorSetting?.value || null;
 
-      const outstandingInvoices = await queryXeroInvoicesPaginated(token, 'Type=="ACCREC"', modifiedAfter);
-      console.log(`[step-3b] Pulled ${outstandingInvoices.length} candidate Xero invoices for outstanding discovery`);
+      const cooldownUntil = cooldownSetting?.value ? new Date(cooldownSetting.value) : null;
+      const isCoolingDown = cooldownUntil && cooldownUntil > new Date();
+
+      if (isCoolingDown) {
+        console.log(`[step-3b] Skipping outstanding discovery: API cooldown active until ${cooldownUntil!.toISOString()}`);
+      } else {
+        console.log(`[step-3b] Running outstanding discovery (Xero-first priority)`);
+
+        const { data: cursorSetting } = await supabase
+          .from('app_settings').select('value')
+          .eq('user_id', userId).eq('key', `xero_last_invoice_scan_at_${token.tenant_id}`)
+          .maybeSingle();
+        const modifiedAfter = cursorSetting?.value || null;
+
+        let outstandingInvoices: any[] = [];
+        try {
+          outstandingInvoices = await queryXeroInvoicesPaginated(token, 'Type=="ACCREC"', modifiedAfter);
+        } catch (e: any) {
+          // If rate limited, set 90-second cooldown and continue with cached data
+          if (e?.message?.includes('429') || e?.status === 429) {
+            console.warn('[step-3b] Xero 429 detected, setting 90s cooldown');
+            const cooldownExpiry = new Date(Date.now() + 90_000).toISOString();
+            await supabase.from('app_settings').upsert({
+              user_id: userId,
+              key: 'xero_api_cooldown_until',
+              value: cooldownExpiry,
+            }, { onConflict: 'user_id,key' });
+          }
+        }
+
+        // Also set cooldown if we got 0 invoices (likely silent 429/failure)
+        if (outstandingInvoices.length === 0 && cacheBySettlement.size > 0) {
+          console.log(`[step-3b] Got 0 invoices but have ${cacheBySettlement.size} cached — possible silent rate limit`);
+        }
+
+        console.log(`[step-3b] Pulled ${outstandingInvoices.length} candidate Xero invoices`);
+
+        const localSettlementIds = new Set((allSettlements || []).map(s => s.settlement_id));
 
       const localSettlementIds = new Set((allSettlements || []).map(s => s.settlement_id));
       let seededCount = 0;
