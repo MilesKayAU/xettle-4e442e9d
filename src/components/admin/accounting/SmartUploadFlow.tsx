@@ -820,7 +820,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     transaction_type: 'Order',
                     posted_date: order.paidAt ? order.paidAt.split('T')[0] : null,
                     marketplace_name: s.metadata?.displayName || mktKey,
-                    accounting_category: 'sales',
+                    accounting_category: 'revenue',
                   }));
                   for (let i = 0; i < lineRows.length; i += 500) {
                     await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
