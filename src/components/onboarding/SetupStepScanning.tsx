@@ -26,12 +26,18 @@ type StepStatus = 'pending' | 'running' | 'success' | 'skipped' | 'error';
 export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXero }: Props) {
   const allSteps: ScanStep[] = [
     // Phase 1 — parallel fetches (run sequentially in UI for progress, but we check caps)
-    ...(hasXero ? [{ label: 'Scanning Xero for existing invoices…', fn: 'scan-xero-history', requiresCapability: 'hasXero' as keyof SyncCapabilities }] : []),
+    ...(hasXero ? [
+      { label: 'Scanning Xero for existing invoices…', fn: 'scan-xero-history', requiresCapability: 'hasXero' as keyof SyncCapabilities },
+    ] : []),
     ...(hasAmazon ? [{ label: 'Fetching Amazon settlements…', fn: 'fetch-amazon-settlements', requiresCapability: 'hasAmazon' as keyof SyncCapabilities }] : []),
     ...(hasShopify ? [
       { label: 'Fetching Shopify payouts…', fn: 'fetch-shopify-payouts', requiresCapability: 'hasShopify' as keyof SyncCapabilities },
       { label: 'Fetching Shopify orders…', fn: 'fetch-shopify-orders', requiresCapability: 'hasShopify' as keyof SyncCapabilities },
       { label: 'Scanning sales channels…', fn: 'scan-shopify-channels', requiresCapability: 'hasShopify' as keyof SyncCapabilities, requiresShopifyOrders: true },
+    ] : []),
+    // Phase 2 — linking & reconciliation
+    ...(hasXero ? [
+      { label: 'Linking settlements to Xero invoices…', fn: 'sync-xero-status', requiresCapability: 'hasXero' as keyof SyncCapabilities },
     ] : []),
     { label: 'Setting up marketplace tabs…', fn: null, action: 'provision-all' },
     { label: 'Running validation sweep…', fn: 'run-validation-sweep' },
