@@ -117,8 +117,8 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
 
       if (connectedCodes.has(conn.marketplace_code)) continue;
 
-      // Never delete manually-added connections
-      if (conn.connection_type === 'manual') continue;
+      // Never delete manually-added or CoA-detected connections
+      if (conn.connection_type === 'manual' || conn.connection_type === 'coa_detected') continue;
 
       // Check if there are any settlements for this marketplace
       const { count: settlementCount } = await supabase

@@ -114,6 +114,46 @@ Deno.serve(async (req) => {
       description: a.Description || '',
     }))
 
+    // ─── Cache CoA in xero_chart_of_accounts ──────────────────────
+    // Soft-delete: mark missing accounts as inactive, don't hard-delete
+    // (protects against partial Xero API responses)
+    try {
+      const xeroAccountRows = (accountsData.Accounts || [])
+        .filter((a: any) => a.AccountID)
+        .map((a: any) => ({
+          user_id: userId,
+          xero_account_id: a.AccountID,
+          account_code: a.Code || null,
+          account_name: a.Name,
+          account_type: a.Type || null,
+          tax_type: a.TaxType || null,
+          description: a.Description || null,
+          is_active: true,
+          synced_at: new Date().toISOString(),
+        }));
+
+      if (xeroAccountRows.length > 0) {
+        // Upsert current accounts
+        await supabase.from('xero_chart_of_accounts').upsert(
+          xeroAccountRows,
+          { onConflict: 'user_id,xero_account_id' }
+        );
+
+        // Mark accounts not in current fetch as inactive (soft-delete)
+        const currentIds = xeroAccountRows.map((r: any) => r.xero_account_id);
+        await supabase
+          .from('xero_chart_of_accounts')
+          .update({ is_active: false })
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .not('xero_account_id', 'in', `(${currentIds.map((id: string) => `"${id}"`).join(',')})`);
+      }
+
+      console.log(`[ai-account-mapper] Cached ${xeroAccountRows.length} CoA accounts for user ${userId}`);
+    } catch (coaErr: any) {
+      console.warn('[ai-account-mapper] CoA cache failed (non-fatal):', coaErr.message);
+    }
+
     // If action is scan_only, just return the accounts
     if (action === 'scan_only') {
       return new Response(JSON.stringify({ success: true, accounts: xeroAccounts }), {

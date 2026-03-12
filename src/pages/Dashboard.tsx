@@ -27,6 +27,7 @@ import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
@@ -251,6 +252,7 @@ export default function Dashboard() {
     return (localStorage.getItem('xettle_insights_subtab') as InsightsSubTab) || 'overview';
   });
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
+  const [suggestedConnections, setSuggestedConnections] = useState<any[]>([]);
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('');
   const [marketplacesLoading, setMarketplacesLoading] = useState(true);
   const [missingSettlements, setMissingSettlements] = useState<MissingSettlement[]>([]);
@@ -297,13 +299,19 @@ export default function Dashboard() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setUserMarketplaces(data as UserMarketplace[]);
+        // Separate active channels from suggested (CoA-detected)
+        const activeConnections = data.filter((m: any) => m.connection_status !== 'suggested');
+        const suggested = data.filter((m: any) => m.connection_status === 'suggested');
+
+        setUserMarketplaces(activeConnections as UserMarketplace[]);
+        setSuggestedConnections(suggested);
         setSelectedMarketplace(prev => {
-          if (data.find((m: any) => m.marketplace_code === prev)) return prev;
-          return data[0].marketplace_code;
+          if (activeConnections.find((m: any) => m.marketplace_code === prev)) return prev;
+          return activeConnections.length > 0 ? activeConnections[0].marketplace_code : '';
         });
       } else {
         setUserMarketplaces([]);
+        setSuggestedConnections([]);
         setSelectedMarketplace('');
       }
     } catch {
@@ -691,6 +699,14 @@ export default function Dashboard() {
 
               {/* AI Account Mapper suggestion banner */}
               <AiMapperBanner />
+
+              {/* CoA-detected channels awaiting confirmation */}
+              {suggestedConnections.length > 0 && (
+                <CoaDetectedPanel
+                  suggestedConnections={suggestedConnections}
+                  onChanged={loadMarketplaces}
+                />
+              )}
 
               {/* Channel alerts — accounting health info */}
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
