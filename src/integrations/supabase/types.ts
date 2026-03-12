@@ -833,6 +833,60 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_verifications: {
+        Row: {
+          created_at: string | null
+          gateway_code: string
+          id: string
+          match_amount: number | null
+          match_confidence: string | null
+          match_confirmed_at: string | null
+          match_confirmed_by: string | null
+          match_method: string | null
+          narration: string | null
+          order_count: number | null
+          settlement_id: string
+          transaction_date: string | null
+          updated_at: string | null
+          user_id: string
+          xero_tx_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          gateway_code: string
+          id?: string
+          match_amount?: number | null
+          match_confidence?: string | null
+          match_confirmed_at?: string | null
+          match_confirmed_by?: string | null
+          match_method?: string | null
+          narration?: string | null
+          order_count?: number | null
+          settlement_id: string
+          transaction_date?: string | null
+          updated_at?: string | null
+          user_id: string
+          xero_tx_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          gateway_code?: string
+          id?: string
+          match_amount?: number | null
+          match_confidence?: string | null
+          match_confirmed_at?: string | null
+          match_confirmed_by?: string | null
+          match_method?: string | null
+          narration?: string | null
+          order_count?: number | null
+          settlement_id?: string
+          transaction_date?: string | null
+          updated_at?: string | null
+          user_id?: string
+          xero_tx_id?: string | null
+        }
+        Relationships: []
+      }
       product_costs: {
         Row: {
           cost: number
