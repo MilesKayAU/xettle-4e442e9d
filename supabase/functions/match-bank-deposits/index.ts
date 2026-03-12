@@ -244,6 +244,7 @@ Deno.serve(async (req) => {
           const best = candidates[0]
 
           // ── Write high-confidence match to payment_verifications (suggestion only) ──
+          const singleGroupId = crypto.randomUUID()
           await adminSupabase.from('payment_verifications').upsert({
             user_id: userId,
             settlement_id: s.settlement_id,
@@ -256,6 +257,7 @@ Deno.serve(async (req) => {
             narration: best.narration,
             transaction_date: best.date,
             order_count: 0,
+            deposit_group_id: singleGroupId,
           }, { onConflict: 'settlement_id,gateway_code' } as any)
 
           // Update settlement status to deposit_matched (but NOT bank_verified)
@@ -406,6 +408,7 @@ Deno.serve(async (req) => {
           if (bestBatch) {
             const batchScore = bestBatchDiff <= 0.05 ? 92 : bestBatchDiff <= 0.50 ? 88 : 82
             const settlementIds = group.map((s: any) => s.settlement_id)
+            const batchGroupId = crypto.randomUUID()
 
             console.log(`[bank-match] BATCH MATCH FOUND: ${marketplace} ${settlementIds.length} settlements → deposit ${Math.abs(bestBatch.amount).toFixed(2)} (diff: ${bestBatchDiff.toFixed(2)}, score: ${batchScore})`)
 
@@ -425,6 +428,7 @@ Deno.serve(async (req) => {
                 narration: bestBatch.description || '',
                 transaction_date: bestBatch.date,
                 order_count: settlementIds.length,
+                deposit_group_id: batchGroupId,
               }, { onConflict: 'settlement_id,gateway_code' } as any)
 
               // Update settlement status if high confidence

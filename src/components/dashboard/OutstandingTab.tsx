@@ -196,6 +196,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
   const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
   const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
+  const [depositCoverage, setDepositCoverage] = useState<Record<string, {
+    siblings: Array<{ settlement_id: string; match_amount: number; confidence_score: number; period_start?: string; period_end?: string; marketplace?: string }>;
+    depositAmount: number;
+    depositDate: string | null;
+    confidence: number;
+    matchMethod: string;
+  }>>({});
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
@@ -271,6 +278,74 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       fetchPaymentVerifications();
     }
   }, [hasLoaded, data, fetchPaymentVerifications]);
+
+  // ─── Lazy-load deposit coverage when a row is expanded ───
+  // Only fetches deposit_group_id data when rowExpanded === true (never preloads)
+  useEffect(() => {
+    if (!expandedRow || !data) return;
+    const row = data.rows.find(r => r.xero_invoice_id === expandedRow);
+    if (!row?.settlement_id || depositCoverage[row.settlement_id]) return;
+
+    const fetchCoverage = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+
+        // Step 1: Get this settlement's payment verification to find deposit_group_id
+        const { data: pv } = await supabase
+          .from('payment_verifications')
+          .select('deposit_group_id, match_amount, confidence_score, match_method, transaction_date')
+          .eq('settlement_id', row.settlement_id!)
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (!pv?.deposit_group_id) return;
+
+        // Step 2: Fetch all siblings sharing this deposit_group_id
+        const { data: siblings } = await supabase
+          .from('payment_verifications')
+          .select('settlement_id, match_amount, confidence_score')
+          .eq('deposit_group_id', pv.deposit_group_id)
+          .eq('user_id', session.user.id);
+
+        if (!siblings || siblings.length === 0) return;
+
+        // Step 3: Get settlement details for each sibling
+        const siblingIds = siblings.map(s => s.settlement_id);
+        const { data: settlementDetails } = await supabase
+          .from('settlements')
+          .select('settlement_id, period_start, period_end, marketplace, bank_deposit')
+          .in('settlement_id', siblingIds)
+          .eq('user_id', session.user.id);
+
+        const enriched = siblings.map(s => {
+          const detail = settlementDetails?.find(d => d.settlement_id === s.settlement_id);
+          return {
+            ...s,
+            period_start: detail?.period_start || undefined,
+            period_end: detail?.period_end || undefined,
+            marketplace: detail?.marketplace || undefined,
+            bank_deposit: detail?.bank_deposit || 0,
+          };
+        });
+
+        setDepositCoverage(prev => ({
+          ...prev,
+          [row.settlement_id!]: {
+            siblings: enriched,
+            depositAmount: pv.match_amount || 0,
+            depositDate: pv.transaction_date || null,
+            confidence: pv.confidence_score || 0,
+            matchMethod: pv.match_method || 'unknown',
+          },
+        }));
+      } catch {
+        // Non-blocking
+      }
+    };
+
+    fetchCoverage();
+  }, [expandedRow, data, depositCoverage]);
 
   // ─── Confirm payment verification (writes to payment_verifications table) ───
   // Nothing is marked as matched until user explicitly confirms.
@@ -1158,6 +1233,81 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                 {renderPaymentVerificationBadges(row)}
                               </div>
                             )}
+
+                            {/* Deposit Coverage Panel — shows which settlements a deposit covers */}
+                            {row.settlement_id && depositCoverage[row.settlement_id] && depositCoverage[row.settlement_id].siblings.length > 1 && (() => {
+                              const coverage = depositCoverage[row.settlement_id!];
+                              const settlementTotal = coverage.siblings.reduce((sum, s) => sum + Math.abs((s as any).bank_deposit || 0), 0);
+                              const difference = Math.abs(coverage.depositAmount - settlementTotal);
+                              const hasDifference = difference > 0.05;
+
+                              return (
+                                <div className="mb-3 p-3 rounded-lg bg-muted/20 border border-border space-y-2">
+                                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                                    <Banknote className="h-3 w-3" /> Deposit Coverage
+                                  </p>
+                                  <div className="flex items-baseline gap-2 flex-wrap">
+                                    <span className="text-sm font-bold text-foreground">
+                                      {formatAUD(coverage.depositAmount)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      detected {coverage.depositDate ? `on ${formatDate(coverage.depositDate)}` : ''}
+                                    </span>
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {coverage.matchMethod === 'batch_sum' ? 'Batch payout' : 'Single match'}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {coverage.confidence}% confidence
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Covers {coverage.siblings.length} settlements:
+                                  </p>
+                                  <div className="space-y-1">
+                                    {coverage.siblings.map(s => (
+                                      <div key={s.settlement_id} className="flex items-center gap-2 text-xs">
+                                        <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                        <span className="font-medium text-foreground">
+                                          {MARKETPLACE_LABELS[(s.marketplace || 'unknown')] || s.marketplace || 'Settlement'}
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                          {s.period_start && s.period_end
+                                            ? `${formatDate(s.period_start)} – ${formatDate(s.period_end)}`
+                                            : s.settlement_id}
+                                        </span>
+                                        <span className="font-mono font-bold text-foreground ml-auto">
+                                          {formatAUD(Math.abs((s as any).bank_deposit || 0))}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="border-t border-border pt-2 mt-2 flex items-center gap-4 text-xs flex-wrap">
+                                    <div>
+                                      <span className="text-muted-foreground">Total settlements: </span>
+                                      <span className="font-mono font-bold text-foreground">{formatAUD(settlementTotal)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Deposit amount: </span>
+                                      <span className="font-mono font-bold text-foreground">{formatAUD(coverage.depositAmount)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Difference: </span>
+                                      <span className={`font-mono font-bold ${hasDifference ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                        {formatAUD(difference)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {hasDifference && (
+                                    <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-1.5">
+                                      <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                      <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                        Deposit amount differs from settlement total
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
 
                             {/* Deposit verification drill-down panel */}
                             {row.has_settlement && row.settlement_evidence && (

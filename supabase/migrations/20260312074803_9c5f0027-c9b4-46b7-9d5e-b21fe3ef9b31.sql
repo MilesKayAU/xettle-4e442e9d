@@ -1,0 +1,2 @@
+ALTER TABLE public.payment_verifications ADD COLUMN IF NOT EXISTS deposit_group_id uuid;
+CREATE INDEX IF NOT EXISTS idx_pv_deposit_group ON public.payment_verifications(deposit_group_id) WHERE deposit_group_id IS NOT NULL;
