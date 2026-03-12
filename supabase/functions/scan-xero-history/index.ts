@@ -386,6 +386,8 @@ Deno.serve(async (req) => {
     } // end !isLightDiscovery
 
     // ─── 3. Scan ALL Contacts (standalone detection) ────────────────
+    // SKIP in light discovery mode — invoices alone are sufficient for discovery
+    if (!isLightDiscovery) {
     try {
       const contactsData = await xeroGet(
         `https://api.xero.com/api.xro/2.0/Contacts?includeArchived=false&pageSize=100`,
@@ -474,6 +476,7 @@ Deno.serve(async (req) => {
     } catch (e) {
       console.error('Contacts scan error:', e)
     }
+    } // end !isLightDiscovery
 
     // ─── 4. Determine boundary ──────────────────────────────────────
     const detected_settlements = Array.from(detectedMap.values())
