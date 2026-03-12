@@ -287,6 +287,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         .from('settlements')
         .update({
           bank_tx_id: null,
+          bank_match_amount: null,
           bank_match_method: null,
           bank_match_confidence: null,
           bank_match_confirmed_at: null,
