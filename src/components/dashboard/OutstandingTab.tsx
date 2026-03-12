@@ -1234,6 +1234,81 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               </div>
                             )}
 
+                            {/* Deposit Coverage Panel — shows which settlements a deposit covers */}
+                            {row.settlement_id && depositCoverage[row.settlement_id] && depositCoverage[row.settlement_id].siblings.length > 1 && (() => {
+                              const coverage = depositCoverage[row.settlement_id!];
+                              const settlementTotal = coverage.siblings.reduce((sum, s) => sum + Math.abs((s as any).bank_deposit || 0), 0);
+                              const difference = Math.abs(coverage.depositAmount - settlementTotal);
+                              const hasDifference = difference > 0.05;
+
+                              return (
+                                <div className="mb-3 p-3 rounded-lg bg-muted/20 border border-border space-y-2">
+                                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                                    <Banknote className="h-3 w-3" /> Deposit Coverage
+                                  </p>
+                                  <div className="flex items-baseline gap-2 flex-wrap">
+                                    <span className="text-sm font-bold text-foreground">
+                                      {formatAUD(coverage.depositAmount)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      detected {coverage.depositDate ? `on ${formatDate(coverage.depositDate)}` : ''}
+                                    </span>
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {coverage.matchMethod === 'batch_sum' ? 'Batch payout' : 'Single match'}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-[10px]">
+                                      {coverage.confidence}% confidence
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Covers {coverage.siblings.length} settlements:
+                                  </p>
+                                  <div className="space-y-1">
+                                    {coverage.siblings.map(s => (
+                                      <div key={s.settlement_id} className="flex items-center gap-2 text-xs">
+                                        <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                        <span className="font-medium text-foreground">
+                                          {MARKETPLACE_LABELS[(s.marketplace || 'unknown')] || s.marketplace || 'Settlement'}
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                          {s.period_start && s.period_end
+                                            ? `${formatDate(s.period_start)} – ${formatDate(s.period_end)}`
+                                            : s.settlement_id}
+                                        </span>
+                                        <span className="font-mono font-bold text-foreground ml-auto">
+                                          {formatAUD(Math.abs((s as any).bank_deposit || 0))}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="border-t border-border pt-2 mt-2 flex items-center gap-4 text-xs flex-wrap">
+                                    <div>
+                                      <span className="text-muted-foreground">Total settlements: </span>
+                                      <span className="font-mono font-bold text-foreground">{formatAUD(settlementTotal)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Deposit amount: </span>
+                                      <span className="font-mono font-bold text-foreground">{formatAUD(coverage.depositAmount)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Difference: </span>
+                                      <span className={`font-mono font-bold ${hasDifference ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                        {formatAUD(difference)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {hasDifference && (
+                                    <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-1.5">
+                                      <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                      <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                        Deposit amount differs from settlement total
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {/* Deposit verification drill-down panel */}
                             {row.has_settlement && row.settlement_evidence && (
                               <div className="mb-3 p-3 rounded-lg bg-muted/20 border border-border space-y-2">
