@@ -243,7 +243,7 @@ export default function Dashboard() {
       }
     };
     checkWizard();
-  }, [user, xeroConnected]);
+  }, [user]);
 
   // ─── Xero Discovery scan (light mode — 90 days only) ──────────
   useEffect(() => {
