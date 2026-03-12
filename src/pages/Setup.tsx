@@ -444,7 +444,7 @@ export default function Setup() {
       if (isRateLimit || isMutex || isCooldown) {
         // Show as pending/warning — not complete, but not blocking
         console.info('[setup] Amazon rate-limited/mutex/cooldown — showing pending state');
-        setAmazonStep({ status: 'success', message: '⏳ Amazon settlement sync will run automatically once the rate limit clears — you can continue setting up in the meantime.' });
+        setAmazonStep({ status: 'pending', message: 'Amazon settlement sync will run automatically once the rate limit clears — you can continue setting up in the meantime.' });
         setAmazonProgress(80);
         setPhase1Amazon(true);
         await upsertSetting(userId, 'setup_phase1_amazon', 'true');
