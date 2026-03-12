@@ -6,7 +6,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, Sparkles } from 'lucide-react';
 import SetupStepConnectXero from './SetupStepConnectXero';
-import SetupStepSelectMarketplaces from './SetupStepSelectMarketplaces';
+import SetupStepConnectStores from './SetupStepConnectStores';
 
 interface SetupWizardProps {
   open: boolean;
@@ -19,7 +19,7 @@ interface SetupWizardProps {
   justConnectedXero?: boolean;
 }
 
-const STEP_LABELS = ['Connect Xero', 'Your Channels', "You're In!"];
+const STEP_LABELS = ['Connect Xero', 'Connect Channels', "You're In!"];
 const TOTAL_STEPS = 3;
 
 export default function SetupWizard({
@@ -28,8 +28,11 @@ export default function SetupWizard({
   onComplete,
   initialStep = 1,
   hasXero = false,
+  hasAmazon = false,
+  hasShopify = false,
+  justConnectedXero = false,
 }: SetupWizardProps) {
-  // If Xero is already connected, skip straight to step 2 (marketplace selection)
+  // If Xero is already connected, skip straight to step 2 (connect stores)
   const [step, setStep] = useState(() => {
     if (hasXero && initialStep <= 1) return 2;
     return Math.min(initialStep, TOTAL_STEPS);
@@ -50,11 +53,6 @@ export default function SetupWizard({
   const handleNext = () => setStep(s => Math.min(s + 1, TOTAL_STEPS));
   const handleSkip = () => setStep(s => Math.min(s + 1, TOTAL_STEPS));
 
-  const handleMarketplacesNext = (codes: string[]) => {
-    setSelectedMarketplaces(codes);
-    setStep(s => Math.min(s + 1, TOTAL_STEPS));
-  };
-
   const handleComplete = () => {
     sessionStorage.removeItem('xettle_setup_step');
     onComplete();
@@ -62,7 +60,6 @@ export default function SetupWizard({
   };
 
   const handleCloseAttempt = () => {
-    // Don't allow closing while an API connection is in progress
     if (isSyncing) return;
     setShowCloseWarning(true);
   };
@@ -110,9 +107,16 @@ export default function SetupWizard({
               />
             )}
             {step === 2 && (
-              <SetupStepSelectMarketplaces
-                onNext={handleMarketplacesNext}
-                onSkip={() => handleMarketplacesNext([])}
+              <SetupStepConnectStores
+                onNext={handleNext}
+                onSkip={handleSkip}
+                onBack={() => setStep(1)}
+                hasAmazon={hasAmazon}
+                hasShopify={hasShopify}
+                hasXero={hasXero}
+                justConnectedXero={justConnectedXero}
+                selectedMarketplaces={selectedMarketplaces}
+                onMarketplacesChange={setSelectedMarketplaces}
               />
             )}
             {step === 3 && (
