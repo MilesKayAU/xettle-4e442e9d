@@ -245,6 +245,128 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   useEffect(() => { fetchOutstanding(); }, []);
 
+  // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
+  // PAYMENT VERIFICATION LAYER ONLY
+  // This never creates accounting entries. No invoice. No journal. No Xero push.
+  // Settlements are the only accounting source.
+  const fetchPaymentVerifications = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const resp = await supabase.functions.invoke('verify-payment-matches', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (resp.data?.candidates) {
+        setPaymentVerifications(resp.data.candidates);
+      }
+    } catch {
+      // Non-blocking — payment verification is optional
+    }
+  }, []);
+
+  useEffect(() => {
+    if (hasLoaded && data) {
+      fetchPaymentVerifications();
+    }
+  }, [hasLoaded, data, fetchPaymentVerifications]);
+
+  // ─── Confirm payment verification (writes to payment_verifications table) ───
+  // Nothing is marked as matched until user explicitly confirms.
+  // Auto-detection is always a SUGGESTION.
+  const confirmPaymentVerification = useCallback(async (
+    settlementId: string,
+    gatewayCode: string,
+    txnId: string,
+    amount: number,
+    method: 'suggested' | 'manual',
+    confidence: 'high' | 'medium' | 'low',
+    orderCount: number,
+    narration: string,
+    transactionDate: string,
+  ) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('payment_verifications')
+        .upsert({
+          user_id: session.user.id,
+          settlement_id: settlementId,
+          gateway_code: gatewayCode,
+          xero_tx_id: txnId,
+          match_amount: amount,
+          match_method: method,
+          match_confidence: confidence,
+          match_confirmed_at: new Date().toISOString(),
+          match_confirmed_by: session.user.id,
+          order_count: orderCount,
+          narration,
+          transaction_date: transactionDate,
+        }, { onConflict: 'settlement_id,gateway_code,user_id' });
+
+      if (error) throw error;
+      toast.success(`✓ ${GATEWAY_LABELS[gatewayCode] || gatewayCode} payment verified`);
+    } catch (err: any) {
+      toast.error(`Failed to confirm: ${err.message}`);
+    }
+  }, []);
+
+  // ─── Render payment verification badges for a row ───
+  const renderPaymentVerificationBadges = (row: OutstandingRow) => {
+    if (!row.settlement_id) return null;
+
+    const badges: JSX.Element[] = [];
+    for (const [gatewayCode, candidates] of Object.entries(paymentVerifications)) {
+      if (!candidates || candidates.length === 0) continue;
+
+      const label = GATEWAY_LABELS[gatewayCode] || gatewayCode;
+
+      // Check if already confirmed
+      // For now, show suggestion badges for all candidates
+      if (candidates.length === 1 && candidates[0].confidence === 'high') {
+        const c = candidates[0];
+        badges.push(
+          <div key={gatewayCode} className="flex items-center gap-1.5 text-xs">
+            <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400 gap-1">
+              <Shield className="h-2.5 w-2.5" />
+              {label}: {c.order_count} orders · {formatAUD(c.amount)}
+            </Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => confirmPaymentVerification(
+                row.settlement_id!, gatewayCode, c.transaction_id,
+                c.amount, 'suggested', c.confidence, c.order_count,
+                c.narration, c.date
+              )}
+              className="text-[10px] h-5 px-1.5"
+            >
+              Confirm
+            </Button>
+          </div>
+        );
+      } else if (candidates.length > 0) {
+        badges.push(
+          <Badge key={gatewayCode} variant="outline" className="text-[10px] border-muted text-muted-foreground gap-1">
+            <Shield className="h-2.5 w-2.5" />
+            {label}: {candidates.length} possible match{candidates.length > 1 ? 'es' : ''}
+          </Badge>
+        );
+      }
+    }
+
+    if (badges.length === 0) return null;
+
+    return (
+      <div className="flex flex-wrap gap-1 mt-1">
+        {badges}
+      </div>
+    );
+  };
+
   // ─── Confirm bank match (writes to settlements table) ───
   // Nothing is marked as matched until user explicitly confirms.
   // Auto-detection is always a SUGGESTION.
