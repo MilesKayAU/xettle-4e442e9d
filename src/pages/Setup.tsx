@@ -181,9 +181,23 @@ export default function Setup() {
         getSetting('setup_phase2_complete'),
         getSetting('setup_phase3_complete'),
       ]);
-      if (p1x === 'true') setPhase1Xero(true);
-      if (p1s === 'true') setPhase1Shopify(true);
-      if (p1a === 'true') setPhase1Amazon(true);
+      if (p1x === 'true') {
+        setPhase1Xero(true);
+        setXeroProgress(100);
+        setXeroStep({ status: 'success', message: 'Xero scan completed' });
+      }
+      if (p1s === 'true') {
+        setPhase1Shopify(true);
+        setShopifyProgress(100);
+        setShopifyPayoutsStep({ status: 'success', message: 'Payouts synced' });
+        setShopifyOrdersStep({ status: 'success', message: 'Orders synced' });
+        setShopifyChannelsStep({ status: 'success', message: 'Channels detected' });
+      }
+      if (p1a === 'true') {
+        setPhase1Amazon(true);
+        setAmazonProgress(100);
+        setAmazonStep({ status: 'success', message: 'Amazon settlements synced' });
+      }
       if (p2 === 'true') setPhase2Complete(true);
       if (p3 === 'true') setPhase3Complete(true);
 
