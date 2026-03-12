@@ -220,14 +220,17 @@ Deno.serve(async (req) => {
     }
 
     // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
-    // Groups Amazon invoices by payout date window, scores bank transaction candidates.
-    // Never auto-matches — returns candidates for user confirmation.
+    // Nothing is marked as matched until user explicitly confirms.
+    // Auto-detection is always a SUGGESTION.
+    // Groups Amazon invoices by PAYOUT DATE WINDOW (not settlement period),
+    // because Amazon deposits often cross settlement period boundaries.
     interface BankCandidate {
       transaction_id: string;
       amount: number;
       date: string;
       reference: string;
       narration: string;
+      bank_account_name: string;
       confidence: 'high' | 'medium' | 'low';
       score: number;
       match_type: 'exact' | 'aggregate';
@@ -323,12 +326,15 @@ Deno.serve(async (req) => {
         const confidence: 'high' | 'medium' | 'low' =
           score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
 
+        // Nothing is marked as matched until user explicitly confirms.
+        // Auto-detection is always a SUGGESTION.
         group.candidates.push({
           transaction_id: txn.BankTransactionID,
           amount: txnAmount,
           date: txnDate,
           reference: txn.Reference || '',
           narration: txn.LineItems?.[0]?.Description || '',
+          bank_account_name: txn.BankAccount?.Name || '',
           confidence,
           score,
           match_type: 'aggregate',
@@ -578,6 +584,7 @@ Deno.serve(async (req) => {
                 date: parseXeroDate(t.Date),
                 reference: t.Reference || '',
                 narration: t.LineItems?.[0]?.Description || '',
+                bank_account_name: t.BankAccount?.Name || '',
               }))
           : [],
       });

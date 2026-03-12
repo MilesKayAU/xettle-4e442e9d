@@ -54,6 +54,7 @@ interface BankCandidate {
   date: string;
   reference: string;
   narration: string;
+  bank_account_name: string;
   confidence: 'high' | 'medium' | 'low';
   score: number;
   match_type: string;
@@ -65,6 +66,7 @@ interface BankTxn {
   date: string | null;
   reference: string;
   narration: string;
+  bank_account_name: string;
 }
 
 interface OutstandingRow {
@@ -199,9 +201,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   useEffect(() => { fetchOutstanding(); }, []);
 
   // ─── Confirm bank match (writes to settlements table) ───
+  // Nothing is marked as matched until user explicitly confirms.
+  // Auto-detection is always a SUGGESTION.
   const confirmBankMatch = useCallback(async (
     row: OutstandingRow,
     bankTxId: string,
+    matchedAmount: number,
     method: 'suggested' | 'manual',
     confidence: 'high' | 'medium' | 'low',
   ) => {
@@ -211,10 +216,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('Not authenticated');
 
+      // Nothing is marked as matched until user explicitly confirms.
+      // Auto-detection is always a SUGGESTION.
       const { error } = await supabase
         .from('settlements')
         .update({
           bank_tx_id: bankTxId,
+          bank_match_amount: matchedAmount,
           bank_match_method: method,
           bank_match_confidence: confidence,
           bank_match_confirmed_at: new Date().toISOString(),
@@ -279,6 +287,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         .from('settlements')
         .update({
           bank_tx_id: null,
+          bank_match_amount: null,
           bank_match_method: null,
           bank_match_confidence: null,
           bank_match_confirmed_at: null,
@@ -456,22 +465,22 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       return (
         <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2">
           <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-            We found a likely deposit match
+            We found a likely deposit match based on amount and date.
           </p>
           <div className="flex items-center gap-4 text-xs bg-background rounded p-2 border border-border">
+            <span className="min-w-[60px]">{formatDate(best.date)}</span>
             <span className="font-mono font-bold">{formatAUD(best.amount)}</span>
-            <span>{formatDate(best.date)}</span>
             <span className="text-muted-foreground truncate flex-1">{best.narration || best.reference || '—'}</span>
+            {best.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{best.bank_account_name}</span>}
             <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">{best.confidence} confidence</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
             Batched deposit across {row.aggregate_settlement_count} settlements totalling {formatAUD(row.aggregate_sum || 0)}
           </p>
-          <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Does this look right?</p>
           <div className="flex gap-2">
             <Button
               size="sm"
-              onClick={() => confirmBankMatch(row, best.transaction_id, 'suggested', best.confidence)}
+              onClick={() => confirmBankMatch(row, best.transaction_id, best.amount, 'suggested', best.confidence)}
               disabled={isConfirmingRow}
               className="gap-1.5 text-xs h-7"
             >
@@ -505,14 +514,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <div className="space-y-1.5">
             {row.aggregate_candidates.map((c, i) => (
               <div key={c.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
-                <span className="font-mono font-bold min-w-[80px]">{formatAUD(c.amount)}</span>
                 <span className="min-w-[60px]">{formatDate(c.date)}</span>
+                <span className="font-mono font-bold min-w-[80px]">{formatAUD(c.amount)}</span>
                 <span className="text-muted-foreground truncate flex-1">{c.narration || c.reference || '—'}</span>
+                {c.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{c.bank_account_name}</span>}
                 <Badge variant="outline" className="text-[10px] shrink-0">{c.confidence}</Badge>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => confirmBankMatch(row, c.transaction_id, 'suggested', c.confidence)}
+                  onClick={() => confirmBankMatch(row, c.transaction_id, c.amount, 'suggested', c.confidence)}
                   disabled={isConfirmingRow}
                   className="text-xs h-6 px-2"
                 >
@@ -568,14 +578,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             <div className="mt-2 space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground">Recent Amazon deposits:</p>
               {row.recent_bank_txns.map(txn => (
-                <div key={txn.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
-                  <span className="font-mono font-bold min-w-[80px]">{formatAUD(txn.amount)}</span>
-                  <span className="min-w-[60px]">{formatDate(txn.date)}</span>
-                  <span className="text-muted-foreground truncate flex-1">{txn.narration || txn.reference || '—'}</span>
+                  <div key={txn.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
+                    <span className="min-w-[60px]">{formatDate(txn.date)}</span>
+                    <span className="font-mono font-bold min-w-[80px]">{formatAUD(txn.amount)}</span>
+                    <span className="text-muted-foreground truncate flex-1">{txn.narration || txn.reference || '—'}</span>
+                    {txn.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{txn.bank_account_name}</span>}
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => confirmBankMatch(row, txn.transaction_id, 'manual', 'low')}
+                    onClick={() => confirmBankMatch(row, txn.transaction_id, txn.amount, 'manual', 'low')}
                     disabled={isConfirmingRow}
                     className="text-xs h-6 px-2"
                   >
