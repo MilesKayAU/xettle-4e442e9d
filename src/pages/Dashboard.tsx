@@ -762,41 +762,22 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
 
-        {/* ─── Upload Hub (connections, guide, upload zone) ───────── */}
+        {/* ─── Upload Hub — uploader first, everything else below ── */}
         {activeView === 'smart_upload' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              {/* Full connection cards — setup belongs here */}
-              <PostSetupBanner
-                onSwitchToUpload={() => switchView('smart_upload')}
-                hasXero={xeroConnected}
-                hasAmazon={hasAmazon}
-                hasShopify={hasShopify}
-                onConnectXero={() => {
-                  setWizardInitialStep(1);
-                  setShowWizard(true);
-                }}
-                onConnectAmazon={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onConnectShopify={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onScanComplete={loadMarketplaces}
-              />
+              {/* Hero message — immediate clarity */}
+              <div className="text-center space-y-2 pt-2">
+                <h2 className="text-2xl font-bold text-foreground">
+                  Drop any settlement file — we'll do the rest
+                </h2>
+                <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+                  CSV, XLSX, PDF — from Amazon, Shopify, Kogan, Bunnings, or any marketplace.
+                  Xettle detects the format, extracts fees & GST, and prepares it for Xero.
+                </p>
+              </div>
 
-              {/* Welcome explainer — shown until first settlement */}
-              <WelcomeGuide
-                onUpload={() => {}}
-                onConnectStore={() => {
-                  setWizardInitialStep(1);
-                  setShowWizard(true);
-                }}
-              />
-
-              {/* Smart Upload drop zone — always visible, primary action */}
+              {/* Smart Upload drop zone — PRIMARY action, front and center */}
               <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
                 <SmartUploadFlow
                   onSettlementsSaved={loadMarketplaces}
