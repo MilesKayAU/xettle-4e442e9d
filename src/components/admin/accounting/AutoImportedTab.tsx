@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 
 interface AutoImportedSettlement {
   id: string;
@@ -487,6 +488,11 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     else setSelected(new Set(settlements.map(s => s.id)));
   };
 
+  // Pagination
+  const [autoPage, setAutoPage] = useState(1);
+  const autoTotalPages = Math.max(1, Math.ceil(settlements.length / DEFAULT_PAGE_SIZE));
+  const paginatedAutoSettlements = settlements.slice((autoPage - 1) * DEFAULT_PAGE_SIZE, autoPage * DEFAULT_PAGE_SIZE);
+
   const handleDeleteSelected = async () => {
     const toDelete = settlements.filter(s => selected.has(s.id));
     if (toDelete.length === 0) return;
@@ -738,7 +744,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
             </div>
 
             <div className="space-y-1 mt-1">
-              {settlements.map(s => {
+              {paginatedAutoSettlements.map(s => {
                 const xeroMatch = xeroMatches[s.settlement_id];
                 const auditStatus = deriveAuditStatus(s, xeroMatch);
                 const config = STATUS_CONFIG[auditStatus];
@@ -908,6 +914,13 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                 );
               })}
             </div>
+            <TablePaginationBar
+              page={autoPage}
+              totalPages={autoTotalPages}
+              totalItems={settlements.length}
+              pageSize={DEFAULT_PAGE_SIZE}
+              onPageChange={setAutoPage}
+            />
           </CardContent>
         </Card>
       )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import ReconciliationStatus from '@/components/shared/ReconciliationStatus';
 import FileReconciliationStatus from '@/components/shared/FileReconciliationStatus';
@@ -36,6 +36,7 @@ import SettlementStatusBadge from './shared/SettlementStatusBadge';
 import ReconChecksInline from './shared/ReconChecksInline';
 import BulkDeleteDialog from './shared/BulkDeleteDialog';
 import GapDetector, { hasSettlementGap } from './shared/GapDetector';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 
 interface GenericMarketplaceDashboardProps {
   marketplace: UserMarketplace;
@@ -199,6 +200,16 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       return true;
     });
   }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
+
+  // Pagination
+  const [settPage, setSettPage] = useState(1);
+  const settTotalPages = Math.max(1, Math.ceil(filteredSettlements.length / DEFAULT_PAGE_SIZE));
+  const paginatedSettlements = useMemo(() => {
+    const start = (settPage - 1) * DEFAULT_PAGE_SIZE;
+    return filteredSettlements.slice(start, start + DEFAULT_PAGE_SIZE);
+  }, [filteredSettlements, settPage]);
+  // Reset page when filter changes
+  useEffect(() => { setSettPage(1); }, [settlementFilter, marketplaceFilter, includeGateways]);
 
   const baseFiltered = useMemo(() => {
     return settlements.filter(s => {
@@ -448,7 +459,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                 </div>
 
                 <div className="space-y-0">
-                  {filteredSettlements.map((s, idx) => {
+                  {paginatedSettlements.map((s, idx) => {
                     const sales = s.sales_principal || 0;
                     const fees = s.seller_fees || 0;
                     const net = s.bank_deposit || 0;
@@ -948,6 +959,13 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     );
                   })}
                 </div>
+                <TablePaginationBar
+                  page={settPage}
+                  totalPages={settTotalPages}
+                  totalItems={filteredSettlements.length}
+                  pageSize={DEFAULT_PAGE_SIZE}
+                  onPageChange={setSettPage}
+                />
               </CardContent>
             </Card>
           </div>

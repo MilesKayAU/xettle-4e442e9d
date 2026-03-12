@@ -35,6 +35,7 @@ import BulkDeleteDialog from '@/components/admin/accounting/shared/BulkDeleteDia
 import { useXeroSync } from '@/hooks/use-xero-sync';
 import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
 import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplicateCheck } from '@/utils/settlement-engine';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 import InsightsTab from '@/components/admin/accounting/InsightsTab';
 
@@ -2115,6 +2116,11 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     }
   }
 
+  // Pagination for displayRows
+  const [histPage, setHistPage] = useState(1);
+  const histTotalPages = Math.max(1, Math.ceil(displayRows.length / DEFAULT_PAGE_SIZE));
+  const paginatedDisplayRows = displayRows.slice((histPage - 1) * DEFAULT_PAGE_SIZE, histPage * DEFAULT_PAGE_SIZE);
+
   const allSelected = selectedIds.size === settlements.length;
   const someSelected = selectedIds.size > 0;
 
@@ -2195,7 +2201,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
               </tr>
             </thead>
             <tbody>
-              {displayRows.map((row, idx) => {
+              {paginatedDisplayRows.map((row, idx) => {
                 if (row.type === 'gap') {
                   return (
                     <tr key={`gap-${idx}`} className="border-b bg-amber-50/60">
@@ -2458,6 +2464,13 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
             </tbody>
           </table>
         </div>
+        <TablePaginationBar
+          page={histPage}
+          totalPages={histTotalPages}
+          totalItems={displayRows.length}
+          pageSize={DEFAULT_PAGE_SIZE}
+          onPageChange={setHistPage}
+        />
       </CardContent>
 
       {/* Rollback Confirmation Dialog */}
