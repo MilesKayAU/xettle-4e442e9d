@@ -24,6 +24,7 @@ import DashboardConnectionStrip from '@/components/dashboard/DashboardConnection
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
+import RecentUploads from '@/components/dashboard/RecentUploads';
 import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
