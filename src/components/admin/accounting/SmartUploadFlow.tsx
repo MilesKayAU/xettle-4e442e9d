@@ -791,7 +791,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 transaction_type: row.totalSalePrice < 0 ? 'Refund' : (row.commissionFee !== 0 && row.totalSalePrice === 0 ? 'Fee' : 'Order'),
                 posted_date: row.orderedDate || null,
                 marketplace_name: s.metadata?.displayName || orderSource,
-                accounting_category: row.totalSalePrice < 0 ? 'refunds' : (row.totalSalePrice === 0 ? 'fees' : 'sales'),
+                accounting_category: row.totalSalePrice < 0 ? 'refund' : (row.totalSalePrice === 0 ? 'marketplace_fee' : 'revenue'),
               }));
               for (let i = 0; i < lineRows.length; i += 500) {
                 await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
