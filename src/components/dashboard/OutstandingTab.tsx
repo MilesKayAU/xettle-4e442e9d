@@ -54,6 +54,7 @@ interface BankCandidate {
   date: string;
   reference: string;
   narration: string;
+  bank_account_name: string;
   confidence: 'high' | 'medium' | 'low';
   score: number;
   match_type: string;
