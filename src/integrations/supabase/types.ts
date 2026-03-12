@@ -1131,6 +1131,7 @@ export type Database = {
         Row: {
           advertising_costs: number | null
           bank_deposit: number | null
+          bank_match_amount: number | null
           bank_match_confidence: string | null
           bank_match_confirmed_at: string | null
           bank_match_confirmed_by: string | null
@@ -1181,6 +1182,7 @@ export type Database = {
         Insert: {
           advertising_costs?: number | null
           bank_deposit?: number | null
+          bank_match_amount?: number | null
           bank_match_confidence?: string | null
           bank_match_confirmed_at?: string | null
           bank_match_confirmed_by?: string | null
@@ -1231,6 +1233,7 @@ export type Database = {
         Update: {
           advertising_costs?: number | null
           bank_deposit?: number | null
+          bank_match_amount?: number | null
           bank_match_confidence?: string | null
           bank_match_confirmed_at?: string | null
           bank_match_confirmed_by?: string | null
