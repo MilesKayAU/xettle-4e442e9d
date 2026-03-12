@@ -706,7 +706,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({
+    const responsePayload = {
       success: true,
       total_outstanding: totalOutstanding,
       invoice_count: invoices.length,
@@ -720,7 +720,11 @@ Deno.serve(async (req) => {
         amazon_rate_limited: amazonRateLimited,
         amazon_rate_limit_until: amazonRateLimitUntil,
       },
-    }), {
+    };
+
+    await saveOutstandingCache(supabase, userId, responsePayload);
+
+    return new Response(JSON.stringify(responsePayload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
