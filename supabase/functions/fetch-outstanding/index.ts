@@ -121,8 +121,13 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (!tokens?.length) {
-      return new Response(JSON.stringify({ error: 'No Xero connection' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      // No Xero connection — return empty result instead of error
+      return new Response(JSON.stringify({
+        invoices: [],
+        summary: { total_outstanding: 0, matched_with_settlement: 0, bank_deposit_found: 0, ready_to_reconcile: 0, total_invoices: 0 },
+        aggregate_groups: [],
+      }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
