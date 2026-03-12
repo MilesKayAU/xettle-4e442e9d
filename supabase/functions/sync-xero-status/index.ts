@@ -460,6 +460,47 @@ serve(async (req) => {
     console.log(`[step-4] Reference matching: ${updated} NEW settlements linked`);
 
     // ════════════════════════════════════════════════════════════════════
+    // STEP 4b: Seed cache for OUTSTANDING Xero invoices with no local settlement
+    // When Xero has an AUTHORISED invoice (e.g. AMZN-12290174743) but we don't
+    // have that settlement yet, pre-cache the Xero link so that when
+    // fetch-amazon-settlements or CSV upload creates the record, it auto-links.
+    // ════════════════════════════════════════════════════════════════════
+    const localSettlementIds = new Set((allSettlements || []).map(s => s.settlement_id));
+    let seededCount = 0;
+    for (const [settlementId, inv] of seen.entries()) {
+      // Only seed if no local settlement exists AND not already cached
+      if (localSettlementIds.has(settlementId)) continue;
+      if (cacheBySettlement.has(settlementId)) continue;
+
+      const ref = inv.Reference || '';
+      const contactName = inv.Contact?.Name || '';
+      const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
+
+      await supabase.from('xero_accounting_matches').upsert({
+        user_id: userId,
+        settlement_id: settlementId,
+        marketplace_code: detectedMarketplace,
+        xero_invoice_id: inv.InvoiceID,
+        xero_invoice_number: inv.InvoiceNumber || null,
+        xero_status: inv.Status || null,
+        xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
+        match_method: 'xero_pre_seed',
+        confidence: 1.0,
+        matched_amount: inv.Total || null,
+        matched_date: parseXeroDate(inv.Date),
+        matched_contact: contactName,
+        matched_reference: ref,
+        reference_hash: ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
+        notes: `Pre-seeded from outstanding Xero invoice — awaiting settlement data from API/CSV`,
+      }, { onConflict: 'user_id,settlement_id' });
+
+      seededCount++;
+    }
+    if (seededCount > 0) {
+      console.log(`[step-4b] Pre-seeded ${seededCount} outstanding Xero invoices (no local settlement yet)`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // STEP 5: Fuzzy match ONLY for remaining unmatched (no cache, no ref)
     // ════════════════════════════════════════════════════════════════════
     const matchedSettlementIds = new Set([

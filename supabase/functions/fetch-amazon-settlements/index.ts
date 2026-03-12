@@ -870,12 +870,37 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
       } as any, { onConflict: 'marketplace,settlement_id,user_id', ignoreDuplicates: true });
 
       if (settError) {
-        // Handle unique constraint violation gracefully
-        if (settError.code === '23505') {
-          continue; // Already exists — skip
-        }
+        if (settError.code === '23505') continue;
         errors.push(`Settlement ${header.settlementId}: ${settError.message}`);
         continue;
+      }
+
+      // ─── Auto-link to pre-cached Xero invoice (from Outstanding) ───
+      const { data: preMatch } = await supabase
+        .from('xero_accounting_matches')
+        .select('xero_invoice_id, xero_invoice_number, xero_status, xero_type, matched_reference')
+        .eq('settlement_id', header.settlementId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (preMatch?.xero_invoice_id) {
+        const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
+        let derivedSt = 'synced_external';
+        if (isXettleFormat) {
+          switch (preMatch.xero_status) {
+            case 'DRAFT': derivedSt = 'draft_in_xero'; break;
+            case 'AUTHORISED': derivedSt = 'authorised_in_xero'; break;
+            case 'PAID': derivedSt = 'reconciled_in_xero'; break;
+            default: derivedSt = 'pushed_to_xero'; break;
+          }
+        }
+        await supabase.from('settlements').update({
+          xero_journal_id: preMatch.xero_invoice_id,
+          xero_invoice_number: preMatch.xero_invoice_number,
+          xero_status: preMatch.xero_status,
+          status: derivedSt,
+        } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
+        console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
       }
 
       // Insert lines in batches
