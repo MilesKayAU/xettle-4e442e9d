@@ -677,6 +677,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
+    if (row.match_status === 'awaiting_sync') return 'bg-blue-50/30 dark:bg-blue-950/10';
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
     if (row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
