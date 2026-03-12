@@ -9,10 +9,10 @@ interface Props {
   onNext: () => void;
   onSkip: () => void;
   hasXero: boolean;
-  onFireBackgroundScan?: (fnName: string) => void;
+  onFireBackgroundScan?: (fnName: string) => void; // Legacy — no longer used
 }
 
-export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onFireBackgroundScan }: Props) {
+export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props) {
   const [connecting, setConnecting] = useState(false);
   const [showSkipWarning, setShowSkipWarning] = useState(false);
 
@@ -39,11 +39,8 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onFireBa
     }
   };
 
+  // No background scan fired from wizard — dashboard handles discovery
   const handleContinue = () => {
-    // Fire background scan if Xero is connected
-    if (hasXero && onFireBackgroundScan) {
-      onFireBackgroundScan('scan-xero-history');
-    }
     onNext();
   };
 

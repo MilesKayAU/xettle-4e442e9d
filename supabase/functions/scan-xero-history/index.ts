@@ -269,18 +269,27 @@ Deno.serve(async (req) => {
 
     const { access_token: accessToken, tenant_id: tenantId } = tokenRow
 
+    // ─── Light discovery mode (90-day scan, no deep import) ─────────
+    const actionHeader = req.headers.get('x-action')
+    const isLightDiscovery = actionHeader === 'light-discovery'
+
     const detectedMap = new Map<string, DetectedSettlement>()
     let hasXettlePrefix = false
     let hasMarketplaceContacts = false
     let hasBankPatterns = false
     const standaloneContacts: string[] = []
 
+    // For light discovery, only scan last 90 days
+    const dateFilter = isLightDiscovery
+      ? `&where=Date>DateTime(${new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]})`
+      : ''
+
     // ─── 1. Scan Invoices ───────────────────────────────────────────
     try {
-      const invoiceData = await xeroGet(
-        `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED,PAID&order=Date DESC&pageSize=100`,
-        accessToken, tenantId
-      )
+      const invoiceUrl = isLightDiscovery
+        ? `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED,PAID&order=Date DESC&pageSize=50${dateFilter}`
+        : `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED,PAID&order=Date DESC&pageSize=100`
+      const invoiceData = await xeroGet(invoiceUrl, accessToken, tenantId)
 
       for (const inv of (invoiceData.Invoices || [])) {
         const contactName = inv.Contact?.Name || ''
@@ -553,9 +562,10 @@ Deno.serve(async (req) => {
           marketplace_name: displayName,
           country_code: 'AU',
           connection_type: 'auto_detected',
-          connection_status: 'active',
+          connection_status: isLightDiscovery ? 'suggested' : 'active',
+          suggested_at: isLightDiscovery ? new Date().toISOString() : null,
           settings: {
-            detected_from: 'xero_scan',
+            detected_from: isLightDiscovery ? 'light_discovery' : 'xero_scan',
             last_xero_date: det.last_recorded_date,
             last_xero_amount: det.last_amount,
             xero_source: det.source,
@@ -566,6 +576,52 @@ Deno.serve(async (req) => {
         }, { onConflict: 'user_id,marketplace_code,country_code' })
       if (!upsertErr) marketplaces_created++
       else console.error(`Failed to upsert marketplace_connection for ${det.marketplace}:`, upsertErr)
+    }
+
+    // ─── LIGHT DISCOVERY: early return (skip deep scanning) ─────────
+    if (isLightDiscovery) {
+      // Mark discovery as complete
+      await supabase.from('app_settings').upsert(
+        { user_id: userId, key: 'xero_discovery_status', value: 'complete' },
+        { onConflict: 'user_id,key' }
+      )
+
+      // Also mark xero_scan_completed
+      await supabase.from('app_settings').upsert(
+        { user_id: userId, key: 'xero_scan_completed', value: new Date().toISOString() },
+        { onConflict: 'user_id,key' }
+      )
+
+      // Log system event
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_light_discovery_completed',
+        severity: 'info',
+        details: {
+          marketplaces_detected: detected_settlements.length,
+          marketplaces_created,
+          gateway_alerts_created,
+          standalone_contacts: standaloneContacts,
+          confidence,
+          mode: 'light_discovery',
+        },
+      })
+
+      console.log(`[scan-xero-history] Light discovery complete: ${detected_settlements.length} detected, ${marketplaces_created} suggested`)
+
+      return new Response(JSON.stringify({
+        hasXero: true,
+        mode: 'light_discovery',
+        detected_settlements,
+        standalone_contacts: standaloneContacts,
+        marketplaces_created,
+        gateway_alerts_created,
+        confidence,
+        confidence_reason,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     // ─── 6b. Extract contact→account mappings from invoices ────────
