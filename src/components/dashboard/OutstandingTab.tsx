@@ -195,10 +195,12 @@ const MARKETPLACE_LABELS: Record<string, string> = {
   unknown: 'Unknown',
 };
 
-export default function OutstandingTab({ onSwitchToUpload }: Props) {
+export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = true }: Props) {
   const [data, setData] = useState<OutstandingSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [rateLimitRetrySeconds, setRateLimitRetrySeconds] = useState<number | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<Set<string>>(new Set());
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
