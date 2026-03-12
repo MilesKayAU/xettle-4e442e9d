@@ -25,13 +25,20 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
   const expiresAt = new Date(token.expires_at);
   if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) return token;
 
+  // Optimistic locking: re-read to detect concurrent refresh
+  const { data: freshToken } = await supabase
+    .from('xero_tokens').select('*').eq('id', token.id).single();
+  if (freshToken && freshToken.expires_at !== token.expires_at) {
+    return { ...token, ...freshToken } as XeroToken;
+  }
+
   const resp = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Authorization': `Basic ${btoa(`${xeroClientId}:${xeroClientSecret}`)}`,
     },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: token.refresh_token }),
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: freshToken?.refresh_token || token.refresh_token }),
   });
 
   if (!resp.ok) throw new Error(`Token refresh failed: ${await resp.text()}`);
@@ -48,63 +55,94 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
   return { ...token, access_token: data.access_token, refresh_token: data.refresh_token, expires_at: newExpiresAt };
 }
 
-// Paginated Xero invoice query — fetches ALL pages (max 100 per page)
-async function queryXeroInvoicesPaginated(token: XeroToken, whereClause: string): Promise<any[]> {
+// ─── Paginated Xero invoice query with optional ModifiedAfter ───
+async function queryXeroInvoicesPaginated(
+  token: XeroToken,
+  whereClause: string,
+  modifiedAfter?: string
+): Promise<any[]> {
   const allInvoices: any[] = [];
   let page = 1;
-  const maxPages = 10; // Safety limit: 1000 invoices max per query
+  const maxPages = 10;
 
   while (page <= maxPages) {
     const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${encodeURIComponent(whereClause)}&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID&page=${page}`;
-    const resp = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token.access_token}`,
-        'Accept': 'application/json',
-        'Xero-tenant-id': token.tenant_id,
-      },
-    });
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${token.access_token}`,
+      'Accept': 'application/json',
+      'Xero-tenant-id': token.tenant_id,
+    };
+    if (modifiedAfter) {
+      headers['If-Modified-Since'] = modifiedAfter;
+    }
+
+    const resp = await fetch(url, { headers });
+    if (resp.status === 304) break; // Not modified
     if (!resp.ok) {
-      console.error(`Xero query failed page ${page} (${whereClause}):`, resp.status, await resp.text());
+      console.error(`Xero query failed page ${page} (${whereClause}):`, resp.status);
       break;
     }
     const result = await resp.json();
     const invoices = result.Invoices || [];
     allInvoices.push(...invoices);
-
-    // Xero returns max 100 per page; if fewer, we've reached the end
     if (invoices.length < 100) break;
     page++;
   }
-
   return allInvoices;
 }
 
-function extractSettlementId(reference: string): string | null {
-  // New format: Xettle-{settlement_id} or Xettle-{settlement_id}-P1/P2
-  if (reference.startsWith('Xettle-')) {
-    const rest = reference.slice(7);
-    return rest.replace(/-P[12]$/, '');
+// ─── Batch status check: fetch multiple invoices by ID in one call ───
+async function batchVerifyInvoiceStatuses(
+  token: XeroToken,
+  invoiceIds: string[]
+): Promise<Map<string, { status: string; total: number }>> {
+  const results = new Map<string, { status: string; total: number }>();
+  if (invoiceIds.length === 0) return results;
+
+  // Xero supports fetching by IDs comma-separated (max ~50 per call)
+  const batchSize = 50;
+  for (let i = 0; i < invoiceIds.length; i += batchSize) {
+    const batch = invoiceIds.slice(i, i + batchSize);
+    const idsParam = batch.join(',');
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?IDs=${idsParam}`;
+    try {
+      const resp = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token.access_token}`,
+          'Accept': 'application/json',
+          'Xero-tenant-id': token.tenant_id,
+        },
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        for (const inv of (data.Invoices || [])) {
+          results.set(inv.InvoiceID, { status: inv.Status, total: inv.Total || 0 });
+        }
+      } else {
+        console.error(`Batch verify failed (${resp.status}), falling back to individual`);
+      }
+    } catch (e) {
+      console.error('Batch verify error:', e);
+    }
   }
-  // Legacy format: AMZN-{settlement_id}
+  return results;
+}
+
+function extractSettlementId(reference: string): string | null {
+  if (reference.startsWith('Xettle-')) {
+    return reference.slice(7).replace(/-P[12]$/, '');
+  }
   if (reference.startsWith('AMZN-')) {
     return reference.slice(5);
   }
-  // LMB format anywhere in string: LMB-{channel}-{settlement_id}-{part}
-  // Handles prefixed references like "(A$73.39) LMB-shopify-128879853815-1"
   const lmbMatch = reference.match(/LMB-\w+-(\d+)-\d+/);
   if (lmbMatch) return lmbMatch[1];
-  // Old format: "Amazon AU Settlement 12284044573 - Part 2 (March)"
-  // Extract the numeric settlement ID, NOT the month in parentheses
-  // Look for a long numeric ID (8+ digits) in the reference
   const numericMatch = reference.match(/\b(\d{8,})\b/);
   if (numericMatch) return numericMatch[1];
-  // Shopify format: "Shopify Payout Shopify-ABC123"
   const shopifyMatch = reference.match(/(Shopify-[\w]+)/);
   if (shopifyMatch) return shopifyMatch[1];
-  // Generic: look for settlement ID patterns like 290994_BigW
   const genericMatch = reference.match(/(\d+_\w+)/);
   if (genericMatch) return genericMatch[1];
-  // Last resort: try parentheses but only if it looks like an ID (not a month)
   const parenMatch = reference.match(/\(([^)]+)\)/);
   if (parenMatch && /\d/.test(parenMatch[1]) && parenMatch[1].length > 3) {
     return parenMatch[1];
@@ -164,6 +202,20 @@ async function generateSettlementStyleFingerprint(marketplace: string, periodSta
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function deriveStatus(inv: any): string {
+  const ref = inv.Reference || '';
+  const isXettleFormat = ref.startsWith('Xettle-');
+  if (isXettleFormat) {
+    switch (inv.Status) {
+      case 'DRAFT': return 'draft_in_xero';
+      case 'AUTHORISED': return 'authorised_in_xero';
+      case 'PAID': return 'reconciled_in_xero';
+      default: return 'pushed_to_xero';
+    }
+  }
+  return 'synced_external';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -188,52 +240,163 @@ serve(async (req) => {
       });
     }
     const userId = authUser.id;
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get Xero token
     const { data: tokens, error: tokenErr } = await supabase
-      .from('xero_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1);
-
+      .from('xero_tokens').select('*').eq('user_id', userId)
+      .order('created_at', { ascending: false }).limit(1);
     if (tokenErr || !tokens?.length) {
       return new Response(JSON.stringify({ success: false, error: 'No Xero connection found' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
     let token = tokens[0] as XeroToken;
     token = await refreshToken(supabase, token);
 
-    // ─── METHOD 1: Exact reference match (paginated, sequential to avoid rate limits) ───
-    console.log(`[sync-xero-status] Starting reference scan for user ${userId}`);
-    
-    const newFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("Xettle-")');
-    const oldFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Settlement")');
-    const amznFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("AMZN-")');
-    // LMB format: use Contains since references may have amount prefix like "(A$73.39) LMB-..."
-    const lmbFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("LMB-")');
-    // Shopify: catch references like "Shopify Payout 12345" or "Payout #12345"
-    const shopifyFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Shopify")');
-    const payoutFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Payout")');
-    // Also search by Shopify contact name for invoices that may not have payout IDs in reference
-    const shopifyContactInvoices = await queryXeroInvoicesPaginated(token, 'Contact.Name.Contains("Shopify")');
+    console.log(`[sync-xero-status] ═══ Cache-first pipeline for user ${userId} ═══`);
 
-    const allInvoices = [...newFormatInvoices, ...oldFormatInvoices, ...amznFormatInvoices, ...lmbFormatInvoices, ...shopifyFormatInvoices, ...payoutFormatInvoices, ...shopifyContactInvoices];
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 1: Load existing cache (xero_accounting_matches)
+    // ════════════════════════════════════════════════════════════════════
+    const { data: cachedMatches } = await supabase
+      .from('xero_accounting_matches')
+      .select('*')
+      .eq('user_id', userId);
+
+    const cacheBySettlement = new Map<string, any>();
+    const cachedInvoiceIds: string[] = [];
+    for (const m of (cachedMatches || [])) {
+      cacheBySettlement.set(m.settlement_id, m);
+      if (m.xero_invoice_id) cachedInvoiceIds.push(m.xero_invoice_id);
+    }
+    console.log(`[step-1] Loaded ${cacheBySettlement.size} cached matches`);
+
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 2: Batch-verify status of all cached invoices (1-2 API calls)
+    // ════════════════════════════════════════════════════════════════════
+    let cacheVerified = 0;
+    let cacheStatusChanged = 0;
+    if (cachedInvoiceIds.length > 0) {
+      const freshStatuses = await batchVerifyInvoiceStatuses(token, cachedInvoiceIds);
+      console.log(`[step-2] Batch-verified ${freshStatuses.size}/${cachedInvoiceIds.length} invoices`);
+
+      for (const [settlementId, cached] of cacheBySettlement.entries()) {
+        if (!cached.xero_invoice_id) continue;
+        const fresh = freshStatuses.get(cached.xero_invoice_id);
+        if (!fresh) continue; // Invoice may have been voided/deleted
+
+        cacheVerified++;
+        const statusChanged = fresh.status !== cached.xero_status;
+
+        if (statusChanged) {
+          cacheStatusChanged++;
+          // Determine derived status using fresh Xero status
+          const isXettleFormat = (cached.matched_reference || '').startsWith('Xettle-');
+          let derivedStatus: string;
+          if (isXettleFormat) {
+            switch (fresh.status) {
+              case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
+              case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
+              case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
+              default: derivedStatus = 'pushed_to_xero'; break;
+            }
+          } else {
+            derivedStatus = 'synced_external';
+          }
+
+          const updatePayload: Record<string, any> = {
+            xero_status: fresh.status,
+            status: derivedStatus,
+          };
+          if (fresh.status === 'PAID') {
+            updatePayload.bank_verified = true;
+            updatePayload.bank_verified_at = new Date().toISOString();
+            updatePayload.bank_verified_by = null;
+          }
+
+          await supabase.from('settlements').update(updatePayload)
+            .eq('settlement_id', settlementId).eq('user_id', userId);
+
+          // Update cache
+          await supabase.from('xero_accounting_matches').update({
+            xero_status: fresh.status,
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', userId).eq('settlement_id', settlementId);
+        }
+      }
+      console.log(`[step-2] ${cacheStatusChanged} status changes detected out of ${cacheVerified} verified`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 3: Find settlements with NO cache entry
+    // ════════════════════════════════════════════════════════════════════
+    const { data: allSettlements } = await supabase
+      .from('settlements')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint')
+      .eq('user_id', userId)
+      .not('status', 'in', '("duplicate_suppressed","already_recorded","push_failed_permanent")');
+
+    const uncachedSettlements = (allSettlements || []).filter(
+      s => !cacheBySettlement.has(s.settlement_id)
+    );
+    console.log(`[step-3] ${uncachedSettlements.length} settlements have no cache entry (of ${allSettlements?.length || 0} total)`);
+
+    // If everything is cached, skip expensive API queries
+    if (uncachedSettlements.length === 0) {
+      console.log(`[sync-xero-status] All settlements cached — skipping Xero API scan`);
+
+      const { data: stillUnmatched } = await supabase
+        .from('settlements').select('settlement_id').eq('user_id', userId)
+        .is('xero_journal_id', null).in('status', ['saved', 'parsed', 'ready_to_push']);
+
+      await supabase.from('system_events').insert({
+        user_id: userId, event_type: 'xero_audit_complete', severity: 'info',
+        details: { cache_verified: cacheVerified, cache_status_changed: cacheStatusChanged, api_calls_saved: '7+', mode: 'cache_only', unmatched: stillUnmatched?.length || 0 },
+      });
+
+      return new Response(JSON.stringify({
+        success: true, updated: cacheStatusChanged, fuzzy_matched: 0,
+        unmatched: stillUnmatched?.length || 0, total: cacheVerified, mode: 'cache_first',
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 4: Incremental Xero scan for UNCACHED settlements only
+    // Uses ModifiedAfter cursor to skip already-seen invoices
+    // ════════════════════════════════════════════════════════════════════
+    // Load incremental cursor
+    const { data: cursorSetting } = await supabase
+      .from('app_settings').select('value')
+      .eq('user_id', userId).eq('key', `xero_last_invoice_scan_at_${token.tenant_id}`)
+      .maybeSingle();
+    const modifiedAfter = cursorSetting?.value || null;
+    console.log(`[step-4] Incremental cursor: ${modifiedAfter || 'FULL SCAN (first run)'}`);
+
+    // Run reference queries — only for new/modified invoices
+    const newFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("Xettle-")', modifiedAfter);
+    const oldFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Settlement")', modifiedAfter);
+    const amznFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("AMZN-")', modifiedAfter);
+    const lmbFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("LMB-")', modifiedAfter);
+    const shopifyFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Shopify")', modifiedAfter);
+    const payoutFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Payout")', modifiedAfter);
+    const shopifyContactInvoices = await queryXeroInvoicesPaginated(token, 'Contact.Name.Contains("Shopify")', modifiedAfter);
+
+    const allInvoices = [
+      ...newFormatInvoices, ...oldFormatInvoices, ...amznFormatInvoices,
+      ...lmbFormatInvoices, ...shopifyFormatInvoices, ...payoutFormatInvoices,
+      ...shopifyContactInvoices,
+    ];
     // Deduplicate by InvoiceID
     const invoiceMap = new Map<string, any>();
     for (const inv of allInvoices) {
       if (!invoiceMap.has(inv.InvoiceID)) invoiceMap.set(inv.InvoiceID, inv);
     }
     const dedupedInvoices = Array.from(invoiceMap.values());
-    
-    console.log(`[sync-xero-status] Found ${dedupedInvoices.length} unique Xero invoices (LMB: ${lmbFormatInvoices.length}, Shopify ref: ${shopifyFormatInvoices.length}, Shopify contact: ${shopifyContactInvoices.length})`);
-    
-    const seen = new Map<string, any>();
+    console.log(`[step-4] Found ${dedupedInvoices.length} invoices from incremental scan`);
 
+    // Extract settlement IDs from references
+    const seen = new Map<string, any>();
     for (const inv of dedupedInvoices) {
       const sid = extractSettlementId(inv.Reference || '');
       if (!sid) continue;
@@ -242,56 +405,40 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[sync-xero-status] Extracted ${seen.size} settlement IDs from references`);
-
-    // Update settlements + cache matches for exact reference hits
+    // Update settlements + cache for reference hits (only uncached ones)
     let updated = 0;
     for (const [settlementId, inv] of seen.entries()) {
+      // Skip if already cached (status was already verified in Step 2)
+      if (cacheBySettlement.has(settlementId)) continue;
+
       const ref = inv.Reference || '';
       const isXettleFormat = ref.startsWith('Xettle-');
-
-      // Detect marketplace from contact name for accurate cache entry
       const contactName = inv.Contact?.Name || '';
       const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
+      const derivedSt = deriveStatus(inv);
 
-      // Xettle-pushed: use granular lifecycle status
-      // Legacy (AMZN-/LMB-/old Settlement): always synced_external
-      let derivedStatus: string;
-      if (isXettleFormat) {
-        switch (inv.Status) {
-          case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
-          case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
-          case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
-          default: derivedStatus = 'pushed_to_xero'; break;
-        }
-      } else {
-        derivedStatus = 'synced_external';
-      }
-
-      // Build update payload — auto-verify if PAID in Xero
       const updatePayload: Record<string, any> = {
         xero_invoice_number: inv.InvoiceNumber || null,
         xero_status: inv.Status || null,
         xero_journal_id: inv.InvoiceID,
-        status: derivedStatus,
+        status: derivedSt,
       };
-
-      // Auto-verify: if Xero says PAID, the bank deposit is confirmed
       if (inv.Status === 'PAID') {
         updatePayload.bank_verified = true;
         updatePayload.bank_verified_at = new Date().toISOString();
-        updatePayload.bank_verified_by = null; // system auto-verified
+        updatePayload.bank_verified_by = null;
       }
 
-      const { error } = await supabase
-        .from('settlements')
-        .update(updatePayload)
-        .eq('settlement_id', settlementId)
-        .eq('user_id', userId);
+      const { error } = await supabase.from('settlements').update(updatePayload)
+        .eq('settlement_id', settlementId).eq('user_id', userId);
 
       if (!error) {
         updated++;
-        // Cache in xero_accounting_matches
+        // Generate reference_hash for fast future lookups
+        const refHash = ref ? await generateSettlementStyleFingerprint(
+          detectedMarketplace, '', '', 0
+        ).then(() => ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase()) : null;
+
         await supabase.from('xero_accounting_matches').upsert({
           user_id: userId,
           settlement_id: settlementId,
@@ -305,71 +452,51 @@ serve(async (req) => {
           matched_amount: inv.Total || null,
           matched_date: parseXeroDate(inv.Date),
           matched_contact: contactName,
-          matched_reference: inv.Reference || null,
+          matched_reference: ref,
+          reference_hash: refHash,
         }, { onConflict: 'user_id,settlement_id' });
       }
     }
+    console.log(`[step-4] Reference matching: ${updated} NEW settlements linked`);
 
-    console.log(`[sync-xero-status] Reference matching: ${updated} settlements updated`);
-
-    // ─── METHOD 2: Fuzzy amount+date matching for unmatched settlements ───
-    // Get all settlements that don't have a Xero match yet
-    const { data: unmatchedSettlements } = await supabase
-      .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint')
-      .eq('user_id', userId)
-      .is('xero_journal_id', null)
-      .not('status', 'in', '("synced","synced_external","already_recorded","draft_in_xero","authorised_in_xero","reconciled_in_xero")');
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 5: Fuzzy match ONLY for remaining unmatched (no cache, no ref)
+    // ════════════════════════════════════════════════════════════════════
+    const matchedSettlementIds = new Set([
+      ...Array.from(cacheBySettlement.keys()),
+      ...Array.from(seen.keys()),
+    ]);
+    const needFuzzy = uncachedSettlements.filter(
+      s => !matchedSettlementIds.has(s.settlement_id) && !seen.has(s.settlement_id)
+    );
 
     let fuzzyMatched = 0;
+    if (needFuzzy.length > 0) {
+      console.log(`[step-5] ${needFuzzy.length} settlements need fuzzy matching`);
 
-    if (unmatchedSettlements && unmatchedSettlements.length > 0) {
-      console.log(`[sync-xero-status] ${unmatchedSettlements.length} settlements still unmatched, running fuzzy scan`);
-      
-      // Extend lookback to 12 months to cover all historical settlements
-      const twelveMonthsAgo = new Date();
-      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-      const fromDate = twelveMonthsAgo.toISOString().split('T')[0];
+      // Fetch recent invoices for fuzzy — use a focused window
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 12);
+      const fromDate = sixMonthsAgo.toISOString().split('T')[0];
       const [y, m, d] = fromDate.split('-');
       const whereDate = `Date>=DateTime(${y},${m},${d})`;
 
       let recentInvoices: any[] = [];
       try {
         recentInvoices = await queryXeroInvoicesPaginated(token, whereDate);
-        console.log(`[sync-xero-status] Fuzzy scan: ${recentInvoices.length} Xero invoices fetched for last 12 months`);
+        console.log(`[step-5] Fetched ${recentInvoices.length} invoices for fuzzy scan`);
       } catch (e) {
         console.error('Fuzzy scan error:', e);
       }
 
-      // Build a map of already-matched invoice IDs to avoid double-matching
-      const matchedInvoiceIds = new Set(
-        Array.from(seen.values()).map(inv => inv.InvoiceID)
-      );
-
-      // Also load existing cached matches
-      const { data: existingMatches } = await supabase
-        .from('xero_accounting_matches')
-        .select('settlement_id, xero_invoice_id')
-        .eq('user_id', userId);
-
-      const alreadyMatchedSettlements = new Set(
-        (existingMatches || []).map(m => m.settlement_id)
-      );
-      for (const m of existingMatches || []) {
+      // Build set of already-matched invoice IDs
+      const matchedInvoiceIds = new Set<string>();
+      for (const inv of dedupedInvoices) matchedInvoiceIds.add(inv.InvoiceID);
+      for (const m of (cachedMatches || [])) {
         if (m.xero_invoice_id) matchedInvoiceIds.add(m.xero_invoice_id);
       }
 
-      // Pre-build fingerprint lookup from settlements for fast matching
-      const settlementFingerprints = new Map<string, typeof unmatchedSettlements[0]>();
-      for (const s of unmatchedSettlements) {
-        if (s.settlement_fingerprint) {
-          settlementFingerprints.set(s.settlement_fingerprint, s);
-        }
-      }
-
-      for (const settlement of unmatchedSettlements) {
-        if (alreadyMatchedSettlements.has(settlement.settlement_id)) continue;
-
+      for (const settlement of needFuzzy) {
         const depositAmount = Math.abs(settlement.bank_deposit || settlement.net_ex_gst || 0);
         if (depositAmount === 0) continue;
 
@@ -393,33 +520,27 @@ serve(async (req) => {
           const contactName = inv.Contact?.Name || '';
           const detectedMkt = detectMarketplaceFromContact(contactName);
 
-          // Check if this invoice could be for the same marketplace
+          if (!detectedMkt || detectedMkt !== marketplace) {
+            if (detectedMkt !== null) continue;
+          }
           const marketplaceMatch = detectedMkt === marketplace;
-          if (!marketplaceMatch && detectedMkt !== null) continue;
 
-          // Amount within 5% or $5
           const pctDiff = depositAmount > 0 ? (amountDiff / depositAmount) * 100 : 100;
           if (amountDiff > 5 && pctDiff > 5) continue;
 
-          // Date within settlement window ± 7 days
           const windowStart = new Date(periodStart);
           windowStart.setUTCDate(windowStart.getUTCDate() - 7);
           const windowEnd = new Date(periodEnd);
           windowEnd.setUTCDate(windowEnd.getUTCDate() + 7);
-
           if (invDateObj < windowStart || invDateObj > windowEnd) continue;
 
-          // ─── Confidence scoring with fingerprint support ───
           let confidence = 0;
           let matchMethod = 'fuzzy_amount_date';
 
           // Fingerprint match
           if (settlement.settlement_fingerprint && marketplaceMatch) {
             const candidateFp = await generateSettlementStyleFingerprint(
-              marketplace,
-              settlement.period_start,
-              settlement.period_end,
-              invAmount
+              marketplace, settlement.period_start, settlement.period_end, invAmount
             );
             if (candidateFp === settlement.settlement_fingerprint) {
               confidence = 0.95;
@@ -427,20 +548,14 @@ serve(async (req) => {
             }
           }
 
-          // If no fingerprint match, use traditional scoring
           if (confidence === 0) {
             confidence = 0.5;
             if (amountDiff <= 0.05) confidence += 0.25;
             else if (amountDiff <= 1) confidence += 0.2;
             else if (pctDiff <= 1) confidence += 0.15;
-
             if (marketplaceMatch) confidence += 0.15;
-
-            // Date proximity bonus
             const daysDiff = Math.abs((invDateObj.getTime() - periodEnd.getTime()) / (1000 * 60 * 60 * 24));
             if (daysDiff <= 2) confidence += 0.05;
-
-            // Reference similarity bonus
             const ref = (inv.Reference || '').toLowerCase();
             const sid = settlement.settlement_id.toLowerCase();
             if (ref.includes(sid) || sid.includes(ref.replace(/\s/g, ''))) {
@@ -449,7 +564,6 @@ serve(async (req) => {
           }
 
           confidence = Math.min(confidence, 0.99);
-
           if (confidence > bestConfidence) {
             bestConfidence = confidence;
             bestMatch = inv;
@@ -458,44 +572,22 @@ serve(async (req) => {
         }
 
         if (bestMatch && bestConfidence >= 0.6) {
-          const bestRef = bestMatch.Reference || '';
-          const isXettleFormat = bestRef.startsWith('Xettle-');
-
-          // Derive status from Xero invoice status
-          let derivedStatus: string;
-          if (isXettleFormat) {
-            switch (bestMatch.Status) {
-              case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
-              case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
-              case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
-              default: derivedStatus = 'pushed_to_xero'; break;
-            }
-          } else {
-            derivedStatus = 'synced_external';
-          }
-
-          // ── Write back to settlements table (critical!) ──
+          const derivedSt = deriveStatus(bestMatch);
           const fuzzyUpdatePayload: Record<string, any> = {
             xero_invoice_number: bestMatch.InvoiceNumber || null,
             xero_status: bestMatch.Status || null,
             xero_journal_id: bestMatch.InvoiceID,
-            status: derivedStatus,
+            status: derivedSt,
           };
-
-          // Auto-verify if PAID
           if (bestMatch.Status === 'PAID') {
             fuzzyUpdatePayload.bank_verified = true;
             fuzzyUpdatePayload.bank_verified_at = new Date().toISOString();
             fuzzyUpdatePayload.bank_verified_by = null;
           }
 
-          await supabase
-            .from('settlements')
-            .update(fuzzyUpdatePayload)
-            .eq('settlement_id', settlement.settlement_id)
-            .eq('user_id', userId);
+          await supabase.from('settlements').update(fuzzyUpdatePayload)
+            .eq('settlement_id', settlement.settlement_id).eq('user_id', userId);
 
-          // Cache fuzzy match in xero_accounting_matches
           await supabase.from('xero_accounting_matches').upsert({
             user_id: userId,
             settlement_id: settlement.settlement_id,
@@ -510,6 +602,7 @@ serve(async (req) => {
             matched_date: parseXeroDate(bestMatch.Date),
             matched_contact: bestMatch.Contact?.Name || null,
             matched_reference: bestMatch.Reference || null,
+            reference_hash: (bestMatch.Reference || '').replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
             notes: `Auto-detected: amount diff $${Math.abs((bestMatch.Total || 0) - Math.abs(settlement.bank_deposit || 0)).toFixed(2)}, contact: ${bestMatch.Contact?.Name || 'unknown'}`,
           }, { onConflict: 'user_id,settlement_id' });
 
@@ -518,18 +611,24 @@ serve(async (req) => {
         }
       }
     }
+    console.log(`[step-5] Fuzzy matching: ${fuzzyMatched} additional settlements matched`);
 
-    console.log(`[sync-xero-status] Fuzzy matching: ${fuzzyMatched} additional settlements matched`);
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 6: Save incremental cursor + update marketplace_validation
+    // ════════════════════════════════════════════════════════════════════
+    const nowIso = new Date().toISOString();
+    await supabase.from('app_settings').upsert({
+      user_id: userId,
+      key: `xero_last_invoice_scan_at_${token.tenant_id}`,
+      value: nowIso,
+    }, { onConflict: 'user_id,key' });
 
-    // ─── Update marketplace_validation for all matched settlements ───
+    // Update marketplace_validation for reference-matched settlements
     for (const [settlementId, inv] of seen.entries()) {
-      const { data: sett } = await supabase
-        .from('settlements')
+      if (cacheBySettlement.has(settlementId)) continue;
+      const { data: sett } = await supabase.from('settlements')
         .select('marketplace, period_start, period_end')
-        .eq('settlement_id', settlementId)
-        .eq('user_id', userId)
-        .maybeSingle();
-
+        .eq('settlement_id', settlementId).eq('user_id', userId).maybeSingle();
       if (sett) {
         const periodLabel = `${sett.period_start} → ${sett.period_end}`;
         await supabase.from('marketplace_validation').upsert({
@@ -540,42 +639,42 @@ serve(async (req) => {
           period_end: sett.period_end,
           xero_pushed: true,
           xero_invoice_id: inv.InvoiceID,
-          xero_pushed_at: new Date().toISOString(),
+          xero_pushed_at: nowIso,
         }, { onConflict: 'user_id,marketplace_code,period_label' });
       }
     }
 
-    // ─── Count remaining unmatched for logging ───
+    // Count remaining unmatched
     const { data: stillUnmatched } = await supabase
-      .from('settlements')
-      .select('settlement_id')
-      .eq('user_id', userId)
-      .is('xero_journal_id', null)
-      .in('status', ['saved', 'parsed', 'ready_to_push']);
+      .from('settlements').select('settlement_id').eq('user_id', userId)
+      .is('xero_journal_id', null).in('status', ['saved', 'parsed', 'ready_to_push']);
     const unmatchedCount = stillUnmatched?.length || 0;
 
-    // ─── Log to system_events ───
+    // Log
     await supabase.from('system_events').insert({
-      user_id: userId,
-      event_type: 'xero_audit_complete',
-      severity: 'info',
+      user_id: userId, event_type: 'xero_audit_complete', severity: 'info',
       details: {
-        matched: updated,
+        mode: 'cache_first_incremental',
+        cache_verified: cacheVerified,
+        cache_status_changed: cacheStatusChanged,
+        new_reference_matches: updated,
         fuzzy_matched: fuzzyMatched,
+        invoices_scanned: dedupedInvoices.length,
+        uncached_settlements: uncachedSettlements.length,
         unmatched: unmatchedCount,
-        total_scanned: dedupedInvoices.length,
-        unmatched_settlements_checked: unmatchedSettlements?.length || 0,
+        cursor_saved: nowIso,
       },
     });
 
-    console.log(`[sync-xero-status] User ${userId}: ${updated} reference matches, ${fuzzyMatched} fuzzy matches, ${dedupedInvoices.length} Xero invoices scanned, ${unmatchedCount} still unmatched`);
+    console.log(`[sync-xero-status] ═══ Complete: ${cacheVerified} cached, ${updated} new refs, ${fuzzyMatched} fuzzy, ${unmatchedCount} unmatched ═══`);
 
     return new Response(JSON.stringify({
       success: true,
-      updated,
+      updated: updated + cacheStatusChanged,
       fuzzy_matched: fuzzyMatched,
       unmatched: unmatchedCount,
-      total: seen.size + fuzzyMatched,
+      total: cacheVerified + updated + fuzzyMatched,
+      mode: 'cache_first_incremental',
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
