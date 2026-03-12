@@ -297,13 +297,19 @@ export default function Dashboard() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setUserMarketplaces(data as UserMarketplace[]);
+        // Separate active channels from suggested (CoA-detected)
+        const activeConnections = data.filter((m: any) => m.connection_status !== 'suggested');
+        const suggested = data.filter((m: any) => m.connection_status === 'suggested');
+
+        setUserMarketplaces(activeConnections as UserMarketplace[]);
+        setSuggestedConnections(suggested);
         setSelectedMarketplace(prev => {
-          if (data.find((m: any) => m.marketplace_code === prev)) return prev;
-          return data[0].marketplace_code;
+          if (activeConnections.find((m: any) => m.marketplace_code === prev)) return prev;
+          return activeConnections.length > 0 ? activeConnections[0].marketplace_code : '';
         });
       } else {
         setUserMarketplaces([]);
+        setSuggestedConnections([]);
         setSelectedMarketplace('');
       }
     } catch {

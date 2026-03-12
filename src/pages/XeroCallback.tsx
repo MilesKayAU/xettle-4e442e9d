@@ -60,7 +60,7 @@ const XeroCallback = () => {
         setMessage('Successfully connected to Xero!');
         sessionStorage.removeItem('xero_oauth_state');
 
-        // Auto-trigger AI Account Mapper if no mapping exists yet
+        // Auto-trigger AI Account Mapper (caches CoA + suggests mappings)
         try {
           const { data: existingCodes } = await supabase
             .from('app_settings')
@@ -71,18 +71,83 @@ const XeroCallback = () => {
 
           if (!existingCodes?.value) {
             console.log('[XeroCallback] No account codes set — auto-triggering AI mapper');
-            supabase.functions.invoke('ai-account-mapper', {
+            const { data: mapResult } = await supabase.functions.invoke('ai-account-mapper', {
               body: { action: 'scan_and_match', autoTrigger: true },
-            }).then(({ data: mapResult }) => {
-              if (mapResult?.success) {
-                console.log('[XeroCallback] AI mapper suggested mapping stored');
-              }
-            }).catch((e) => {
-              console.error('[XeroCallback] AI mapper auto-trigger failed:', e);
             });
+
+            if (mapResult?.success) {
+              console.log('[XeroCallback] AI mapper complete — running CoA intelligence');
+            }
+          }
+
+          // ─── CoA Intelligence: detect channels from Chart of Accounts ───
+          // Check if we already ran detection recently (24h cache)
+          const { data: cachedResult } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('user_id', session.user.id)
+            .eq('key', 'coa_detection_results')
+            .maybeSingle();
+
+          const cachedAge = cachedResult?.value
+            ? Date.now() - new Date(JSON.parse(cachedResult.value).timestamp || 0).getTime()
+            : Infinity;
+
+          if (cachedAge > 24 * 60 * 60 * 1000) {
+            const [coaRes, registryRes, processorRes] = await Promise.all([
+              supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, tax_type').eq('user_id', session.user.id).eq('is_active', true),
+              supabase.from('marketplace_registry').select('marketplace_code, marketplace_name, detection_keywords').eq('is_active', true),
+              supabase.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords').eq('is_active', true),
+            ]);
+
+            if (coaRes.data && coaRes.data.length > 0 && registryRes.data && processorRes.data) {
+              const { analyseCoA, getHighConfidenceChannels } = await import('@/utils/coa-intelligence');
+              const signals = analyseCoA(coaRes.data, registryRes.data, processorRes.data);
+              const highChannels = getHighConfidenceChannels(signals);
+
+              console.log(`[XeroCallback] CoA intelligence: ${highChannels.length} HIGH channels, ${signals.payment_providers.length} providers`);
+
+              // Insert suggested channels — never downgrade active to suggested
+              for (const ch of highChannels) {
+                // Check if already active
+                const { data: existing } = await supabase
+                  .from('marketplace_connections')
+                  .select('connection_status')
+                  .eq('user_id', session.user.id)
+                  .eq('marketplace_code', ch.marketplace_code)
+                  .maybeSingle();
+
+                if (existing?.connection_status === 'active') continue;
+
+                await supabase.from('marketplace_connections').upsert({
+                  user_id: session.user.id,
+                  marketplace_code: ch.marketplace_code,
+                  marketplace_name: ch.marketplace_name,
+                  connection_type: 'coa_detected',
+                  connection_status: 'suggested',
+                  suggested_at: new Date().toISOString(),
+                  settings: {
+                    detected_from: 'coa',
+                    detected_account: ch.detected_account,
+                  },
+                }, { onConflict: 'user_id,marketplace_code' });
+              }
+
+              // Cache detection results
+              await supabase.from('app_settings').upsert({
+                user_id: session.user.id,
+                key: 'coa_detection_results',
+                value: JSON.stringify({
+                  timestamp: new Date().toISOString(),
+                  channels: signals.channels.length,
+                  providers: signals.payment_providers.length,
+                  mappings: signals.mapping_suggestions.length,
+                }),
+              }, { onConflict: 'user_id,key' });
+            }
           }
         } catch (e) {
-          console.error('[XeroCallback] Auto-mapper check failed:', e);
+          console.error('[XeroCallback] Auto-mapper/CoA intelligence failed:', e);
         }
         
         // Auto-redirect after brief success display
