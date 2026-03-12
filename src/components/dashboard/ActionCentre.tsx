@@ -625,6 +625,7 @@ export default function ActionCentre({
               <span>🟡 Ready to push</span>
               <span>⚠️ Gap detected</span>
               <span>❌ Missing/needed</span>
+              <span>📋 Already in Xero</span>
               <span>· Not tracked (pre-boundary)</span>
             </div>
           </CardContent>
