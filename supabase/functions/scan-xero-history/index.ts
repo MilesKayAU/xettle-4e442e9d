@@ -545,41 +545,82 @@ Deno.serve(async (req) => {
     }
 
     // ─── 6b. Extract contact→account mappings from invoices ────────
-    const contactAccountCounts = new Map<string, Map<string, number>>()
+    // Normalise contact names: lowercase, trim, remove corporate suffixes + punctuation
+    function normaliseContactName(name: string): string {
+      return name
+        .toLowerCase()
+        .trim()
+        .replace(/\b(pty|ltd|limited|inc|corp|co)\b/gi, '')
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
+    // EXCLUDED tax types and categories — only learn from sales/fees
+    const EXCLUDED_TAX_TYPES = new Set(['BASEXCLUDED'])
+    const EXCLUDED_DESCRIPTIONS = ['reimbursement', 'tax adjustment', 'tax_adjustment']
+
+    const contactAccountCounts = new Map<string, { original: string; codes: Map<string, number> }>()
     try {
       const invoiceData2 = await xeroGet(
         `https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED,PAID&order=Date DESC&pageSize=100`,
         accessToken, tenantId
       )
       for (const inv of (invoiceData2.Invoices || [])) {
-        const contactName = (inv.Contact?.Name || '').trim()
-        if (!contactName) continue
+        const rawName = (inv.Contact?.Name || '').trim()
+        if (!rawName) continue
+        const normKey = normaliseContactName(rawName)
+        if (!normKey) continue
+
         for (const li of (inv.LineItems || [])) {
           const code = li.AccountCode
           if (!code) continue
-          if (!contactAccountCounts.has(contactName)) {
-            contactAccountCounts.set(contactName, new Map())
+
+          // EDGE CASE 1: Skip BASEXCLUDED and reimbursement/tax adjustment lines
+          const taxType = (li.TaxType || '').toUpperCase()
+          if (EXCLUDED_TAX_TYPES.has(taxType)) continue
+          const desc = (li.Description || '').toLowerCase()
+          if (EXCLUDED_DESCRIPTIONS.some(ex => desc.includes(ex))) continue
+
+          if (!contactAccountCounts.has(normKey)) {
+            contactAccountCounts.set(normKey, { original: rawName, codes: new Map() })
           }
-          const codeMap = contactAccountCounts.get(contactName)!
-          codeMap.set(code, (codeMap.get(code) || 0) + 1)
+          const entry = contactAccountCounts.get(normKey)!
+          entry.codes.set(code, (entry.codes.get(code) || 0) + 1)
         }
       }
 
-      // Persist mappings with usage_count >= 3
-      for (const [contactName, codeMap] of contactAccountCounts) {
+      // Persist mappings with usage_count >= 3 AND total_uses >= 5
+      for (const [normKey, { original, codes: codeMap }] of contactAccountCounts) {
         const totalUsage = Array.from(codeMap.values()).reduce((a, b) => a + b, 0)
+        if (totalUsage < 5) continue // EDGE CASE 3: minimum sample size
+
         for (const [code, count] of codeMap) {
           if (count < 3) continue
           const confidencePct = Math.round((count / totalUsage) * 100)
+
+          // EDGE CASE 4: Skip upsert if existing row has same code and count difference < 2
+          const { data: existing } = await supabaseAdmin
+            .from('xero_contact_account_mappings')
+            .select('usage_count')
+            .eq('user_id', userId)
+            .eq('normalised_contact_key', normKey)
+            .eq('account_code', code)
+            .maybeSingle()
+
+          if (existing && Math.abs(existing.usage_count - count) < 2) continue
+
           await supabaseAdmin.from('xero_contact_account_mappings').upsert({
             user_id: userId,
-            contact_name: contactName,
+            contact_name: normKey, // kept for backwards compat
+            original_contact_name: original,
+            normalised_contact_key: normKey,
             account_code: code,
             usage_count: count,
             confidence_pct: confidencePct,
             last_seen: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'user_id,contact_name,account_code' })
+          }, { onConflict: 'user_id,normalised_contact_key,account_code' })
         }
       }
       console.log(`[scan-xero-history] Contact→account mappings extracted for ${contactAccountCounts.size} contacts`)

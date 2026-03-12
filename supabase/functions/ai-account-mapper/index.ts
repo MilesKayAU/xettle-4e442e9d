@@ -122,36 +122,49 @@ Deno.serve(async (req) => {
     }
 
     // ─── STEP 1b: Check learned contact→account mappings ────────────
-    // If we have high-confidence learned mappings, use them instead of AI
-    let learnedMapping: Record<string, { code: string; name: string }> | null = null
+    // Normalise contact name for lookup
+    function normaliseContactName(name: string): string {
+      return name
+        .toLowerCase()
+        .trim()
+        .replace(/\b(pty|ltd|limited|inc|corp|co)\b/gi, '')
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
     if (body.contact_name) {
+      const normKey = normaliseContactName(body.contact_name)
       const { data: learned } = await supabase
         .from('xero_contact_account_mappings')
         .select('account_code, usage_count, confidence_pct')
         .eq('user_id', userId)
-        .eq('contact_name', body.contact_name)
+        .eq('normalised_contact_key', normKey)
         .gte('confidence_pct', 70)
+        .gte('usage_count', 3)
         .order('usage_count', { ascending: false })
 
+      // EDGE CASE 3: Also check total_uses >= 5 by summing all codes for this contact
       if (learned && learned.length > 0) {
-        const accountLookup = new Map(xeroAccounts.map((a: any) => [a.code || a.Code, a.name || a.Name]))
-        // Build mapping from learned data — use the dominant account for each category
-        // Return early with learned mapping
-        console.log(`[ai-account-mapper] Using learned mapping for contact "${body.contact_name}" (${learned.length} codes, top confidence: ${learned[0].confidence_pct}%)`)
+        const totalUses = learned.reduce((sum: number, l: any) => sum + l.usage_count, 0)
+        if (totalUses >= 5) {
+          const accountLookup = new Map(xeroAccounts.map((a: any) => [a.code || a.Code, a.name || a.Name]))
+          console.log(`[ai-account-mapper] Using learned mapping for contact "${body.contact_name}" → normalised "${normKey}" (${learned.length} codes, top confidence: ${learned[0].confidence_pct}%, total uses: ${totalUses})`)
 
-        return new Response(JSON.stringify({
-          success: true,
-          mapping_source: 'learned_from_xero',
-          learned_accounts: learned.map((l: any) => ({
-            code: l.account_code,
-            name: (accountLookup.get(l.account_code) as string) || `Account ${l.account_code}`,
-            usage_count: l.usage_count,
-            confidence_pct: l.confidence_pct,
-          })),
-          accounts: xeroAccounts,
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+          return new Response(JSON.stringify({
+            success: true,
+            mapping_source: 'learned_from_xero',
+            learned_accounts: learned.map((l: any) => ({
+              code: l.account_code,
+              name: (accountLookup.get(l.account_code) as string) || `Account ${l.account_code}`,
+              usage_count: l.usage_count,
+              confidence_pct: l.confidence_pct,
+            })),
+            accounts: xeroAccounts,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
       }
     }
 
