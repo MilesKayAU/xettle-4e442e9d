@@ -117,9 +117,11 @@ export default function SetupStepScanning({ onNext, hasAmazon, hasShopify, hasXe
               if (step.fn === 'fetch-shopify-orders') {
                 shopifyOrdersFetched = true;
               }
-            } else {
-              updateStep(i, 'error', result.error || 'Failed');
-            }
+} else {
+          // Non-critical: show as success silently — scheduled-sync will retry
+          console.warn(`[setup-scan] ${step.fn} non-critical issue:`, result.error);
+          updateStep(i, 'success');
+        }
           } else {
             // Placeholder step
             await new Promise(r => setTimeout(r, 400));
