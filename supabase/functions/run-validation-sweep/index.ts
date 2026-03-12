@@ -383,11 +383,12 @@ async function sweepUser(adminSupabase: any, userId: string) {
 
   if (!connections || connections.length === 0) return summary
 
+  // Boundary note: validation sweep checks ALL settlements regardless of boundary.
+  // Boundary only determines what gets pushed to Xero.
   const { data: settlements } = await adminSupabase
     .from('settlements')
     .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at')
     .eq('user_id', userId)
-    .gte('period_end', boundaryDate)
 
   const { data: reconChecks } = await adminSupabase
     .from('reconciliation_checks')

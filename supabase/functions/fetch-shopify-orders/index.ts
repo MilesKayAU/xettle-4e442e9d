@@ -72,27 +72,10 @@ Deno.serve(async (req) => {
     const resolvedUserId = userId || authenticatedUserId;
     const effectiveLimit = Math.min(limit || 250, 250);
 
-    // ─── Enforce accounting boundary (skip for channel detection scans) ─
-    let effectiveDateFrom = dateFrom;
-    if (!channelDetectionOnly) {
-      console.log("[fetch-shopify-orders] Querying accounting boundary...");
-      const { data: boundarySetting } = await supabase
-        .from("app_settings")
-        .select("value")
-        .eq("key", "accounting_boundary_date")
-        .eq("user_id", resolvedUserId)
-        .maybeSingle();
-
-      if (boundarySetting?.value) {
-        const boundaryDate = boundarySetting.value;
-        if (!effectiveDateFrom || effectiveDateFrom < boundaryDate) {
-          effectiveDateFrom = boundaryDate + "T00:00:00Z";
-        }
-      }
-      console.log("[fetch-shopify-orders] Boundary resolved, effectiveDateFrom:", effectiveDateFrom);
-    } else {
-      console.log("[fetch-shopify-orders] Channel detection mode — skipping accounting boundary");
-    }
+    // ─── Boundary note: accounting_boundary_date only applies to entry creation,
+    //     never to order fetching. All orders are fetched regardless of boundary. ─
+    const effectiveDateFrom = dateFrom;
+    console.log("[fetch-shopify-orders] effectiveDateFrom:", effectiveDateFrom, "channelDetectionOnly:", channelDetectionOnly);
 
     // 1. Get access token from shopify_tokens
     // If shopDomain not provided, look up the user's token by user_id alone
