@@ -174,7 +174,7 @@ export default function PostSetupBanner({
             }
             // Non-retryable or exhausted retries
             if (isRetryable) {
-              setShopifyMessage('Shopify is temporarily unavailable — will retry automatically');
+              setShopifyMessage('Shopify temporarily unavailable — scheduled sync will retry shortly');
               setShopifyStatus('rate_limited');
               return;
             }
