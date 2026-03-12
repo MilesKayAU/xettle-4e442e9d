@@ -78,19 +78,53 @@ function extractSettlementId(reference: string): { id: string | null; part: numb
   return { id: null, part: null };
 }
 
+const MARKETPLACE_SIGNAL_MAP: Array<{ code: string; signals: string[] }> = [
+  { code: 'amazon_au', signals: ['amazon', 'amzn', 'lmb-'] },
+  { code: 'shopify_payments', signals: ['shopify', 'shopify payments'] },
+  { code: 'kogan', signals: ['kogan'] },
+  { code: 'bigw', signals: ['big w', 'bigw'] },
+  { code: 'bunnings', signals: ['bunnings'] },
+  { code: 'mydeal', signals: ['mydeal', 'my deal'] },
+  { code: 'catch', signals: ['catch', 'catch_au'] },
+  { code: 'ebay_au', signals: ['ebay', 'ebay_au'] },
+  { code: 'woolworths_marketplus', signals: ['woolworths', 'woolworths_mp', 'everyday market', 'marketplus'] },
+];
+
+function normaliseMarketplaceCode(code: string | null | undefined): string {
+  if (!code) return 'unknown';
+  const lower = code.toLowerCase().trim();
+  const aliases: Record<string, string> = {
+    shopify: 'shopify_payments',
+    shopify_orders: 'shopify_payments',
+    catch_au: 'catch',
+    ebay: 'ebay_au',
+    woolworths_mp: 'woolworths_marketplus',
+  };
+  return aliases[lower] || lower;
+}
+
 function detectMarketplace(reference: string, contactName: string): string {
-  const ref = reference.toLowerCase();
-  const contact = contactName.toLowerCase();
-  if (ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon')) return 'amazon_au';
-  if (ref.includes('shopify') || contact.includes('shopify')) return 'shopify_payments';
-  if (contact.includes('kogan')) return 'kogan';
-  if (contact.includes('big w') || contact.includes('bigw')) return 'bigw';
-  if (contact.includes('bunnings')) return 'bunnings';
-  if (contact.includes('mydeal') || contact.includes('my deal')) return 'mydeal';
-  if (contact.includes('catch')) return 'catch';
-  if (contact.includes('ebay')) return 'ebay_au';
-  if (ref.startsWith('lmb-')) return 'amazon_au';
+  const ref = (reference || '').toLowerCase();
+  const contact = (contactName || '').toLowerCase();
+  const haystack = `${ref} ${contact}`;
+
+  if (ref.startsWith('xettle-') || ref.startsWith('amzn-') || ref.startsWith('lmb-')) {
+    return 'amazon_au';
+  }
+
+  for (const entry of MARKETPLACE_SIGNAL_MAP) {
+    if (entry.signals.some(signal => haystack.includes(signal))) {
+      return entry.code;
+    }
+  }
+
   return 'unknown';
+}
+
+function isLikelyMarketplaceInvoice(reference: string, contactName: string): boolean {
+  if (detectMarketplace(reference, contactName) !== 'unknown') return true;
+  const ref = (reference || '').toLowerCase();
+  return ref.startsWith('xettle-') || ref.startsWith('amzn-') || ref.startsWith('lmb-') || ref.includes('settlement') || ref.includes('payout');
 }
 
 async function loadOutstandingCache(supabase: any, userId: string) {
