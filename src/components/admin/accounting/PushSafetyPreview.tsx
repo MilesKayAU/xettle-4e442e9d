@@ -128,7 +128,32 @@ export default function PushSafetyPreview({
 
   const loadPreviews = async () => {
     setLoading(true);
+    setMappingInvalidError(null);
     try {
+      // ─── Pre-validate account codes against CoA ───────────────────
+      const { data: { user } } = await supabase.auth.getUser();
+      let coaMap = new Map<string, { name: string; type: string; active: boolean }>();
+      let userCodes: Record<string, string> = {};
+
+      if (user) {
+        const [coaRes, codesRes] = await Promise.all([
+          supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, is_active').eq('user_id', user.id),
+          supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'accounting_xero_account_codes').maybeSingle(),
+        ]);
+        for (const acc of (coaRes.data || [])) {
+          if (acc.account_code) {
+            coaMap.set(acc.account_code, {
+              name: acc.account_name,
+              type: (acc.account_type || '').toUpperCase(),
+              active: acc.is_active !== false,
+            });
+          }
+        }
+        if (codesRes.data?.value) {
+          try { userCodes = JSON.parse(codesRes.data.value); } catch { /* */ }
+        }
+      }
+
       const results = [];
       for (const { settlementId, marketplace } of settlements) {
         const { data: s } = await supabase
@@ -163,8 +188,8 @@ export default function PushSafetyPreview({
         // Build line items for display
         const lineItems = buildLineItemsFromSettlement(settlement);
 
-        // Build validation checks
-        const checks = buildValidationChecks(settlement, lineItems);
+        // Build validation checks (now with CoA awareness)
+        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes);
 
         const contactName = MARKETPLACE_CONTACTS[settlement.marketplace] || `${settlement.marketplace} Marketplace`;
         const reference = `Xettle-${settlement.settlement_id}`;
