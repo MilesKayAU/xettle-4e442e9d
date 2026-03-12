@@ -741,6 +741,20 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                       <p className="text-amber-600 font-medium">Difference: {formatAUD(row.bank_difference)}</p>
                                     )}
                                   </>
+                                ) : row.aggregate_match && row.aggregate_bank_match ? (
+                                  <>
+                                    <p className="flex items-center gap-1">
+                                      <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                      <span className="font-bold">{formatAUD(row.aggregate_bank_match.amount)}</span> on {row.aggregate_bank_match.date ? new Date(row.aggregate_bank_match.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'}
+                                    </p>
+                                    <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">Batched deposit</Badge>
+                                    <p className="text-muted-foreground mt-1">
+                                      Amazon deposit of {formatAUD(row.aggregate_sum || 0)} matched across {row.aggregate_settlement_count} settlements
+                                    </p>
+                                    {row.aggregate_bank_match.narration && (
+                                      <p className="text-muted-foreground">Narration: {row.aggregate_bank_match.narration}</p>
+                                    )}
+                                  </>
                                 ) : (
                                   <p className="flex items-center gap-1 text-destructive">
                                     <XCircle className="h-3 w-3" />
