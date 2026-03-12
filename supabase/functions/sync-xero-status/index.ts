@@ -440,7 +440,44 @@ serve(async (req) => {
         }
 
         if (bestMatch && bestConfidence >= 0.6) {
-          // Cache fuzzy match
+          const bestRef = bestMatch.Reference || '';
+          const isXettleFormat = bestRef.startsWith('Xettle-');
+
+          // Derive status from Xero invoice status
+          let derivedStatus: string;
+          if (isXettleFormat) {
+            switch (bestMatch.Status) {
+              case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
+              case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
+              case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
+              default: derivedStatus = 'pushed_to_xero'; break;
+            }
+          } else {
+            derivedStatus = 'synced_external';
+          }
+
+          // ── Write back to settlements table (critical!) ──
+          const fuzzyUpdatePayload: Record<string, any> = {
+            xero_invoice_number: bestMatch.InvoiceNumber || null,
+            xero_status: bestMatch.Status || null,
+            xero_journal_id: bestMatch.InvoiceID,
+            status: derivedStatus,
+          };
+
+          // Auto-verify if PAID
+          if (bestMatch.Status === 'PAID') {
+            fuzzyUpdatePayload.bank_verified = true;
+            fuzzyUpdatePayload.bank_verified_at = new Date().toISOString();
+            fuzzyUpdatePayload.bank_verified_by = null;
+          }
+
+          await supabase
+            .from('settlements')
+            .update(fuzzyUpdatePayload)
+            .eq('settlement_id', settlement.settlement_id)
+            .eq('user_id', userId);
+
+          // Cache fuzzy match in xero_accounting_matches
           await supabase.from('xero_accounting_matches').upsert({
             user_id: userId,
             settlement_id: settlement.settlement_id,
