@@ -821,7 +821,8 @@ export default function Setup() {
   const gateReason = phase2GateReason();
 
   // Progress bar status text
-  function progressStatus(progress: number, done: boolean, apiName: string): string {
+  function progressStatus(progress: number, done: boolean, apiName: string, stepStatus?: StepStatus): string {
+    if (stepStatus === 'pending') return 'Pending...';
     if (done) return 'Complete';
     if (progress >= 95) return 'Still working...';
     return 'Scanning...';
