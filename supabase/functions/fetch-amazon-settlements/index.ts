@@ -426,6 +426,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
       const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
       const accountingBoundary = settingsMap['accounting_boundary_date'] || null;
 
+      // Smart sync window: use sync_from if provided, otherwise default to 90 days
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 90);
       const params = new URLSearchParams({
