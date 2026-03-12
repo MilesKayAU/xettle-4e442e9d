@@ -712,6 +712,8 @@ export default function Dashboard() {
         onClose={handleWizardClose}
         onComplete={handleWizardComplete}
         hasXero={xeroConnected}
+        hasAmazon={hasAmazon}
+        hasShopify={hasShopify}
       />
       {/* Top bar */}
       <header className="border-b border-border bg-card">
