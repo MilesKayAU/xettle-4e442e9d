@@ -195,54 +195,76 @@ export default function ValidationSweep({
     }
   };
 
-  const handlePushToXero = async (row: ValidationRow) => {
+  // Open preview modal for a single settlement
+  const openPushPreview = (row: ValidationRow) => {
     if (!row.settlement_id) return;
-    setPushing(row.id);
-    try {
-      const { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines } = await import('@/utils/settlement-engine');
-      
-      const { data: settlement } = await supabase
-        .from('settlements')
-        .select('*')
-        .eq('settlement_id', row.settlement_id)
-        .maybeSingle();
+    setPreviewSettlements([{ settlementId: row.settlement_id, marketplace: row.marketplace_code }]);
+    setPreviewOpen(true);
+  };
 
-      if (!settlement) throw new Error('Settlement not found');
+  // Open preview modal for ALL ready-to-push settlements
+  const openPushAllPreview = () => {
+    const items = readyToPushRows
+      .filter(r => r.settlement_id)
+      .map(r => ({ settlementId: r.settlement_id!, marketplace: r.marketplace_code }));
+    if (items.length === 0) return;
+    setPreviewSettlements(items);
+    setPreviewOpen(true);
+  };
 
-      const std = {
-        marketplace: settlement.marketplace || row.marketplace_code,
-        settlement_id: settlement.settlement_id,
-        period_start: settlement.period_start,
-        period_end: settlement.period_end,
-        sales_ex_gst: settlement.sales_principal || 0,
-        gst_on_sales: settlement.gst_on_income || 0,
-        fees_ex_gst: settlement.seller_fees || 0,
-        gst_on_fees: settlement.gst_on_expenses || 0,
-        net_payout: settlement.bank_deposit || 0,
-        source: 'csv_upload' as const,
-        reconciles: true,
-        metadata: {
-          refundsExGst: settlement.refunds || 0,
-          shippingExGst: settlement.sales_shipping || 0,
-          subscriptionAmount: (settlement.other_fees && settlement.other_fees < 0) ? 0 : (settlement.other_fees || 0),
-          refundCommissionExGst: settlement.reimbursements || 0,
-        },
-      };
-      const lineItems = await buildSimpleInvoiceLines(std);
-      const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace || row.marketplace_code, { lineItems });
-      
-      if (result.success) {
-        toast.success(`Pushed to Xero ✅`);
-        await syncXeroStatus();
-        loadData();
-      } else {
-        toast.error(result.error || 'Push failed');
+  // Actually execute the push (called after preview confirmation)
+  const executePush = async () => {
+    for (const { settlementId, marketplace } of previewSettlements) {
+      const row = rows.find(r => r.settlement_id === settlementId);
+      if (row) setPushing(row.id);
+      try {
+        const { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines } = await import('@/utils/settlement-engine');
+        
+        const { data: settlement } = await supabase
+          .from('settlements')
+          .select('*')
+          .eq('settlement_id', settlementId)
+          .maybeSingle();
+
+        if (!settlement) throw new Error('Settlement not found');
+
+        const std = {
+          marketplace: settlement.marketplace || marketplace,
+          settlement_id: settlement.settlement_id,
+          period_start: settlement.period_start,
+          period_end: settlement.period_end,
+          sales_ex_gst: settlement.sales_principal || 0,
+          gst_on_sales: settlement.gst_on_income || 0,
+          fees_ex_gst: settlement.seller_fees || 0,
+          gst_on_fees: settlement.gst_on_expenses || 0,
+          net_payout: settlement.bank_deposit || 0,
+          source: 'csv_upload' as const,
+          reconciles: true,
+          metadata: {
+            refundsExGst: settlement.refunds || 0,
+            shippingExGst: settlement.sales_shipping || 0,
+            subscriptionAmount: (settlement.other_fees && settlement.other_fees < 0) ? 0 : (settlement.other_fees || 0),
+            refundCommissionExGst: settlement.reimbursements || 0,
+          },
+        };
+        const lineItems = await buildSimpleInvoiceLines(std);
+        const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace || marketplace, { lineItems });
+        
+        if (result.success) {
+          toast.success(`Pushed to Xero ✅`);
+          await syncXeroStatus();
+        } else {
+          toast.error(result.error || 'Push failed');
+        }
+      } catch (err: any) {
+        toast.error(err.message || 'Push failed');
+      } finally {
+        setPushing(null);
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Push failed');
-    } finally {
-      setPushing(null);
     }
+    setPreviewOpen(false);
+    loadData();
+  };
   };
 
   // Counts
