@@ -294,7 +294,6 @@ serve(async (req) => {
 
     if (unmatchedSettlements && unmatchedSettlements.length > 0) {
       // Fetch recent marketplace-related invoices for fuzzy matching
-      // Query invoices from last 6 months for marketplace contacts
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       const fromDate = sixMonthsAgo.toISOString().split('T')[0];
@@ -324,6 +323,14 @@ serve(async (req) => {
       );
       for (const m of existingMatches || []) {
         if (m.xero_invoice_id) matchedInvoiceIds.add(m.xero_invoice_id);
+      }
+
+      // Pre-build fingerprint lookup from settlements for fast matching
+      const settlementFingerprints = new Map<string, typeof unmatchedSettlements[0]>();
+      for (const s of unmatchedSettlements) {
+        if (s.settlement_fingerprint) {
+          settlementFingerprints.set(s.settlement_fingerprint, s);
+        }
       }
 
       for (const settlement of unmatchedSettlements) {
