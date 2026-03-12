@@ -1131,6 +1131,11 @@ export type Database = {
         Row: {
           advertising_costs: number | null
           bank_deposit: number | null
+          bank_match_confidence: string | null
+          bank_match_confirmed_at: string | null
+          bank_match_confirmed_by: string | null
+          bank_match_method: string | null
+          bank_tx_id: string | null
           bank_verified: boolean | null
           bank_verified_amount: number | null
           bank_verified_at: string | null
@@ -1176,6 +1181,11 @@ export type Database = {
         Insert: {
           advertising_costs?: number | null
           bank_deposit?: number | null
+          bank_match_confidence?: string | null
+          bank_match_confirmed_at?: string | null
+          bank_match_confirmed_by?: string | null
+          bank_match_method?: string | null
+          bank_tx_id?: string | null
           bank_verified?: boolean | null
           bank_verified_amount?: number | null
           bank_verified_at?: string | null
@@ -1221,6 +1231,11 @@ export type Database = {
         Update: {
           advertising_costs?: number | null
           bank_deposit?: number | null
+          bank_match_confidence?: string | null
+          bank_match_confirmed_at?: string | null
+          bank_match_confirmed_by?: string | null
+          bank_match_method?: string | null
+          bank_tx_id?: string | null
           bank_verified?: boolean | null
           bank_verified_amount?: number | null
           bank_verified_at?: string | null
