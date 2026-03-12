@@ -695,7 +695,37 @@ serve(async (req) => {
     const result = await response.json();
     const invoiceId = result.Invoices?.[0]?.InvoiceID;
     const invoiceNumber = result.Invoices?.[0]?.InvoiceNumber;
+    const xeroInvoiceTotal = result.Invoices?.[0]?.Total ?? null;
     console.log('Invoice created successfully:', invoiceId, 'Number:', invoiceNumber);
+
+    // ─── Balance check: settlement vs Xero invoice total ──────────
+    const settlementTotal = typeof netAmount === 'number' ? Math.round(netAmount * 100) / 100 : null;
+    const xeroTotal = typeof xeroInvoiceTotal === 'number' ? Math.round(xeroInvoiceTotal * 100) / 100 : null;
+    // For bills (ACCPAY), Xero returns positive Total for what we sent as abs(negative)
+    const comparableXeroTotal = isNegativeSettlement && xeroTotal !== null ? -xeroTotal : xeroTotal;
+    const balanceDifference = settlementTotal !== null && comparableXeroTotal !== null
+      ? Math.round((settlementTotal - comparableXeroTotal) * 100) / 100
+      : null;
+
+    console.log(`[balance-check] settlement_total=${settlementTotal}, xero_invoice_total=${xeroTotal} (comparable=${comparableXeroTotal}), difference=${balanceDifference}`);
+
+    // Log to system_events for audit trail
+    await supabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'xero_push_balance_check',
+      severity: balanceDifference !== null && balanceDifference !== 0 ? 'warning' : 'info',
+      settlement_id: body.settlementData?.settlement_id || reference?.replace('Xettle-', '') || null,
+      marketplace_code: body.settlementData?.marketplace || null,
+      details: {
+        settlement_total: settlementTotal,
+        xero_invoice_total: xeroTotal,
+        comparable_xero_total: comparableXeroTotal,
+        difference: balanceDifference,
+        invoice_type: invoiceType,
+        xero_invoice_id: invoiceId,
+        reference,
+      },
+    });
 
     // ─── Attach audit CSV (non-blocking) ──────────────────────────
     let attachmentResult: { success: boolean; error?: string } | null = null;
