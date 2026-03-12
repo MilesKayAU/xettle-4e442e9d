@@ -48,6 +48,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
   const [timedOut, setTimedOut] = useState(false);
   const hasStarted = useRef(false);
   const scanStartTime = useRef(Date.now());
+  const stepStatusesRef = useRef<StepStatus[]>([]);
 
   const hasAnyApi = hasXero || hasAmazon || hasShopify;
 
