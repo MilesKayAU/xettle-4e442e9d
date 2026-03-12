@@ -499,10 +499,17 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     <>
       <div className="space-y-2">
         <div className="flex justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1 text-xs text-muted-foreground">
-            {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-            {syncing ? 'Rescanning...' : 'Rescan'}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1 text-xs text-muted-foreground">
+                  {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  {syncing ? 'Rescanning...' : 'Rescan'}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Re-scan your Xero and Shopify accounts for new marketplaces and deposits</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           {alerts.length >= 3 && (
             <Button size="sm" variant="ghost" onClick={() => setExpanded(false)} className="gap-1 text-xs">
               Collapse <ChevronUp className="h-3 w-3" />
