@@ -206,9 +206,16 @@ export default function Dashboard() {
       }
     }
 
-    // Check token existence
-    supabase.from('xero_tokens').select('id').eq('user_id', user.id).limit(1)
-      .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
+    // Check token existence for all three platforms
+    Promise.all([
+      supabase.from('xero_tokens').select('id').eq('user_id', user.id).limit(1),
+      supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1),
+      supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1),
+    ]).then(([xero, amazon, shopify]) => {
+      setXeroConnected(!!(xero.data && xero.data.length > 0));
+      setHasAmazon(!!(amazon.data && amazon.data.length > 0));
+      setHasShopify(!!(shopify.data && shopify.data.length > 0));
+    });
   }, [user]);
 
   // ─── Setup wizard pre-check (simplified: Xero-first) ────────────
