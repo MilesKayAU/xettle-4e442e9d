@@ -43,8 +43,23 @@ Deno.serve(async (req) => {
       // No body or invalid JSON — default to live mode
     }
 
-    const modeLabel = dryRun ? 'DRY RUN' : 'LIVE'
-    console.log(`[auto-push-xero] Mode: ${modeLabel}`)
+    // ══════════════════════════════════════════════════════════════
+    // GOLDEN RULE: Nothing is pushed to Xero without the user
+    // explicitly reviewing and confirming the data via the Push
+    // Safety Preview modal. This function is DISABLED.
+    // Auto-detection is always a SUGGESTION, never a fact.
+    // User is the final validator for all Xero operations.
+    // ══════════════════════════════════════════════════════════════
+    console.log('[auto-push-xero] BLOCKED: Golden rule — no automated Xero pushes. All pushes require user confirmation via Push Safety Preview.')
+    return new Response(JSON.stringify({
+      success: true,
+      pushed: 0,
+      blocked: true,
+      reason: 'golden_rule_enforced',
+      message: 'Automated Xero pushes are disabled. All pushes require user review and confirmation via the Push Safety Preview modal.',
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
 
     // ─── Find all users with Xero tokens ─────────────────────────
     const { data: xeroTokens, error: xeroErr } = await supabase
