@@ -220,6 +220,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     return data.rows.filter(r => r.is_marketplace !== false);
   }, [data, showNonMarketplace]);
 
+  const hasOnlyUnclassifiedRows = useMemo(() => {
+    if (!data || showNonMarketplace) return false;
+    return data.rows.length > 0 && filteredRows.length === 0 && data.rows.some(r => r.is_marketplace === false);
+  }, [data, filteredRows.length, showNonMarketplace]);
+
+  useEffect(() => {
+    if (hasOnlyUnclassifiedRows) setShowNonMarketplace(true);
+  }, [hasOnlyUnclassifiedRows]);
+
   const nonMarketplaceCount = useMemo(() => {
     if (!data) return 0;
     return data.rows.filter(r => r.is_marketplace === false).length;

@@ -630,6 +630,7 @@ Deno.serve(async (req) => {
             mydeal: ['mydeal'],
             catch: ['catch'],
             ebay_au: ['ebay'],
+            woolworths_marketplus: ['woolworths', 'everyday market', 'marketplus'],
           };
 
           const patterns = marketplacePatterns[marketplace] || [];
