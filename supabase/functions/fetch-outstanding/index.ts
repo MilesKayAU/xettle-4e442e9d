@@ -390,6 +390,7 @@ Deno.serve(async (req) => {
     let matchedWithSettlement = 0;
     let bankDepositFound = 0;
     let readyToReconcile = 0;
+    let awaitingSyncCount = 0;
 
     for (const inv of invoices) {
       const reference = inv.Reference || '';
