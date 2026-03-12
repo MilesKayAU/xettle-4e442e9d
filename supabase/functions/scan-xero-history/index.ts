@@ -390,7 +390,9 @@ Deno.serve(async (req) => {
             console.log(`[scan-xero-history] Advertising platform contact ${contactName} → ignored`)
             continue
           }
-          // This marketplace exists as a Xero contact but has no invoices or bank txns yet
+          // Standalone contacts (no invoices or bank transactions) are informational only.
+          // They get a channel_alert for visibility but do NOT create marketplace_connections.
+          // A contact existing in Xero doesn't prove the user sells on that channel.
           standaloneContacts.push(contactName)
           detectedMap.set(marketplace, {
             marketplace,
@@ -402,7 +404,7 @@ Deno.serve(async (req) => {
           })
           hasMarketplaceContacts = true
 
-          // Also create a channel_alert for visibility in Setup Hub
+          // Create a channel_alert for visibility in Setup Hub (informational only)
           await supabase.from('channel_alerts').upsert({
             user_id: userId,
             source_name: marketplace,
