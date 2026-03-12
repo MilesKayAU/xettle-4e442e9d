@@ -127,6 +127,26 @@ function detectMarketplaceFromContact(contactName: string): string | null {
   return null;
 }
 
+// Generate a fingerprint for a Xero invoice to compare against settlement fingerprints
+async function generateXeroFingerprint(marketplace: string, amount: number, date: string): Promise<string> {
+  // We can't know exact period_start/period_end from Xero, so generate a simpler fingerprint
+  // used for amount+marketplace matching
+  const input = `${marketplace}|${date}|${amount}`;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Generate the same fingerprint format as the DB trigger for exact matching
+async function generateSettlementStyleFingerprint(marketplace: string, periodStart: string, periodEnd: string, bankDeposit: number): Promise<string> {
+  const input = `${marketplace}|${periodStart}|${periodEnd}|${bankDeposit}`;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -265,7 +285,7 @@ serve(async (req) => {
     // Get all settlements that don't have a Xero match yet
     const { data: unmatchedSettlements } = await supabase
       .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint')
       .eq('user_id', userId)
       .is('xero_journal_id', null)
       .not('status', 'in', '("synced","synced_external","already_recorded")');
@@ -274,7 +294,6 @@ serve(async (req) => {
 
     if (unmatchedSettlements && unmatchedSettlements.length > 0) {
       // Fetch recent marketplace-related invoices for fuzzy matching
-      // Query invoices from last 6 months for marketplace contacts
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
       const fromDate = sixMonthsAgo.toISOString().split('T')[0];
@@ -306,6 +325,14 @@ serve(async (req) => {
         if (m.xero_invoice_id) matchedInvoiceIds.add(m.xero_invoice_id);
       }
 
+      // Pre-build fingerprint lookup from settlements for fast matching
+      const settlementFingerprints = new Map<string, typeof unmatchedSettlements[0]>();
+      for (const s of unmatchedSettlements) {
+        if (s.settlement_fingerprint) {
+          settlementFingerprints.set(s.settlement_fingerprint, s);
+        }
+      }
+
       for (const settlement of unmatchedSettlements) {
         if (alreadyMatchedSettlements.has(settlement.settlement_id)) continue;
 
@@ -318,6 +345,7 @@ serve(async (req) => {
 
         let bestMatch: any = null;
         let bestConfidence = 0;
+        let bestMatchMethod = 'fuzzy_amount_date';
 
         for (const inv of recentInvoices) {
           if (matchedInvoiceIds.has(inv.InvoiceID)) continue;
@@ -347,23 +375,52 @@ serve(async (req) => {
 
           if (invDateObj < windowStart || invDateObj > windowEnd) continue;
 
-          // Calculate confidence
-          let confidence = 0.5;
-          if (amountDiff <= 0.05) confidence += 0.3;
-          else if (amountDiff <= 1) confidence += 0.2;
-          else if (pctDiff <= 1) confidence += 0.15;
+          // ─── Confidence scoring with fingerprint support ───
+          let confidence = 0;
+          let matchMethod = 'fuzzy_amount_date';
 
-          if (marketplaceMatch) confidence += 0.15;
+          // Fingerprint match: generate candidate fingerprint from Xero invoice
+          // Try matching with detected marketplace + invoice date as both period bounds
+          if (settlement.settlement_fingerprint && marketplaceMatch) {
+            const candidateFp = await generateSettlementStyleFingerprint(
+              marketplace,
+              settlement.period_start,
+              settlement.period_end,
+              invAmount
+            );
+            if (candidateFp === settlement.settlement_fingerprint) {
+              confidence = 0.95; // Near-certain: same marketplace, dates, and exact amount
+              matchMethod = 'fingerprint';
+            }
+          }
 
-          // Date proximity bonus
-          const daysDiff = Math.abs((invDateObj.getTime() - periodEnd.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysDiff <= 2) confidence += 0.05;
+          // If no fingerprint match, use traditional scoring
+          if (confidence === 0) {
+            confidence = 0.5;
+            if (amountDiff <= 0.05) confidence += 0.25;
+            else if (amountDiff <= 1) confidence += 0.2;
+            else if (pctDiff <= 1) confidence += 0.15;
 
-          confidence = Math.min(confidence, 0.95);
+            if (marketplaceMatch) confidence += 0.15;
+
+            // Date proximity bonus
+            const daysDiff = Math.abs((invDateObj.getTime() - periodEnd.getTime()) / (1000 * 60 * 60 * 24));
+            if (daysDiff <= 2) confidence += 0.05;
+
+            // Reference similarity bonus
+            const ref = (inv.Reference || '').toLowerCase();
+            const sid = settlement.settlement_id.toLowerCase();
+            if (ref.includes(sid) || sid.includes(ref.replace(/\s/g, ''))) {
+              confidence += 0.05;
+            }
+          }
+
+          confidence = Math.min(confidence, 0.99);
 
           if (confidence > bestConfidence) {
             bestConfidence = confidence;
             bestMatch = inv;
+            bestMatchMethod = matchMethod;
           }
         }
 
@@ -377,7 +434,7 @@ serve(async (req) => {
             xero_invoice_number: bestMatch.InvoiceNumber || null,
             xero_status: bestMatch.Status || null,
             xero_type: bestMatch.Type === 'ACCPAY' ? 'bill' : 'invoice',
-            match_method: 'fuzzy_amount_date',
+            match_method: bestMatchMethod,
             confidence: bestConfidence,
             matched_amount: bestMatch.Total || null,
             matched_date: parseXeroDate(bestMatch.Date),
