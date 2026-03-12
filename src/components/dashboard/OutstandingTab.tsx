@@ -514,9 +514,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <div className="space-y-1.5">
             {row.aggregate_candidates.map((c, i) => (
               <div key={c.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
-                <span className="font-mono font-bold min-w-[80px]">{formatAUD(c.amount)}</span>
                 <span className="min-w-[60px]">{formatDate(c.date)}</span>
+                <span className="font-mono font-bold min-w-[80px]">{formatAUD(c.amount)}</span>
                 <span className="text-muted-foreground truncate flex-1">{c.narration || c.reference || '—'}</span>
+                {c.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{c.bank_account_name}</span>}
                 <Badge variant="outline" className="text-[10px] shrink-0">{c.confidence}</Badge>
                 <Button
                   size="sm"
