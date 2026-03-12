@@ -515,10 +515,19 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-1.5">
-                          {getStatusIcon(row)}
-                          <span className="text-xs font-medium">{getStatusLabel(row)}</span>
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1.5">
+                              {getStatusIcon(row)}
+                              <span className="text-xs font-medium">{getStatusLabel(row)}</span>
+                            </div>
+                          </TooltipTrigger>
+                          {row.is_pre_boundary && row.match_status === 'no_settlement' && (
+                            <TooltipContent side="left" className="max-w-[220px] text-center">
+                              Created before Xettle was connected — managed directly in Xero
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex items-center gap-1.5 justify-end">
