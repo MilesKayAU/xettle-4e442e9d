@@ -161,6 +161,12 @@ export default function Dashboard() {
 
       if (connected === 'xero') {
         setXeroConnected(true);
+        // Mark wizard complete so it doesn't reopen
+        supabase.from('app_settings').upsert(
+          { user_id: user.id, key: 'onboarding_wizard_complete', value: 'true' },
+          { onConflict: 'user_id,key' }
+        );
+        setShowWizard(false);
         toast.success('Xero connected — analysing your account…');
       } else if (connected === 'amazon') {
         setHasAmazon(true);
