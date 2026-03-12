@@ -871,7 +871,7 @@ export default function Setup() {
                       </Button>
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {progressStatus(xeroProgress, phase1Xero, 'Xero')}
+                      {progressStatus(xeroProgress, phase1Xero, 'Xero', xeroStep.status)}
                     </span>
                   </div>
                 </div>
