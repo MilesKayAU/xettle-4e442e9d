@@ -345,6 +345,7 @@ serve(async (req) => {
 
         let bestMatch: any = null;
         let bestConfidence = 0;
+        let bestMatchMethod = 'fuzzy_amount_date';
 
         for (const inv of recentInvoices) {
           if (matchedInvoiceIds.has(inv.InvoiceID)) continue;
