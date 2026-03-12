@@ -173,10 +173,10 @@ Deno.serve(async (req) => {
       return MARKETPLACE_CONTACT_PATTERNS.some(p => contact.includes(p));
     });
 
-    // ─── Get user's settlements for matching ───
+    // ─── Get user's settlements for matching (including bank match fields) ───
     const { data: settlements } = await supabase
       .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data, bank_tx_id, bank_match_method, bank_match_confidence, bank_match_confirmed_at, bank_match_confirmed_by')
       .eq('user_id', userId);
 
     const settlementMap = new Map<string, any>();
