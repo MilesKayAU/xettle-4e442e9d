@@ -165,6 +165,7 @@ interface OutstandingSummary {
 
 interface Props {
   onSwitchToUpload: () => void;
+  discoveryComplete?: boolean;
 }
 
 const GATEWAY_LABELS: Record<string, string> = {
