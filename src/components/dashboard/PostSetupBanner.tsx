@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, CheckCircle2, X, Zap, ShoppingCart, BookOpen, ArrowRight, Sparkles, Shield, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle2, X, Zap, ShoppingCart, BookOpen, ArrowRight, Sparkles, Shield, AlertTriangle, Clock3 } from 'lucide-react';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
 
