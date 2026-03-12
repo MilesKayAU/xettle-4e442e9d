@@ -921,7 +921,7 @@ export default function Setup() {
                       </Button>
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {progressStatus(amazonProgress, phase1Amazon, 'Amazon')}
+                      {progressStatus(amazonProgress, phase1Amazon, 'Amazon', amazonStep.status)}
                     </span>
                   </div>
                 </div>
