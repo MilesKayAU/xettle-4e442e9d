@@ -408,6 +408,7 @@ Deno.serve(async (req) => {
           if (bestBatch) {
             const batchScore = bestBatchDiff <= 0.05 ? 92 : bestBatchDiff <= 0.50 ? 88 : 82
             const settlementIds = group.map((s: any) => s.settlement_id)
+            const batchGroupId = crypto.randomUUID()
 
             console.log(`[bank-match] BATCH MATCH FOUND: ${marketplace} ${settlementIds.length} settlements → deposit ${Math.abs(bestBatch.amount).toFixed(2)} (diff: ${bestBatchDiff.toFixed(2)}, score: ${batchScore})`)
 
