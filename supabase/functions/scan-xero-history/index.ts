@@ -286,8 +286,10 @@ Deno.serve(async (req) => {
 
     // ─── 1. Scan Invoices ───────────────────────────────────────────
     try {
-      const invoiceData = await xeroGet(
-        `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED,PAID&order=Date DESC&pageSize=100`,
+      const invoiceUrl = isLightDiscovery
+        ? `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED,PAID&order=Date DESC&pageSize=50${dateFilter}`
+        : `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED,PAID&order=Date DESC&pageSize=100`
+      const invoiceData = await xeroGet(invoiceUrl, accessToken, tenantId)
         accessToken, tenantId
       )
 
