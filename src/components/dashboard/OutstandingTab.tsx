@@ -16,8 +16,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
-  FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
+  FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard, MinusCircle,
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -54,6 +55,8 @@ interface OutstandingRow {
   invoice_date: string | null;
   due_date: string | null;
   amount: number;
+  currency_code?: string;
+  is_pre_boundary?: boolean;
   overdue_days: number | null;
   has_settlement: boolean;
   settlement_id: string | null;
@@ -245,6 +248,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getStatusIcon = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+    if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status.startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     return <XCircle className="h-4 w-4 text-destructive" />;
@@ -252,6 +256,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'Balanced';
+    if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
     if (row.match_status.startsWith('gap_')) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
@@ -262,6 +267,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getRowBgClass = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'bg-green-50/50 dark:bg-green-950/10';
+    if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
   };
@@ -376,11 +382,20 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Needs attention</p>
-              <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
-                {data.invoice_count - data.ready_to_reconcile}
-              </p>
-              <p className="text-xs text-muted-foreground">gaps or missing</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Awaiting payment</p>
+                    <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
+                      {data.invoice_count - data.ready_to_reconcile}
+                    </p>
+                    <p className="text-xs text-muted-foreground">to action</p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-center">
+                  Xero invoices awaiting payment — approve and reconcile these in Xero
+                </TooltipContent>
+              </Tooltip>
             </CardContent>
           </Card>
         </div>
@@ -478,12 +493,21 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono font-medium text-foreground">
-                        {formatAUD(row.amount)}
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="font-mono font-medium text-foreground">{formatAUD(row.amount)}</span>
+                          {row.currency_code && row.currency_code !== 'AUD' && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-semibold border-amber-300 text-amber-700 dark:text-amber-400">
+                              {row.currency_code}
+                            </Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-center">
                         {row.has_settlement ? (
                           <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
+                        ) : row.is_pre_boundary ? (
+                          <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
                         ) : (
                           <XCircle className="h-4 w-4 text-destructive inline" />
                         )}
@@ -495,15 +519,26 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                           ) : (
                             <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
                           )
+                        ) : row.is_pre_boundary ? (
+                          <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
                         ) : (
                           <XCircle className="h-4 w-4 text-destructive inline" />
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-1.5">
-                          {getStatusIcon(row)}
-                          <span className="text-xs font-medium">{getStatusLabel(row)}</span>
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1.5">
+                              {getStatusIcon(row)}
+                              <span className="text-xs font-medium">{getStatusLabel(row)}</span>
+                            </div>
+                          </TooltipTrigger>
+                          {row.is_pre_boundary && row.match_status === 'no_settlement' && (
+                            <TooltipContent side="left" className="max-w-[220px] text-center">
+                              Created before Xettle was connected — managed directly in Xero
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex items-center gap-1.5 justify-end">
@@ -522,7 +557,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               Mark Paid
                             </Button>
                           )}
-                          {row.match_status === 'no_settlement' && (
+                          {row.match_status === 'no_settlement' && row.is_pre_boundary && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(`https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${row.xero_invoice_id}`, '_blank')}
+                              className="gap-1 text-xs h-7"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View in Xero →
+                            </Button>
+                          )}
+                          {row.match_status === 'no_settlement' && !row.is_pre_boundary && (
                             <Button
                               size="sm"
                               variant="outline"

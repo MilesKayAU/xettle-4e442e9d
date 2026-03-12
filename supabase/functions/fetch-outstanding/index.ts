@@ -129,6 +129,15 @@ Deno.serve(async (req) => {
     let token = tokens[0] as XeroToken;
     token = await refreshToken(supabase, token);
 
+    // ─── Get accounting boundary date ───
+    const { data: boundaryRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'accounting_boundary_date')
+      .maybeSingle();
+    const accountingBoundary = boundaryRow?.value || null;
+
     // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
     // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
     const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
@@ -363,6 +372,10 @@ Deno.serve(async (req) => {
         matchStatus = 'no_settlement';
       }
 
+      // Determine if pre-boundary
+      const currencyCode = inv.CurrencyCode || 'AUD';
+      const isPreBoundary = accountingBoundary && invoiceDate && invoiceDate < accountingBoundary;
+
       rows.push({
         xero_invoice_id: invoiceId,
         xero_invoice_number: invoiceNumber,
@@ -373,6 +386,8 @@ Deno.serve(async (req) => {
         invoice_date: invoiceDate,
         due_date: dueDate,
         amount,
+        currency_code: currencyCode,
+        is_pre_boundary: !!isPreBoundary,
         overdue_days: dueDate ? Math.max(0, Math.floor((Date.now() - new Date(dueDate).getTime()) / (1000 * 60 * 60 * 24))) : null,
         has_settlement: hasSettlement,
         settlement_id: settlementId,
