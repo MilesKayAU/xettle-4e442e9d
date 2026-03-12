@@ -260,6 +260,55 @@ export default function SetupStepConnectStores({
     toast.success(`${name} added — you can upload its files in the next step.`);
   };
 
+  const persistSelectedMarketplaces = async () => {
+    if (selectedMarketplaces.length === 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const uniqueCodes = Array.from(new Set(
+      selectedMarketplaces.map(code => code.toLowerCase().trim()).filter(Boolean)
+    ));
+
+    if (uniqueCodes.length === 0) return;
+
+    const connectionRows = uniqueCodes.map(code => ({
+      user_id: user.id,
+      marketplace_code: code,
+      marketplace_name: marketplaceLabelFromCode(code),
+      country_code: 'AU',
+      connection_type: 'manual',
+      connection_status: 'active',
+    }));
+
+    const { error: connectionErr } = await supabase
+      .from('marketplace_connections')
+      .upsert(connectionRows as any, { onConflict: 'user_id,marketplace_code' } as any);
+
+    if (connectionErr) throw connectionErr;
+
+    const codesToResolve = expandMarketplaceCodes(uniqueCodes);
+    await supabase
+      .from('channel_alerts' as any)
+      .update({ status: 'auto_resolved_setup', actioned_at: new Date().toISOString() } as any)
+      .eq('user_id', user.id)
+      .eq('status', 'pending')
+      .in('source_name', codesToResolve as any);
+  };
+
+  const handleContinueFromMarketplaceStep = async () => {
+    setPersistingSelections(true);
+    try {
+      await persistSelectedMarketplaces();
+    } catch (err) {
+      console.error('[setup] failed to persist selected marketplaces:', err);
+      toast.error('Could not fully save marketplace selections, but setup will continue.');
+    } finally {
+      setPersistingSelections(false);
+      onNext();
+    }
+  };
+
   // Back within sub-steps goes to previous sub-step, or to wizard back
   const handleInternalBack = () => {
     if (step === 1 && onBack) {
