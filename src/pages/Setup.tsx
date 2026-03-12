@@ -294,26 +294,52 @@ export default function Setup() {
     shopifyAbortRef.current = ac;
 
     setShopifyPayoutsStep({ status: 'running', message: 'Fetching payouts...' });
-    const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', token, {}, { signal: ac.signal });
-    if (!mountedRef.current) return;
-    if (payoutsResult.aborted) {
-      shopifyAbortRef.current = null;
-      setShopifyPayoutsStep({ status: 'error', message: 'Stopped', error: 'Stopped by user' });
-      setShopifyProgress(0);
-      return;
-    }
-
-    if (!payoutsResult.ok) {
-      const isCooldown = payoutsResult.error?.includes('429');
-      const isTimeout = payoutsResult.error?.includes('timed out');
-      if (isCooldown || isTimeout) {
-        setShopifyPayoutsStep({ status: 'success', message: '✅ Payouts already synced recently' });
-      } else {
-        setShopifyPayoutsStep({ status: 'error', message: 'Payouts fetch failed', error: payoutsResult.error });
+    
+    // Retry loop for 503/429 with backoff
+    let payoutsOk = false;
+    let lastPayoutsResult: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', token, {}, { signal: ac.signal });
+      lastPayoutsResult = payoutsResult;
+      if (!mountedRef.current) return;
+      if (payoutsResult.aborted) {
+        shopifyAbortRef.current = null;
+        setShopifyPayoutsStep({ status: 'error', message: 'Stopped', error: 'Stopped by user' });
+        setShopifyProgress(0);
+        return;
       }
-    } else {
-      const payoutCount = payoutsResult.data?.synced || payoutsResult.data?.count || 0;
-      const skipped = payoutsResult.data?.skipped || 0;
+      if (payoutsResult.ok) {
+        payoutsOk = true;
+        break;
+      }
+      const isRetryable = payoutsResult.rateLimited || payoutsResult.statusCode === 503 || payoutsResult.statusCode === 429;
+      if (isRetryable && attempt < 2) {
+        const waitSec = (attempt + 1) * 5;
+        console.warn(`[setup] Shopify payouts ${payoutsResult.statusCode} — retrying in ${waitSec}s (attempt ${attempt + 1})`);
+        setShopifyPayoutsStep({ status: 'running', message: `Shopify temporarily unavailable — retrying in ${waitSec}s…` });
+        await new Promise(r => setTimeout(r, waitSec * 1000));
+        if (!mountedRef.current) return;
+        continue;
+      }
+      // Non-retryable or exhausted retries
+      if (isRetryable) {
+        setShopifyPayoutsStep({ status: 'error', message: 'Shopify temporarily unavailable — click Retry to try again', error: payoutsResult.error });
+      } else {
+        const isCooldown = payoutsResult.error?.includes('429');
+        const isTimeout = payoutsResult.error?.includes('timed out');
+        if (isCooldown || isTimeout) {
+          setShopifyPayoutsStep({ status: 'success', message: '✅ Payouts already synced recently' });
+          payoutsOk = true;
+        } else {
+          setShopifyPayoutsStep({ status: 'error', message: 'Payouts fetch failed', error: payoutsResult.error });
+        }
+      }
+      break;
+    }
+    
+    if (payoutsOk && lastPayoutsResult?.ok) {
+      const payoutCount = lastPayoutsResult.data?.synced || lastPayoutsResult.data?.count || 0;
+      const skipped = lastPayoutsResult.data?.skipped || 0;
       const msg = payoutCount > 0
         ? `✅ ${payoutCount} payouts fetched`
         : skipped > 0
