@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
         .select('period_end')
         .eq('user_id', uid)
         .not('status', 'in', '("reconciled_in_xero","synced_external","already_recorded","duplicate_suppressed")')
+        .neq('bank_verified', true)
         .order('period_end', { ascending: true })
         .limit(1);
 
