@@ -942,7 +942,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         <Button
           variant="outline"
           size="sm"
-          onClick={fetchOutstanding}
+          onClick={() => fetchOutstanding({ runSync: true })}
           disabled={loading}
           className="gap-1.5"
         >
