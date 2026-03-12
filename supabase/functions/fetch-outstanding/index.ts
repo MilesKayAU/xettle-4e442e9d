@@ -199,6 +199,27 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const cachedRecord = await loadOutstandingCache(supabase, userId);
+    const cachedPayload = cachedRecord?.payload || null;
+    const cacheAgeSeconds = cachedRecord?.cached_at
+      ? Math.max(0, Math.floor((Date.now() - new Date(cachedRecord.cached_at).getTime()) / 1000))
+      : null;
+
+    // Serve warm cache for a short window to reduce Xero API pressure
+    if (cachedPayload && cacheAgeSeconds !== null && cacheAgeSeconds < 90) {
+      return new Response(JSON.stringify({
+        ...cachedPayload,
+        sync_info: {
+          ...(cachedPayload.sync_info || {}),
+          from_cache: true,
+          cache_age_seconds: cacheAgeSeconds,
+        },
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Get Xero token
     const { data: tokens } = await supabase
       .from('xero_tokens')
@@ -208,11 +229,14 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (!tokens?.length) {
-      // No Xero connection — return empty result instead of error
       return new Response(JSON.stringify({
-        invoices: [],
-        summary: { total_outstanding: 0, matched_with_settlement: 0, bank_deposit_found: 0, ready_to_reconcile: 0, total_invoices: 0 },
-        aggregate_groups: [],
+        error: 'No Xero connection',
+        rows: [],
+        total_outstanding: 0,
+        invoice_count: 0,
+        matched_with_settlement: 0,
+        bank_deposit_found: 0,
+        ready_to_reconcile: 0,
       }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -230,10 +254,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const accountingBoundary = boundaryRow?.value || null;
 
-    // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
-    // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
-    const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
+    // ─── Fetch only outstanding sales invoices (ACCREC + AUTHORISED + AmountDue>0) ───
+    // Keep this query narrow to avoid hitting Xero rate limits.
+    const invoiceWhere = encodeURIComponent(`Type=="ACCREC" AND Status=="AUTHORISED" AND AmountDue>0`);
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${invoiceWhere}&order=Date DESC`;
     const xeroResp = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token.access_token}`,
