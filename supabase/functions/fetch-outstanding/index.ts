@@ -23,13 +23,20 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
   const expiresAt = new Date(token.expires_at);
   if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) return token;
 
+  // Optimistic locking: re-read to detect concurrent refresh
+  const { data: freshToken } = await supabase
+    .from('xero_tokens').select('*').eq('id', token.id).single();
+  if (freshToken && freshToken.expires_at !== token.expires_at) {
+    return { ...token, ...freshToken } as XeroToken;
+  }
+
   const resp = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Authorization': `Basic ${btoa(`${xeroClientId}:${xeroClientSecret}`)}`,
     },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: token.refresh_token }),
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: freshToken?.refresh_token || token.refresh_token }),
   });
 
   if (!resp.ok) throw new Error(`Token refresh failed: ${await resp.text()}`);
