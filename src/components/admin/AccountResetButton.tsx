@@ -37,24 +37,29 @@ export default function AccountResetButton() {
       const cleared = Object.values(data.results as Record<string, string>).filter(v => v === 'cleared').length;
       const errors = Object.entries(data.results as Record<string, string>).filter(([, v]) => v.startsWith('error'));
 
-      // Clear wizard session state so it restarts from step 1
+      // Clear ALL client-side state so dashboard sees fresh DB
       sessionStorage.clear();
-      localStorage.removeItem('xettle_wizard_dismissed');
+      localStorage.clear();
 
-      // Nuke ALL React Query caches so dashboard/home show fresh state
+      // Nuke ALL React Query caches
       queryClient.clear();
-
-      toast({
-        title: '🔄 Account Reset Complete',
-        description: `${cleared} tables cleared.${errors.length > 0 ? ` ${errors.length} errors — check console.` : ''} Reloading…`,
-      });
+      queryClient.removeQueries();
 
       if (errors.length > 0) {
         console.warn('Reset errors:', Object.fromEntries(errors));
       }
 
-      // Hard reload after brief delay so user sees the toast
-      setTimeout(() => window.location.replace('/dashboard'), 1500);
+      // Force a full hard reload with cache-busting to /dashboard
+      // Use a brief delay so the toast can show
+      toast({
+        title: '🔄 Account Reset Complete',
+        description: `${cleared} tables cleared.${errors.length > 0 ? ` ${errors.length} errors — check console.` : ''} Reloading…`,
+      });
+
+      setTimeout(() => {
+        // Full page reload that bypasses all SPA routing and caches
+        window.location.href = '/dashboard?reset=' + Date.now();
+      }, 1200);
     } catch (err: any) {
       toast({
         title: 'Reset failed',
