@@ -444,6 +444,14 @@ serve(async (req) => {
       });
     }
 
+    // Load incremental cursor for full reference scan
+    const { data: cursorSetting } = await supabase
+      .from('app_settings').select('value')
+      .eq('user_id', userId).eq('key', `xero_last_invoice_scan_at_${token.tenant_id}`)
+      .maybeSingle();
+    const modifiedAfter = cursorSetting?.value || null;
+    console.log(`[step-4] Incremental cursor: ${modifiedAfter || 'FULL SCAN (first run)'}`);
+
     // Run reference queries — only for new/modified invoices
     const newFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("Xettle-")', modifiedAfter);
     const oldFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Settlement")', modifiedAfter);
