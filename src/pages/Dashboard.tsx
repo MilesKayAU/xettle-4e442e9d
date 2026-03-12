@@ -143,79 +143,149 @@ export default function Dashboard() {
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
   const [hasAmazon, setHasAmazon] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
-  const [justConnectedXero, setJustConnectedXero] = useState(false);
 
+  // Discovery flow state
+  const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
+  const [showChannelsPrompt, setShowChannelsPrompt] = useState(false);
+  const discoveryTriggered = useRef(false);
+
+  // Check Xero connection + handle OAuth callbacks
   useEffect(() => {
     if (!user) return;
     const connected = searchParams.get('connected');
-    if (connected === 'xero') {
-      setXeroConnected(true);
-      setJustConnectedXero(true);
+
+    // Handle OAuth callbacks — show toast and trigger per-channel sync
+    if (connected) {
+      searchParams.delete('connected');
+      setSearchParams(searchParams, { replace: true });
+
+      if (connected === 'xero') {
+        setXeroConnected(true);
+        toast.success('Xero connected — analysing your account…');
+      } else if (connected === 'amazon') {
+        setHasAmazon(true);
+        toast.success('Amazon connected — syncing settlements…');
+        // Fire Amazon-only sync
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            callEdgeFunctionSafe('fetch-amazon-settlements', session.access_token, {}, { headers: { 'x-action': 'smart-sync' } });
+          }
+        });
+      } else if (connected === 'shopify') {
+        setHasShopify(true);
+        toast.success('Shopify connected — syncing payouts…');
+        // Fire Shopify-only sync
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            callEdgeFunctionSafe('fetch-shopify-payouts', session.access_token);
+          }
+        });
+      }
     }
+
+    // Check token existence
     supabase.from('xero_tokens').select('id').eq('user_id', user.id).limit(1)
       .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
   }, [user]);
 
-  // ─── Setup wizard pre-check ───────────────────────────────────────
+  // ─── Setup wizard pre-check (simplified: Xero-first) ────────────
   useEffect(() => {
     if (!user) return;
     const isTestMode = searchParams.get('test_wizard') === 'true';
     if (isTestMode) {
-      const connected = searchParams.get('connected');
-      if (connected === 'amazon' || connected === 'shopify') setWizardInitialStep(2);
-      else if (connected === 'xero') setWizardInitialStep(2);
       setShowWizard(true);
       return;
     }
-    const connected = searchParams.get('connected');
+
     const checkWizard = async () => {
       try {
-        const [settRes, amazonRes, shopifyRes, wizardRes] = await Promise.all([
+        const [settRes, wizardRes] = await Promise.all([
           supabase.from('settlements').select('id').eq('user_id', user.id).limit(1),
-          supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1),
-          supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1),
           supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'onboarding_wizard_complete').maybeSingle(),
         ]);
 
         const hasSettlements = !!(settRes.data && settRes.data.length > 0);
-        const hasAmz = !!(amazonRes.data && amazonRes.data.length > 0);
-        const hasShp = !!(shopifyRes.data && shopifyRes.data.length > 0);
         const wizardComplete = wizardRes.data?.value === 'true';
 
-        setHasAmazon(hasAmz);
-        setHasShopify(hasShp);
-
-        const dismissKey = user ? `xettle_wizard_dismiss_count_${user.id}` : 'xettle_wizard_dismiss_count';
+        const dismissKey = `xettle_wizard_dismiss_count_${user.id}`;
         const dismissCount = parseInt(sessionStorage.getItem(dismissKey) || '0', 10);
 
-        // If user just connected via OAuth callback, always show wizard regardless of existing data
-        if (connected) {
-          // Don't skip — let the wizard handle the post-connection flow
-        } else if (hasSettlements || wizardComplete || dismissCount >= 3) {
+        if (hasSettlements || wizardComplete || dismissCount >= 3) {
           setShowWizard(false);
           return;
         }
 
-        if (!hasAmz || !hasShp || !xeroConnected) {
-          if (connected === 'amazon' || connected === 'shopify') {
-            setWizardInitialStep(2);
-            if (connected === 'amazon') setHasAmazon(true);
-            if (connected === 'shopify') setHasShopify(true);
-          } else if (connected === 'xero') {
-            setWizardInitialStep(2);
-          }
-          if (connected) {
-            searchParams.delete('connected');
-            setSearchParams(searchParams, { replace: true });
-          }
-          setShowWizard(true);
-        }
+        setShowWizard(true);
       } catch (error) {
-        console.error("Wizard check failed, defaulting to show:", error);
+        console.error("Wizard check failed:", error);
         setShowWizard(true);
       }
     };
     checkWizard();
+  }, [user, xeroConnected]);
+
+  // ─── Xero Discovery scan (light mode — 90 days only) ──────────
+  useEffect(() => {
+    if (!user || !xeroConnected || discoveryTriggered.current) return;
+    discoveryTriggered.current = true;
+
+    const triggerDiscovery = async () => {
+      try {
+        // Check if discovery already ran
+        const { data: discoverySetting } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'xero_discovery_status')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (discoverySetting?.value === 'complete') {
+          // Discovery already done — check if channels prompt should show
+          const { data: promptDismissed } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'channels_prompt_dismissed')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (promptDismissed?.value !== 'true') {
+            setShowChannelsPrompt(true);
+          }
+          return;
+        }
+
+        if (discoverySetting?.value === 'running') {
+          setShowDiscoveryBanner(true);
+          return;
+        }
+
+        // Mark discovery as running
+        await supabase.from('app_settings').upsert(
+          { user_id: user.id, key: 'xero_discovery_status', value: 'running' },
+          { onConflict: 'user_id,key' }
+        );
+        setShowDiscoveryBanner(true);
+
+        // Fire light discovery scan
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+          await fetch(`https://${projectId}.supabase.co/functions/v1/scan-xero-history`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+              'x-action': 'light-discovery',
+            },
+            body: JSON.stringify({}),
+          });
+        }
+      } catch (err) {
+        console.warn('[dashboard] Discovery scan failed:', err);
+      }
+    };
+
+    triggerDiscovery();
   }, [user, xeroConnected]);
 
   const handleWizardClose = () => {
