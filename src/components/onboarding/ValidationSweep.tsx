@@ -534,7 +534,7 @@ export default function ValidationSweep({
                       row={row}
                       pushing={pushing === row.id}
                       onUpload={() => onSwitchToUpload?.()}
-                      onPush={() => handlePushToXero(row)}
+                      onPush={() => openPushPreview(row)}
                     />
                   </td>
                 </tr>
