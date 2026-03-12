@@ -23,11 +23,11 @@ export async function detectCapabilities(): Promise<SyncCapabilities> {
   }
 
   const [xeroRes, amazonRes, shopifyRes, settRes, ordersRes] = await Promise.all([
-    supabase.from('xero_tokens').select('id').limit(1),
-    supabase.from('amazon_tokens').select('id').limit(1),
-    supabase.from('shopify_tokens').select('shop_domain').limit(1),
-    supabase.from('settlements').select('id').limit(1),
-    supabase.from('shopify_orders').select('id').limit(1),
+    supabase.from('xero_tokens').select('id').eq('user_id', session.user.id).limit(1),
+    supabase.from('amazon_tokens').select('id').eq('user_id', session.user.id).limit(1),
+    supabase.from('shopify_tokens').select('shop_domain').eq('user_id', session.user.id).limit(1),
+    supabase.from('settlements').select('id').eq('user_id', session.user.id).limit(1),
+    supabase.from('shopify_orders').select('id').eq('user_id', session.user.id).limit(1),
   ]);
 
   return {
