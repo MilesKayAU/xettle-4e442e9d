@@ -879,6 +879,26 @@ Deno.serve(async (req) => {
     })
   } catch (err) {
     console.error('scan-xero-history error:', err)
+
+    // Even on error, mark discovery as complete so the client stops polling
+    try {
+      const authHeader = req.headers.get('Authorization')
+      if (authHeader) {
+        const errClient = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_ANON_KEY')!,
+          { global: { headers: { Authorization: authHeader } } }
+        )
+        const { data: { user: errUser } } = await errClient.auth.getUser()
+        if (errUser) {
+          await errClient.from('app_settings').upsert(
+            { user_id: errUser.id, key: 'xero_discovery_status', value: 'complete' },
+            { onConflict: 'user_id,key' }
+          )
+        }
+      }
+    } catch (_) { /* best effort */ }
+
     return new Response(JSON.stringify({ error: 'Internal server error', detail: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
