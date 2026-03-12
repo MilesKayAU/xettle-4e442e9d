@@ -176,8 +176,19 @@ serve(async (req) => {
     const oldFormatInvoices = await queryXeroInvoices(token, 'Reference.Contains("Settlement")');
     const amznFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("AMZN-")');
     const lmbFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("LMB-")');
+    // Shopify: catch references like "Shopify Payout 12345" or "Payout #12345"
+    const shopifyFormatInvoices = await queryXeroInvoices(token, 'Reference.Contains("Shopify")');
+    const payoutFormatInvoices = await queryXeroInvoices(token, 'Reference.Contains("Payout")');
+    // Also search by Shopify contact name for invoices that may not have payout IDs in reference
+    const shopifyContactInvoices = await queryXeroInvoices(token, 'Contact.Name.Contains("Shopify")');
 
-    const allInvoices = [...newFormatInvoices, ...oldFormatInvoices, ...amznFormatInvoices, ...lmbFormatInvoices];
+    const allInvoices = [...newFormatInvoices, ...oldFormatInvoices, ...amznFormatInvoices, ...lmbFormatInvoices, ...shopifyFormatInvoices, ...payoutFormatInvoices, ...shopifyContactInvoices];
+    // Deduplicate by InvoiceID
+    const invoiceMap = new Map<string, any>();
+    for (const inv of allInvoices) {
+      if (!invoiceMap.has(inv.InvoiceID)) invoiceMap.set(inv.InvoiceID, inv);
+    }
+    const dedupedInvoices = Array.from(invoiceMap.values());
     const seen = new Map<string, any>();
 
     for (const inv of allInvoices) {
