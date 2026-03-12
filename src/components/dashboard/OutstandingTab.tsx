@@ -1159,6 +1159,60 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               </div>
                             )}
 
+                            {/* Deposit verification drill-down panel */}
+                            {row.has_settlement && row.settlement_evidence && (
+                              <div className="mb-3 p-3 rounded-lg bg-muted/20 border border-border space-y-2">
+                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <Banknote className="h-3 w-3" /> Payout Verification
+                                </p>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                  <div>
+                                    <p className="text-muted-foreground">Expected payout</p>
+                                    <p className="font-mono font-bold text-foreground">{formatAUD(row.settlement_evidence.bank_deposit)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Search window</p>
+                                    <p className="font-medium text-foreground">
+                                      {formatDate(row.settlement_evidence.period_end)} – {formatDate(
+                                        new Date(new Date(row.settlement_evidence.period_end).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Detected deposit</p>
+                                    {row.has_bank_deposit && row.bank_match ? (
+                                      <p className="font-mono font-bold text-foreground">
+                                        {formatAUD(row.bank_match.amount)} on {formatDate(row.bank_match.date)}
+                                      </p>
+                                    ) : (
+                                      <p className="text-muted-foreground italic">No matching deposit</p>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Status</p>
+                                    {row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
+                                      <p className="font-medium text-emerald-600 dark:text-emerald-400">Verified ✓</p>
+                                    ) : row.match_status === 'suggestion_high' ? (
+                                      <p className="font-medium text-primary">Deposit matched</p>
+                                    ) : row.match_status === 'confirmed_manual' ? (
+                                      <p className="font-medium text-primary">Manually confirmed</p>
+                                    ) : (
+                                      <p className="font-medium text-muted-foreground">Awaiting deposit</p>
+                                    )}
+                                  </div>
+                                </div>
+                                {row.has_bank_deposit && row.bank_match && row.bank_difference != null && row.bank_difference > 0.05 && (
+                                  <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-1.5">
+                                    <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                    <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                      Difference: {formatAUD(row.bank_difference)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                               {/* Xero Invoice */}
                               <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
