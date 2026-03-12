@@ -759,7 +759,7 @@ export default function Setup() {
       case 'settlement_needed':
       case 'missing': return <X className="h-3.5 w-3.5 text-destructive" />;
       case 'gap_detected': return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
-      case 'already_recorded': return <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />;
+      case 'already_recorded': return <SkipForward className="h-3.5 w-3.5 text-muted-foreground" />;
       default: return <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />;
     }
   }
