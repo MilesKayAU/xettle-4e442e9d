@@ -742,10 +742,8 @@ export default function Dashboard() {
                 userName={user?.email?.split('@')[0]}
               />
 
-              {/* Validation table — marketplace × period status grid (dashboard = last 5 only) */}
-              <ValidationSweep
-                onSwitchToUpload={() => switchView('smart_upload')}
-                maxRows={5}
+              {/* Recent settlements — real payout/settlement records only */}
+              <RecentSettlements
                 onViewAll={() => {
                   switchView('settlements');
                   switchSettlementsSubTab('overview');
