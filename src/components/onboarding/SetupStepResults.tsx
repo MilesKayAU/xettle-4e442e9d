@@ -72,7 +72,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
   }, []);
 
   const updateStep = useCallback((idx: number, status: StepStatus, message?: string) => {
-    setStepStatuses(prev => { const n = [...prev]; n[idx] = status; return n; });
+    setStepStatuses(prev => { const n = [...prev]; n[idx] = status; stepStatusesRef.current = n; return n; });
     if (message) setStepMessages(prev => { const n = [...prev]; n[idx] = message; return n; });
   }, []);
 
