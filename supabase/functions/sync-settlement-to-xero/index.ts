@@ -843,6 +843,28 @@ serve(async (req) => {
     const xeroInvoiceTotal = result.Invoices?.[0]?.Total ?? null;
     console.log('Invoice created successfully:', invoiceId, 'Number:', invoiceNumber);
 
+    // ─── Write to reference index cache (prevents future duplicates) ──
+    if (invoiceId && settlementIdFromRef) {
+      const sd = body.settlementData || {};
+      await supabase.from('xero_accounting_matches').upsert({
+        user_id: userId,
+        settlement_id: settlementIdFromRef,
+        marketplace_code: sd.marketplace || 'unknown',
+        xero_invoice_id: invoiceId,
+        xero_invoice_number: invoiceNumber || null,
+        xero_status: 'DRAFT',
+        xero_type: isNegativeSettlement ? 'bill' : 'invoice',
+        match_method: 'push',
+        confidence: 1.0,
+        matched_amount: xeroInvoiceTotal || null,
+        matched_date: date,
+        matched_contact: contactName || null,
+        matched_reference: reference,
+        reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
+      }, { onConflict: 'user_id,settlement_id' });
+      console.log(`[cache-write] Indexed ${settlementIdFromRef} → ${invoiceId}`);
+    }
+
     // ─── Balance check: settlement vs Xero invoice total ──────────
     const settlementTotal = typeof netAmount === 'number' ? Math.round(netAmount * 100) / 100 : null;
     const xeroTotal = typeof xeroInvoiceTotal === 'number' ? Math.round(xeroInvoiceTotal * 100) / 100 : null;
