@@ -583,16 +583,12 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         {/* ─── Group alerts by type ─── */}
         {(() => {
           const unlinkedAlerts = alerts.filter(a => a.alert_type === 'unlinked');
-          const xeroContactAlerts = alerts.filter(a => {
-            const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-            return isXeroContactOnly;
-          });
+          const xeroContactAlerts = alerts.filter(a => isXeroContactOnlyAlert(a));
           const depositAlerts = alerts.filter(a => a.alert_type === 'unmatched_deposit' || a.alert_type === 'unknown_deposit' || a.alert_type === 'payment_gateway_deposit');
           const newChannelAlerts = alerts.filter(a => {
             if (a.alert_type === 'unlinked') return false;
             if (a.alert_type === 'unmatched_deposit' || a.alert_type === 'unknown_deposit' || a.alert_type === 'payment_gateway_deposit') return false;
-            const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-            if (isXeroContactOnly) return false;
+            if (isXeroContactOnlyAlert(a)) return false;
             return true;
           });
 
