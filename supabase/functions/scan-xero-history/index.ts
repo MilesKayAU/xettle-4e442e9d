@@ -776,7 +776,24 @@ Deno.serve(async (req) => {
 
     console.log(`[scan-xero-history] User ${userId}: detected ${detected_settlements.length} marketplaces, created ${marketplaces_created} connections + ${gateway_alerts_created} gateway alerts, boundary: ${accounting_boundary_date}`)
 
-    // ─── 10. Trigger validation sweep server-side as backup ─────────
+    // ─── 10. Trigger sync-xero-status to link settlements↔Xero invoices ───
+    try {
+      const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/sync-xero-status`
+      const syncRes = await fetch(syncUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader!,
+        },
+        body: JSON.stringify({}),
+      })
+      const syncData = await syncRes.json().catch(() => ({}))
+      console.log(`[scan-xero-history] sync-xero-status result:`, syncData)
+    } catch (syncErr) {
+      console.warn('[scan-xero-history] sync-xero-status failed (non-blocking):', syncErr)
+    }
+
+    // ─── 11. Trigger validation sweep server-side as backup ─────────
     try {
       const sweepUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/run-validation-sweep`
       await fetch(sweepUrl, {
