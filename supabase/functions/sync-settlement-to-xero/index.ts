@@ -734,7 +734,31 @@ serve(async (req) => {
 
     token = await refreshXeroToken(supabase, token);
 
-    // Check for duplicate — also checks legacy AMZN-{id} and LMB-{id} formats
+    // ─── CACHE-FIRST DUPLICATE CHECK ─────────────────────────────────
+    // Check local reference index before hitting the Xero API
+    const settlementIdFromRef = extractSettlementIdFromReference(reference);
+    if (settlementIdFromRef) {
+      const { data: cachedMatch } = await supabase
+        .from('xero_accounting_matches')
+        .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference')
+        .eq('user_id', userId)
+        .eq('settlement_id', settlementIdFromRef)
+        .maybeSingle();
+
+      if (cachedMatch?.xero_invoice_id) {
+        const cachedRef = cachedMatch.matched_reference || '';
+        const refInfo = cachedRef && cachedRef !== reference
+          ? ` (matched reference: "${cachedRef}")`
+          : '';
+        console.log(`[duplicate-guard] Cache hit: settlement ${settlementIdFromRef} already in Xero as ${cachedMatch.xero_invoice_id}`);
+        throw new Error(
+          `An invoice for this settlement already exists in Xero${refInfo} (ID: ${cachedMatch.xero_invoice_id}, Status: ${cachedMatch.xero_status}). ` +
+          `Void it in Xero first if you need to re-push.`
+        );
+      }
+    }
+
+    // Fallback: Check Xero API directly (covers cases where cache is empty)
     const existing = await checkExistingInvoice(token, reference);
     if (existing.exists) {
       const refInfo = existing.matchedReference && existing.matchedReference !== reference
