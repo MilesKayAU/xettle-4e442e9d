@@ -850,8 +850,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* Summary strip */}
-      {data && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      {data && (() => {
+        const verifiedCount = filteredRows.filter(r =>
+          r.settlement_status === 'verified_payout' ||
+          (r.match_status === 'confirmed' && r.bank_match_confirmed_at)
+        ).length;
+        const depositMatchedCount = filteredRows.filter(r =>
+          r.settlement_status === 'deposit_matched' ||
+          r.match_status === 'suggestion_high'
+        ).length;
+
+        return (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Total outstanding</p>
@@ -884,8 +894,26 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Ready to reconcile</p>
-              <p className="text-xl font-bold text-green-600 dark:text-green-400">{data.ready_to_reconcile}</p>
+              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{data.ready_to_reconcile}</p>
               <p className="text-xs text-muted-foreground">balanced</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Verified payouts</p>
+                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {verifiedCount}
+                    </p>
+                    <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-center">
+                  Settlements with confirmed bank deposits
+                </TooltipContent>
+              </Tooltip>
             </CardContent>
           </Card>
           <Card>
@@ -907,7 +935,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             </CardContent>
           </Card>
         </div>
-      )}
+        );
+      })()}
 
       {/* Bulk action bar */}
       {data && balancedCount > 0 && (
@@ -1130,6 +1159,59 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               </div>
                             )}
 
+                            {/* Deposit verification drill-down panel */}
+                            {row.has_settlement && row.settlement_evidence && (
+                              <div className="mb-3 p-3 rounded-lg bg-muted/20 border border-border space-y-2">
+                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <Banknote className="h-3 w-3" /> Payout Verification
+                                </p>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                  <div>
+                                    <p className="text-muted-foreground">Expected payout</p>
+                                    <p className="font-mono font-bold text-foreground">{formatAUD(row.settlement_evidence.bank_deposit)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Search window</p>
+                                    <p className="font-medium text-foreground">
+                                      {formatDate(row.settlement_evidence.period_end)} – {formatDate(
+                                        new Date(new Date(row.settlement_evidence.period_end).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Detected deposit</p>
+                                    {row.has_bank_deposit && row.bank_match ? (
+                                      <p className="font-mono font-bold text-foreground">
+                                        {formatAUD(row.bank_match.amount)} on {formatDate(row.bank_match.date)}
+                                      </p>
+                                    ) : (
+                                      <p className="text-muted-foreground italic">No matching deposit</p>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Status</p>
+                                    {row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
+                                      <p className="font-medium text-emerald-600 dark:text-emerald-400">Verified ✓</p>
+                                    ) : row.match_status === 'suggestion_high' ? (
+                                      <p className="font-medium text-primary">Deposit matched</p>
+                                    ) : row.match_status === 'confirmed_manual' ? (
+                                      <p className="font-medium text-primary">Manually confirmed</p>
+                                    ) : (
+                                      <p className="font-medium text-muted-foreground">Awaiting deposit</p>
+                                    )}
+                                  </div>
+                                </div>
+                                {row.has_bank_deposit && row.bank_match && row.bank_difference != null && row.bank_difference > 0.05 && (
+                                  <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-1.5">
+                                    <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                    <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                      Difference: {formatAUD(row.bank_difference)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                               {/* Xero Invoice */}
                               <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
@@ -1164,11 +1246,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                       </Badge>
                                     )}
                                     <div className="border-t border-border pt-1.5 mt-1.5 space-y-0.5">
-                                      <p>Sales: <span className="font-medium text-green-600">{formatAUD(Math.abs(row.settlement_evidence.sales_principal))}</span></p>
+                                      <p>Sales: <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatAUD(Math.abs(row.settlement_evidence.sales_principal))}</span></p>
                                       <p>Fees: <span className="font-medium text-destructive">{formatAUD(Math.abs(row.settlement_evidence.seller_fees + row.settlement_evidence.fba_fees))}</span></p>
-                                      <p>Refunds: <span className="font-medium">{formatAUD(Math.abs(row.settlement_evidence.refunds))}</span></p>
-                                      <p>Net ex GST: <span className="font-bold">{formatAUD(row.settlement_evidence.split_net ?? row.settlement_evidence.net_ex_gst)}</span></p>
-                                      <p>Bank deposit: <span className="font-bold">{formatAUD(row.settlement_evidence.bank_deposit)}</span></p>
+                                      <p>Refunds: <span className="font-medium text-orange-600 dark:text-orange-400">{formatAUD(Math.abs(row.settlement_evidence.refunds))}</span></p>
+                                      <p>Net ex GST: <span className="font-bold text-foreground">{formatAUD(row.settlement_evidence.split_net ?? row.settlement_evidence.net_ex_gst)}</span></p>
+                                      <p>Bank deposit: <span className="font-bold text-foreground">{formatAUD(row.settlement_evidence.bank_deposit)}</span></p>
                                     </div>
                                     {row.settlement_evidence.bank_verified && (
                                       <p className="flex items-center gap-1 text-green-600 mt-1">

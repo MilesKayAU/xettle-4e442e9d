@@ -138,6 +138,7 @@ interface MarketplaceSwitcherProps {
   onMarketplaceChange: (code: string) => void;
   userMarketplaces: UserMarketplace[];
   onMarketplacesChanged: () => void;
+  settlementCounts?: Record<string, number>;
 }
 
 export default function MarketplaceSwitcher({
@@ -145,6 +146,7 @@ export default function MarketplaceSwitcher({
   onMarketplaceChange,
   userMarketplaces,
   onMarketplacesChanged,
+  settlementCounts = {},
 }: MarketplaceSwitcherProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addingCode, setAddingCode] = useState<string | null>(null);
@@ -272,6 +274,11 @@ export default function MarketplaceSwitcher({
               >
                 <span className="text-base">{def?.icon || '📋'}</span>
                 <span>{def?.name || um.marketplace_name}</span>
+                {settlementCounts[um.marketplace_code] != null && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
+                    {settlementCounts[um.marketplace_code]}
+                  </Badge>
+                )}
                 <CheckCircle2 className="h-3 w-3 text-green-600" />
               </button>
               {/* Delete X button - visible on hover */}

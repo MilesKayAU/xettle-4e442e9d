@@ -435,11 +435,14 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             {/* Audit table header */}
             <Card>
               <CardContent className="p-0">
-                <div className="hidden sm:grid sm:grid-cols-[auto_1fr_80px_80px_120px_auto] gap-2 px-3 py-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+                <div className="hidden sm:grid sm:grid-cols-[auto_1fr_80px_80px_80px_80px_50px_120px_auto] gap-2 px-3 py-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                   <div className="w-5" />
                   <div>Settlement</div>
                   <div className="text-center">Xero</div>
                   <div className="text-center">Bank</div>
+                  <div className="text-right">Expected</div>
+                  <div className="text-right">Actual</div>
+                  <div className="text-right">Diff</div>
                   <div className="text-center">Status</div>
                   <div className="text-right">Actions</div>
                 </div>
@@ -491,7 +494,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                           isPushFailed ? 'bg-red-50/30 dark:bg-red-950/10' :
                           'hover:bg-muted/20'
                         } ${isSelected ? 'bg-primary/5' : ''}`}>
-                          <div className="p-2.5 sm:grid sm:grid-cols-[auto_1fr_80px_80px_120px_auto] gap-2 items-center">
+                          <div className="p-2.5 sm:grid sm:grid-cols-[auto_1fr_80px_80px_80px_80px_50px_120px_auto] gap-2 items-center">
                             {/* Checkbox */}
                             <button
                               className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
@@ -576,6 +579,36 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                 <span className="flex items-center gap-1 text-muted-foreground">
                                   <span className="text-xs">—</span>
                                 </span>
+                              )}
+                            </div>
+
+                            {/* Expected Deposit */}
+                            <div className="text-right">
+                              <span className="text-xs font-mono text-muted-foreground">{formatAUD(net)}</span>
+                            </div>
+
+                            {/* Actual Deposit */}
+                            <div className="text-right">
+                              {s.bank_verified && s.bank_verified_amount != null ? (
+                                <span className="text-xs font-mono font-medium text-foreground">{formatAUD(s.bank_verified_amount)}</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </div>
+
+                            {/* Difference */}
+                            <div className="text-right">
+                              {s.bank_verified && s.bank_verified_amount != null ? (() => {
+                                const diff = Math.abs((s.bank_verified_amount || 0) - net);
+                                return diff <= 0.05 ? (
+                                  <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400">$0.00 ✓</span>
+                                ) : (
+                                  <span className="text-xs font-mono text-amber-600 dark:text-amber-400">
+                                    −{formatAUD(diff)} ⚠
+                                  </span>
+                                );
+                              })() : (
+                                <span className="text-xs text-muted-foreground">—</span>
                               )}
                             </div>
 
@@ -821,12 +854,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                       </div>
                                       <div className="text-xs">
                                         <span className="text-muted-foreground">Fees: </span>
-                                        <span className="font-semibold text-amber-600 dark:text-amber-400">−{formatAUD(feesTotal)}</span>
+                                        <span className="font-semibold text-destructive">−{formatAUD(feesTotal)}</span>
                                       </div>
                                       {refundsTotal > 0 && (
                                         <div className="text-xs">
                                           <span className="text-muted-foreground">Refunds: </span>
-                                          <span className="font-semibold text-destructive">−{formatAUD(refundsTotal)}</span>
+                                          <span className="font-semibold text-orange-600 dark:text-orange-400">−{formatAUD(refundsTotal)}</span>
                                         </div>
                                       )}
                                       <div className="text-xs">
@@ -882,8 +915,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                               <tr
                                                 key={lIdx}
                                                 className={`border-t border-border/50 ${
-                                                  isRefund ? 'text-destructive' :
-                                                  isFee ? 'text-amber-600 dark:text-amber-400' :
+                                                  isRefund ? 'text-orange-600 dark:text-orange-400' :
+                                                  isFee ? 'text-destructive' :
+                                                  (line.amount || 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' :
                                                   ''
                                                 }`}
                                               >

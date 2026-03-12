@@ -122,7 +122,7 @@ export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroT
     // ─── Deposit verification statuses ──────────────────────────
     case 'awaiting_deposit':
       return (
-        <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">
+        <Badge variant="outline" className="border-muted-foreground/40 text-muted-foreground text-[10px]">
           Awaiting Deposit{refSuffix}
         </Badge>
       );
