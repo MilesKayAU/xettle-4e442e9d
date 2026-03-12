@@ -351,6 +351,7 @@ export type Database = {
           marketplace_code: string
           marketplace_name: string
           settings: Json | null
+          suggested_at: string | null
           updated_at: string
           user_id: string
         }
@@ -363,6 +364,7 @@ export type Database = {
           marketplace_code: string
           marketplace_name: string
           settings?: Json | null
+          suggested_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -375,6 +377,7 @@ export type Database = {
           marketplace_code?: string
           marketplace_name?: string
           settings?: Json | null
+          suggested_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1649,6 +1652,45 @@ export type Database = {
           xero_invoice_number?: string | null
           xero_status?: string | null
           xero_type?: string | null
+        }
+        Relationships: []
+      }
+      xero_chart_of_accounts: {
+        Row: {
+          account_code: string | null
+          account_name: string
+          account_type: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          synced_at: string | null
+          tax_type: string | null
+          user_id: string
+          xero_account_id: string | null
+        }
+        Insert: {
+          account_code?: string | null
+          account_name: string
+          account_type?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          synced_at?: string | null
+          tax_type?: string | null
+          user_id: string
+          xero_account_id?: string | null
+        }
+        Update: {
+          account_code?: string | null
+          account_name?: string
+          account_type?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          synced_at?: string | null
+          tax_type?: string | null
+          user_id?: string
+          xero_account_id?: string | null
         }
         Relationships: []
       }
