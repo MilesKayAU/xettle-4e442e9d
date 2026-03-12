@@ -46,10 +46,10 @@ async function fetchStatuses(): Promise<ConnectionStatus[]> {
     try { return formatDistanceToNow(new Date(d), { addSuffix: true }); } catch { return undefined; }
   };
 
-  // Connected = token exists OR phase1 ran (initial connect)
-  const xeroConnected = !!xero || flags.get('setup_phase1_xero')?.value === 'true' || flags.get('xero_scan_completed')?.value === 'true';
-  const amazonConnected = !!amazon || flags.get('setup_phase1_amazon')?.value === 'true' || flags.get('amazon_scan_completed')?.value === 'true';
-  const shopifyConnected = !!shopify || flags.get('setup_phase1_shopify')?.value === 'true' || flags.get('shopify_scan_completed')?.value === 'true';
+  // Connected = token MUST exist (flags alone are not sufficient — token may have been revoked/reset)
+  const xeroConnected = !!xero;
+  const amazonConnected = !!amazon;
+  const shopifyConnected = !!shopify;
 
   // "Synced" = deep scan completed (not just connected). Only use *_scan_completed flags for sync time.
   const xeroSynced = flags.get('xero_scan_completed')?.value === 'true';

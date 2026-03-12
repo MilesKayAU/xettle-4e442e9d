@@ -150,11 +150,19 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (!tokens?.length) {
-      // No Xero connection — return empty result instead of error
+      // No Xero connection — return explicit signal so UI shows reconnect state (never false "All clear")
       return new Response(JSON.stringify({
-        invoices: [],
-        summary: { total_outstanding: 0, matched_with_settlement: 0, bank_deposit_found: 0, ready_to_reconcile: 0, total_invoices: 0 },
-        aggregate_groups: [],
+        rows: [],
+        total_outstanding: 0,
+        invoice_count: 0,
+        matched_with_settlement: 0,
+        bank_deposit_found: 0,
+        ready_to_reconcile: 0,
+        sync_info: {
+          no_xero_connection: true,
+          status: 'no_connection',
+          message: 'No Xero connection found — connect Xero to see outstanding invoices.',
+        },
       }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

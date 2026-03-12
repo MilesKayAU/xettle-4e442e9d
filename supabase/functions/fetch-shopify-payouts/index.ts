@@ -405,15 +405,46 @@ async function syncPayoutsForUser(
         } as any);
       }
 
+      // ─── Auto-link with pre-seeded Xero matches ────────────
+      // If sync-xero-status already discovered this settlement in Xero,
+      // immediately link the settlement to its Xero invoice
+      const payoutSettlementId = String(payout.id);
+      const { data: preSeeded } = await supabase
+        .from("xero_accounting_matches")
+        .select("xero_invoice_id, xero_invoice_number, xero_status, matched_reference")
+        .eq("user_id", userId)
+        .eq("settlement_id", payoutSettlementId)
+        .maybeSingle();
+
+      if (preSeeded?.xero_invoice_id) {
+        const isXettleFormat = (preSeeded.matched_reference || '').startsWith('Xettle-');
+        let derivedStatus = 'synced_external';
+        if (isXettleFormat) {
+          switch (preSeeded.xero_status) {
+            case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
+            case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
+            case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
+            default: derivedStatus = 'pushed_to_xero'; break;
+          }
+        }
+        await supabase.from("settlements").update({
+          xero_journal_id: preSeeded.xero_invoice_id,
+          xero_invoice_number: preSeeded.xero_invoice_number,
+          xero_status: preSeeded.xero_status,
+          status: derivedStatus,
+        }).eq("settlement_id", payoutSettlementId).eq("user_id", userId);
+        console.log(`[fetch-shopify-payouts] Auto-linked payout ${payoutSettlementId} to Xero invoice ${preSeeded.xero_invoice_number}`);
+      }
+
       // ─── Log system event ────────────────────────────────────
       await supabase.from("system_events").insert({
         user_id: userId,
         event_type: "shopify_payout_synced",
         marketplace_code: "shopify_payments",
         period_label: periodLabel,
-        settlement_id: String(payout.id),
+        settlement_id: payoutSettlementId,
         severity: "info",
-        details: { net: netPayout, source: "api", transactions_count: transactions.length },
+        details: { net: netPayout, source: "api", transactions_count: transactions.length, auto_linked_xero: !!preSeeded?.xero_invoice_id },
       } as any);
 
       synced++;

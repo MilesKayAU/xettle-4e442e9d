@@ -243,14 +243,31 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
 
+        // Treat sync failure as actionable — surface no-connection explicitly
         if (syncResp.error) {
-          throw new Error(`Xero sync failed: ${syncResp.error.message}`);
+          console.warn(`[OutstandingTab] sync-xero-status error: ${syncResp.error.message}`);
+        }
+        if (syncResp.data?.success === false) {
+          const syncError = syncResp.data?.error || '';
+          if (typeof syncError === 'string' && (syncError.includes('No Xero connection') || syncError.includes('Unauthorized'))) {
+            setNoXeroConnection(true);
+            setHasLoaded(true);
+            setLoading(false);
+            return;
+          }
         }
       }
 
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
+
+      // Check for structured no_xero_connection signal from fetch-outstanding
+      if (resp.data?.sync_info?.no_xero_connection === true) {
+        setNoXeroConnection(true);
+        setHasLoaded(true);
+        return;
+      }
 
       const noXeroMsg = resp.data?.error || resp.error?.message || '';
       if (typeof noXeroMsg === 'string' && noXeroMsg.includes('No Xero connection')) {
@@ -274,8 +291,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, []);
 
-  // On mount, just fetch cached data — don't auto-trigger a full Xero sync
-  useEffect(() => { fetchOutstanding({ runSync: false }); }, [fetchOutstanding]);
+  // On mount, run sync to discover outstanding invoices from Xero (priority)
+  useEffect(() => { fetchOutstanding({ runSync: true }); }, [fetchOutstanding]);
 
   // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
   // PAYMENT VERIFICATION LAYER ONLY

@@ -115,26 +115,44 @@ Deno.serve(async (req) => {
 
   for (const uid of allUserIds) {
     try {
-      // Find the oldest unreconciled settlement using period_end (not period_start)
-      // period_end is the optimal boundary: still captures the settlement while reducing unnecessary earlier fetches
-      const { data: oldestGap } = await adminClient
-        .from('settlements')
-        .select('period_end')
+      // PRIORITY 1: Use oldest outstanding Xero invoice date (set by sync-xero-status)
+      // This ensures Amazon/Shopify sync windows cover all unreconciled Xero invoices
+      const { data: xeroOutstandingSetting } = await adminClient
+        .from('app_settings')
+        .select('value')
         .eq('user_id', uid)
-        .not('status', 'in', '("reconciled_in_xero","synced_external","already_recorded","duplicate_suppressed")')
-        .neq('bank_verified', true)
-        .order('period_end', { ascending: true })
-        .limit(1);
+        .eq('key', 'xero_oldest_outstanding_date')
+        .maybeSingle();
 
-      // Apply 3-day safety buffer to handle timezone differences and overlapping settlement reports
       let syncFrom = defaultSyncFrom;
-      if (oldestGap?.[0]?.period_end) {
-        const gapDate = new Date(oldestGap[0].period_end + 'T00:00:00Z');
-        gapDate.setUTCDate(gapDate.getUTCDate() - 3);
-        syncFrom = gapDate.toISOString().split('T')[0];
+
+      if (xeroOutstandingSetting?.value) {
+        const xeroDate = new Date(xeroOutstandingSetting.value + 'T00:00:00Z');
+        xeroDate.setUTCDate(xeroDate.getUTCDate() - 7); // 7-day safety buffer for Xero outstanding
+        syncFrom = xeroDate.toISOString().split('T')[0];
+        console.log(`[scheduled-sync] User ${uid}: sync_from = ${syncFrom} (from Xero outstanding priority)`);
+      } else {
+        // PRIORITY 2: Fallback to oldest unreconciled settlement
+        const { data: oldestGap } = await adminClient
+          .from('settlements')
+          .select('period_end')
+          .eq('user_id', uid)
+          .not('status', 'in', '("reconciled_in_xero","synced_external","already_recorded","duplicate_suppressed")')
+          .neq('bank_verified', true)
+          .order('period_end', { ascending: true })
+          .limit(1);
+
+        if (oldestGap?.[0]?.period_end) {
+          const gapDate = new Date(oldestGap[0].period_end + 'T00:00:00Z');
+          gapDate.setUTCDate(gapDate.getUTCDate() - 3);
+          syncFrom = gapDate.toISOString().split('T')[0];
+          console.log(`[scheduled-sync] User ${uid}: sync_from = ${syncFrom} (from settlement fallback)`);
+        } else {
+          console.log(`[scheduled-sync] User ${uid}: sync_from = ${syncFrom} (default 2 months)`);
+        }
       }
+
       userSyncFromMap[uid] = syncFrom;
-      console.log(`[scheduled-sync] User ${uid}: sync_from = ${syncFrom}`);
     } catch (err) {
       userSyncFromMap[uid] = defaultSyncFrom;
       console.error(`[scheduled-sync] Sync window calc failed for ${uid}:`, err);
