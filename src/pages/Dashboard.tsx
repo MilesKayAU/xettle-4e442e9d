@@ -272,6 +272,19 @@ export default function Dashboard() {
     checkAdmin();
   }, [user]);
 
+  // Fetch outstanding (Awaiting Payment) count for badge
+  useEffect(() => {
+    if (!user) return;
+    async function fetchOutstandingCount() {
+      const { count } = await supabase
+        .from('settlements')
+        .select('id', { count: 'exact', head: true })
+        .eq('xero_status', 'authorised_in_xero');
+      setOutstandingCount(count ?? 0);
+    }
+    fetchOutstandingCount();
+  }, [user]);
+
   const loadMarketplaces = useCallback(async () => {
     if (!user) return;
     setMarketplacesLoading(true);
