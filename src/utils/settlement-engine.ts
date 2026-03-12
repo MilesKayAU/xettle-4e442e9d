@@ -217,7 +217,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
   if (meta.subscriptionAmount && meta.subscriptionAmount !== 0) {
     lines.push({
       Description: 'Marketplace Subscription',
-      AccountCode: getCode('Seller Fees'),
+      AccountCode: getCode('Seller Fees', mpLabel),
       TaxType: 'INPUT',
       UnitAmount: Math.round(meta.subscriptionAmount * 100) / 100,
       Quantity: 1,

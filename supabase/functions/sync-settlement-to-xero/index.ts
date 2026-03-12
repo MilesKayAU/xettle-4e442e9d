@@ -556,8 +556,13 @@ serve(async (req) => {
       console.error('Failed to load user account codes, using defaults:', e);
     }
 
-    const getCode = (category: string): string =>
-      userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
+    const getCode = (category: string, marketplace?: string): string => {
+      if (marketplace) {
+        const mpKey = `${category}:${marketplace}`;
+        if (userAccountCodes[mpKey]) return userAccountCodes[mpKey];
+      }
+      return userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
+    };
 
     // ─── Fetch tracking category setting ────────────────────────────
     let trackingArray: any[] | null = null;
