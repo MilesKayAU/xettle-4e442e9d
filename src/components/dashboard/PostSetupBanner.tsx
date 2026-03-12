@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, CheckCircle2, X, Zap, ShoppingCart, BookOpen, ArrowRight, Sparkles, Shield, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle2, X, Zap, ShoppingCart, BookOpen, ArrowRight, Sparkles, Shield, AlertTriangle, Clock3 } from 'lucide-react';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
 
@@ -36,7 +36,7 @@ export default function PostSetupBanner({
   // Unified scan state
   const [scanPhase, setScanPhase] = useState<'idle' | 'detecting' | 'scanning' | 'done'>('idle');
   const [xeroStatus, setXeroStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
-  const [amazonStatus, setAmazonStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
+  const [amazonStatus, setAmazonStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error' | 'rate_limited'>('idle');
   const [shopifyStatus, setShopifyStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
 
   const [xeroMessage, setXeroMessage] = useState('');
@@ -130,8 +130,11 @@ export default function PostSetupBanner({
             setAmazonMessage(found > 0 ? `${found} settlement${found > 1 ? 's' : ''} imported` : 'No settlements found yet');
             setAmazonStatus('done');
             await setAppFlag('amazon_scan_completed');
+          } else if (result.rateLimited || result.statusCode === 429) {
+            setAmazonMessage('Amazon is rate limited — will retry automatically');
+            setAmazonStatus('rate_limited');
           } else {
-            setAmazonMessage('Amazon sync encountered an issue — check your connection');
+            setAmazonMessage('Amazon connection error — check your connection');
             setAmazonStatus('error');
           }
         })());
@@ -256,7 +259,7 @@ export default function PostSetupBanner({
   // Auto-dismiss when fully synced with enough data
   const allScansTerminal =
     (xeroStatus === 'done' || xeroStatus === 'skipped') &&
-    (amazonStatus === 'done' || amazonStatus === 'skipped') &&
+    (amazonStatus === 'done' || amazonStatus === 'skipped' || amazonStatus === 'rate_limited') &&
     (shopifyStatus === 'done' || shopifyStatus === 'skipped');
   if (allConnected && allScansTerminal && scanPhase === 'done' && settlementCount !== null && settlementCount > 3) return null;
 
@@ -266,7 +269,8 @@ export default function PostSetupBanner({
     switch (status) {
       case 'scanning': return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary inline mr-1.5" />;
       case 'done': return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 inline mr-1.5" />;
-      case 'error': return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline mr-1.5" />;
+      case 'rate_limited': return <Clock3 className="h-3.5 w-3.5 text-amber-500 inline mr-1.5" />;
+      case 'error': return <AlertTriangle className="h-3.5 w-3.5 text-destructive inline mr-1.5" />;
       case 'skipped': return null;
       default: return null;
     }
@@ -360,7 +364,7 @@ export default function PostSetupBanner({
                     </p>
                   )}
                   {hasAmazon && amazonStatus !== 'skipped' && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className={`text-sm ${amazonStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {renderStatusIcon(amazonStatus)}
                       {amazonStatus === 'scanning'
                         ? amazonFound > 0
