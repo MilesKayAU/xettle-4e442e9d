@@ -573,8 +573,17 @@ export default function ValidationSweep({
                 </tr>
               )}
             </tbody>
-          </table>
+           </table>
         </div>
+        {!maxRows && (
+          <TablePaginationBar
+            page={safeVsPage}
+            totalPages={vsTotalPages}
+            totalItems={filteredRows.length}
+            pageSize={DEFAULT_PAGE_SIZE}
+            onPageChange={setVsPage}
+          />
+        )}
         {/* View all link when truncated */}
         {maxRows && filteredRows.length > maxRows && (
           <div className="border-t border-border px-4 py-3 text-center">
