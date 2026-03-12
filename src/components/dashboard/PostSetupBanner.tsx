@@ -37,7 +37,7 @@ export default function PostSetupBanner({
   const [scanPhase, setScanPhase] = useState<'idle' | 'detecting' | 'scanning' | 'done'>('idle');
   const [xeroStatus, setXeroStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
   const [amazonStatus, setAmazonStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error' | 'rate_limited'>('idle');
-  const [shopifyStatus, setShopifyStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
+  const [shopifyStatus, setShopifyStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error' | 'rate_limited'>('idle');
 
   const [xeroMessage, setXeroMessage] = useState('');
   const [amazonMessage, setAmazonMessage] = useState('');
@@ -155,16 +155,44 @@ export default function PostSetupBanner({
         phase1Promises.push((async () => {
           setShopifyStatus('scanning');
 
-          // Step 1: Payouts
-          const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken!);
-          if (!payoutsResult.ok) {
-            console.warn('[sync] Shopify payouts issue:', payoutsResult.error);
+          // Step 1: Payouts (with retry for 503/429)
+          let payoutsOk = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken!);
+            if (payoutsResult.ok) {
+              payoutsOk = true;
+              break;
+            }
+            const isRetryable = payoutsResult.statusCode === 503 || payoutsResult.statusCode === 429 || payoutsResult.rateLimited;
+            if (isRetryable && attempt < 2) {
+              console.warn(`[sync] Shopify payouts ${payoutsResult.statusCode} — retrying in ${(attempt + 1) * 5}s (attempt ${attempt + 1})`);
+              setShopifyMessage('Shopify is temporarily unavailable — retrying…');
+              setShopifyStatus('rate_limited');
+              await new Promise(r => setTimeout(r, (attempt + 1) * 5000));
+              setShopifyStatus('scanning');
+              continue;
+            }
+            // Non-retryable or exhausted retries
+            if (isRetryable) {
+              setShopifyMessage('Shopify is temporarily unavailable — will retry automatically');
+              setShopifyStatus('rate_limited');
+              return;
+            }
+            setShopifyMessage('Shopify connection error — check your connection');
+            setShopifyStatus('error');
+            return;
           }
 
           // Step 2: Orders
           const body = caps.shopDomain ? { shopDomain: caps.shopDomain } : {};
           const ordersResult = await callEdgeFunctionSafe('fetch-shopify-orders', caps.accessToken!, body);
           if (!ordersResult.ok) {
+            const isRetryable = ordersResult.statusCode === 503 || ordersResult.statusCode === 429 || ordersResult.rateLimited;
+            if (isRetryable) {
+              setShopifyMessage('Shopify is temporarily unavailable — will retry automatically');
+              setShopifyStatus('rate_limited');
+              return;
+            }
             console.warn('[sync] Shopify orders issue:', ordersResult.error);
           }
 
@@ -384,7 +412,7 @@ export default function PostSetupBanner({
                     </p>
                   )}
                   {hasShopify && shopifyStatus !== 'skipped' && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className={`text-sm ${shopifyStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {renderStatusIcon(shopifyStatus)}
                       {shopifyStatus === 'scanning'
                         ? shopifyChannelsFound > 0
