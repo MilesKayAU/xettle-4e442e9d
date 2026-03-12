@@ -24,6 +24,18 @@ interface ReconItem {
   status: string;
   sourceId: string; // original row ID for notes
   resolvedAt?: string;
+  // Extended settlement details for bookkeeper review
+  settlementId?: string;
+  depositDate?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  xeroStatus?: string;
+  reconStatus?: string;
+  salesPrincipal?: number;
+  sellerFees?: number;
+  fbaFees?: number;
+  refunds?: number;
+  otherFees?: number;
 }
 
 interface ReconNote {
