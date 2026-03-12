@@ -167,6 +167,8 @@ export default function Dashboard() {
           { onConflict: 'user_id,key' }
         );
         setShowWizard(false);
+        // Discovery will be triggered by the discovery effect below — don't double-fire
+        discoveryTriggered.current = false; // allow the effect to pick it up
         toast.success('Xero connected — analysing your account…');
       } else if (connected === 'amazon') {
         setHasAmazon(true);
@@ -175,7 +177,7 @@ export default function Dashboard() {
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
             // Verify Xero discovery is done before API sync
-            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').maybeSingle()
+            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').eq('user_id', user.id).maybeSingle()
               .then(({ data }) => {
                 if (data?.value === 'complete') {
                   callEdgeFunctionSafe('fetch-amazon-settlements', session.access_token, {}, { headers: { 'x-action': 'smart-sync' } });
@@ -191,7 +193,7 @@ export default function Dashboard() {
         // Fire Shopify-only sync (gated by Xero discovery)
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
-            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').maybeSingle()
+            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').eq('user_id', user.id).maybeSingle()
               .then(({ data }) => {
                 if (data?.value === 'complete') {
                   callEdgeFunctionSafe('fetch-shopify-payouts', session.access_token);
