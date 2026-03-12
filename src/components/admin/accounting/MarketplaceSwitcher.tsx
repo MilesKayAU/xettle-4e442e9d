@@ -138,6 +138,7 @@ interface MarketplaceSwitcherProps {
   onMarketplaceChange: (code: string) => void;
   userMarketplaces: UserMarketplace[];
   onMarketplacesChanged: () => void;
+  settlementCounts?: Record<string, number>;
 }
 
 export default function MarketplaceSwitcher({
