@@ -23,39 +23,58 @@ interface Props {
 }
 
 async function fetchStatuses(): Promise<ConnectionStatus[]> {
-  const [xeroRes, amazonRes, shopifyRes] = await Promise.all([
+  // Fetch tokens AND scan completion flags in parallel for a unified view
+  const [xeroRes, amazonRes, shopifyRes, flagsRes] = await Promise.all([
     supabase.from('xero_tokens').select('tenant_name, updated_at').limit(1),
     supabase.from('amazon_tokens').select('selling_partner_id, updated_at').limit(1),
     supabase.from('shopify_tokens').select('shop_domain, updated_at').limit(1),
+    supabase.from('app_settings').select('key, value, updated_at').in('key', [
+      'setup_phase1_xero', 'setup_phase1_shopify', 'setup_phase1_amazon',
+      'xero_scan_completed', 'amazon_scan_completed', 'shopify_scan_completed',
+    ]),
   ]);
 
   const xero = xeroRes.data?.[0];
   const amazon = amazonRes.data?.[0];
   const shopify = shopifyRes.data?.[0];
 
+  const flags = new Map(flagsRes.data?.map(f => [f.key, f]) || []);
+
   const timeAgo = (d: string | null | undefined) => {
     if (!d) return undefined;
     try { return formatDistanceToNow(new Date(d), { addSuffix: true }); } catch { return undefined; }
   };
 
+  // Connected = token exists OR scan completed successfully (token may have been refreshed/rotated)
+  const xeroConnected = !!xero || flags.get('setup_phase1_xero')?.value === 'true' || flags.get('xero_scan_completed')?.value === 'true';
+  const amazonConnected = !!amazon || flags.get('setup_phase1_amazon')?.value === 'true' || flags.get('amazon_scan_completed')?.value === 'true';
+  const shopifyConnected = !!shopify || flags.get('setup_phase1_shopify')?.value === 'true' || flags.get('shopify_scan_completed')?.value === 'true';
+
+  // Use the most recent timestamp from either the token or the scan flag
+  const bestSyncTime = (tokenDate: string | undefined, ...flagKeys: string[]): string | undefined => {
+    const dates = [tokenDate, ...flagKeys.map(k => flags.get(k)?.updated_at)].filter(Boolean) as string[];
+    if (dates.length === 0) return undefined;
+    return dates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+  };
+
   return [
     {
       label: 'Xero',
-      connected: !!xero,
+      connected: xeroConnected,
       detail: xero?.tenant_name || undefined,
-      lastSync: timeAgo(xero?.updated_at),
+      lastSync: timeAgo(bestSyncTime(xero?.updated_at, 'setup_phase1_xero', 'xero_scan_completed')),
     },
     {
       label: 'Amazon',
-      connected: !!amazon,
+      connected: amazonConnected,
       detail: amazon?.selling_partner_id || undefined,
-      lastSync: timeAgo(amazon?.updated_at),
+      lastSync: timeAgo(bestSyncTime(amazon?.updated_at, 'setup_phase1_amazon', 'amazon_scan_completed')),
     },
     {
       label: 'Shopify',
-      connected: !!shopify,
+      connected: shopifyConnected,
       detail: shopify?.shop_domain || undefined,
-      lastSync: timeAgo(shopify?.updated_at),
+      lastSync: timeAgo(bestSyncTime(shopify?.updated_at, 'setup_phase1_shopify', 'shopify_scan_completed')),
     },
   ];
 }
