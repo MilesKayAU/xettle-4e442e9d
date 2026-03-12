@@ -465,18 +465,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       return (
         <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2">
           <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-            We found a likely deposit match
+            We found a likely deposit match based on amount and date.
           </p>
           <div className="flex items-center gap-4 text-xs bg-background rounded p-2 border border-border">
+            <span className="min-w-[60px]">{formatDate(best.date)}</span>
             <span className="font-mono font-bold">{formatAUD(best.amount)}</span>
-            <span>{formatDate(best.date)}</span>
             <span className="text-muted-foreground truncate flex-1">{best.narration || best.reference || '—'}</span>
+            {best.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{best.bank_account_name}</span>}
             <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">{best.confidence} confidence</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
             Batched deposit across {row.aggregate_settlement_count} settlements totalling {formatAUD(row.aggregate_sum || 0)}
           </p>
-          <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Does this look right?</p>
           <div className="flex gap-2">
             <Button
               size="sm"
