@@ -491,9 +491,9 @@ export default function Setup() {
 
       if (isRateLimit || isMutex || isCooldown) {
         console.info('[setup] Amazon rate-limited/mutex/cooldown — showing rate_limited state');
-        setAmazonStep({ status: 'rate_limited', message: 'Amazon rate limited — click Retry to try again', error: result.error });
+        setAmazonStep({ status: 'rate_limited', message: 'Waiting for Amazon API — will retry automatically' });
         setAmazonProgress(80);
-        // Don't mark as complete — user needs to retry
+        // System will retry on next scheduled sync
       } else {
         setAmazonStep({ status: 'error', message: 'Amazon sync encountered an issue — check your connection', error: result.error });
         setAmazonProgress(0);
