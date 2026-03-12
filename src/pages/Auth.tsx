@@ -34,11 +34,13 @@ export default function Auth() {
   const [showResendVerification, setShowResendVerification] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) navigate('/dashboard');
-    };
-    checkAuth();
+    // Use onAuthStateChange instead of getSession to avoid blocking on slow DB
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && event !== 'SIGNED_OUT') {
+        navigate('/dashboard');
+      }
+    });
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -55,9 +57,12 @@ export default function Auth() {
     }
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email: sanitizedEmail, password: signInData.password });
+      // Race against a timeout to handle slow DB responses
+      const signInPromise = supabase.auth.signInWithPassword({ email: sanitizedEmail, password: signInData.password });
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000));
+      
+      const { error } = await Promise.race([signInPromise, timeoutPromise]);
       if (error) {
-        // If email not confirmed, offer resend
         if (error.message.toLowerCase().includes('email not confirmed')) {
           setResendEmail(sanitizedEmail);
           setShowResendVerification(true);
@@ -67,8 +72,11 @@ export default function Auth() {
       }
       toast({ title: "Welcome back!", description: "You have been signed in successfully." });
       navigate('/dashboard');
-    } catch {
-      toast({ title: "Sign In Failed", description: "An unexpected error occurred", variant: "destructive" });
+    } catch (err: any) {
+      const msg = err?.message === 'timeout'
+        ? "Sign in is taking longer than usual — please try again"
+        : "An unexpected error occurred";
+      toast({ title: "Sign In Failed", description: msg, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
