@@ -88,7 +88,8 @@ export function buildAmazonInvoiceLineItems(
   }
 
   const getAccountCodeForSplit = (cat: string): string => {
-    if (cat === 'Sales - Principal' || cat === 'Sales - Shipping') return getAccountCode('Sales');
+    if (cat === 'Sales - Principal') return getAccountCode('Sales');
+    if (cat === 'Sales - Shipping') return getAccountCode('Shipping');
     return getAccountCode(cat);
   };
 

@@ -3533,6 +3533,7 @@ function SettlementReview({
 
 const DEFAULT_ACCOUNT_CODES: Record<string, { code: string; name: string; type: string; taxType: string; description: string }> = {
   'Sales': { code: '200', name: 'Amazon Sales AU', type: 'Revenue', taxType: 'OUTPUT', description: 'Revenue, GST on Income' },
+  'Shipping': { code: '206', name: 'Shipping Income', type: 'Revenue', taxType: 'OUTPUT', description: 'Revenue, GST on Income' },
   'Refunds': { code: '205', name: 'Amazon Refunds AU', type: 'Revenue', taxType: 'OUTPUT', description: 'Revenue, GST on Income' },
   'Reimbursements': { code: '271', name: 'Amazon FBA Inventory Reimbursement AU', type: 'Other Income', taxType: 'BASEXCLUDED', description: 'Other Income, BAS Excluded' },
   'Seller Fees': { code: '407', name: 'Amazon Seller Fees AU', type: 'Expense', taxType: 'INPUT', description: 'Expense, GST on Expenses' },
