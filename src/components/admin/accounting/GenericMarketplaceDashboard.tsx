@@ -280,7 +280,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                   settlementFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                All ({settlements.length})
+                All ({baseFiltered.length})
               </button>
               <button
                 onClick={() => setSettlementFilter('attention')}
@@ -301,6 +301,56 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             </div>
           )}
         </div>
+
+        {/* Advanced filters row */}
+        {settlements.length > 0 && (
+          <div className="flex items-center gap-4 flex-wrap">
+            {/* Marketplace filter — only show when multiple marketplace codes exist */}
+            {uniqueMarketplaceCodes.length > 1 && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Marketplace</Label>
+                <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
+                  <SelectTrigger className="h-7 w-[160px] text-xs">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All marketplaces</SelectItem>
+                    {uniqueMarketplaceCodes.filter(c => includeGateways || !GATEWAY_CODES.has(c)).map(c => {
+                      const cat = MARKETPLACE_CATALOG.find(m => m.code === c);
+                      return (
+                        <SelectItem key={c} value={c}>
+                          {cat?.icon || '📦'} {cat?.name || c}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Include gateways toggle — only show when gateway settlements exist */}
+            {hasGatewaySettlements && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="include-gateways"
+                  checked={includeGateways}
+                  onCheckedChange={setIncludeGateways}
+                  className="scale-75"
+                />
+                <Label htmlFor="include-gateways" className="text-xs text-muted-foreground cursor-pointer">
+                  Include payment gateways
+                </Label>
+              </div>
+            )}
+
+            {/* Settlement count */}
+            {filteredSettlements.length !== settlements.length && (
+              <span className="text-xs text-muted-foreground ml-auto">
+                Showing {filteredSettlements.length} of {settlements.length} settlements
+              </span>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <Card className="border-border">
