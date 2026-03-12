@@ -76,10 +76,23 @@ async function queryXeroInvoicesPaginated(
       headers['If-Modified-Since'] = modifiedAfter;
     }
 
-    const resp = await fetch(url, { headers });
+    let resp: Response | null = null;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      resp = await fetch(url, { headers });
+      if (resp.status === 429 && attempt < 4) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+        console.warn(`[queryXeroInvoicesPaginated] 429 on page ${page}, retrying in ${delayMs}ms (attempt ${attempt}/4)`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      break;
+    }
+
+    if (!resp) break;
     if (resp.status === 304) break; // Not modified
     if (!resp.ok) {
-      console.error(`Xero query failed page ${page} (${whereClause}):`, resp.status);
+      const errText = await resp.text();
+      console.error(`Xero query failed page ${page} (${whereClause}):`, resp.status, errText.substring(0, 300));
       break;
     }
     const result = await resp.json();
@@ -342,30 +355,96 @@ serve(async (req) => {
     );
     console.log(`[step-3] ${uncachedSettlements.length} settlements have no cache entry (of ${allSettlements?.length || 0} total)`);
 
-    // If everything is cached, skip expensive API queries
+    // If there are no uncached local settlements, run a lightweight outstanding-only
+    // discovery pass (single query family) so Outstanding stays aligned with Xero
+    // without triggering the full multi-query reference scan.
     if (uncachedSettlements.length === 0) {
-      console.log(`[sync-xero-status] All settlements cached — skipping Xero API scan`);
+      console.log(`[step-3b] No uncached local settlements — running lightweight outstanding discovery`);
+
+      const { data: cursorSetting } = await supabase
+        .from('app_settings').select('value')
+        .eq('user_id', userId).eq('key', `xero_last_invoice_scan_at_${token.tenant_id}`)
+        .maybeSingle();
+      const modifiedAfter = cursorSetting?.value || null;
+
+      const outstandingInvoices = await queryXeroInvoicesPaginated(token, 'Type=="ACCREC"', modifiedAfter);
+      console.log(`[step-3b] Pulled ${outstandingInvoices.length} candidate Xero invoices for outstanding discovery`);
+
+      const localSettlementIds = new Set((allSettlements || []).map(s => s.settlement_id));
+      let seededCount = 0;
+
+      for (const inv of outstandingInvoices) {
+        const sid = extractSettlementId(inv.Reference || '');
+        if (!sid) continue;
+        if (localSettlementIds.has(sid)) continue;
+        if (cacheBySettlement.has(sid)) continue;
+        if (!['DRAFT', 'SUBMITTED', 'AUTHORISED'].includes(inv.Status || '')) continue;
+
+        const ref = inv.Reference || '';
+        const contactName = inv.Contact?.Name || '';
+        const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
+
+        await supabase.from('xero_accounting_matches').upsert({
+          user_id: userId,
+          settlement_id: sid,
+          marketplace_code: detectedMarketplace,
+          xero_invoice_id: inv.InvoiceID,
+          xero_invoice_number: inv.InvoiceNumber || null,
+          xero_status: inv.Status || null,
+          xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
+          match_method: 'xero_pre_seed',
+          confidence: 1.0,
+          matched_amount: inv.Total || null,
+          matched_date: parseXeroDate(inv.Date),
+          matched_contact: contactName,
+          matched_reference: ref,
+          reference_hash: ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
+          notes: 'Pre-seeded from outstanding Xero invoice — awaiting settlement data from API/CSV',
+        }, { onConflict: 'user_id,settlement_id' });
+
+        seededCount++;
+      }
+
+      const nowIso = new Date().toISOString();
+      await supabase.from('app_settings').upsert({
+        user_id: userId,
+        key: `xero_last_invoice_scan_at_${token.tenant_id}`,
+        value: nowIso,
+      }, { onConflict: 'user_id,key' });
 
       const { data: stillUnmatched } = await supabase
         .from('settlements').select('settlement_id').eq('user_id', userId)
-        .is('xero_journal_id', null).in('status', ['saved', 'parsed', 'ready_to_push']);
+        .is('xero_journal_id', null).in('status', ['parsed', 'ready_to_push']);
 
       await supabase.from('system_events').insert({
-        user_id: userId, event_type: 'xero_audit_complete', severity: 'info',
-        details: { cache_verified: cacheVerified, cache_status_changed: cacheStatusChanged, api_calls_saved: '7+', mode: 'cache_only', unmatched: stillUnmatched?.length || 0 },
+        user_id: userId,
+        event_type: 'xero_audit_complete',
+        severity: 'info',
+        details: {
+          mode: 'cache_plus_outstanding_seed',
+          cache_verified: cacheVerified,
+          cache_status_changed: cacheStatusChanged,
+          outstanding_seeded: seededCount,
+          invoices_scanned: outstandingInvoices.length,
+          unmatched: stillUnmatched?.length || 0,
+          cursor_saved: nowIso,
+        },
       });
 
       return new Response(JSON.stringify({
-        success: true, updated: cacheStatusChanged, fuzzy_matched: 0,
-        unmatched: stillUnmatched?.length || 0, total: cacheVerified, mode: 'cache_first',
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        success: true,
+        updated: cacheStatusChanged,
+        fuzzy_matched: 0,
+        pre_seeded: seededCount,
+        unmatched: stillUnmatched?.length || 0,
+        total: cacheVerified + seededCount,
+        mode: 'cache_plus_outstanding_seed',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // ════════════════════════════════════════════════════════════════════
-    // STEP 4: Incremental Xero scan for UNCACHED settlements only
-    // Uses ModifiedAfter cursor to skip already-seen invoices
-    // ════════════════════════════════════════════════════════════════════
-    // Load incremental cursor
+    // Load incremental cursor for full reference scan
     const { data: cursorSetting } = await supabase
       .from('app_settings').select('value')
       .eq('user_id', userId).eq('key', `xero_last_invoice_scan_at_${token.tenant_id}`)
