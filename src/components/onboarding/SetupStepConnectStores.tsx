@@ -316,7 +316,7 @@ export default function SetupStepConnectStores({
               <h3 className="font-semibold text-foreground text-lg">Which marketplaces do you use?</h3>
             </div>
             <p className="text-xs text-muted-foreground">
-              Toggle on <strong>all</strong> the marketplaces you sell through — select as many as you need.
+              Toggle on <span className="font-semibold">all</span> the marketplaces you sell through — select as many as you need.
               {hasXero && ' We'll also detect channels from Xero automatically.'}
               {(hasShopify || hasAmazon) && ' Your connected stores will sync too.'}
             </p>
