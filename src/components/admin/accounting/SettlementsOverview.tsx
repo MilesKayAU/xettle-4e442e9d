@@ -153,7 +153,7 @@ export default function SettlementsOverview({
         .from('settlements')
         .select('*')
         .eq('marketplace', code)
-        .in('status', ['saved', 'parsed'])
+        .in('status', ['ready_to_push', 'parsed'])
         .order('period_end');
 
       if (error) throw error;
