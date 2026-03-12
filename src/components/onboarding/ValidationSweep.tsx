@@ -771,15 +771,7 @@ function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch:
   );
 }
 
-  const [vsPage, setVsPage] = useState(1);
-  const vsTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
-  const safeVsPage = Math.min(vsPage, vsTotalPages);
-  const paginatedRows = useMemo(() => {
-    if (maxRows) return filteredRows.slice(0, maxRows);
-    const start = (safeVsPage - 1) * DEFAULT_PAGE_SIZE;
-    return filteredRows.slice(start, start + DEFAULT_PAGE_SIZE);
-  }, [filteredRows, safeVsPage, maxRows]);
-  useEffect(() => { setVsPage(1); }, [filter]);
+
 
 function SummaryCard({
   label, count, emoji, active, onClick, bgClass, borderClass,
