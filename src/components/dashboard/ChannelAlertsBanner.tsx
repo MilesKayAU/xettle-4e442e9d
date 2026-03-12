@@ -191,9 +191,25 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           : a.candidate_tags || [],
       })) as ChannelAlert[];
 
+      // Auto-resolve stale Xero contact alerts for marketplaces already configured by user
+      const staleConfiguredXeroAlerts = rawAlerts.filter(a =>
+        isXeroContactOnlyAlert(a) && configuredCodes.has((a.source_name || '').toLowerCase().trim())
+      );
+
+      if (staleConfiguredXeroAlerts.length > 0) {
+        const staleIds = staleConfiguredXeroAlerts.map(a => a.id);
+        await supabase
+          .from('channel_alerts' as any)
+          .update({ status: 'auto_resolved_existing_marketplace', actioned_at: new Date().toISOString() } as any)
+          .in('id', staleIds as any)
+          .eq('status', 'pending');
+      }
+
+      const scopedAlerts = rawAlerts.filter(a => !staleConfiguredXeroAlerts.some(s => s.id === a.id));
+
       // Auto-reclassify gateway contacts as payment_gateway_deposit alerts
       const alertsData: ChannelAlert[] = [];
-      for (const a of rawAlerts) {
+      for (const a of scopedAlerts) {
         const name = (a.source_name || '').toLowerCase();
         const label = (a.detected_label || '').toLowerCase();
         const isGateway = gatewayKeywords.has(name) || gatewayKeywords.has(label) ||
