@@ -494,7 +494,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                           isPushFailed ? 'bg-red-50/30 dark:bg-red-950/10' :
                           'hover:bg-muted/20'
                         } ${isSelected ? 'bg-primary/5' : ''}`}>
-                          <div className="p-2.5 sm:grid sm:grid-cols-[auto_1fr_80px_80px_120px_auto] gap-2 items-center">
+                          <div className="p-2.5 sm:grid sm:grid-cols-[auto_1fr_80px_80px_80px_80px_50px_120px_auto] gap-2 items-center">
                             {/* Checkbox */}
                             <button
                               className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
