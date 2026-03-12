@@ -76,10 +76,23 @@ async function queryXeroInvoicesPaginated(
       headers['If-Modified-Since'] = modifiedAfter;
     }
 
-    const resp = await fetch(url, { headers });
+    let resp: Response | null = null;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      resp = await fetch(url, { headers });
+      if (resp.status === 429 && attempt < 4) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+        console.warn(`[queryXeroInvoicesPaginated] 429 on page ${page}, retrying in ${delayMs}ms (attempt ${attempt}/4)`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      break;
+    }
+
+    if (!resp) break;
     if (resp.status === 304) break; // Not modified
     if (!resp.ok) {
-      console.error(`Xero query failed page ${page} (${whereClause}):`, resp.status);
+      const errText = await resp.text();
+      console.error(`Xero query failed page ${page} (${whereClause}):`, resp.status, errText.substring(0, 300));
       break;
     }
     const result = await resp.json();
