@@ -14,6 +14,7 @@ import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink,
 import { supabase } from '@/integrations/supabase/client';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import GatewayDepositEvidence from '@/components/dashboard/GatewayDepositEvidence';
+import ContactClassificationModal from '@/components/dashboard/ContactClassificationModal';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 import { toast } from 'sonner';
 
