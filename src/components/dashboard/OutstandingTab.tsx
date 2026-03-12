@@ -578,10 +578,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             <div className="mt-2 space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground">Recent Amazon deposits:</p>
               {row.recent_bank_txns.map(txn => (
-                <div key={txn.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
-                  <span className="font-mono font-bold min-w-[80px]">{formatAUD(txn.amount)}</span>
-                  <span className="min-w-[60px]">{formatDate(txn.date)}</span>
-                  <span className="text-muted-foreground truncate flex-1">{txn.narration || txn.reference || '—'}</span>
+                  <div key={txn.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
+                    <span className="min-w-[60px]">{formatDate(txn.date)}</span>
+                    <span className="font-mono font-bold min-w-[80px]">{formatAUD(txn.amount)}</span>
+                    <span className="text-muted-foreground truncate flex-1">{txn.narration || txn.reference || '—'}</span>
+                    {txn.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{txn.bank_account_name}</span>}
                   <Button
                     size="sm"
                     variant="outline"
