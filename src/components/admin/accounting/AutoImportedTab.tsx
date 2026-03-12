@@ -744,7 +744,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
             </div>
 
             <div className="space-y-1 mt-1">
-              {settlements.map(s => {
+              {paginatedAutoSettlements.map(s => {
                 const xeroMatch = xeroMatches[s.settlement_id];
                 const auditStatus = deriveAuditStatus(s, xeroMatch);
                 const config = STATUS_CONFIG[auditStatus];
