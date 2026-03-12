@@ -158,6 +158,20 @@ Deno.serve(async (req) => {
     if (!xeroResp.ok) {
       const errText = await xeroResp.text();
       console.error('Xero invoice fetch failed:', xeroResp.status, errText);
+
+      // If rate-limited (429), return empty result with a flag instead of hard error
+      if (xeroResp.status === 429) {
+        const retryAfter = xeroResp.headers.get('Retry-After') || '60';
+        return new Response(JSON.stringify({
+          invoices: [],
+          summary: { total_outstanding: 0, matched_with_settlement: 0, bank_deposit_found: 0, ready_to_reconcile: 0, total_invoices: 0 },
+          aggregate_groups: [],
+          sync_info: { xero_rate_limited: true, retry_after_seconds: parseInt(retryAfter) || 60 },
+        }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       return new Response(JSON.stringify({ error: 'Failed to fetch Xero invoices', detail: errText.substring(0, 500) }), {
         status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
