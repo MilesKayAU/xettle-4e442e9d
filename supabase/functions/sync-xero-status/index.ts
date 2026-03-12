@@ -127,6 +127,26 @@ function detectMarketplaceFromContact(contactName: string): string | null {
   return null;
 }
 
+// Generate a fingerprint for a Xero invoice to compare against settlement fingerprints
+async function generateXeroFingerprint(marketplace: string, amount: number, date: string): Promise<string> {
+  // We can't know exact period_start/period_end from Xero, so generate a simpler fingerprint
+  // used for amount+marketplace matching
+  const input = `${marketplace}|${date}|${amount}`;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Generate the same fingerprint format as the DB trigger for exact matching
+async function generateSettlementStyleFingerprint(marketplace: string, periodStart: string, periodEnd: string, bankDeposit: number): Promise<string> {
+  const input = `${marketplace}|${periodStart}|${periodEnd}|${bankDeposit}`;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
