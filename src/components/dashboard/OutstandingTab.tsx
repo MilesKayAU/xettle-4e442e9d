@@ -155,6 +155,12 @@ interface OutstandingSummary {
   bank_deposit_found: number;
   ready_to_reconcile: number;
   rows: OutstandingRow[];
+  sync_info?: {
+    unmatched_count: number;
+    awaiting_sync_count: number;
+    amazon_rate_limited: boolean;
+    amazon_rate_limit_until: string | null;
+  };
 }
 
 interface Props {
