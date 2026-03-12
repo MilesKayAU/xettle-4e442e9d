@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
     // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
     // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
     const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC&summaryOnly=true`;
 
     let allInvoices: any[] = [];
     let usingCacheFallback = false;
