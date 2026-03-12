@@ -796,14 +796,24 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       );
     }
 
-    // STATE 3: No match found (Amazon)
+    // STATE 3: No match found (Amazon — settlement verified, awaiting batched deposit)
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) {
       const isPickerOpen = manualPickerOpen === row.xero_invoice_id;
       return (
         <div className="p-3 rounded-lg bg-muted/30 border border-border space-y-2">
           <div className="flex items-center gap-2">
-            <Clock3 className="h-4 w-4 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">No deposit found yet</p>
+            {row.has_settlement ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <p className="text-sm text-foreground font-medium">Settlement verified ✓</p>
+                <span className="text-xs text-muted-foreground">— awaiting batched Amazon deposit</span>
+              </>
+            ) : (
+              <>
+                <Clock3 className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No deposit found yet</p>
+              </>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
