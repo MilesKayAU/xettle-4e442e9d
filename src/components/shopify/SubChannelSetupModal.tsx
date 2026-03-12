@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -84,6 +85,32 @@ export default function SubChannelSetupModal({
       order_count: channel.order_count,
       total_revenue: channel.total_revenue,
     });
+
+    // ── Register in marketplace_registry so the system learns this marketplace ──
+    if (result.success) {
+      try {
+        const nameClean = label.trim();
+        const codeClean = marketplaceCode;
+        // Build detection keywords from the label and source_name
+        const keywords = [
+          nameClean.toLowerCase(),
+          ...(channel.source_name !== nameClean ? [channel.source_name.toLowerCase()] : []),
+        ].filter(Boolean);
+
+        await supabase.from('marketplace_registry').upsert({
+          marketplace_code: codeClean,
+          marketplace_name: nameClean,
+          country: 'AU',
+          type: 'marketplace',
+          is_active: true,
+          added_by: 'user',
+          detection_keywords: keywords,
+          shopify_source_names: [channel.source_name],
+        }, { onConflict: 'marketplace_code' });
+      } catch (err) {
+        console.error('Non-fatal: failed to register marketplace in registry:', err);
+      }
+    }
 
     setSaving(false);
 
