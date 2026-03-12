@@ -50,6 +50,9 @@ interface ValidationSweepProps {
   onSwitchToUpload?: () => void;
   onPushToXero?: (settlementId: string, marketplace: string) => void;
   showSweepAnimation?: boolean;
+  /** When set, limits visible rows and shows a "View all" link */
+  maxRows?: number;
+  onViewAll?: () => void;
 }
 
 type FilterStatus = 'all' | 'complete' | 'ready_to_push' | 'settlement_needed' | 'gap_detected';
