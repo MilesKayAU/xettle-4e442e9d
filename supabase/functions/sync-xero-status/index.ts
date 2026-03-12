@@ -355,11 +355,13 @@ serve(async (req) => {
     );
     console.log(`[step-3] ${uncachedSettlements.length} settlements have no cache entry (of ${allSettlements?.length || 0} total)`);
 
-    // If there are no uncached local settlements, run a lightweight outstanding-only
-    // discovery pass (single query family) so Outstanding stays aligned with Xero
-    // without triggering the full multi-query reference scan.
-    if (uncachedSettlements.length === 0) {
-      console.log(`[step-3b] No uncached local settlements — running lightweight outstanding discovery`);
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 3b: ALWAYS run outstanding discovery (Xero is the priority source of truth)
+    // This ensures Outstanding tab reflects Xero's Awaiting Payment invoices even when
+    // local settlement data is incomplete or hasn't been fetched yet.
+    // ════════════════════════════════════════════════════════════════════
+    {
+      console.log(`[step-3b] Running outstanding discovery (always — Xero-first priority)`);
 
       const { data: cursorSetting } = await supabase
         .from('app_settings').select('value')
