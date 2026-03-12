@@ -329,7 +329,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       .eq('id', alert.id);
 
     setAlerts(prev => prev.filter(a => a.id !== alert.id));
-    onAlertCountChange?.(alerts.length - 1);
+    onAlertCountChange?.(getActionableCount(alerts, alert.id));
     toast.success(`${getDisplayName(alert)} deposit confirmed as included in your Shopify Payments payout.`);
   };
 
