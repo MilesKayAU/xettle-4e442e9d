@@ -187,7 +187,10 @@ const MARKETPLACE_LABELS: Record<string, string> = {
   bunnings: 'Bunnings',
   mydeal: 'MyDeal',
   catch: 'Catch',
+  catch_au: 'Catch',
   ebay_au: 'eBay',
+  woolworths_marketplus: 'Woolworths Everyday Market',
+  woolworths_mp: 'Woolworths Everyday Market',
   unknown: 'Unknown',
 };
 

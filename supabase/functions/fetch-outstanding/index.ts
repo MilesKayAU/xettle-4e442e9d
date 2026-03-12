@@ -281,16 +281,11 @@ Deno.serve(async (req) => {
     const xeroData = await xeroResp.json();
     const allInvoices = xeroData.Invoices || [];
 
-    // ─── Filter to known marketplace contacts only ───
-    const MARKETPLACE_CONTACT_PATTERNS = [
-      'amazon', 'shopify', 'ebay', 'catch', 'kogan', 'bigw', 'big w',
-      'everyday market', 'mydeal', 'bunnings', 'woolworths', 'mirakl',
-      'tradesquare', 'temu', 'walmart',
-    ];
-
+    // ─── Filter to likely marketplace invoices (contact OR reference signals) ───
     const invoices = allInvoices.filter((inv: any) => {
-      const contact = (inv.Contact?.Name || '').toLowerCase();
-      return MARKETPLACE_CONTACT_PATTERNS.some(p => contact.includes(p));
+      const contact = inv.Contact?.Name || '';
+      const reference = inv.Reference || '';
+      return isLikelyMarketplaceInvoice(reference, contact);
     });
 
     // ─── Get user's settlements for matching (including bank match fields) ───
