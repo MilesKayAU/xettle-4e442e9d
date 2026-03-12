@@ -401,6 +401,36 @@ export default function ReconciliationHub() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{item.subtitle}</p>
 
+                  {/* Extended settlement details for bookkeeper review */}
+                  {item.type === 'settlement' && (
+                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs border-t border-border/50 pt-2">
+                      {item.settlementId && (
+                        <div><span className="text-muted-foreground">ID:</span> <span className="font-mono text-foreground">{item.settlementId.length > 16 ? item.settlementId.slice(0, 16) + '…' : item.settlementId}</span></div>
+                      )}
+                      {item.depositDate && (
+                        <div><span className="text-muted-foreground">Deposit:</span> <span className="text-foreground">{item.depositDate}</span></div>
+                      )}
+                      {item.amount != null && (
+                        <div><span className="text-muted-foreground">Net payout:</span> <span className="font-medium text-foreground">{formatAUD(item.amount)}</span></div>
+                      )}
+                      {item.xeroStatus && (
+                        <div><span className="text-muted-foreground">Xero:</span> <span className="text-foreground">{item.xeroStatus.replace(/_/g, ' ')}</span></div>
+                      )}
+                      {item.salesPrincipal != null && (
+                        <div><span className="text-muted-foreground">Sales:</span> <span className="text-foreground">{formatAUD(item.salesPrincipal)}</span></div>
+                      )}
+                      {(item.sellerFees != null || item.fbaFees != null) && (
+                        <div><span className="text-muted-foreground">Fees:</span> <span className="text-foreground">{formatAUD((item.sellerFees || 0) + (item.fbaFees || 0) + (item.otherFees || 0))}</span></div>
+                      )}
+                      {item.refunds != null && item.refunds !== 0 && (
+                        <div><span className="text-muted-foreground">Refunds:</span> <span className="text-destructive">{formatAUD(item.refunds)}</span></div>
+                      )}
+                      {item.reconStatus && (
+                        <div><span className="text-muted-foreground">Recon:</span> <span className="text-foreground">{item.reconStatus.replace(/_/g, ' ')}</span></div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Notes */}
                   {notes[item.sourceId] && notes[item.sourceId].length > 0 && (
                     <div className="mt-2 space-y-1">
