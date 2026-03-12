@@ -66,6 +66,7 @@ interface BankTxn {
   date: string | null;
   reference: string;
   narration: string;
+  bank_account_name: string;
 }
 
 interface OutstandingRow {
