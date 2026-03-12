@@ -18,7 +18,10 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher';
-import { formatSettlementDate, formatAUD } from '@/utils/settlement-engine';
+import { formatSettlementDate, formatAUD, GATEWAY_CODES } from '@/utils/settlement-engine';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
