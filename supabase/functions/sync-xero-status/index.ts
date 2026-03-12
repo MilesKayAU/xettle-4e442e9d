@@ -483,6 +483,7 @@ serve(async (req) => {
           cursor_saved: nowIso,
         },
       });
+      } // end if (!isCoolingDown)
     }
 
     // If there are no uncached local settlements, we're done after the outstanding discovery
