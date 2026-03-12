@@ -173,10 +173,10 @@ Deno.serve(async (req) => {
       return MARKETPLACE_CONTACT_PATTERNS.some(p => contact.includes(p));
     });
 
-    // ─── Get user's settlements for matching ───
+    // ─── Get user's settlements for matching (including bank match fields) ───
     const { data: settlements } = await supabase
       .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data, bank_tx_id, bank_match_method, bank_match_confidence, bank_match_confirmed_at, bank_match_confirmed_by')
       .eq('user_id', userId);
 
     const settlementMap = new Map<string, any>();
@@ -219,16 +219,28 @@ Deno.serve(async (req) => {
       console.error('Bank txn fetch error:', e);
     }
 
-    // ─── Amazon aggregate deposit matching ───
-    // Amazon batches multiple settlements into one bank deposit.
-    // Group Amazon invoices by payout date window and try to match the sum.
+    // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
+    // Groups Amazon invoices by payout date window, scores bank transaction candidates.
+    // Never auto-matches — returns candidates for user confirmation.
+    interface BankCandidate {
+      transaction_id: string;
+      amount: number;
+      date: string;
+      reference: string;
+      narration: string;
+      confidence: 'high' | 'medium' | 'low';
+      score: number;
+      match_type: 'exact' | 'aggregate';
+    }
+
     interface AggregateGroup {
       id: string;
       invoiceIds: string[];
+      settlementIds: string[];
       sum: number;
       dates: string[];
       centreDate: Date;
-      bankMatch: any | null;
+      candidates: BankCandidate[];
     }
 
     const amazonInvoices = invoices.filter((inv: any) => {
@@ -237,7 +249,7 @@ Deno.serve(async (req) => {
       return ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon') || ref.startsWith('lmb-');
     });
 
-    // Sort Amazon invoices by date
+    // Sort by date
     const sortedAmazon = [...amazonInvoices].sort((a: any, b: any) => {
       const da = parseXeroDate(a.Date) || '';
       const db = parseXeroDate(b.Date) || '';
@@ -253,32 +265,34 @@ Deno.serve(async (req) => {
       if (!invDate) continue;
       const invDateMs = new Date(invDate).getTime();
       const amount = inv.AmountDue || inv.Total || 0;
+      const ref = inv.Reference || '';
+      const extracted = extractSettlementId(ref);
 
       if (!currentGroup || (invDateMs - currentGroup.centreDate.getTime()) > 5 * 24 * 60 * 60 * 1000) {
-        // Start a new window
         currentGroup = {
           id: `agg_${invDate}_${aggregateGroups.length}`,
           invoiceIds: [inv.InvoiceID],
+          settlementIds: extracted.id ? [extracted.id] : [],
           sum: amount,
           dates: [invDate],
           centreDate: new Date(invDateMs),
-          bankMatch: null,
+          candidates: [],
         };
         aggregateGroups.push(currentGroup);
       } else {
         currentGroup.invoiceIds.push(inv.InvoiceID);
+        if (extracted.id) currentGroup.settlementIds.push(extracted.id);
         currentGroup.sum += amount;
         currentGroup.dates.push(invDate);
-        // Recalculate centre date
         const allMs = currentGroup.dates.map(d => new Date(d).getTime());
         const avgMs = allMs.reduce((a, b) => a + b, 0) / allMs.length;
         currentGroup.centreDate = new Date(avgMs);
       }
     }
 
-    // Round sums and try to match each group against bank transactions
+    // Score bank transaction candidates for each aggregate group
     for (const group of aggregateGroups) {
-      if (group.invoiceIds.length < 2) continue; // Only aggregate for 2+ invoices
+      if (group.invoiceIds.length < 2) continue;
       group.sum = Math.round(group.sum * 100) / 100;
 
       for (const txn of bankTxns) {
@@ -287,35 +301,50 @@ Deno.serve(async (req) => {
         if (!txnDate) continue;
 
         const amountDiff = Math.abs(txnAmount - group.sum);
-        if (amountDiff > 1.00) continue; // Within $1.00
+        if (amountDiff > 10) continue; // Wider net for candidates
 
         const daysDiff = Math.abs(
           (new Date(txnDate).getTime() - group.centreDate.getTime()) / (1000 * 60 * 60 * 24)
         );
-        if (daysDiff > 5) continue;
+        if (daysDiff > 7) continue;
 
-        // Check narration
         const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''} ${txn.Reference || ''}`.toLowerCase();
-        if (narration.includes('amazon') || narration.includes('amzn')) {
-          group.bankMatch = {
-            amount: txnAmount,
-            date: txnDate,
-            reference: txn.Reference || '',
-            narration: txn.LineItems?.[0]?.Description || '',
-            transaction_id: txn.BankTransactionID,
-          };
-          break;
-        }
+        const narrationMatch = narration.includes('amazon') || narration.includes('amzn');
+
+        // Score: higher = better
+        let score = 0;
+        if (amountDiff <= 0.05) score += 50;       // Exact amount
+        else if (amountDiff <= 1.00) score += 30;   // Close amount
+        else score += 10;                           // Within $10
+        if (narrationMatch) score += 30;            // Narration bonus
+        if (daysDiff <= 2) score += 20;             // Close date
+        else if (daysDiff <= 5) score += 10;        // Within window
+
+        const confidence: 'high' | 'medium' | 'low' =
+          score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
+
+        group.candidates.push({
+          transaction_id: txn.BankTransactionID,
+          amount: txnAmount,
+          date: txnDate,
+          reference: txn.Reference || '',
+          narration: txn.LineItems?.[0]?.Description || '',
+          confidence,
+          score,
+          match_type: 'aggregate',
+        });
       }
+
+      // Sort by score descending, keep top 3
+      group.candidates.sort((a, b) => b.score - a.score);
+      group.candidates = group.candidates.slice(0, 3);
     }
 
-    // Build lookup: invoiceId → aggregate group (if matched)
+    // Build lookup: invoiceId → aggregate group
     const aggregateLookup = new Map<string, AggregateGroup>();
     for (const group of aggregateGroups) {
-      if (group.bankMatch) {
-        for (const invId of group.invoiceIds) {
-          aggregateLookup.set(invId, group);
-        }
+      for (const invId of group.invoiceIds) {
+        aggregateLookup.set(invId, group);
       }
     }
 
@@ -340,10 +369,9 @@ Deno.serve(async (req) => {
       // Try to match with our settlement (direct ID, then alias lookup)
       const extracted = extractSettlementId(reference);
       const settlementId = extracted.id;
-      const splitPart = extracted.part; // 1 or 2 for LMB/Xettle split-month refs
+      const splitPart = extracted.part;
       let settlement = settlementId ? settlementMap.get(settlementId) : null;
       
-      // Try alias lookup if direct match failed
       if (!settlement && settlementId) {
         const canonical = aliasMap.get(settlementId);
         if (canonical) settlement = settlementMap.get(canonical);
@@ -352,10 +380,9 @@ Deno.serve(async (req) => {
       const hasSettlement = !!settlement;
       if (hasSettlement) matchedWithSettlement++;
 
-      // Build settlement evidence for the UI
+      // Build settlement evidence
       let settlementEvidence: any = null;
       if (settlement) {
-        // For split-month settlements, show the relevant part's data
         let splitData = null;
         if (settlement.is_split_month && splitPart) {
           splitData = splitPart === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
@@ -364,7 +391,7 @@ Deno.serve(async (req) => {
 
         settlementEvidence = {
           settlement_id: settlement.settlement_id,
-          source: settlement.source, // 'api', 'manual', 'csv'
+          source: settlement.source,
           marketplace: settlement.marketplace,
           period_start: settlement.period_start,
           period_end: settlement.period_end,
@@ -386,45 +413,65 @@ Deno.serve(async (req) => {
         };
       }
 
-      // Try to find matching bank deposit
+      // ─── Check if settlement already has a confirmed bank match ───
+      const isConfirmed = settlement?.bank_tx_id && settlement?.bank_match_confirmed_at;
+
+      // Try to find matching bank deposit (exact 1:1 for non-Amazon)
       const marketplace = detectMarketplace(reference, contactName);
       const isMarketplace = marketplace !== 'unknown';
       let bankMatch: any = null;
       let bankDifference: number | null = null;
 
-      for (const txn of bankTxns) {
-        const txnAmount = Math.abs(txn.Total || 0);
-        const txnDate = parseXeroDate(txn.Date);
-        const amountDiff = Math.abs(txnAmount - amount);
+      // For confirmed matches, load the confirmed bank tx
+      if (isConfirmed) {
+        const confirmedTxn = bankTxns.find(t => t.BankTransactionID === settlement.bank_tx_id);
+        if (confirmedTxn) {
+          bankMatch = {
+            amount: Math.abs(confirmedTxn.Total || 0),
+            date: parseXeroDate(confirmedTxn.Date),
+            reference: confirmedTxn.Reference || '',
+            narration: confirmedTxn.LineItems?.[0]?.Description || '',
+            transaction_id: confirmedTxn.BankTransactionID,
+            confirmed: true,
+          };
+          bankDifference = 0;
+        }
+      }
 
-        // Match within $0.05 and ±3 days
-        if (amountDiff <= 0.05 && txnDate && invoiceDate) {
-          const daysDiff = Math.abs(
-            (new Date(txnDate).getTime() - new Date(invoiceDate).getTime()) / (1000 * 60 * 60 * 24)
-          );
-          if (daysDiff <= 7) {
-            bankMatch = {
-              amount: txnAmount,
-              date: txnDate,
-              reference: txn.Reference || '',
-              narration: txn.LineItems?.[0]?.Description || '',
-              transaction_id: txn.BankTransactionID,
-            };
-            bankDifference = amountDiff;
-            break;
+      // Only do auto-detection for non-confirmed
+      if (!bankMatch) {
+        for (const txn of bankTxns) {
+          const txnAmount = Math.abs(txn.Total || 0);
+          const txnDate = parseXeroDate(txn.Date);
+          const amountDiff = Math.abs(txnAmount - amount);
+
+          if (amountDiff <= 0.05 && txnDate && invoiceDate) {
+            const daysDiff = Math.abs(
+              (new Date(txnDate).getTime() - new Date(invoiceDate).getTime()) / (1000 * 60 * 60 * 24)
+            );
+            if (daysDiff <= 7) {
+              bankMatch = {
+                amount: txnAmount,
+                date: txnDate,
+                reference: txn.Reference || '',
+                narration: txn.LineItems?.[0]?.Description || '',
+                transaction_id: txn.BankTransactionID,
+              };
+              bankDifference = amountDiff;
+              break;
+            }
           }
         }
       }
 
-      // Also check fuzzy bank match (within $10)
-      if (!bankMatch) {
+      // Fuzzy match for non-confirmed, non-Amazon
+      if (!bankMatch && !isConfirmed) {
         for (const txn of bankTxns) {
           const txnAmount = Math.abs(txn.Total || 0);
           const txnDate = parseXeroDate(txn.Date);
           const amountDiff = Math.abs(txnAmount - amount);
           const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''}`.toLowerCase();
 
-          // Check if narration mentions the marketplace
           const marketplacePatterns: Record<string, string[]> = {
             amazon_au: ['amazon', 'amzn'],
             shopify_payments: ['shopify'],
@@ -457,20 +504,25 @@ Deno.serve(async (req) => {
       const hasBankDeposit = !!bankMatch;
       if (hasBankDeposit) bankDepositFound++;
 
-      // ─── Check aggregate match for Amazon invoices ───
+      // ─── Aggregate candidates for Amazon (suggestions, not matches) ───
       const aggGroup = aggregateLookup.get(inv.InvoiceID);
-      const hasAggregateMatch = !!aggGroup;
-      if (hasAggregateMatch && !hasBankDeposit) bankDepositFound++;
+      const hasCandidates = aggGroup && aggGroup.candidates.length > 0;
 
       // Determine match status
       let matchStatus: string;
-      if (hasSettlement && (hasBankDeposit || hasAggregateMatch) && (bankDifference || 0) <= 0.05) {
-        matchStatus = hasAggregateMatch && !hasBankDeposit ? 'aggregate_matched' : 'balanced';
+      if (isConfirmed) {
+        matchStatus = settlement.bank_match_method === 'manual' ? 'confirmed_manual' : 'confirmed';
+        bankDepositFound++;
         readyToReconcile++;
-      } else if (hasSettlement && (hasBankDeposit || hasAggregateMatch)) {
-        matchStatus = hasAggregateMatch && !hasBankDeposit ? 'aggregate_matched' : `gap_${bankDifference?.toFixed(2)}`;
-        if (hasAggregateMatch && !hasBankDeposit) readyToReconcile++;
-      } else if (hasSettlement && !hasBankDeposit && !hasAggregateMatch) {
+      } else if (hasSettlement && hasBankDeposit && (bankDifference || 0) <= 0.05) {
+        matchStatus = 'balanced';
+        readyToReconcile++;
+      } else if (hasSettlement && hasBankDeposit) {
+        matchStatus = `gap_${bankDifference?.toFixed(2)}`;
+      } else if (hasSettlement && hasCandidates) {
+        matchStatus = aggGroup!.candidates.length === 1 && aggGroup!.candidates[0].confidence === 'high'
+          ? 'suggestion_high' : 'suggestion_multiple';
+      } else if (hasSettlement && !hasBankDeposit) {
         matchStatus = 'no_bank_deposit';
       } else if (!hasSettlement && hasBankDeposit) {
         matchStatus = 'no_settlement';
@@ -499,16 +551,35 @@ Deno.serve(async (req) => {
         settlement_id: settlementId,
         settlement_status: settlement?.status || null,
         settlement_evidence: settlementEvidence,
-        has_bank_deposit: hasBankDeposit || hasAggregateMatch,
+        has_bank_deposit: hasBankDeposit || isConfirmed,
         bank_match: bankMatch,
         bank_difference: bankDifference,
         match_status: matchStatus,
-        // Aggregate match fields
-        aggregate_match: hasAggregateMatch,
+        // Aggregate candidate fields (suggestions, not confirmed matches)
         aggregate_group_id: aggGroup?.id || null,
         aggregate_sum: aggGroup ? aggGroup.sum : null,
         aggregate_settlement_count: aggGroup ? aggGroup.invoiceIds.length : null,
-        aggregate_bank_match: aggGroup?.bankMatch || null,
+        aggregate_candidates: aggGroup?.candidates || [],
+        // Confirmed match audit trail
+        bank_match_method: settlement?.bank_match_method || null,
+        bank_match_confidence: settlement?.bank_match_confidence || null,
+        bank_match_confirmed_at: settlement?.bank_match_confirmed_at || null,
+        // Recent bank transactions for manual picker
+        recent_bank_txns: matchStatus === 'no_bank_deposit' && marketplace === 'amazon_au'
+          ? bankTxns
+              .filter(t => {
+                const n = `${t.LineItems?.[0]?.Description || ''} ${t.Contact?.Name || ''} ${t.Reference || ''}`.toLowerCase();
+                return n.includes('amazon') || n.includes('amzn');
+              })
+              .slice(0, 10)
+              .map(t => ({
+                transaction_id: t.BankTransactionID,
+                amount: Math.abs(t.Total || 0),
+                date: parseXeroDate(t.Date),
+                reference: t.Reference || '',
+                narration: t.LineItems?.[0]?.Description || '',
+              }))
+          : [],
       });
     }
 

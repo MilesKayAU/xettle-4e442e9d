@@ -2,10 +2,12 @@
  * OutstandingTab — Shows every Xero invoice "Awaiting Payment" matched against
  * our settlement data and bank deposits. Bookkeeper's primary weekly reconciliation view.
  *
- * Three states per row:
- * 🟢 Green — invoice + settlement + bank deposit all match → "Mark Paid"
- * 🟡 Amber — invoice exists, settlement found, but bank deposit missing or differs → "Investigate"
- * 🔴 Red — invoice in Xero but nothing in our system → "Upload"
+ * Five bank-match states per row:
+ * STATE 1 — suggestion_high: High confidence match found, confirm or reject
+ * STATE 2 — suggestion_multiple: Multiple candidates, user picks one
+ * STATE 3 — no_bank_deposit: No match found, manual reconciliation
+ * STATE 4 — confirmed_manual: User manually confirmed a deposit
+ * STATE 5 — confirmed / balanced: Deposit matched and confirmed
  */
 
 import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
@@ -16,7 +18,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
-  FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard, MinusCircle, Clock3,
+  FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
+  MinusCircle, Clock3, Search, ArrowRight,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,6 +48,25 @@ interface SettlementEvidence {
   status: string;
 }
 
+interface BankCandidate {
+  transaction_id: string;
+  amount: number;
+  date: string;
+  reference: string;
+  narration: string;
+  confidence: 'high' | 'medium' | 'low';
+  score: number;
+  match_type: string;
+}
+
+interface BankTxn {
+  transaction_id: string;
+  amount: number;
+  date: string | null;
+  reference: string;
+  narration: string;
+}
+
 interface OutstandingRow {
   xero_invoice_id: string;
   xero_invoice_number: string;
@@ -70,21 +92,19 @@ interface OutstandingRow {
     narration: string;
     transaction_id: string;
     fuzzy?: boolean;
+    confirmed?: boolean;
   } | null;
   bank_difference: number | null;
   match_status: string;
-  // Aggregate match fields
-  aggregate_match?: boolean;
+  // Aggregate / suggestion fields
   aggregate_group_id?: string | null;
   aggregate_sum?: number | null;
   aggregate_settlement_count?: number | null;
-  aggregate_bank_match?: {
-    amount: number;
-    date: string | null;
-    reference: string;
-    narration: string;
-    transaction_id: string;
-  } | null;
+  aggregate_candidates?: BankCandidate[];
+  bank_match_method?: string | null;
+  bank_match_confidence?: string | null;
+  bank_match_confirmed_at?: string | null;
+  recent_bank_txns?: BankTxn[];
 }
 
 interface OutstandingSummary {
@@ -102,6 +122,9 @@ interface Props {
 
 const formatAUD = (n: number) =>
   new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
+
+const formatDate = (d: string | null) =>
+  d ? new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—';
 
 const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
@@ -124,8 +147,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [bulkApplying, setBulkApplying] = useState(false);
   const [showNonMarketplace, setShowNonMarketplace] = useState(false);
+  const [confirming, setConfirming] = useState<Set<string>>(new Set());
+  const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
 
-  // Filter rows based on marketplace toggle
   const filteredRows = useMemo(() => {
     if (!data) return [];
     if (showNonMarketplace) return data.rows;
@@ -154,8 +178,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
-      // Handle "No Xero connection" gracefully — supabase.functions.invoke
-      // puts non-2xx responses in resp.error, not resp.data
       const noXeroMsg = resp.data?.error || resp.error?.message || '';
       if (typeof noXeroMsg === 'string' && noXeroMsg.includes('No Xero connection')) {
         setNoXeroConnection(true);
@@ -174,8 +196,104 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, []);
 
-  // Auto-load on mount
   useEffect(() => { fetchOutstanding(); }, []);
+
+  // ─── Confirm bank match (writes to settlements table) ───
+  const confirmBankMatch = useCallback(async (
+    row: OutstandingRow,
+    bankTxId: string,
+    method: 'suggested' | 'manual',
+    confidence: 'high' | 'medium' | 'low',
+  ) => {
+    if (!row.settlement_id) return;
+    setConfirming(prev => new Set(prev).add(row.xero_invoice_id));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('settlements')
+        .update({
+          bank_tx_id: bankTxId,
+          bank_match_method: method,
+          bank_match_confidence: confidence,
+          bank_match_confirmed_at: new Date().toISOString(),
+          bank_match_confirmed_by: session.user.id,
+        })
+        .eq('settlement_id', row.settlement_id)
+        .eq('user_id', session.user.id);
+
+      if (error) throw error;
+
+      toast.success(`✓ Deposit confirmed for ${row.xero_invoice_number}`);
+
+      // Update local state to reflect confirmation
+      setData(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          rows: prev.rows.map(r =>
+            r.xero_invoice_id === row.xero_invoice_id
+              ? { ...r, match_status: method === 'manual' ? 'confirmed_manual' : 'confirmed', has_bank_deposit: true, bank_match_method: method, bank_match_confirmed_at: new Date().toISOString() }
+              : r
+          ),
+          bank_deposit_found: prev.bank_deposit_found + 1,
+          ready_to_reconcile: prev.ready_to_reconcile + 1,
+        };
+      });
+      setManualPickerOpen(null);
+    } catch (err: any) {
+      toast.error(`Failed to confirm match: ${err.message}`);
+    } finally {
+      setConfirming(prev => {
+        const next = new Set(prev);
+        next.delete(row.xero_invoice_id);
+        return next;
+      });
+    }
+  }, []);
+
+  // ─── Reject suggestion → drops to "no match" ───
+  const rejectSuggestion = useCallback((row: OutstandingRow) => {
+    setData(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        rows: prev.rows.map(r =>
+          r.xero_invoice_id === row.xero_invoice_id
+            ? { ...r, match_status: 'no_bank_deposit', aggregate_candidates: [] }
+            : r
+        ),
+      };
+    });
+  }, []);
+
+  // ─── Reset confirmed match ───
+  const resetMatch = useCallback(async (row: OutstandingRow) => {
+    if (!row.settlement_id) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('settlements')
+        .update({
+          bank_tx_id: null,
+          bank_match_method: null,
+          bank_match_confidence: null,
+          bank_match_confirmed_at: null,
+          bank_match_confirmed_by: null,
+        })
+        .eq('settlement_id', row.settlement_id)
+        .eq('user_id', session.user.id);
+
+      if (error) throw error;
+      toast.success('Match reset — you can re-select a deposit');
+      fetchOutstanding(); // Refresh to get fresh candidates
+    } catch (err: any) {
+      toast.error(`Failed to reset: ${err.message}`);
+    }
+  }, [fetchOutstanding]);
 
   const applyPayment = useCallback(async (row: OutstandingRow) => {
     if (!row.has_bank_deposit || !row.bank_match) return;
@@ -201,7 +319,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
       toast.success(`✓ ${row.xero_invoice_number} marked as paid`);
 
-      // Remove from list
       setData(prev => prev ? {
         ...prev,
         rows: prev.rows.filter(r => r.xero_invoice_id !== row.xero_invoice_id),
@@ -223,7 +340,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const handleBulkApply = useCallback(async () => {
     if (!data) return;
     const balancedSelected = data.rows.filter(
-      r => selected.has(r.xero_invoice_id) && r.match_status === 'balanced'
+      r => selected.has(r.xero_invoice_id) && (r.match_status === 'balanced' || r.match_status === 'confirmed')
     );
     if (balancedSelected.length === 0) {
       toast.error('No balanced invoices selected');
@@ -253,41 +370,22 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const toggleSelectAll = () => {
     if (!data) return;
-    const balancedIds = data.rows.filter(r => r.match_status === 'balanced').map(r => r.xero_invoice_id);
+    const balancedIds = data.rows.filter(r => r.match_status === 'balanced' || r.match_status === 'confirmed').map(r => r.xero_invoice_id);
     const allSelected = balancedIds.every(id => selected.has(id));
     setSelected(allSelected ? new Set() : new Set(balancedIds));
   };
 
   const isAmazon = (row: OutstandingRow) => row.marketplace?.toLowerCase().includes('amazon');
 
+  // ─── Status rendering helpers ───
   const getStatusIcon = (row: OutstandingRow) => {
-    if (row.match_status === 'balanced') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-    if (row.match_status === 'aggregate_matched') return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs text-xs">
-          Amazon deposit of {formatAUD(row.aggregate_sum || 0)} matched across {row.aggregate_settlement_count} settlements
-          {row.aggregate_bank_match?.date ? ` on ${new Date(row.aggregate_bank_match.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}` : ''}
-        </TooltipContent>
-      </Tooltip>
-    );
+    if (row.match_status === 'balanced' || row.match_status === 'confirmed') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+    if (row.match_status === 'confirmed_manual') return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
+    if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status.startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      if (isAmazon(row)) {
-        return (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Clock3 className="h-4 w-4 text-muted-foreground" />
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">
-              Amazon batches multiple settlements into one deposit — no matching deposit found yet
-            </TooltipContent>
-          </Tooltip>
-        );
-      }
+      if (isAmazon(row)) return <Clock3 className="h-4 w-4 text-muted-foreground" />;
       return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     }
     return <XCircle className="h-4 w-4 text-destructive" />;
@@ -295,27 +393,209 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'Balanced';
-    if (row.match_status === 'aggregate_matched') return 'Deposit matched (batched)';
+    if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
+    if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
+    if (row.match_status === 'suggestion_high') return 'Likely match found';
+    if (row.match_status === 'suggestion_multiple') return 'Possible matches';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
     if (row.match_status.startsWith('gap_')) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
     }
     if (row.match_status === 'no_bank_deposit') {
-      return isAmazon(row) ? 'Awaiting deposit' : 'No bank deposit';
+      return isAmazon(row) ? 'No deposit found' : 'No bank deposit';
     }
     return 'No settlement';
   };
 
   const getRowBgClass = (row: OutstandingRow) => {
-    if (row.match_status === 'balanced' || row.match_status === 'aggregate_matched') return 'bg-green-50/50 dark:bg-green-950/10';
+    if (row.match_status === 'balanced' || row.match_status === 'confirmed') return 'bg-green-50/50 dark:bg-green-950/10';
+    if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
+    if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
     if (row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
   };
 
-  // Not loaded yet — show loading
+  // ─── Inline bank match action panel (rendered below row when needed) ───
+  const renderBankMatchPanel = (row: OutstandingRow) => {
+    const isConfirmingRow = confirming.has(row.xero_invoice_id);
+
+    // STATE 5: Confirmed (any method)
+    if (row.match_status === 'confirmed' || row.match_status === 'confirmed_manual') {
+      return (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+          <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-green-800 dark:text-green-300">
+              Deposit matched ✓
+            </p>
+            {row.bank_match && (
+              <p className="text-xs text-green-700 dark:text-green-400">
+                {formatAUD(row.bank_match.amount)} on {formatDate(row.bank_match.date)}
+              </p>
+            )}
+            {row.bank_match_method === 'manual' && (
+              <Badge variant="outline" className="text-[10px] mt-1 text-blue-600 border-blue-300">Manually confirmed</Badge>
+            )}
+          </div>
+          <button
+            onClick={() => resetMatch(row)}
+            className="text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            not right? change →
+          </button>
+        </div>
+      );
+    }
+
+    // STATE 1: High confidence suggestion
+    if (row.match_status === 'suggestion_high' && row.aggregate_candidates?.length) {
+      const best = row.aggregate_candidates[0];
+      return (
+        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            We found a likely deposit match
+          </p>
+          <div className="flex items-center gap-4 text-xs bg-background rounded p-2 border border-border">
+            <span className="font-mono font-bold">{formatAUD(best.amount)}</span>
+            <span>{formatDate(best.date)}</span>
+            <span className="text-muted-foreground truncate flex-1">{best.narration || best.reference || '—'}</span>
+            <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">{best.confidence} confidence</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Batched deposit across {row.aggregate_settlement_count} settlements totalling {formatAUD(row.aggregate_sum || 0)}
+          </p>
+          <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Does this look right?</p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => confirmBankMatch(row, best.transaction_id, 'suggested', best.confidence)}
+              disabled={isConfirmingRow}
+              className="gap-1.5 text-xs h-7"
+            >
+              {isConfirmingRow ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+              Confirm match
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => rejectSuggestion(row)}
+              className="gap-1.5 text-xs h-7"
+            >
+              <XCircle className="h-3 w-3" />
+              Not this one
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // STATE 2: Multiple candidates
+    if (row.match_status === 'suggestion_multiple' && row.aggregate_candidates?.length) {
+      return (
+        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            We found possible deposit matches
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Select the correct deposit for this batch of {row.aggregate_settlement_count} settlements ({formatAUD(row.aggregate_sum || 0)})
+          </p>
+          <div className="space-y-1.5">
+            {row.aggregate_candidates.map((c, i) => (
+              <div key={c.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
+                <span className="font-mono font-bold min-w-[80px]">{formatAUD(c.amount)}</span>
+                <span className="min-w-[60px]">{formatDate(c.date)}</span>
+                <span className="text-muted-foreground truncate flex-1">{c.narration || c.reference || '—'}</span>
+                <Badge variant="outline" className="text-[10px] shrink-0">{c.confidence}</Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => confirmBankMatch(row, c.transaction_id, 'suggested', c.confidence)}
+                  disabled={isConfirmingRow}
+                  className="text-xs h-6 px-2"
+                >
+                  {isConfirmingRow ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Select'}
+                </Button>
+              </div>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => rejectSuggestion(row)}
+            className="text-xs h-7 text-muted-foreground"
+          >
+            None of these are correct
+          </Button>
+        </div>
+      );
+    }
+
+    // STATE 3: No match found (Amazon)
+    if (row.match_status === 'no_bank_deposit' && isAmazon(row)) {
+      const isPickerOpen = manualPickerOpen === row.xero_invoice_id;
+      return (
+        <div className="p-3 rounded-lg bg-muted/30 border border-border space-y-2">
+          <div className="flex items-center gap-2">
+            <Clock3 className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No deposit found yet</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => window.open('https://go.xero.com/Bank/BankAccounts.aspx', '_blank')}
+              className="gap-1.5 text-xs h-7"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Reconcile in Xero →
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setManualPickerOpen(isPickerOpen ? null : row.xero_invoice_id)}
+              className="gap-1.5 text-xs h-7"
+            >
+              <Search className="h-3 w-3" />
+              I'll find it manually →
+            </Button>
+          </div>
+
+          {/* Manual picker: show recent Amazon bank transactions */}
+          {isPickerOpen && row.recent_bank_txns && row.recent_bank_txns.length > 0 && (
+            <div className="mt-2 space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Recent Amazon deposits:</p>
+              {row.recent_bank_txns.map(txn => (
+                <div key={txn.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
+                  <span className="font-mono font-bold min-w-[80px]">{formatAUD(txn.amount)}</span>
+                  <span className="min-w-[60px]">{formatDate(txn.date)}</span>
+                  <span className="text-muted-foreground truncate flex-1">{txn.narration || txn.reference || '—'}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => confirmBankMatch(row, txn.transaction_id, 'manual', 'low')}
+                    disabled={isConfirmingRow}
+                    className="text-xs h-6 px-2"
+                  >
+                    {isConfirmingRow ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Select'}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {isPickerOpen && (!row.recent_bank_txns || row.recent_bank_txns.length === 0) && (
+            <p className="text-xs text-muted-foreground mt-2">No recent Amazon bank transactions found in Xero.</p>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  // ─── Loading state ───
   if (!hasLoaded && loading) {
     return (
       <div className="space-y-6">
@@ -330,7 +610,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     );
   }
 
-  // No Xero connection — show helpful message
   if (noXeroConnection) {
     return (
       <div className="space-y-6">
@@ -345,7 +624,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             <FileText className="h-12 w-12 text-muted-foreground/40 mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">No Xero Connection</h3>
             <p className="text-muted-foreground max-w-md">
-              Connect your Xero account to see outstanding invoices. Go to the <strong>Setup</strong> tab to link Xero, 
+              Connect your Xero account to see outstanding invoices. Go to the <strong>Setup</strong> tab to link Xero,
               then return here to reconcile your marketplace settlements.
             </p>
           </CardContent>
@@ -354,9 +633,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     );
   }
 
-  const balancedCount = data?.rows.filter(r => r.match_status === 'balanced').length || 0;
+  const balancedCount = data?.rows.filter(r => r.match_status === 'balanced' || r.match_status === 'confirmed').length || 0;
   const selectedBalancedCount = data?.rows.filter(
-    r => selected.has(r.xero_invoice_id) && r.match_status === 'balanced'
+    r => selected.has(r.xero_invoice_id) && (r.match_status === 'balanced' || r.match_status === 'confirmed')
   ).length || 0;
 
   return (
@@ -381,7 +660,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </Button>
       </div>
 
-      {/* Filter toggle for non-marketplace invoices */}
+      {/* Filter toggle */}
       {data && nonMarketplaceCount > 0 && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Switch
@@ -510,7 +789,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               {filteredRows.map(row => {
                 const isExpanded = expandedRow === row.xero_invoice_id;
                 const isApplying = applying.has(row.xero_invoice_id);
-                const isBalanced = row.match_status === 'balanced';
+                const isBalanced = row.match_status === 'balanced' || row.match_status === 'confirmed';
+                const hasSuggestion = row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple';
 
                 return (
                   <Fragment key={row.xero_invoice_id}>
@@ -538,7 +818,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                       </td>
                       <td className="px-3 py-2">
                         <div className="text-xs">
-                          <p>{row.invoice_date ? new Date(row.invoice_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'}</p>
+                          <p>{formatDate(row.invoice_date)}</p>
                           {row.overdue_days != null && row.overdue_days > 0 && (
                             <p className="text-destructive font-medium">{row.overdue_days}d overdue</p>
                           )}
@@ -564,17 +844,19 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {row.has_bank_deposit ? (
-                          row.aggregate_match && !row.bank_match ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs text-xs">
-                                Batched deposit: {formatAUD(row.aggregate_sum || 0)} across {row.aggregate_settlement_count} settlements
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : row.bank_match?.fuzzy ? (
+                        {row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
+                        ) : row.match_status === 'confirmed_manual' ? (
+                          <CheckCircle2 className="h-4 w-4 text-blue-600 inline" />
+                        ) : hasSuggestion ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs">Suggested match — needs your confirmation</TooltipContent>
+                          </Tooltip>
+                        ) : row.has_bank_deposit ? (
+                          row.bank_match?.fuzzy ? (
                             <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
                           ) : (
                             <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
@@ -586,19 +868,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex items-center gap-1.5">
-                              {getStatusIcon(row)}
-                              <span className="text-xs font-medium">{getStatusLabel(row)}</span>
-                            </div>
-                          </TooltipTrigger>
-                          {row.is_pre_boundary && row.match_status === 'no_settlement' && (
-                            <TooltipContent side="left" className="max-w-[220px] text-center">
-                              Created before Xettle was connected — managed directly in Xero
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
+                        <div className="flex items-center gap-1.5">
+                          {getStatusIcon(row)}
+                          <span className="text-xs font-medium">{getStatusLabel(row)}</span>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex items-center gap-1.5 justify-end">
@@ -639,7 +912,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               Upload
                             </Button>
                           )}
-                          {/* Evidence / Investigate — available for any non-no_settlement row */}
                           {row.match_status !== 'no_settlement' && (
                             <Button
                               size="sm"
@@ -662,6 +934,14 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         <td colSpan={9} className="px-6 py-4 bg-muted/20 border-b border-border">
                           <div className="space-y-3">
                             <h4 className="text-sm font-semibold text-foreground">Match Evidence</h4>
+
+                            {/* Bank match action panel (5 states) */}
+                            {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || (row.match_status === 'no_bank_deposit' && isAmazon(row))) && (
+                              <div className="mb-3">
+                                {renderBankMatchPanel(row)}
+                              </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                               {/* Xero Invoice */}
                               <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
@@ -684,7 +964,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                     <p className="flex items-center gap-1">
                                       <CheckCircle2 className="h-3 w-3 text-green-600" />
                                       <span className="font-medium">
-                                        {row.settlement_evidence.source === 'api' ? '🔗 Amazon API' : 
+                                        {row.settlement_evidence.source === 'api' ? '🔗 Amazon API' :
                                          row.settlement_evidence.source === 'csv' ? '📄 Uploaded CSV' : '✏️ Manual'}
                                       </span>
                                     </p>
@@ -734,6 +1014,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                     {row.bank_match.fuzzy && (
                                       <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">Fuzzy match</Badge>
                                     )}
+                                    {row.bank_match.confirmed && (
+                                      <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">User confirmed</Badge>
+                                    )}
                                     {row.bank_match.narration && (
                                       <p className="text-muted-foreground">Narration: {row.bank_match.narration}</p>
                                     )}
@@ -741,24 +1024,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                       <p className="text-amber-600 font-medium">Difference: {formatAUD(row.bank_difference)}</p>
                                     )}
                                   </>
-                                ) : row.aggregate_match && row.aggregate_bank_match ? (
-                                  <>
-                                    <p className="flex items-center gap-1">
-                                      <CheckCircle2 className="h-3 w-3 text-green-600" />
-                                      <span className="font-bold">{formatAUD(row.aggregate_bank_match.amount)}</span> on {row.aggregate_bank_match.date ? new Date(row.aggregate_bank_match.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'}
-                                    </p>
-                                    <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">Batched deposit</Badge>
-                                    <p className="text-muted-foreground mt-1">
-                                      Amazon deposit of {formatAUD(row.aggregate_sum || 0)} matched across {row.aggregate_settlement_count} settlements
-                                    </p>
-                                    {row.aggregate_bank_match.narration && (
-                                      <p className="text-muted-foreground">Narration: {row.aggregate_bank_match.narration}</p>
-                                    )}
-                                  </>
                                 ) : (
-                                  <p className="flex items-center gap-1 text-destructive">
-                                    <XCircle className="h-3 w-3" />
-                                    No matching bank deposit found in Xero
+                                  <p className="flex items-center gap-1 text-muted-foreground">
+                                    <Clock3 className="h-3 w-3" />
+                                    {isAmazon(row) ? 'Amazon batches deposits — check suggestions above' : 'No matching bank deposit found in Xero'}
                                   </p>
                                 )}
                               </div>
