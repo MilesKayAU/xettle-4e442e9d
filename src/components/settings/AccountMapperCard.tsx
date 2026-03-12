@@ -70,6 +70,8 @@ export default function AccountMapperCard() {
   // Marketplace split state
   const [splitByMarketplace, setSplitByMarketplace] = useState(false);
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
+  // CoA validation state
+  const [coaMap, setCoaMap] = useState<Map<string, CoaEntry>>(new Map());
 
   // Load current state on mount
   useEffect(() => {
