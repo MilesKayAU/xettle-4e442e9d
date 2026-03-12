@@ -147,11 +147,19 @@ function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: strin
       </Badge>
     );
   }
-  if (status === 'parsed' || status === 'ready_to_push' || status === 'saved') {
+  if (status === 'ready_to_push' || status === 'parsed') {
     return (
       <Badge variant="outline" className="text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-900/30 dark:border-sky-800 text-xs">
         <Send className="h-3 w-3 mr-1" />
         Ready to Post
+      </Badge>
+    );
+  }
+  if (status === 'saved') {
+    return (
+      <Badge variant="outline" className="text-muted-foreground text-xs">
+        <Clock className="h-3 w-3 mr-1" />
+        Awaiting Xero Check
       </Badge>
     );
   }
