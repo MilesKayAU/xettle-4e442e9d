@@ -428,6 +428,7 @@ Deno.serve(async (req) => {
                 narration: bestBatch.description || '',
                 transaction_date: bestBatch.date,
                 order_count: settlementIds.length,
+                deposit_group_id: batchGroupId,
               }, { onConflict: 'settlement_id,gateway_code' } as any)
 
               // Update settlement status if high confidence
