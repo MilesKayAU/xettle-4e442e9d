@@ -505,7 +505,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
           const isBeforeCutoff = accountingBoundary && parsed.header.periodEnd && parsed.header.periodEnd <= accountingBoundary;
           const { header, summary, lines, unmapped, splitMonth } = parsed;
 
-          const { error: settError } = await supabaseAdmin.from('settlements').insert({
+          const { error: settError } = await supabaseAdmin.from('settlements').upsert({
             user_id: userId,
             settlement_id: header.settlementId,
             marketplace: 'amazon_au',
@@ -533,7 +533,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
             split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
             parser_version: PARSER_VERSION,
-          });
+          }, { onConflict: 'marketplace,settlement_id,user_id', ignoreDuplicates: true });
 
           if (settError) {
             userErrors++;
