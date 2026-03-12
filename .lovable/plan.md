@@ -1,348 +1,124 @@
-# Xettle Complete Technical Audit — Cross-Referenced
-**Date: 9 March 2026 (v2 — verified against codebase)**
-**Scope: Full codebase — frontend, backend, parsers, engines, edge functions, database, security**
 
----
 
-## 1. Architecture Overview
+# Fix 76b — CoA Intelligence & Fast Channel Detection
 
-### Stack
-- **Frontend**: React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
-- **Backend**: Lovable Cloud (Supabase) — Postgres, Edge Functions, Auth, RLS
-- **Integrations**: Xero (OAuth2), Amazon SP-API (OAuth2)
-- **State**: React Query (5-min stale time), Supabase Realtime subscriptions
-- **Routing**: React Router v6 with lazy-loaded pages
+## Summary
+After connecting Xero, Xettle reads the user's Chart of Accounts, detects likely marketplaces and payment providers from account names, and pre-creates suggested channel connections. The user confirms which are real. Onboarding drops from minutes to seconds.
 
-### Key Pages
-| Route | Component | Purpose |
-|-------|-----------|---------|
-| `/` | Landing | Marketing page |
-| `/auth` | Auth | Sign in / Sign up with email verification |
-| `/dashboard` | Dashboard | Main app — marketplace tabs, Smart Upload, Insights |
-| `/admin` | Admin | Admin panel (role-gated) |
-| `/pricing` | Pricing | Plan tiers |
-| `/xero/callback` | XeroCallback | OAuth2 callback for Xero |
-| `/amazon/callback` | AmazonCallback | OAuth2 callback for Amazon SP-API |
-| `/reset-password` | ResetPassword | Password reset flow |
+## Step 1: Migration
 
-### Architecture Rules (ARCHITECTURE.md)
-Three enforced rules:
-1. **All dashboards MUST use shared hooks** — useSettlementManager, useBulkSelect, useXeroSync, useReconciliation, useTransactionDrilldown
-2. **No direct color classes** — use semantic design tokens only
-3. **Secrets never in code** — use Lovable Cloud secrets
+**New table: `xero_chart_of_accounts`** — caches user's CoA for detection and mapping.
 
----
-
-## 2. Database Schema (17 tables)
-
-| Table | Purpose | RLS |
-|-------|---------|-----|
-| `settlements` | Core settlement records — one per marketplace period | ✅ user_id scoped |
-| `settlement_lines` | Transaction-level line items per settlement | ✅ user_id scoped |
-| `settlement_unmapped` | Rows that couldn't be categorized during parsing | ✅ user_id scoped |
-| `marketplace_connections` | User's active marketplace tabs | ✅ user_id scoped |
-| `marketplaces` | Global marketplace metadata (admin-managed) | ✅ read=all, write=admin |
-| `marketplace_fee_observations` | Fee rate observations per settlement | ✅ user_id scoped |
-| `marketplace_fee_alerts` | Anomaly alerts when fee rates deviate | ✅ user_id + admin read |
-| `marketplace_ad_spend` | Manual ad spend entries per marketplace | ⚠️ public role (Gap 4) |
-| `marketplace_shipping_costs` | Estimated shipping cost per order | ⚠️ public role (Gap 4) |
-| `marketplace_file_fingerprints` | User-specific column signature fingerprints | ✅ user_id scoped |
-| `marketplace_fingerprints` | Global + user-specific marketplace detection patterns | ✅ mixed |
-| `product_costs` | SKU-level COGS data | ✅ user_id scoped |
-| `xero_tokens` | Xero OAuth2 tokens | ✅ user_id scoped |
-| `amazon_tokens` | Amazon SP-API OAuth2 tokens | ✅ user_id scoped |
-| `app_settings` | Per-user key/value settings | ✅ user_id scoped |
-| `sync_history` | Xero sync event log | ✅ user_id scoped |
-| `user_roles` | RBAC roles (admin, paid, starter, pro) | ✅ read-only for user |
-
----
-
-## 3. Verified ✅ — What IS Built
-
-### Parsers (all working)
-| Parser | File | Lines | Status |
-|--------|------|-------|--------|
-| Amazon AU Settlement | `settlement-parser.ts` | ~400 | ✅ Production |
-| Shopify Payments | `shopify-payments-parser.ts` | ~300 | ✅ Production |
-| Shopify Orders | `shopify-orders-parser.ts` | ~250 | ✅ Production |
-| Bunnings Billing Cycle | `bunnings-summary-parser.ts` | ~200 | ✅ Production |
-| Woolworths MarketPlus | `woolworths-marketplus-parser.ts` | 481 | ✅ Production — splits by Order Source column |
-| Generic CSV | `generic-csv-parser.ts` | ~200 | ✅ Fallback for any marketplace |
-
-### Engines (all working)
-| Engine | File | Lines | Purpose |
-|--------|------|-------|---------|
-| Settlement Engine | `settlement-engine.ts` | ~500 | CRUD operations, dedup (app-level), Supabase persistence |
-| Reconciliation Engine | `reconciliation-engine.ts` | ~300 | Amazon-specific recon |
-| Universal Reconciliation | `universal-reconciliation.ts` | ~250 | Balance + GST + Sanity checks for any marketplace |
-| Fee Observation Engine | `fee-observation-engine.ts` | ~350 | Fee rate tracking + anomaly alerts |
-| Profit Engine | `profit-engine.ts` | 135 | COGS calculation from product_costs table |
-| File Fingerprint Engine | `file-fingerprint-engine.ts` | ~200 | Column signature detection |
-| File Marketplace Detector | `file-marketplace-detector.ts` | ~300 | 3-level detection pipeline |
-
-### Shared Hooks (all built, GenericMarketplaceDashboard uses them)
-| Hook | File | Purpose |
-|------|------|---------|
-| `useSettlementManager` | `use-settlement-manager.ts` | Fetch + filter + loading states |
-| `useBulkSelect` | `use-bulk-select.ts` | Checkbox selection + Xero-aware bulk delete |
-| `useXeroSync` | `use-xero-sync.ts` | Push/sync/rollback with Xero |
-| `useReconciliation` | `use-reconciliation.ts` | Inline Balance/GST/Sanity checks |
-| `useTransactionDrilldown` | `use-transaction-drilldown.ts` | Line-item drill-down per settlement |
-
-### Shared UI Components (all built)
-| Component | File | Purpose |
-|-----------|------|---------|
-| `SettlementStatusBadge` | `shared/SettlementStatusBadge.tsx` | Consistent status badges |
-| `ReconChecksInline` | `shared/ReconChecksInline.tsx` | Expandable recon results |
-| `BulkDeleteDialog` | `shared/BulkDeleteDialog.tsx` | Xero-aware delete confirmation |
-| `GapDetector` | `shared/GapDetector.tsx` | Missing period detection |
-
-### Dashboard Components (verified)
-| Component | File | Status |
-|-----------|------|--------|
-| `GenericMarketplaceDashboard` | ✅ Fully refactored — uses all shared hooks, ~700 lines |
-| `AccountingDashboard` | ❌ 4,395 lines — NOT on shared hooks (Gap 2) |
-| `ShopifyPaymentsDashboard` | ❌ ~800 lines — NOT on shared hooks (Gap 2) |
-| `BunningsDashboard` | ❌ ~1,230 lines — NOT on shared hooks (Gap 2) |
-| `ShopifyOrdersDashboard` | ❌ ~1,315 lines — NOT on shared hooks (Gap 2) |
-| `InsightsDashboard` | ✅ Cross-marketplace analytics |
-| `SkuCostManager` | ✅ SKU cost CRUD UI |
-| `MonthlyReconciliationStatus` | ✅ Built |
-| `OnboardingChecklist` | ✅ Built |
-| `MarketplaceReturnRatio` | ✅ Built |
-
-### Edge Functions (10 deployed)
-| Function | Purpose | JWT |
-|----------|---------|-----|
-| `ai-file-interpreter` | AI-powered file classification | verify_jwt=false |
-| `sync-xero-status` | Sync-back invoice status from Xero | verify_jwt=false |
-| `sync-settlement-to-xero` | Push settlement as Xero invoice | auth in code |
-| `auto-push-xero` | Batch auto-push new settlements | auth in code |
-| `xero-auth` | Xero OAuth2 token exchange | auth in code |
-| `amazon-auth` | Amazon SP-API OAuth2 token exchange | auth in code |
-| `fetch-amazon-settlements` | Pull settlements from Amazon SP-API | auth in code |
-| `sync-amazon-journal` | Create Xero journal from Amazon data | auth in code |
-| `admin-list-users` | List users (admin only) | auth in code |
-| `admin-manage-users` | Manage user roles (admin only) | auth in code |
-
-### Other Verified
-- ✅ Rollback flow (void Xero invoice + reset local status)
-- ✅ Xero reference format: `Xettle-{settlement_id}` (new) + legacy `(ID)` parsing
-- ✅ Duplicate prevention: pre-push Xero API search + local journal ID check
-- ✅ Smart Upload Flow with marketplace auto-detection
-- ✅ MarketplaceSwitcher with tab management
-- ✅ Marketplace config tab (admin)
-- ✅ Seller Central Guide for Amazon
-- ✅ Shopify onboarding flow
-
----
-
-## 4. THE REAL GAPS — Priority Ordered
-
-### Gap 1 — CRITICAL: No DB Unique Constraint on Settlements
-**Risk**: Race condition = duplicate settlements possible
-**Current state**: Dedup is application-level only in `settlement-engine.ts`
-**Fix**: Single migration:
 ```sql
-CREATE UNIQUE INDEX idx_settlement_dedup ON settlements (settlement_id, marketplace, user_id);
-```
-**Effort**: 5 minutes
-
-### Gap 2 — CRITICAL: 4 Dashboards NOT on Shared Hooks
-**Risk**: Feature drift, inconsistent UX, duplicated bug-prone code
-
-| Dashboard | Lines | Missing Features |
-|-----------|-------|-----------------|
-| `AccountingDashboard.tsx` | 4,395 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `ShopifyPaymentsDashboard.tsx` | ~800 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `BunningsDashboard.tsx` | ~1,230 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `ShopifyOrdersDashboard.tsx` | ~1,315 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-
-**Fix**: Migrate each to use shared hooks + components (follow GenericMarketplaceDashboard pattern)
-**Effort**: 2-4 hours per dashboard
-
-### Gap 3 — CRITICAL: Stripe/Billing = Zero
-**Current state**:
-- No Stripe code anywhere in codebase
-- No subscription enforcement
-- Roles exist in DB (`paid`, `starter`, `pro`) but nothing gates features
-- Users can use everything for free forever
-
-**Fix needed**:
-1. Enable Stripe integration
-2. Create subscription products/prices
-3. Implement plan-gating middleware
-4. Wire role assignment on subscription events
-**Effort**: 1-2 days
-
-### Gap 4 — SECURITY: RLS Tightening
-| Table | Issue | Fix |
-|-------|-------|-----|
-| `marketplace_ad_spend` | Uses `public` role instead of `authenticated` | Change RLS policies to `authenticated` |
-| `marketplace_shipping_costs` | Uses `public` role instead of `authenticated` | Change RLS policies to `authenticated` |
-| Edge functions | No rate limiting | Add rate limiting logic |
-
-**Fix**: Migration to update RLS policies + edge function code updates
-**Effort**: 30 minutes for RLS, 1-2 hours for rate limiting
-
----
-
-## 5. File Detection Pipeline (3-Level)
-
-```
-Upload → Fingerprint DB match (highest confidence)
-       → Heuristic detection (column pattern matching via fingerprint-library.ts)
-       → AI fallback (ai-file-interpreter edge function using Gemini)
+CREATE TABLE xero_chart_of_accounts (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid NOT NULL,
+  xero_account_id text,
+  account_code text,
+  account_name text NOT NULL,
+  account_type text,
+  tax_type text,
+  description text,
+  is_active boolean DEFAULT true,
+  synced_at timestamptz DEFAULT now(),
+  UNIQUE(user_id, xero_account_id)
+);
+-- RLS: users manage own rows
 ```
 
-Each level populates `marketplace_fingerprints` and `marketplace_file_fingerprints` tables for future auto-detection.
+**Alter `marketplace_connections`** — add `suggested_at` column:
 
----
+```sql
+ALTER TABLE marketplace_connections
+  ADD COLUMN suggested_at timestamptz;
+```
 
-## 6. Xero Integration Architecture
+No new constraint needed — `UNIQUE(user_id, marketplace_code)` already exists (confirmed by `onConflict` usage in `marketplace-token-map.ts` line 74).
 
-### Flow
-1. **OAuth2**: `xero-auth` edge function handles token exchange + refresh
-2. **Push**: `sync-settlement-to-xero` creates Xero invoice with line items
-3. **Sync-back**: `sync-xero-status` queries Xero for invoice status updates
-4. **Auto-push**: `auto-push-xero` batch-pushes new settlements
-5. **Rollback**: Void Xero invoice + reset local `xero_journal_id` and `status`
+## Step 2: New file — `src/utils/coa-intelligence.ts` (~150 lines)
 
-### Duplicate Prevention (3-layer)
-1. Local check: `xero_journal_id` already set → skip
-2. Pre-push API search: Query Xero by reference `Xettle-{id}` → skip if found
-3. Legacy format support: `sync-xero-status` parses both new and legacy reference formats
+Pure client-side module. Contains:
 
-### Reference Format
-- **New**: `Xettle-{settlement_id}` (in Reference field)
-- **Legacy**: Human-readable with `(settlement_id)` suffix
-- Both parsed by sync-back function
+- **`XETTLE_COA_RULES`** constant (read-only enforcement)
+- **`analyseCoA()`** function:
+  - Input: `xero_chart_of_accounts[]` rows + `marketplace_registry[]` rows + `payment_processor_registry[]` rows
+  - Normalizes account names: `toLowerCase().replace(/[^a-z0-9 ]/g, '')`
+  - Matches against `marketplace_registry.detection_keywords` and `payment_processor_registry.detection_keywords` (uses existing DB tables, not hardcoded lists)
+  - Confidence scoring: HIGH (direct marketplace name match), MEDIUM (related keyword like "FBA"), LOW (generic like "Online Sales")
+  - Only HIGH confidence → auto-suggest channel. MEDIUM → show in "possible" section. LOW → ignore.
+  - Output: `{ channels: ChannelSuggestion[], payment_providers: ProviderSuggestion[], mapping_suggestions: MappingSuggestion[] }`
 
----
+Mapping suggestions pair detected accounts with categories (sales, fees, refunds, etc.) for later use by Fix 76a wizard.
 
-## 7. Secrets Configuration (Verified)
+## Step 3: Update `ai-account-mapper` edge function
 
-| Secret | Purpose | Status |
-|--------|---------|--------|
-| `XERO_CLIENT_ID` | Xero OAuth2 | ✅ Set |
-| `XERO_CLIENT_SECRET` | Xero OAuth2 | ✅ Set |
-| `AMAZON_SP_CLIENT_ID` | Amazon SP-API OAuth2 | ✅ Set |
-| `AMAZON_SP_CLIENT_SECRET` | Amazon SP-API OAuth2 | ✅ Set |
-| `LOVABLE_API_KEY` | AI file interpreter | ✅ Set |
-| `RESEND_API_KEY` | Email sending | ✅ Set |
-| `SUPABASE_URL` | Edge function access | ✅ Auto |
-| `SUPABASE_SERVICE_ROLE_KEY` | Edge function admin access | ✅ Auto |
-| `SUPABASE_PUBLISHABLE_KEY` | Client-side access | ✅ Auto |
-| `SUPABASE_ANON_KEY` | Client-side access | ✅ Auto |
-| `SUPABASE_DB_URL` | Direct DB access | ✅ Auto |
+After fetching Xero accounts (line 115), add ~20 lines to **cache CoA in `xero_chart_of_accounts`**:
+- Upsert all active accounts for this user
+- Mark accounts not in current fetch as `is_active = false` (soft-delete, not hard-delete — protects against partial Xero API responses)
+- Hard-delete only accounts that have been `is_active = false` for 2+ consecutive syncs
 
----
+## Step 4: Update `XeroCallback.tsx`
 
-## 8. Recommended Fix Order
+After the existing `ai-account-mapper` auto-trigger (line 74-86), add a second step:
+1. Wait for `ai-account-mapper` to complete (it now caches CoA)
+2. Fetch `xero_chart_of_accounts`, `marketplace_registry`, and `payment_processor_registry` from DB
+3. Run `analyseCoA()` client-side
+4. For each HIGH confidence channel, upsert into `marketplace_connections`:
+   - `connection_type: 'coa_detected'`
+   - `connection_status: 'suggested'`
+   - `suggested_at: now()`
+   - `settings: { detected_from: 'coa', detected_account: 'Amazon Sales' }`
+   - Uses existing `onConflict: 'user_id,marketplace_code'` — **never downgrades active to suggested** (WHERE clause)
+5. Cache detection results in `app_settings` key `coa_detection_results` with timestamp to skip re-detection within 24 hours
 
-### Phase 1 — Integrity (Day 1)
-1. ✅ Gap 1: Add DB unique constraint (5 min)
-2. ✅ Gap 4: Fix RLS `public` → `authenticated` (30 min)
+## Step 5: Update ghost cleanup in `marketplace-token-map.ts`
 
-### Phase 2 — Dashboard Migration (Day 1-3)
-3. Gap 2: Migrate `AccountingDashboard.tsx` to shared hooks (largest, highest impact)
-4. Gap 2: Migrate `ShopifyPaymentsDashboard.tsx`
-5. Gap 2: Migrate `BunningsDashboard.tsx`
-6. Gap 2: Migrate `ShopifyOrdersDashboard.tsx`
+Line 121 — add `coa_detected` to skip list:
+```typescript
+if (conn.connection_type === 'manual' || conn.connection_type === 'coa_detected') continue;
+```
 
-### Phase 3 — Monetisation (Day 3-5)
-7. Gap 3: Enable Stripe
-8. Gap 3: Create subscription tiers matching existing roles
-9. Gap 3: Implement plan-gating
-10. Gap 3: Wire webhook for role assignment
+## Step 6: New component — `src/components/dashboard/CoaDetectedPanel.tsx` (~130 lines)
 
-### Phase 4 — Hardening (Day 5+)
-11. Rate limiting on edge functions
-12. Unit tests (Vitest) for parsers and engines
-13. E2E tests for critical flows
-14. Error monitoring setup
+Shows when `marketplace_connections` has rows with `connection_status === 'suggested'`.
 
----
+UI per detected channel:
+- Channel name + "Detected from: [account name]" (read from `settings.detected_account`)
+- Actions: **[Connect API]** / **[Upload Settlement]** / **[Not selling here]**
+- Connect API → navigates to Setup for that marketplace
+- Upload Settlement → sets `connection_status: 'active'`, `connection_type: 'manual'`
+- Not selling here → deletes the `marketplace_connections` row
 
-## 9. Code Quality Notes
+Payment providers shown separately with **[Noted]** / **[Dismiss]** actions.
 
-### Strengths
-- Clean separation: parsers → engines → hooks → components
-- Consistent RLS pattern across 17 tables
-- Smart 3-level file detection with learning
-- Universal reconciliation works for any marketplace
-- Well-structured edge functions with proper CORS
+## Step 7: Filter suggested channels from dashboard
 
-### Weaknesses
-- `AccountingDashboard.tsx` at 4,395 lines is unmaintainable
-- Some `as any` type casts in dashboard components
-- No automated tests anywhere
-- No error boundary at dashboard level (only app-level)
-- Console.log statements in production code
+**`Dashboard.tsx` (line ~300)**: Filter `marketplace_connections` query to pass only `connection_status !== 'suggested'` rows to `MarketplaceSwitcher`.
 
----
+**`MarketplaceSwitcher.tsx`**: No change needed — receives filtered data from parent.
 
-## 10. Summary Stats
+**Analytics queries**: No change needed — they query `settlements` table directly, not `marketplace_connections`.
 
-| Metric | Count |
-|--------|-------|
-| Total files | ~120 |
-| React components | ~60 |
-| Custom hooks | 8 |
-| Utility modules | 14 |
-| Edge functions | 10 |
-| Database tables | 17 |
-| RLS policies | ~40 |
-| Parsers | 6 |
-| Engines | 7 |
-| Lines of dashboard code | ~8,500 |
-| Lines on shared hooks | ~700 (GenericMarketplaceDashboard only) |
-| Lines NOT on shared hooks | ~7,800 |
+## Files Created
+| File | Purpose |
+|------|---------|
+| `src/utils/coa-intelligence.ts` | CoA analysis + `XETTLE_COA_RULES` constant |
+| `src/components/dashboard/CoaDetectedPanel.tsx` | UI for confirming/dismissing detected channels |
+| Migration | `xero_chart_of_accounts` table + `suggested_at` column |
 
----
+## Files Modified
+| File | Change |
+|------|--------|
+| `supabase/functions/ai-account-mapper/index.ts` | Cache CoA in DB after fetch (~20 lines after line 115) |
+| `src/pages/XeroCallback.tsx` | Run CoA intelligence after mapper completes (~30 lines after line 86) |
+| `src/utils/marketplace-token-map.ts` | Skip `coa_detected` in ghost cleanup (line 121) |
+| `src/pages/Dashboard.tsx` | Filter suggested channels + render `CoaDetectedPanel` (line ~300) |
 
-## Session 10+ — Gateway-Aware Payout Splitting
+## Safety Rules Enforced
+- Xettle never creates/modifies/deletes Xero accounts
+- Never auto-activates channels — user must confirm
+- Never downgrades active connections to suggested
+- Soft-delete stale CoA cache entries (protects against partial API responses)
+- Detection results cached 24h to prevent unnecessary re-scans
+- Uses `marketplace_registry` + `payment_processor_registry` for detection keywords (existing DB tables)
 
-### Problem
-Shopify payouts aggregate all transactions (direct + marketplace) into a single payout. Gateway names like "Mirakl", "Commercium by constacloud", and "Manual" indicate marketplace or non-standard origins but are not currently used to split settlements.
-
-### Approach (Approved)
-1. **Cross-reference `source_order_id`**: Each Shopify Balance Transaction has a `source_order_id`. Look this up against the cached `shopify_orders` table to get the `gateway` field.
-2. **Group by gateway**: Within each payout, group transactions by resolved gateway → generate sub-settlements per marketplace.
-3. **Mirakl resolution**: When gateway = "mirakl", cross-reference the order's `source_name` or tags to resolve the specific marketplace (Bunnings, Kmart, Target AU).
-4. **Registry entries**: `mirakl` and `manual_bank_transfer` are already in `payment_processor_registry` (added Session 9).
-
-### Performance Considerations
-- Large payout histories (1000+ transactions) need batched lookups against `shopify_orders`
-- Consider pre-building a gateway map during `fetch-shopify-orders` sync
-- May need an index on `shopify_orders(shopify_order_id)` for fast joins
-
-### Registry Data (already seeded)
-- `mirakl` → type: `marketplace_operator`, needs source_name cross-reference
-- `manual_bank_transfer` → type: `bank_transfer`, exclude from channel alerts
-- `commercium by constacloud` → already in `GATEWAY_REGISTRY` → maps to Kogan
-
-### Implementation Steps
-1. Add `gateway` column awareness to `fetch-shopify-payouts` transaction processing
-2. Build gateway→marketplace resolver function
-3. Generate sub-settlement records per marketplace within a single payout
-4. Update `marketplace_validation` to track split payouts
-5. UI: Show split payout breakdown in Shopify Payments dashboard
-
----
-
-## Session 10+ — Amazon Aggregate Bank Deposit Matching
-
-### Problem
-Amazon batches multiple settlements into a single bank deposit. The current matching engine compares individual invoice amounts against individual bank transactions, which will never match for Amazon.
-
-### Approach
-1. **Group Amazon invoices by settlement period**: Cluster by `deposit_date` or `period_end` within 3-day windows
-2. **Sum net deposit amounts across settlements**: Calculate the expected aggregate deposit total
-3. **Match sum against single bank transaction**: $1.00 tolerance and ±5-day date window
-4. **Amazon deposit narration**: Typically contains "AMAZON" or seller account reference number — use for fuzzy matching
-
-### UI Changes
-- Outstanding tab: Show "Matched (aggregated)" badge for Amazon invoices matched via aggregate
-- Bank deposit card: Show aggregate match count separately
-- Drill-down: Show which settlements were grouped into the aggregate match
