@@ -198,11 +198,37 @@ Deno.serve(async (req) => {
       const errText = await xeroResp.text();
       console.error('Xero invoice fetch failed:', xeroResp.status, errText);
 
-      // For ANY Xero error, return a soft 200 with error info instead of 502
-      // This prevents the UI from crashing while still surfacing the issue
+      // Soft-fail and preserve UX: if we have cached outstanding rows, return them.
       const retryAfter = xeroResp.headers.get('Retry-After') || '60';
       const isRateLimited = xeroResp.status === 429;
       const isAuthError = xeroResp.status === 401 || xeroResp.status === 403;
+      const cached = await loadOutstandingCache(supabase, userId);
+
+      const syncInfo = {
+        xero_rate_limited: isRateLimited,
+        xero_auth_error: isAuthError,
+        xero_error: !isRateLimited && !isAuthError,
+        xero_status: xeroResp.status,
+        retry_after_seconds: isRateLimited ? (parseInt(retryAfter) || 60) : undefined,
+        from_cache: !!cached,
+        message: isAuthError
+          ? 'Xero token expired — please reconnect Xero'
+          : isRateLimited
+          ? 'Xero rate limited — retrying automatically'
+          : 'Xero temporarily unavailable',
+      };
+
+      if (cached) {
+        return new Response(JSON.stringify({
+          ...cached,
+          sync_info: {
+            ...(cached.sync_info || {}),
+            ...syncInfo,
+          },
+        }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       return new Response(JSON.stringify({
         invoices: [],
@@ -212,18 +238,7 @@ Deno.serve(async (req) => {
         matched_with_settlement: 0,
         bank_deposit_found: 0,
         ready_to_reconcile: 0,
-        sync_info: {
-          xero_rate_limited: isRateLimited,
-          xero_auth_error: isAuthError,
-          xero_error: !isRateLimited && !isAuthError,
-          xero_status: xeroResp.status,
-          retry_after_seconds: isRateLimited ? (parseInt(retryAfter) || 60) : undefined,
-          message: isAuthError
-            ? 'Xero token expired — please reconnect Xero'
-            : isRateLimited
-            ? 'Xero rate limited — will retry shortly'
-            : 'Xero temporarily unavailable',
-        },
+        sync_info: syncInfo,
       }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
