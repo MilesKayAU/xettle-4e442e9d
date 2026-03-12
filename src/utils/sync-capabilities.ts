@@ -105,7 +105,7 @@ export async function callEdgeFunctionSafe(
       console.warn(`[sync] ${name} returned ${res.status}:`, text);
       return {
         ok: false,
-        error: isRateLimited ? 'Rate limited (429)' : `${name} failed (${res.status})`,
+        error: isRateLimited ? 'Temporarily unavailable — will retry automatically' : 'Temporarily unavailable',
         statusCode: res.status,
         rateLimited: isRateLimited,
       };
@@ -121,7 +121,7 @@ export async function callEdgeFunctionSafe(
         return { ok: false, error: 'Stopped by user', aborted: true };
       }
       console.warn(`[sync] ${name} timed out`);
-      return { ok: false, error: `${name} timed out` };
+      return { ok: false, error: 'Taking longer than expected — will retry automatically' };
     }
     console.error(`[sync] ${name} error:`, err);
     return { ok: false, error: err.message || `${name} failed` };
