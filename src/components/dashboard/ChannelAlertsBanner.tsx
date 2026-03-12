@@ -14,6 +14,7 @@ import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink,
 import { supabase } from '@/integrations/supabase/client';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import GatewayDepositEvidence from '@/components/dashboard/GatewayDepositEvidence';
+import ContactClassificationModal from '@/components/dashboard/ContactClassificationModal';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 import { toast } from 'sonner';
 
@@ -106,6 +107,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [customName, setCustomName] = useState('');
   const [linkingAlertId, setLinkingAlertId] = useState<string | null>(null);
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
+  const [classifyingAlert, setClassifyingAlert] = useState<ChannelAlert | null>(null);
 
   const loadAlerts = async () => {
     try {
@@ -745,8 +747,8 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1 text-xs">
-                      <X className="h-3.5 w-3.5" /> Not a marketplace
+                    <Button size="sm" variant="outline" onClick={() => setClassifyingAlert(alert)} className="gap-1 text-xs">
+                      Classify <ArrowRight className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => {
                       setSetupChannel({
@@ -877,6 +879,30 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           open={!!setupChannel}
           onClose={() => setSetupChannel(null)}
           onComplete={handleSetupComplete}
+        />
+      )}
+
+      {classifyingAlert && (
+        <ContactClassificationModal
+          open={!!classifyingAlert}
+          onClose={() => setClassifyingAlert(null)}
+          contactName={getDisplayName(classifyingAlert)}
+          alertId={classifyingAlert.id}
+          onClassified={async (alertId) => {
+            await supabase
+              .from('channel_alerts' as any)
+              .update({ status: 'classified', actioned_at: new Date().toISOString() } as any)
+              .eq('id', alertId);
+            setAlerts(prev => prev.filter(a => a.id !== alertId));
+            const remaining = alerts.length - 1;
+            const actionableCount = alerts.filter(a => {
+              if (a.id === alertId) return false;
+              const isXC = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
+              return !isXC;
+            }).length;
+            onAlertCountChange?.(actionableCount);
+            setClassifyingAlert(null);
+          }}
         />
       )}
     </>
