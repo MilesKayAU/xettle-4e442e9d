@@ -38,6 +38,7 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onConnec
     } catch (err: any) {
       toast.error(err.message || 'Failed to start Xero connection');
       setConnecting(false);
+      onConnecting?.(false);
     }
   };
 
