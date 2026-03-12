@@ -9,15 +9,17 @@ interface Props {
   onNext: () => void;
   onSkip: () => void;
   hasXero: boolean;
+  onConnecting?: (connecting: boolean) => void;
   onFireBackgroundScan?: (fnName: string) => void; // Legacy — no longer used
 }
 
-export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props) {
+export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onConnecting }: Props) {
   const [connecting, setConnecting] = useState(false);
   const [showSkipWarning, setShowSkipWarning] = useState(false);
 
   const handleConnect = async () => {
     setConnecting(true);
+    onConnecting?.(true);
     try {
       const redirectUri = 'https://xettle.app/xero/callback';
       const { data, error } = await supabase.functions.invoke('xero-auth', {
@@ -36,6 +38,7 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero }: Props)
     } catch (err: any) {
       toast.error(err.message || 'Failed to start Xero connection');
       setConnecting(false);
+      onConnecting?.(false);
     }
   };
 

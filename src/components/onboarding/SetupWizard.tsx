@@ -29,10 +29,19 @@ export default function SetupWizard({
   initialStep = 1,
   hasXero = false,
 }: SetupWizardProps) {
-  const [step, setStep] = useState(() => Math.min(initialStep, TOTAL_STEPS));
+  // If Xero is already connected, skip straight to step 2 (marketplace selection)
+  const [step, setStep] = useState(() => {
+    if (hasXero && initialStep <= 1) return 2;
+    return Math.min(initialStep, TOTAL_STEPS);
+  });
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [selectedMarketplaces, setSelectedMarketplaces] = useState<string[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   const nav = useNavigate();
+
+  useEffect(() => {
+    if (hasXero && step === 1) setStep(2);
+  }, [hasXero]);
 
   useEffect(() => {
     if (initialStep > 1) setStep(Math.min(initialStep, TOTAL_STEPS));
@@ -53,6 +62,8 @@ export default function SetupWizard({
   };
 
   const handleCloseAttempt = () => {
+    // Don't allow closing while an API connection is in progress
+    if (isSyncing) return;
     setShowCloseWarning(true);
   };
 
@@ -66,7 +77,7 @@ export default function SetupWizard({
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) handleCloseAttempt(); }}>
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+        <DialogContent className={`sm:max-w-xl max-h-[90vh] overflow-y-auto p-0 gap-0 ${isSyncing ? '[&>button]:hidden' : ''}`}>
           {/* Progress header */}
           <div className="px-6 pt-6 pb-3 space-y-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -95,6 +106,7 @@ export default function SetupWizard({
                 onNext={handleNext}
                 onSkip={handleSkip}
                 hasXero={hasXero}
+                onConnecting={setIsSyncing}
               />
             )}
             {step === 2 && (
