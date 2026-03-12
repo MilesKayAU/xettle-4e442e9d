@@ -417,14 +417,34 @@ export default function Setup() {
     const ac = new AbortController();
     amazonAbortRef.current = ac;
     setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements (this can take several minutes)...' });
-    const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token, {}, { signal: ac.signal, headers: { 'x-action': 'smart-sync' } });
-    amazonAbortRef.current = null;
-    if (!mountedRef.current) return;
 
-    if (result.aborted) {
-      setAmazonStep({ status: 'error', message: 'Amazon fetch stopped', error: 'Stopped by user' });
-      setAmazonProgress(0);
-      return;
+    // Retry loop for 503/429 with backoff
+    let result: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      result = await callEdgeFunctionSafe('fetch-amazon-settlements', token, {}, { signal: ac.signal, headers: { 'x-action': 'smart-sync' } });
+      amazonAbortRef.current = null;
+      if (!mountedRef.current) return;
+
+      if (result.aborted) {
+        setAmazonStep({ status: 'error', message: 'Amazon fetch stopped', error: 'Stopped by user' });
+        setAmazonProgress(0);
+        return;
+      }
+      if (result.ok) break;
+
+      const isRetryable = result.rateLimited || result.statusCode === 503 || result.statusCode === 429;
+      if (isRetryable && attempt < 2) {
+        const waitSec = (attempt + 1) * 10;
+        console.warn(`[setup] Amazon ${result.statusCode} — retrying in ${waitSec}s (attempt ${attempt + 1})`);
+        setAmazonStep({ status: 'rate_limited', message: `Rate limited — retrying in ${waitSec}s…`, error: result.error });
+        await new Promise(r => setTimeout(r, waitSec * 1000));
+        if (!mountedRef.current) return;
+        setAmazonStep({ status: 'running', message: `Retrying Amazon fetch (attempt ${attempt + 2}/3)…` });
+        amazonAbortRef.current = ac;
+        continue;
+      }
+      // Exhausted retries or non-retryable
+      break;
     }
 
     if (result.ok) {
@@ -461,20 +481,18 @@ export default function Setup() {
       setPhase1Amazon(true);
       await upsertSetting(userId, 'setup_phase1_amazon', 'true');
     } else {
-      // Check for rate limit / mutex / cooldown — show calm message
+      // Check for rate limit / mutex / cooldown
       const errorData = result.data || {};
       const errorType = errorData.error_type || errorData.error || '';
-      const isRateLimit = errorType === 'rate_limit' || errorType === 'rate_limited' || result.error?.includes('429');
+      const isRateLimit = result.rateLimited || errorType === 'rate_limit' || errorType === 'rate_limited' || result.statusCode === 503 || result.statusCode === 429;
       const isMutex = errorType === 'mutex' || errorType === 'sync_in_progress';
       const isCooldown = errorType === 'cooldown' || result.error?.includes('cooldown');
 
       if (isRateLimit || isMutex || isCooldown) {
-        // Show as pending/warning — not complete, but not blocking
-        console.info('[setup] Amazon rate-limited/mutex/cooldown — showing pending state');
-        setAmazonStep({ status: 'pending', message: 'Amazon settlement sync will run automatically once the rate limit clears — you can continue setting up in the meantime.' });
+        console.info('[setup] Amazon rate-limited/mutex/cooldown — showing rate_limited state');
+        setAmazonStep({ status: 'rate_limited', message: 'Amazon rate limited — click Retry to try again', error: result.error });
         setAmazonProgress(80);
-        setPhase1Amazon(true);
-        await upsertSetting(userId, 'setup_phase1_amazon', 'true');
+        // Don't mark as complete — user needs to retry
       } else {
         setAmazonStep({ status: 'error', message: 'Amazon sync encountered an issue — check your connection', error: result.error });
         setAmazonProgress(0);
