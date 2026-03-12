@@ -316,14 +316,15 @@ export default function Setup() {
       if (isRetryable && attempt < 2) {
         const waitSec = (attempt + 1) * 5;
         console.warn(`[setup] Shopify payouts ${payoutsResult.statusCode} — retrying in ${waitSec}s (attempt ${attempt + 1})`);
-        setShopifyPayoutsStep({ status: 'running', message: `Shopify temporarily unavailable — retrying in ${waitSec}s…` });
+        setShopifyPayoutsStep({ status: 'rate_limited', message: `Rate limited — retrying in ${waitSec}s…`, error: payoutsResult.error });
         await new Promise(r => setTimeout(r, waitSec * 1000));
         if (!mountedRef.current) return;
+        setShopifyPayoutsStep({ status: 'running', message: `Retrying payouts fetch (attempt ${attempt + 2}/3)…` });
         continue;
       }
       // Non-retryable or exhausted retries
       if (isRetryable) {
-        setShopifyPayoutsStep({ status: 'error', message: 'Shopify temporarily unavailable — click Retry to try again', error: payoutsResult.error });
+        setShopifyPayoutsStep({ status: 'rate_limited', message: 'Shopify rate limited — click Retry to try again', error: payoutsResult.error });
       } else {
         const isCooldown = payoutsResult.error?.includes('429');
         const isTimeout = payoutsResult.error?.includes('timed out');
