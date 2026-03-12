@@ -588,10 +588,14 @@ export default function AccountMapperCard() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           {CATEGORIES.map((cat) => {
             const entry = mapping[cat];
+            const code = entry?.code;
             return (
-              <div key={cat} className="flex justify-between py-1 border-b border-border/50">
+              <div key={cat} className="flex items-center justify-between py-1 border-b border-border/50 gap-2">
                 <span className="text-muted-foreground">{cat}</span>
-                <span className="font-mono">{entry?.code || '—'}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-mono">{code || '—'}</span>
+                  {renderValidationBadge(code, cat)}
+                </span>
               </div>
             );
           })}
