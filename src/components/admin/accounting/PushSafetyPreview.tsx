@@ -112,6 +112,7 @@ export default function PushSafetyPreview({
 }: PushSafetyPreviewProps) {
   const [loading, setLoading] = useState(true);
   const [pushing, setPushing] = useState(false);
+  const [mappingInvalidError, setMappingInvalidError] = useState<string[] | null>(null);
   const [previews, setPreviews] = useState<Array<{
     settlement: SettlementPreview;
     lineItems: LineItemPreview[];
