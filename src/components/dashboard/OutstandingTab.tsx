@@ -32,11 +32,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
   FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
-  MinusCircle, Clock3, Search, ArrowRight,
+  MinusCircle, Clock3, Search, ArrowRight, Shield,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ACCOUNTING_RULES } from '@/constants/accounting-rules';
 
 interface SettlementEvidence {
   settlement_id: string;
