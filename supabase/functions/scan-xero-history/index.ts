@@ -269,11 +269,20 @@ Deno.serve(async (req) => {
 
     const { access_token: accessToken, tenant_id: tenantId } = tokenRow
 
+    // ─── Light discovery mode (90-day scan, no deep import) ─────────
+    const actionHeader = req.headers.get('x-action')
+    const isLightDiscovery = actionHeader === 'light-discovery'
+
     const detectedMap = new Map<string, DetectedSettlement>()
     let hasXettlePrefix = false
     let hasMarketplaceContacts = false
     let hasBankPatterns = false
     const standaloneContacts: string[] = []
+
+    // For light discovery, only scan last 90 days
+    const dateFilter = isLightDiscovery
+      ? `&where=Date>DateTime(${new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]})`
+      : ''
 
     // ─── 1. Scan Invoices ───────────────────────────────────────────
     try {
