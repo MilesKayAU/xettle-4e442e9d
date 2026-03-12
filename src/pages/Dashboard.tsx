@@ -165,19 +165,34 @@ export default function Dashboard() {
       } else if (connected === 'amazon') {
         setHasAmazon(true);
         toast.success('Amazon connected — syncing settlements…');
-        // Fire Amazon-only sync
+        // Fire Amazon-only sync (user explicitly connected — Xero-first already satisfied by this point)
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
-            callEdgeFunctionSafe('fetch-amazon-settlements', session.access_token, {}, { headers: { 'x-action': 'smart-sync' } });
+            // Verify Xero discovery is done before API sync
+            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').maybeSingle()
+              .then(({ data }) => {
+                if (data?.value === 'complete') {
+                  callEdgeFunctionSafe('fetch-amazon-settlements', session.access_token, {}, { headers: { 'x-action': 'smart-sync' } });
+                } else {
+                  toast.info('Amazon will sync after Xero analysis completes.');
+                }
+              });
           }
         });
       } else if (connected === 'shopify') {
         setHasShopify(true);
         toast.success('Shopify connected — syncing payouts…');
-        // Fire Shopify-only sync
+        // Fire Shopify-only sync (gated by Xero discovery)
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
-            callEdgeFunctionSafe('fetch-shopify-payouts', session.access_token);
+            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').maybeSingle()
+              .then(({ data }) => {
+                if (data?.value === 'complete') {
+                  callEdgeFunctionSafe('fetch-shopify-payouts', session.access_token);
+                } else {
+                  toast.info('Shopify will sync after Xero analysis completes.');
+                }
+              });
           }
         });
       }
