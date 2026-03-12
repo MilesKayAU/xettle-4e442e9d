@@ -10,6 +10,9 @@
 // This function matches bank deposits to settlements for VERIFICATION.
 // Nothing is marked as matched until user explicitly confirms.
 // Auto-detection is always a SUGGESTION.
+//
+// v2: Now reads from local bank_transactions cache instead of
+//     calling Xero API per settlement. Much faster and cheaper.
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -20,13 +23,13 @@ const corsHeaders = {
 }
 
 const MARKETPLACE_NAMES: Record<string, string[]> = {
-  amazon_au: ['amazon', 'amzn', 'a]zn'],
+  amazon_au: ['amazon', 'amzn', 'amazon payments', 'amzn mktplace pmts', 'amazon au'],
   kogan: ['kogan'],
   bigw: ['big w', 'bigw'],
-  bunnings: ['bunnings'],
+  bunnings: ['bunnings', 'mirakl'],
   mydeal: ['mydeal', 'my deal'],
   catch: ['catch'],
-  shopify: ['shopify'],
+  shopify: ['shopify', 'shopify payments'],
   ebay: ['ebay'],
   woolworths: ['woolworths', 'woolies'],
   iconic: ['iconic', 'the iconic'],
@@ -38,53 +41,8 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0]
 }
 
-function parseXeroDate(dateField: string | null | undefined): string | null {
-  if (!dateField) return null
-  const raw = dateField.replace('/Date(', '').replace(')/', '').split('+')[0]
-  const ts = parseInt(raw)
-  if (!isNaN(ts)) return new Date(ts).toISOString().split('T')[0]
-  return raw.split('T')[0]
-}
-
-async function refreshXeroToken(supabase: any, userId: string, clientId: string, clientSecret: string) {
-  const { data: tokenRow, error } = await supabase
-    .from('xero_tokens')
-    .select('*')
-    .eq('user_id', userId)
-    .single()
-
-  if (error || !tokenRow) return null
-
-  const expiresAt = new Date(tokenRow.expires_at)
-  if (expiresAt > new Date(Date.now() + 60000)) return tokenRow
-
-  const res = await fetch('https://identity.xero.com/connect/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: tokenRow.refresh_token,
-    }),
-  })
-
-  if (!res.ok) return null
-  const tokens = await res.json()
-  const newExpiry = new Date(Date.now() + (tokens.expires_in || 1800) * 1000).toISOString()
-
-  await supabase.from('xero_tokens').update({
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token || tokenRow.refresh_token,
-    expires_at: newExpiry,
-  }).eq('user_id', userId)
-
-  return { ...tokenRow, access_token: tokens.access_token }
-}
-
-function narrationMatchesMarketplace(narration: string, contactName: string, marketplace: string): boolean {
-  const text = `${narration} ${contactName}`.toLowerCase()
+function narrationMatchesMarketplace(description: string, contactName: string, marketplace: string): boolean {
+  const text = `${description} ${contactName}`.toLowerCase()
   const patterns = MARKETPLACE_NAMES[marketplace] || [marketplace.replace('_', ' ')]
   return patterns.some(p => text.includes(p))
 }
@@ -101,8 +59,8 @@ interface MatchResult {
     transaction_id: string
   }
   confidence?: number
+  confidence_score?: number
   difference?: number
-  transaction?: any
 }
 
 Deno.serve(async (req) => {
@@ -114,14 +72,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-    const clientId = Deno.env.get('XERO_CLIENT_ID')
-    const clientSecret = Deno.env.get('XERO_CLIENT_SECRET')
-
-    if (!clientId || !clientSecret) {
-      return new Response(JSON.stringify({ error: 'Xero credentials not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
 
     // Auth
     const authHeader = req.headers.get('Authorization')
@@ -132,13 +82,10 @@ Deno.serve(async (req) => {
         global: { headers: { Authorization: authHeader } },
       })
       const { data: { user }, error: authError } = await userSupabase.auth.getUser()
-      if (!authError && user) {
-        userId = user.id
-      }
+      if (!authError && user) userId = user.id
     }
 
     const body = await req.json().catch(() => ({}))
-    // Allow service-role calls to specify userId
     if (!userId && body.userId) userId = body.userId
 
     if (!userId) {
@@ -149,16 +96,6 @@ Deno.serve(async (req) => {
 
     const adminSupabase = createClient(supabaseUrl, serviceRoleKey)
     const settlementId = body.settlementId as string | undefined
-    const forceMatch = body.force_match as boolean | undefined
-    const forceTransactionId = body.transaction_id as string | undefined
-
-    // Refresh Xero token
-    const xeroToken = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret)
-    if (!xeroToken) {
-      return new Response(JSON.stringify({ error: 'Xero not connected or token expired' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
 
     // Get settlements to match
     let query = adminSupabase
@@ -170,8 +107,8 @@ Deno.serve(async (req) => {
     if (settlementId) {
       query = query.eq('settlement_id', settlementId)
     } else {
-      // Only match pushed settlements — check via xero_journal_id or status
-      query = query.or('status.eq.synced,status.eq.pushed_to_xero')
+      // Match pushed settlements that don't have a deposit match yet
+      query = query.or('status.eq.synced,status.eq.pushed_to_xero,status.eq.awaiting_deposit,status.eq.draft_in_xero,status.eq.authorised_in_xero')
     }
 
     const { data: settlements, error: settErr } = await query
@@ -196,109 +133,70 @@ Deno.serve(async (req) => {
         continue
       }
 
-      // Fetch bank transactions from Xero for the relevant date range
-      const fromDate = addDays(periodEnd, -7)
-      const toDate = addDays(periodEnd, 21)
+      // ── Query local bank_transactions cache (7-day window) ──
+      const fromDate = periodEnd
+      const toDate = addDays(periodEnd, 7)
 
-      // Xero where clause format: DateTime(YYYY, MM, DD) with AND (not &&)
-      // Docs: https://developer.xero.com/documentation/api/accounting/banktransactions
-      const formatXeroDateTime = (d: string) => {
-        const [y, m, dd] = d.split('-')
-        return `DateTime(${y}, ${m}, ${dd})`
+      const { data: bankTxns, error: btErr } = await adminSupabase
+        .from('bank_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('date', fromDate)
+        .lte('date', toDate)
+        .eq('transaction_type', 'RECEIVE')
+
+      if (btErr) {
+        console.error(`[bank-match] DB query error for ${s.settlement_id}:`, btErr.message)
       }
-      const whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)} AND Date<=${formatXeroDateTime(toDate)}`
 
-      let bankTxns: any[] = []
-      try {
-        const url = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(whereClause)}`
-        console.log(`[bank-match] Querying Xero: ${whereClause} for ${marketplace} (${s.settlement_id})`)
-        const res = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${xeroToken.access_token}`,
-            'Xero-Tenant-Id': xeroToken.tenant_id,
-            'Accept': 'application/json',
-          },
-        })
-        if (res.ok) {
-          const data = await res.json()
-          bankTxns = data?.BankTransactions || []
-          console.log(`[bank-match] Xero returned ${bankTxns.length} RECEIVE transactions. First:`, bankTxns.length > 0 ? JSON.stringify({ Total: bankTxns[0].Total, Date: bankTxns[0].Date, Reference: bankTxns[0].Reference, Contact: bankTxns[0].Contact?.Name, LineItem0: bankTxns[0].LineItems?.[0]?.Description }) : 'none')
-
-          // Log diagnostic to system_events so it's visible from the dashboard
-          await adminSupabase.from('system_events').insert({
-            user_id: userId,
-            event_type: 'bank_match_query',
-            marketplace_code: marketplace,
-            settlement_id: s.settlement_id,
-            period_label: `${s.period_start} → ${s.period_end}`,
-            details: {
-              where_clause: whereClause,
-              txns_returned: bankTxns.length,
-              deposit_amount_searched: depositAmount,
-              first_txn: bankTxns.length > 0 ? { total: bankTxns[0].Total, date: parseXeroDate(bankTxns[0].Date), reference: bankTxns[0].Reference, contact: bankTxns[0].Contact?.Name } : null,
-            },
-            severity: 'info',
-          })
-        } else {
-          const errText = await res.text()
-          console.error(`Xero bank API error [${res.status}]:`, errText)
-          await adminSupabase.from('system_events').insert({
-            user_id: userId,
-            event_type: 'bank_match_query',
-            marketplace_code: marketplace,
-            settlement_id: s.settlement_id,
-            details: { error: `Xero API ${res.status}`, response: errText.substring(0, 500) },
-            severity: 'error',
-          })
-        }
-      } catch (e) {
-        console.error('Xero bank fetch error:', e)
-      }
+      const txns = bankTxns || []
+      console.log(`[bank-match] ${marketplace} (${s.settlement_id}): ${txns.length} cached RECEIVE txns in ${fromDate} → ${toDate}, searching for ${depositAmount}`)
 
       // ══════════════════════════════════════════════════════════════
       // GOLDEN RULE: Nothing is marked as matched until user explicitly
       // confirms. Auto-detection is always a SUGGESTION, never a fact.
       // This function NEVER writes bank_verified or bank_match fields.
-      // All matches are returned as suggestions for the UI to present.
       // ══════════════════════════════════════════════════════════════
-      let matchFound = false
       const candidates: any[] = []
 
-      for (const txn of bankTxns) {
-        const txnAmount = Math.abs(txn.Total || 0)
-        const txnDate = parseXeroDate(txn.Date)
+      for (const txn of txns) {
+        const txnAmount = Math.abs(txn.amount || 0)
+        const txnDate = txn.date
         const amountDiff = Math.abs(txnAmount - depositAmount)
-        const narration = txn.LineItems?.[0]?.Description || ''
-        const contactName = txn.Contact?.Name || ''
-        const txnRef = txn.Reference || ''
-        const bankAccountName = txn.BankAccount?.Name || ''
+        const description = txn.description || ''
+        const contactName = txn.contact_name || ''
+        const txnRef = txn.reference || ''
+        const bankAccountName = txn.bank_account_name || ''
 
-        // Score each candidate — NEVER auto-write to DB
+        // Score each candidate
         let score = 0
-        const nameMatch = narrationMatchesMarketplace(narration, contactName, marketplace) ||
-          narration.includes(s.settlement_id) || txnRef.includes(s.settlement_id)
+        const nameMatch = narrationMatchesMarketplace(description, contactName, marketplace) ||
+          description.includes(s.settlement_id) || txnRef.includes(s.settlement_id)
 
+        // Amount scoring
         if (amountDiff <= 0.05) score += 50
+        else if (amountDiff <= 0.50) score += 40
         else if (amountDiff <= 1.00) score += 30
         else if (amountDiff <= 10) score += 15
 
+        // Processor/narration match (+30)
         if (nameMatch) score += 30
 
+        // Date proximity
         if (txnDate) {
           const daysDiff = Math.abs((new Date(txnDate).getTime() - new Date(periodEnd).getTime()) / (1000 * 60 * 60 * 24))
           if (daysDiff <= 2) score += 20
           else if (daysDiff <= 7) score += 10
-          else if (daysDiff <= 30) score += 5
         }
 
         if (score >= 15) {
-          const confidence = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low'
+          const confidence = score >= 90 ? 'high' : score >= 70 ? 'medium' : 'low'
           candidates.push({
-            transaction_id: txn.BankTransactionID,
+            transaction_id: txn.xero_transaction_id,
             amount: txnAmount,
             date: txnDate,
             reference: txnRef,
-            narration,
+            narration: description,
             bank_account_name: bankAccountName,
             confidence,
             score,
@@ -312,6 +210,30 @@ Deno.serve(async (req) => {
 
       if (candidates.length > 0) {
         const best = candidates[0]
+
+        // ── Write high-confidence match to payment_verifications (suggestion only) ──
+        if (best.score >= 90) {
+          await adminSupabase.from('payment_verifications').upsert({
+            user_id: userId,
+            settlement_id: s.settlement_id,
+            gateway_code: marketplace,
+            xero_tx_id: best.transaction_id,
+            match_amount: best.amount,
+            match_method: 'auto_suggested',
+            match_confidence: best.confidence,
+            confidence_score: best.score,
+            narration: best.narration,
+            transaction_date: best.date,
+            order_count: 0,
+          }, { onConflict: 'settlement_id,gateway_code' } as any)
+
+          // Update settlement status to deposit_matched (but NOT bank_verified)
+          await adminSupabase.from('settlements').update({
+            status: 'deposit_matched',
+          }).eq('settlement_id', s.settlement_id).eq('user_id', userId)
+            .in('status', ['awaiting_deposit', 'synced', 'pushed_to_xero', 'draft_in_xero', 'authorised_in_xero'])
+        }
+
         results.push({
           matched: false, // GOLDEN RULE: never auto-confirmed
           settlement_id: s.settlement_id,
@@ -323,13 +245,11 @@ Deno.serve(async (req) => {
             narration: best.narration,
             transaction_id: best.transaction_id,
           },
-          confidence: best.score >= 70 ? 0.9 : best.score >= 40 ? 0.7 : 0.5,
+          confidence: best.score >= 90 ? 0.9 : best.score >= 70 ? 0.7 : 0.5,
+          confidence_score: best.score,
           difference: best.amount_diff,
         })
-        matchFound = true
-      }
-
-      if (!matchFound) {
+      } else {
         // Log no match
         await adminSupabase.from('system_events').insert({
           user_id: userId,
@@ -337,7 +257,7 @@ Deno.serve(async (req) => {
           marketplace_code: marketplace,
           settlement_id: s.settlement_id,
           period_label: `${s.period_start} → ${s.period_end}`,
-          details: { deposit_amount: depositAmount, searched_from: fromDate, searched_to: toDate, txns_checked: bankTxns.length },
+          details: { deposit_amount: depositAmount, searched_from: fromDate, searched_to: toDate, cached_txns_checked: txns.length },
           severity: 'warning',
         })
 

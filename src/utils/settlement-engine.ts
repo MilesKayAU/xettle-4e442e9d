@@ -801,7 +801,7 @@ export async function syncSettlementToXero(
     await supabase
       .from('settlements')
       .update({
-        status: 'synced',
+        status: 'awaiting_deposit',
         xero_journal_id: result.invoiceId,
         xero_invoice_number: result.invoiceNumber || null,
         xero_status: 'AUTHORISED',

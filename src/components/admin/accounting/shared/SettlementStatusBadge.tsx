@@ -119,6 +119,28 @@ export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroT
         </Badge>
       );
 
+    // ─── Deposit verification statuses ──────────────────────────
+    case 'awaiting_deposit':
+      return (
+        <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">
+          Awaiting Deposit{refSuffix}
+        </Badge>
+      );
+
+    case 'deposit_matched':
+      return (
+        <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+          Deposit Matched{refSuffix}
+        </Badge>
+      );
+
+    case 'verified_payout':
+      return (
+        <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+          Verified{refSuffix} ✓
+        </Badge>
+      );
+
     default:
       return <Badge variant="outline" className="text-[10px]">{status || 'Saved'}</Badge>;
   }
