@@ -1,3 +1,16 @@
+// ══════════════════════════════════════════════════════════════
+// ACCOUNTING RULES (hardcoded, never configurable)
+// Canonical source: src/constants/accounting-rules.ts
+// 
+// Rule #11 — Three-Layer Accounting Source Model:
+//   Orders     → NEVER create accounting entries
+//   Payments   → NEVER create accounting entries
+//   Settlements → ONLY source of accounting entries
+//
+// This function syncs SETTLEMENT data to Xero as DRAFT invoices.
+// Orders and payments never trigger accounting entries.
+// ══════════════════════════════════════════════════════════════
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
