@@ -30,6 +30,32 @@ const CSV_MARKETPLACES = [
   { id: 'ebay', label: 'eBay' },
 ];
 
+const MARKETPLACE_CODE_ALIASES: Record<string, string[]> = {
+  everyday_market: ['woolworths'],
+  woolworths: ['everyday_market'],
+  ebay: ['ebay_au'],
+  ebay_au: ['ebay'],
+};
+
+function expandMarketplaceCodes(codes: string[]): string[] {
+  const expanded = new Set<string>();
+  for (const code of codes) {
+    const normalized = (code || '').toLowerCase().trim();
+    if (!normalized) continue;
+    expanded.add(normalized);
+    for (const alias of MARKETPLACE_CODE_ALIASES[normalized] || []) {
+      expanded.add(alias);
+    }
+  }
+  return Array.from(expanded);
+}
+
+function marketplaceLabelFromCode(code: string): string {
+  const known = CSV_MARKETPLACES.find(m => m.id === code);
+  if (known) return known.label;
+  return code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function StepDots({ current, total }: { current: number; total: number }) {
   return (
     <div className="flex items-center justify-center gap-2 mb-4">
@@ -73,6 +99,7 @@ export default function SetupStepConnectStores({
   const [shopDomain, setShopDomain] = useState('mileskayaustralia.myshopify.com');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customName, setCustomName] = useState('');
+  const [persistingSelections, setPersistingSelections] = useState(false);
 
   const handleConnectAmazon = async () => {
     setConnectingAmazon(true);
@@ -231,6 +258,55 @@ export default function SetupStepConnectStores({
     setNearMatch(null);
     setShowCustomInput(false);
     toast.success(`${name} added — you can upload its files in the next step.`);
+  };
+
+  const persistSelectedMarketplaces = async () => {
+    if (selectedMarketplaces.length === 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const uniqueCodes = Array.from(new Set(
+      selectedMarketplaces.map(code => code.toLowerCase().trim()).filter(Boolean)
+    ));
+
+    if (uniqueCodes.length === 0) return;
+
+    const connectionRows = uniqueCodes.map(code => ({
+      user_id: user.id,
+      marketplace_code: code,
+      marketplace_name: marketplaceLabelFromCode(code),
+      country_code: 'AU',
+      connection_type: 'manual',
+      connection_status: 'active',
+    }));
+
+    const { error: connectionErr } = await supabase
+      .from('marketplace_connections')
+      .upsert(connectionRows as any, { onConflict: 'user_id,marketplace_code' } as any);
+
+    if (connectionErr) throw connectionErr;
+
+    const codesToResolve = expandMarketplaceCodes(uniqueCodes);
+    await supabase
+      .from('channel_alerts' as any)
+      .update({ status: 'auto_resolved_setup', actioned_at: new Date().toISOString() } as any)
+      .eq('user_id', user.id)
+      .eq('status', 'pending')
+      .in('source_name', codesToResolve as any);
+  };
+
+  const handleContinueFromMarketplaceStep = async () => {
+    setPersistingSelections(true);
+    try {
+      await persistSelectedMarketplaces();
+    } catch (err) {
+      console.error('[setup] failed to persist selected marketplaces:', err);
+      toast.error('Could not fully save marketplace selections, but setup will continue.');
+    } finally {
+      setPersistingSelections(false);
+      onNext();
+    }
   };
 
   // Back within sub-steps goes to previous sub-step, or to wizard back
@@ -512,8 +588,8 @@ export default function SetupStepConnectStores({
           </p>
 
           <div className="flex flex-col items-center gap-2">
-            <Button onClick={onNext} className="w-full">
-              Continue
+            <Button onClick={handleContinueFromMarketplaceStep} className="w-full" disabled={persistingSelections}>
+              {persistingSelections ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving selections...</> : 'Continue'}
             </Button>
             <div className="flex items-center justify-between w-full">
               <button onClick={() => setStep(2)} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">

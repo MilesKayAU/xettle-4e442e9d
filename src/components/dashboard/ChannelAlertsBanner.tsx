@@ -86,6 +86,31 @@ function resolveMarketplaceCode(label: string | null, sourceName: string): strin
   return null;
 }
 
+const MARKETPLACE_CODE_ALIASES: Record<string, string[]> = {
+  everyday_market: ['woolworths'],
+  woolworths: ['everyday_market'],
+  ebay: ['ebay_au'],
+  ebay_au: ['ebay'],
+};
+
+function expandMarketplaceCodes(codes: string[]): Set<string> {
+  const expanded = new Set<string>();
+  for (const code of codes) {
+    const normalized = (code || '').toLowerCase().trim();
+    if (!normalized) continue;
+    expanded.add(normalized);
+    for (const alias of MARKETPLACE_CODE_ALIASES[normalized] || []) {
+      expanded.add(alias);
+    }
+  }
+  return expanded;
+}
+
+function isXeroContactOnlyAlert(alert: Pick<ChannelAlert, 'detection_method' | 'order_count'>): boolean {
+  return (alert.detection_method === 'xero_contact_standalone' || alert.detection_method === 'xero_contact')
+    && (alert.order_count === 0 || alert.order_count === null);
+}
+
 /** Get the best display name for an alert */
 function getDisplayName(alert: ChannelAlert): string {
   if (alert.detected_label) return alert.detected_label;
@@ -115,8 +140,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     return alertList.filter(a => {
       if (excludeId && a.id === excludeId) return false;
       // Exclude unclassified Xero contacts (info-only)
-      const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-      if (isXeroContactOnly) return false;
+      if (isXeroContactOnlyAlert(a)) return false;
       // Exclude payment gateway deposits
       if (a.alert_type === 'payment_gateway_deposit') return false;
       // Exclude micro-deposits under $5 (gateway noise)
@@ -127,17 +151,30 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
   const loadAlerts = async () => {
     try {
-      // Load payment processor registry to auto-exclude gateways
-      const { data: processorData } = await supabase
-        .from('payment_processor_registry')
-        .select('processor_code, processor_name, detection_keywords');
+      const [processorRes, connectionsRes, settlementsRes, fingerprintRes, subChannelsRes] = await Promise.all([
+        supabase.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords'),
+        supabase.from('marketplace_connections').select('marketplace_code').eq('connection_status', 'active'),
+        supabase.from('settlements').select('marketplace').not('marketplace', 'is', null),
+        supabase.from('marketplace_file_fingerprints').select('marketplace_code'),
+        supabase.from('shopify_sub_channels').select('marketplace_code').eq('ignored', false).not('marketplace_code', 'is', null),
+      ]);
+
+      const processorData = processorRes.data || [];
+
       const gatewayKeywords = new Set<string>();
-      for (const p of (processorData || [])) {
+      for (const p of processorData) {
         gatewayKeywords.add((p.processor_name || '').toLowerCase());
         for (const kw of (p.detection_keywords as string[] || [])) {
           gatewayKeywords.add(kw.toLowerCase());
         }
       }
+
+      const configuredCodes = expandMarketplaceCodes([
+        ...(connectionsRes.data || []).map((c: any) => c.marketplace_code),
+        ...(settlementsRes.data || []).map((s: any) => s.marketplace),
+        ...(fingerprintRes.data || []).map((f: any) => f.marketplace_code),
+        ...(subChannelsRes.data || []).map((s: any) => s.marketplace_code),
+      ]);
 
       const { data, error } = await supabase
         .from('channel_alerts' as any)
@@ -154,9 +191,25 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           : a.candidate_tags || [],
       })) as ChannelAlert[];
 
+      // Auto-resolve stale Xero contact alerts for marketplaces already configured by user
+      const staleConfiguredXeroAlerts = rawAlerts.filter(a =>
+        isXeroContactOnlyAlert(a) && configuredCodes.has((a.source_name || '').toLowerCase().trim())
+      );
+
+      if (staleConfiguredXeroAlerts.length > 0) {
+        const staleIds = staleConfiguredXeroAlerts.map(a => a.id);
+        await supabase
+          .from('channel_alerts' as any)
+          .update({ status: 'auto_resolved_existing_marketplace', actioned_at: new Date().toISOString() } as any)
+          .in('id', staleIds as any)
+          .eq('status', 'pending');
+      }
+
+      const scopedAlerts = rawAlerts.filter(a => !staleConfiguredXeroAlerts.some(s => s.id === a.id));
+
       // Auto-reclassify gateway contacts as payment_gateway_deposit alerts
       const alertsData: ChannelAlert[] = [];
-      for (const a of rawAlerts) {
+      for (const a of scopedAlerts) {
         const name = (a.source_name || '').toLowerCase();
         const label = (a.detected_label || '').toLowerCase();
         const isGateway = gatewayKeywords.has(name) || gatewayKeywords.has(label) ||
@@ -530,16 +583,12 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         {/* ─── Group alerts by type ─── */}
         {(() => {
           const unlinkedAlerts = alerts.filter(a => a.alert_type === 'unlinked');
-          const xeroContactAlerts = alerts.filter(a => {
-            const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-            return isXeroContactOnly;
-          });
+          const xeroContactAlerts = alerts.filter(a => isXeroContactOnlyAlert(a));
           const depositAlerts = alerts.filter(a => a.alert_type === 'unmatched_deposit' || a.alert_type === 'unknown_deposit' || a.alert_type === 'payment_gateway_deposit');
           const newChannelAlerts = alerts.filter(a => {
             if (a.alert_type === 'unlinked') return false;
             if (a.alert_type === 'unmatched_deposit' || a.alert_type === 'unknown_deposit' || a.alert_type === 'payment_gateway_deposit') return false;
-            const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-            if (isXeroContactOnly) return false;
+            if (isXeroContactOnlyAlert(a)) return false;
             return true;
           });
 
