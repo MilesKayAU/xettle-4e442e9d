@@ -569,11 +569,7 @@ export default function ValidationSweep({
             </div>
             <div className="flex gap-2">
               {readyToPushRows.length > 0 && (
-                <Button size="sm" className="gap-1.5" onClick={async () => {
-                  for (const r of readyToPushRows) {
-                    await handlePushToXero(r);
-                  }
-                }}>
+                <Button size="sm" className="gap-1.5" onClick={openPushAllPreview}>
                   <Send className="h-3.5 w-3.5" /> Push all to Xero
                 </Button>
               )}
