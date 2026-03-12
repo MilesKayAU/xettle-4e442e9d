@@ -1580,6 +1580,42 @@ export type Database = {
         }
         Relationships: []
       }
+      xero_contact_account_mappings: {
+        Row: {
+          account_code: string
+          confidence_pct: number
+          contact_name: string
+          created_at: string
+          id: string
+          last_seen: string
+          updated_at: string
+          usage_count: number
+          user_id: string
+        }
+        Insert: {
+          account_code: string
+          confidence_pct?: number
+          contact_name: string
+          created_at?: string
+          id?: string
+          last_seen?: string
+          updated_at?: string
+          usage_count?: number
+          user_id: string
+        }
+        Update: {
+          account_code?: string
+          confidence_pct?: number
+          contact_name?: string
+          created_at?: string
+          id?: string
+          last_seen?: string
+          updated_at?: string
+          usage_count?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       xero_tokens: {
         Row: {
           access_token: string
