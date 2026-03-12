@@ -893,7 +893,7 @@ export default function Setup() {
                       </Button>
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {progressStatus(shopifyProgress, phase1Shopify, 'Shopify')}
+                      {progressStatus(shopifyProgress, phase1Shopify, 'Shopify', shopifyPayoutsStep.status)}
                     </span>
                   </div>
                 </div>
