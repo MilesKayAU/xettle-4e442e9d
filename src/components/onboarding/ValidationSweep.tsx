@@ -81,6 +81,8 @@ export default function ValidationSweep({
   onSwitchToUpload,
   onPushToXero,
   showSweepAnimation = false,
+  maxRows,
+  onViewAll,
 }: ValidationSweepProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [loading, setLoading] = useState(true);
