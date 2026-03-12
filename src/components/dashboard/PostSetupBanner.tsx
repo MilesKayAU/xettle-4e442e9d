@@ -412,7 +412,7 @@ export default function PostSetupBanner({
                     </p>
                   )}
                   {hasShopify && shopifyStatus !== 'skipped' && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className={`text-sm ${shopifyStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {renderStatusIcon(shopifyStatus)}
                       {shopifyStatus === 'scanning'
                         ? shopifyChannelsFound > 0

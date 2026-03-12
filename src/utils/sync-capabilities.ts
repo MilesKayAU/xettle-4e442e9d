@@ -101,7 +101,7 @@ export async function callEdgeFunctionSafe(
 
     if (!res.ok) {
       const text = await res.text().catch(() => 'Unknown error');
-      const isRateLimited = res.status === 429;
+      const isRateLimited = res.status === 429 || res.status === 503;
       console.warn(`[sync] ${name} returned ${res.status}:`, text);
       return {
         ok: false,
