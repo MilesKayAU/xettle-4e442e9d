@@ -914,6 +914,13 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
                 );
               })}
             </div>
+            <TablePaginationBar
+              page={autoPage}
+              totalPages={autoTotalPages}
+              totalItems={settlements.length}
+              pageSize={DEFAULT_PAGE_SIZE}
+              onPageChange={setAutoPage}
+            />
           </CardContent>
         </Card>
       )}
