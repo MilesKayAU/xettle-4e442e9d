@@ -362,7 +362,7 @@ async function upsertSetting(supabase: any, userId: string, key: string, value: 
 // ═══════════════════════════════════════════════════════════════
 // SYNC ACTION: Full server-side fetch-parse-save loop (cron)
 // ═══════════════════════════════════════════════════════════════
-async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported: number; skipped: number; errors: number; details: string[] }> {
+async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{ users: number; imported: number; skipped: number; errors: number; details: string[] }> {
   const details: string[] = [];
   let totalImported = 0, totalSkipped = 0, totalErrors = 0;
 
