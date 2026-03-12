@@ -151,17 +151,30 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
   const loadAlerts = async () => {
     try {
-      // Load payment processor registry to auto-exclude gateways
-      const { data: processorData } = await supabase
-        .from('payment_processor_registry')
-        .select('processor_code, processor_name, detection_keywords');
+      const [processorRes, connectionsRes, settlementsRes, fingerprintRes, subChannelsRes] = await Promise.all([
+        supabase.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords'),
+        supabase.from('marketplace_connections').select('marketplace_code').eq('connection_status', 'active'),
+        supabase.from('settlements').select('marketplace').not('marketplace', 'is', null),
+        supabase.from('marketplace_file_fingerprints').select('marketplace_code'),
+        supabase.from('shopify_sub_channels').select('marketplace_code').eq('ignored', false).not('marketplace_code', 'is', null),
+      ]);
+
+      const processorData = processorRes.data || [];
+
       const gatewayKeywords = new Set<string>();
-      for (const p of (processorData || [])) {
+      for (const p of processorData) {
         gatewayKeywords.add((p.processor_name || '').toLowerCase());
         for (const kw of (p.detection_keywords as string[] || [])) {
           gatewayKeywords.add(kw.toLowerCase());
         }
       }
+
+      const configuredCodes = expandMarketplaceCodes([
+        ...(connectionsRes.data || []).map((c: any) => c.marketplace_code),
+        ...(settlementsRes.data || []).map((s: any) => s.marketplace),
+        ...(fingerprintRes.data || []).map((f: any) => f.marketplace_code),
+        ...(subChannelsRes.data || []).map((s: any) => s.marketplace_code),
+      ]);
 
       const { data, error } = await supabase
         .from('channel_alerts' as any)
