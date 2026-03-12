@@ -35,6 +35,7 @@ import BulkDeleteDialog from '@/components/admin/accounting/shared/BulkDeleteDia
 import { useXeroSync } from '@/hooks/use-xero-sync';
 import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
 import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplicateCheck } from '@/utils/settlement-engine';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 import InsightsTab from '@/components/admin/accounting/InsightsTab';
 
