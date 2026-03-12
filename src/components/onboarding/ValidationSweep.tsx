@@ -510,6 +510,15 @@ export default function ValidationSweep({
                     <SettlementCell row={row} />
                   </td>
 
+                  {/* Net Payout */}
+                  <td className="px-4 py-3 text-right">
+                    {row.settlement_net && row.settlement_net !== 0 ? (
+                      <span className="font-semibold text-foreground">{formatAUD(row.settlement_net)}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+
                   {/* Xero */}
                   <td className="px-4 py-3 text-center">
                     {row.xero_pushed ? (
