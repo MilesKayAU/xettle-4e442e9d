@@ -608,10 +608,14 @@ export default function AccountMapperCard() {
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
               {marketplaceOverrideKeys.map(key => {
                 const [cat, mp] = key.split(':');
+                const code = mapping[key]?.code;
                 return (
-                  <div key={key} className="flex justify-between py-1 border-b border-border/50">
+                  <div key={key} className="flex items-center justify-between py-1 border-b border-border/50 gap-2">
                     <span className="text-muted-foreground">{mp} {cat}</span>
-                    <span className="font-mono">{mapping[key]?.code || '—'}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-mono">{code || '—'}</span>
+                      {renderValidationBadge(code, cat || 'Sales')}
+                    </span>
                   </div>
                 );
               })}
