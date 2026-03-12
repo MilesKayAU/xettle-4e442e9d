@@ -644,6 +644,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'confirmed_manual') return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
+    if (row.match_status === 'awaiting_sync') return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
     if (row.match_status.startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
       if (isAmazon(row)) return <Clock3 className="h-4 w-4 text-muted-foreground" />;
@@ -652,13 +653,14 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     return <XCircle className="h-4 w-4 text-destructive" />;
   };
 
-  const getStatusLabel = (row: OutstandingRow) => {
+   const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
     if (row.match_status === 'suggestion_high') return 'Likely match found';
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
+    if (row.match_status === 'awaiting_sync') return 'Syncing settlement…';
     if (row.match_status.startsWith('gap_')) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
@@ -675,6 +677,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
+    if (row.match_status === 'awaiting_sync') return 'bg-blue-50/30 dark:bg-blue-950/10';
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
     if (row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
@@ -933,6 +936,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           Sync with Xero
         </Button>
       </div>
+
+      {/* Sync-in-progress banner — shown when most invoices have no settlement match */}
+      {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <Loader2 className="h-5 w-5 text-amber-600 dark:text-amber-400 animate-spin shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Settlement sync in progress
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              Xettle is fetching your Amazon and Shopify settlement data in the background. This can take a few minutes
+              on first setup — settlements will automatically match to these invoices as they arrive.
+              Refresh this page shortly to see updated matches.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Filter toggle */}
       {data && nonMarketplaceCount > 0 && (

@@ -200,6 +200,20 @@ Deno.serve(async (req) => {
       aliasMap.set(a.alias_id, a.canonical_settlement_id);
     }
 
+    // ─── Load pre-seeded cache from xero_accounting_matches ───
+    // When sync-xero-status pre-seeds outstanding invoices before settlement data arrives,
+    // we can use this to show "Awaiting sync" instead of "No settlement"
+    const { data: preSeededMatches } = await supabase
+      .from('xero_accounting_matches')
+      .select('settlement_id, marketplace_code, xero_invoice_id, match_method, matched_amount, matched_date')
+      .eq('user_id', userId)
+      .eq('match_method', 'xero_pre_seed');
+
+    const preSeededSet = new Set<string>();
+    for (const m of (preSeededMatches || [])) {
+      preSeededSet.add(m.settlement_id);
+    }
+
     // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -537,6 +551,9 @@ Deno.serve(async (req) => {
         matchStatus = 'no_bank_deposit';
       } else if (!hasSettlement && hasBankDeposit) {
         matchStatus = 'no_settlement';
+      } else if (!hasSettlement && settlementId && preSeededSet.has(settlementId)) {
+        // Pre-seeded by sync-xero-status — settlement data is expected from API sync
+        matchStatus = 'awaiting_sync';
       } else {
         matchStatus = 'no_settlement';
       }
