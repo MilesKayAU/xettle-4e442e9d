@@ -55,6 +55,8 @@ interface OutstandingRow {
   invoice_date: string | null;
   due_date: string | null;
   amount: number;
+  currency_code?: string;
+  is_pre_boundary?: boolean;
   overdue_days: number | null;
   has_settlement: boolean;
   settlement_id: string | null;
