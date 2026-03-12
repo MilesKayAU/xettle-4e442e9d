@@ -88,7 +88,8 @@ async function fetchXeroWithRetry(url: string, headers: Record<string, string>, 
     lastBody = await resp.text();
 
     if (resp.status === 429 && attempt < maxAttempts) {
-      const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+      const retryAfterHeader = resp.headers.get('Retry-After');
+      const delayMs = retryAfterHeader ? parseInt(retryAfterHeader) * 1000 : Math.min(2000 * Math.pow(2, attempt - 1), 16000);
       console.warn(`Xero rate limited (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs}ms`);
       await sleep(delayMs);
       continue;
@@ -183,7 +184,7 @@ Deno.serve(async (req) => {
     // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
     // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
     const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC&summaryOnly=true`;
 
     let allInvoices: any[] = [];
     let usingCacheFallback = false;
@@ -250,17 +251,8 @@ Deno.serve(async (req) => {
       console.log(`[fetch-outstanding] Using cached fallback for ${allInvoices.length} invoices`);
     }
 
-    // ─── Filter to known marketplace contacts only ───
-    const MARKETPLACE_CONTACT_PATTERNS = [
-      'amazon', 'shopify', 'ebay', 'catch', 'kogan', 'bigw', 'big w',
-      'everyday market', 'mydeal', 'bunnings', 'woolworths', 'mirakl',
-      'tradesquare', 'temu', 'walmart',
-    ];
-
-    const invoices = allInvoices.filter((inv: any) => {
-      const contact = (inv.Contact?.Name || '').toLowerCase();
-      return MARKETPLACE_CONTACT_PATTERNS.some(p => contact.includes(p));
-    });
+    // ─── Pass ALL outstanding ACCREC invoices through — UI toggle controls marketplace vs all ───
+    const invoices = allInvoices;
 
     // ─── Get user's settlements for matching (including bank match fields) ───
     const { data: settlements } = await supabase
