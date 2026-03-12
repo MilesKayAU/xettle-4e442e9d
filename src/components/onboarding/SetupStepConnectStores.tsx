@@ -30,6 +30,32 @@ const CSV_MARKETPLACES = [
   { id: 'ebay', label: 'eBay' },
 ];
 
+const MARKETPLACE_CODE_ALIASES: Record<string, string[]> = {
+  everyday_market: ['woolworths'],
+  woolworths: ['everyday_market'],
+  ebay: ['ebay_au'],
+  ebay_au: ['ebay'],
+};
+
+function expandMarketplaceCodes(codes: string[]): string[] {
+  const expanded = new Set<string>();
+  for (const code of codes) {
+    const normalized = (code || '').toLowerCase().trim();
+    if (!normalized) continue;
+    expanded.add(normalized);
+    for (const alias of MARKETPLACE_CODE_ALIASES[normalized] || []) {
+      expanded.add(alias);
+    }
+  }
+  return Array.from(expanded);
+}
+
+function marketplaceLabelFromCode(code: string): string {
+  const known = CSV_MARKETPLACES.find(m => m.id === code);
+  if (known) return known.label;
+  return code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function StepDots({ current, total }: { current: number; total: number }) {
   return (
     <div className="flex items-center justify-center gap-2 mb-4">
