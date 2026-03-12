@@ -9,6 +9,7 @@ import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/ac
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
+import RecentSettlements from '@/components/dashboard/RecentSettlements';
 import ActionCentre, { type MissingSettlement } from '@/components/dashboard/ActionCentre';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
