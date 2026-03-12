@@ -248,6 +248,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getStatusIcon = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+    if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status.startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     return <XCircle className="h-4 w-4 text-destructive" />;
@@ -255,6 +256,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'Balanced';
+    if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
     if (row.match_status.startsWith('gap_')) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
@@ -265,6 +267,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getRowBgClass = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'bg-green-50/50 dark:bg-green-950/10';
+    if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
   };
