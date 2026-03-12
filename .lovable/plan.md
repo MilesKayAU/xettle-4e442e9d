@@ -298,3 +298,33 @@ Each level populates `marketplace_fingerprints` and `marketplace_file_fingerprin
 | Lines of dashboard code | ~8,500 |
 | Lines on shared hooks | ~700 (GenericMarketplaceDashboard only) |
 | Lines NOT on shared hooks | ~7,800 |
+
+---
+
+## Session 10+ — Gateway-Aware Payout Splitting
+
+### Problem
+Shopify payouts aggregate all transactions (direct + marketplace) into a single payout. Gateway names like "Mirakl", "Commercium by constacloud", and "Manual" indicate marketplace or non-standard origins but are not currently used to split settlements.
+
+### Approach (Approved)
+1. **Cross-reference `source_order_id`**: Each Shopify Balance Transaction has a `source_order_id`. Look this up against the cached `shopify_orders` table to get the `gateway` field.
+2. **Group by gateway**: Within each payout, group transactions by resolved gateway → generate sub-settlements per marketplace.
+3. **Mirakl resolution**: When gateway = "mirakl", cross-reference the order's `source_name` or tags to resolve the specific marketplace (Bunnings, Kmart, Target AU).
+4. **Registry entries**: `mirakl` and `manual_bank_transfer` are already in `payment_processor_registry` (added Session 9).
+
+### Performance Considerations
+- Large payout histories (1000+ transactions) need batched lookups against `shopify_orders`
+- Consider pre-building a gateway map during `fetch-shopify-orders` sync
+- May need an index on `shopify_orders(shopify_order_id)` for fast joins
+
+### Registry Data (already seeded)
+- `mirakl` → type: `marketplace_operator`, needs source_name cross-reference
+- `manual_bank_transfer` → type: `bank_transfer`, exclude from channel alerts
+- `commercium by constacloud` → already in `GATEWAY_REGISTRY` → maps to Kogan
+
+### Implementation Steps
+1. Add `gateway` column awareness to `fetch-shopify-payouts` transaction processing
+2. Build gateway→marketplace resolver function
+3. Generate sub-settlement records per marketplace within a single payout
+4. Update `marketplace_validation` to track split payouts
+5. UI: Show split payout breakdown in Shopify Payments dashboard
