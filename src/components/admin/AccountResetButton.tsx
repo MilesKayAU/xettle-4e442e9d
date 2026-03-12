@@ -22,6 +22,7 @@ export default function AccountResetButton() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
+  const queryClient = useQueryClient();
 
   const isConfirmed = confirmInput === CONFIRM_TEXT;
 
