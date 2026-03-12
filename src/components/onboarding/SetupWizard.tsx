@@ -62,6 +62,8 @@ export default function SetupWizard({
   };
 
   const handleCloseAttempt = () => {
+    // Don't allow closing while an API connection is in progress
+    if (isSyncing) return;
     setShowCloseWarning(true);
   };
 
@@ -75,7 +77,7 @@ export default function SetupWizard({
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) handleCloseAttempt(); }}>
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+        <DialogContent className={`sm:max-w-xl max-h-[90vh] overflow-y-auto p-0 gap-0 ${isSyncing ? '[&>button]:hidden' : ''}`}>
           {/* Progress header */}
           <div className="px-6 pt-6 pb-3 space-y-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
