@@ -195,7 +195,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
   if (meta.refundCommissionExGst && meta.refundCommissionExGst !== 0) {
     lines.push({
       Description: 'Commission Refund (on refunded orders)',
-      AccountCode: getCode('Seller Fees'),
+      AccountCode: getCode('Seller Fees', mpLabel),
       TaxType: 'INPUT',
       UnitAmount: Math.round(Math.abs(meta.refundCommissionExGst) * 100) / 100,
       Quantity: 1,
