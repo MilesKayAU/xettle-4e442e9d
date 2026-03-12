@@ -316,7 +316,19 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
     }
   }, []);
 
-  useEffect(() => { fetchOutstanding(); }, []);
+  // Only auto-fetch when discovery is complete (prevents Xero API call storm)
+  useEffect(() => {
+    if (discoveryComplete) {
+      fetchOutstanding();
+    }
+  }, [discoveryComplete]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+    };
+  }, []);
 
   // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
   // PAYMENT VERIFICATION LAYER ONLY
