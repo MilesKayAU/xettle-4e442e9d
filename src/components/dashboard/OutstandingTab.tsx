@@ -278,7 +278,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       return `Gap: $${gap}`;
     }
     if (row.match_status === 'no_bank_deposit') {
-      return isAmazon(row) ? 'Awaiting bank deposit' : 'No bank deposit';
+      return isAmazon(row) ? 'Awaiting deposit' : 'No bank deposit';
     }
     return 'No settlement';
   };
