@@ -84,10 +84,14 @@ async function syncPayoutsForUser(
 
   const buildInitialUrl = () => {
     const params = new URLSearchParams({ status: "paid" });
-    // Smart sync window: if sync_from provided, only fetch payouts from that date
+    // Smart sync window: use sync_from if provided, otherwise use boundary date
+    // This prevents downloading hundreds of historical payouts on first connect
     if (syncFromParam) {
       params.set("date_min", syncFromParam);
       console.log(`[fetch-shopify-payouts] Using sync_from filter: date_min=${syncFromParam}`);
+    } else if (dateMin) {
+      params.set("date_min", dateMin);
+      console.log(`[fetch-shopify-payouts] Using boundary date filter: date_min=${dateMin}`);
     }
     return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/shopify_payments/payouts.json?${params.toString()}`;
   };
