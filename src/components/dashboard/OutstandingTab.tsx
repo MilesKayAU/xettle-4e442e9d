@@ -652,13 +652,14 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     return <XCircle className="h-4 w-4 text-destructive" />;
   };
 
-  const getStatusLabel = (row: OutstandingRow) => {
+   const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
     if (row.match_status === 'suggestion_high') return 'Likely match found';
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
+    if (row.match_status === 'awaiting_sync') return 'Syncing settlement…';
     if (row.match_status.startsWith('gap_')) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
