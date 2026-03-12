@@ -34,11 +34,13 @@ export default function Auth() {
   const [showResendVerification, setShowResendVerification] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) navigate('/dashboard');
-    };
-    checkAuth();
+    // Use onAuthStateChange instead of getSession to avoid blocking on slow DB
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && event !== 'SIGNED_OUT') {
+        navigate('/dashboard');
+      }
+    });
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
   const handleSignIn = async (e: React.FormEvent) => {
