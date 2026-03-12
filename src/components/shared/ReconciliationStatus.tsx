@@ -284,18 +284,23 @@ export function ReconciliationHealth({ className, userId }: ReconciliationHealth
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!userId) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+
     loadHealth();
-  }, []);
+  }, [userId]);
 
   async function loadHealth() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+    if (!userId) return;
 
+    try {
       const { data: checks, error } = await supabase
         .from('reconciliation_checks')
         .select('marketplace_code, status')
-        .eq('user_id', user.id);
+        .eq('user_id', userId);
 
       if (error) throw error;
       if (!checks || checks.length === 0) {
