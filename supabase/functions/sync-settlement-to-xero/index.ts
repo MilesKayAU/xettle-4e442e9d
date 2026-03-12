@@ -530,6 +530,7 @@ serve(async (req) => {
     // ─── Fetch user account code overrides ──────────────────────────
     const DEFAULT_ACCOUNT_CODES: Record<string, string> = {
       'Sales': '200',
+      'Shipping': '206',
       'Refunds': '205',
       'Reimbursements': '271',
       'Seller Fees': '407',

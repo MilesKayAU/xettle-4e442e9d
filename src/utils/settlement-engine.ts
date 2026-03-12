@@ -101,6 +101,7 @@ export interface XeroLineItem {
 
 const DEFAULT_ACCOUNT_CODES: Record<string, string> = {
   'Sales': '200',
+  'Shipping': '206',
   'Refunds': '205',
   'Reimbursements': '271',
   'Seller Fees': '407',
@@ -193,7 +194,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
   if (meta.shippingExGst && meta.shippingExGst !== 0) {
     lines.push({
       Description: 'Shipping Revenue',
-      AccountCode: getCode('Sales'),
+      AccountCode: getCode('Shipping'),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round(meta.shippingExGst * 100) / 100,
       Quantity: 1,

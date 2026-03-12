@@ -23,12 +23,13 @@ interface MappingEntry {
 type MapperState = 'unmapped' | 'scanning' | 'review' | 'confirmed';
 
 const CATEGORIES = [
-  'Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements',
+  'Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements',
   'Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees',
 ] as const;
 
 const CATEGORY_DESCRIPTIONS: Record<string, string> = {
-  'Sales': 'Gross product sales & shipping revenue',
+  'Sales': 'Gross product sales revenue',
+  'Shipping': 'Shipping revenue charged to customers',
   'Promotional Discounts': 'Vouchers & promotions reducing sale price',
   'Refunds': 'Product & shipping refunds to customers',
   'Reimbursements': 'Marketplace reimbursements (not taxable)',

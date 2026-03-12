@@ -1022,7 +1022,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                     const meta = parsed.metadata || {};
                     if (meta.refundsExGst && meta.refundsExGst !== 0) previewLines.push({ Description: 'Customer Refunds', AccountCode: '205', TaxType: 'OUTPUT', UnitAmount: Math.round((meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) * 100) / 100, Quantity: 1 });
                     if (meta.refundCommissionExGst && meta.refundCommissionExGst !== 0) previewLines.push({ Description: 'Commission Refund', AccountCode: '407', TaxType: 'INPUT', UnitAmount: Math.round(Math.abs(meta.refundCommissionExGst) * 100) / 100, Quantity: 1 });
-                    if (meta.shippingExGst && meta.shippingExGst !== 0) previewLines.push({ Description: 'Shipping Revenue', AccountCode: '200', TaxType: 'OUTPUT', UnitAmount: Math.round(meta.shippingExGst * 100) / 100, Quantity: 1 });
+                    if (meta.shippingExGst && meta.shippingExGst !== 0) previewLines.push({ Description: 'Shipping Revenue', AccountCode: '206', TaxType: 'OUTPUT', UnitAmount: Math.round(meta.shippingExGst * 100) / 100, Quantity: 1 });
                     if (meta.subscriptionAmount && meta.subscriptionAmount !== 0) previewLines.push({ Description: 'Marketplace Subscription', AccountCode: '407', TaxType: 'INPUT', UnitAmount: Math.round(meta.subscriptionAmount * 100) / 100, Quantity: 1 });
                     const invoiceLines = previewLines.filter(l => Math.round(l.UnitAmount * 100) !== 0);
                     const invoiceTotal = invoiceLines.reduce((sum, l) => sum + l.UnitAmount * l.Quantity, 0);
