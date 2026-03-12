@@ -339,31 +339,25 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
           {/* Filter tabs */}
           {settlements.length > 0 && (
-            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
-              <button
-                onClick={() => setSettlementFilter('all')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  settlementFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                All ({baseFiltered.length})
-              </button>
-              <button
-                onClick={() => setSettlementFilter('attention')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  settlementFilter === 'attention' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Needs Attention {attentionCount > 0 && <span className="ml-1 text-amber-600">({attentionCount})</span>}
-              </button>
-              <button
-                onClick={() => setSettlementFilter('synced')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  settlementFilter === 'synced' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Synced {syncedCount > 0 && <span className="ml-1 text-emerald-600">({syncedCount})</span>}
-              </button>
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5 flex-wrap">
+              {([
+                { key: 'all', label: 'All', count: baseFiltered.length, color: '' },
+                { key: 'ready', label: 'Ready to Push', count: readyCount, color: 'text-primary' },
+                { key: 'in_xero', label: 'In Xero', count: inXeroCount, color: 'text-emerald-600 dark:text-emerald-400' },
+                { key: 'bank_matched', label: 'Bank Matched', count: bankMatchedCount, color: 'text-emerald-600 dark:text-emerald-400' },
+                { key: 'failed', label: 'Failed', count: failedCount, color: 'text-destructive' },
+              ] as const).filter(f => f.key === 'all' || f.count > 0).map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setSettlementFilter(f.key as any)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                    settlementFilter === f.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {f.label}
+                  {f.count > 0 && <span className={`ml-1 ${f.color}`}>({f.count})</span>}
+                </button>
+              ))}
             </div>
           )}
         </div>
