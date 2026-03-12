@@ -189,7 +189,7 @@ export default function PostSetupBanner({
           if (!ordersResult.ok) {
             const isRetryable = ordersResult.statusCode === 503 || ordersResult.statusCode === 429 || ordersResult.rateLimited;
             if (isRetryable) {
-              setShopifyMessage('Shopify is temporarily unavailable — will retry automatically');
+              setShopifyMessage('Shopify temporarily unavailable — scheduled sync will retry shortly');
               setShopifyStatus('rate_limited');
               return;
             }
