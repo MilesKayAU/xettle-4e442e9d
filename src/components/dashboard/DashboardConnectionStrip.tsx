@@ -100,13 +100,17 @@ export default function DashboardConnectionStrip({ onSwitchToUpload }: Props) {
             <span className="text-foreground">
               <span className="text-emerald-500">🟢</span>{' '}
               <span className="font-medium">{conn.label}</span>
-              {conn.lastSync && (
+              {conn.detail?.includes('rate limited') ? (
+                <span className="text-muted-foreground"> · {conn.detail}</span>
+              ) : conn.lastSync ? (
                 <span className="text-muted-foreground"> synced {conn.lastSync}</span>
+              ) : (
+                <span className="text-muted-foreground"> connected</span>
               )}
             </span>
           ) : (
             <span className="text-foreground">
-              <span className="text-amber-500">⚠️</span>{' '}
+              <span className="text-muted-foreground/60">⚪</span>{' '}
               <span className="font-medium">{conn.label}</span>{' '}
               <span className="text-muted-foreground">not connected</span>
             </span>
@@ -120,7 +124,7 @@ export default function DashboardConnectionStrip({ onSwitchToUpload }: Props) {
             onClick={onSwitchToUpload}
             className="text-primary hover:underline font-medium"
           >
-            Go to Upload to connect →
+            Connect →
           </button>
         </>
       )}

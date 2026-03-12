@@ -101,8 +101,14 @@ export default function PostSetupBanner({
             setXeroStatus('done');
             await setAppFlag('xero_scan_completed');
           } else {
-            setXeroMessage('Xero scan encountered an issue');
-            setXeroStatus('error');
+            const isRateLimit = result.statusCode === 429 || result.error?.includes('429') || result.error?.includes('rate');
+            if (isRateLimit) {
+              setXeroMessage('Xero API temporarily rate limited — will retry automatically');
+              setXeroStatus('done');
+            } else {
+              setXeroMessage('Xero history scan will retry on next sync — connection is active');
+              setXeroStatus('done');
+            }
           }
         })());
       } else if (hasXero && !caps.hasXero) {

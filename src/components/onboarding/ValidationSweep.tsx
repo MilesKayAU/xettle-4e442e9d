@@ -50,6 +50,9 @@ interface ValidationSweepProps {
   onSwitchToUpload?: () => void;
   onPushToXero?: (settlementId: string, marketplace: string) => void;
   showSweepAnimation?: boolean;
+  /** When set, limits visible rows and shows a "View all" link */
+  maxRows?: number;
+  onViewAll?: () => void;
 }
 
 type FilterStatus = 'all' | 'complete' | 'ready_to_push' | 'settlement_needed' | 'gap_detected';
@@ -78,6 +81,8 @@ export default function ValidationSweep({
   onSwitchToUpload,
   onPushToXero,
   showSweepAnimation = false,
+  maxRows,
+  onViewAll,
 }: ValidationSweepProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -472,7 +477,7 @@ export default function ValidationSweep({
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row, idx) => (
+              {(maxRows ? filteredRows.slice(0, maxRows) : filteredRows).map((row, idx) => (
                 <tr key={row.id} className={cn("transition-colors hover:bg-muted/30", idx % 2 === 1 && "bg-muted/10")}>
                   {/* Marketplace */}
                   <td className="px-4 py-3 font-medium text-foreground">
@@ -559,6 +564,17 @@ export default function ValidationSweep({
             </tbody>
           </table>
         </div>
+        {/* View all link when truncated */}
+        {maxRows && filteredRows.length > maxRows && (
+          <div className="border-t border-border px-4 py-3 text-center">
+            <button
+              onClick={onViewAll}
+              className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1"
+            >
+              View all {filteredRows.length} settlements <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </Card>
 
       {/* Bottom action bar */}

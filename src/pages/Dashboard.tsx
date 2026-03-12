@@ -741,9 +741,14 @@ export default function Dashboard() {
                 userName={user?.email?.split('@')[0]}
               />
 
-              {/* Validation table — marketplace × period status grid */}
+              {/* Validation table — marketplace × period status grid (dashboard = last 5 only) */}
               <ValidationSweep
                 onSwitchToUpload={() => switchView('smart_upload')}
+                maxRows={5}
+                onViewAll={() => {
+                  switchView('settlements');
+                  switchSettlementsSubTab('overview');
+                }}
               />
             </div>
           </ErrorBoundary>
