@@ -1588,6 +1588,8 @@ export type Database = {
           created_at: string
           id: string
           last_seen: string
+          normalised_contact_key: string
+          original_contact_name: string | null
           updated_at: string
           usage_count: number
           user_id: string
@@ -1599,6 +1601,8 @@ export type Database = {
           created_at?: string
           id?: string
           last_seen?: string
+          normalised_contact_key: string
+          original_contact_name?: string | null
           updated_at?: string
           usage_count?: number
           user_id: string
@@ -1610,6 +1614,8 @@ export type Database = {
           created_at?: string
           id?: string
           last_seen?: string
+          normalised_contact_key?: string
+          original_contact_name?: string | null
           updated_at?: string
           usage_count?: number
           user_id?: string

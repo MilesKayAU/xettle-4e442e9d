@@ -59,13 +59,23 @@ export default function AccountingBoundarySettings({
   }, [loadBoundary]);
 
   async function handleManualDateChange(date: Date | undefined) {
-    if (!date) return;
+    // Reject null/undefined
+    if (!date) {
+      toast.error('Please enter a valid past date for your accounting boundary');
+      return;
+    }
 
-    // BUILD 1 — Reject future boundary dates
+    // Reject invalid date objects
+    if (isNaN(date.getTime())) {
+      toast.error('Please enter a valid past date for your accounting boundary');
+      return;
+    }
+
+    // Reject future dates
     const today = new Date();
     today.setHours(23, 59, 59, 999);
     if (date > today) {
-      toast.error('Boundary date cannot be in the future — this would hide all your transactions');
+      toast.error('Please enter a valid past date for your accounting boundary');
       return;
     }
 
