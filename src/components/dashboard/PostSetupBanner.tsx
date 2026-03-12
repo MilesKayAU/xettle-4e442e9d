@@ -269,7 +269,8 @@ export default function PostSetupBanner({
     switch (status) {
       case 'scanning': return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary inline mr-1.5" />;
       case 'done': return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 inline mr-1.5" />;
-      case 'error': return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline mr-1.5" />;
+      case 'rate_limited': return <Clock3 className="h-3.5 w-3.5 text-amber-500 inline mr-1.5" />;
+      case 'error': return <AlertTriangle className="h-3.5 w-3.5 text-destructive inline mr-1.5" />;
       case 'skipped': return null;
       default: return null;
     }
