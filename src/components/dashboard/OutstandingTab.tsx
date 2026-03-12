@@ -8,6 +8,19 @@
  * STATE 3 — no_bank_deposit: No match found, manual reconciliation
  * STATE 4 — confirmed_manual: User manually confirmed a deposit
  * STATE 5 — confirmed / balanced: Deposit matched and confirmed
+ *
+ * Payment verification states (PayPal, Shopify Payments, etc.):
+ * ✅ "Payment confirmed" (green)
+ * ⚠️ "Confirm payment match" (amber)
+ * 🔗 "Find in Xero →" (grey)
+ * 🔧 "Manually confirmed" (blue)
+ * ❓ "No feed detected" (yellow — links to settings)
+ *
+ * PAYMENT VERIFICATION LAYER ONLY
+ * Payment matching never creates accounting entries.
+ * No invoice. No journal. No Xero push.
+ * Settlements are the only accounting source.
+ * See: architecture rule #11
  */
 
 import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
@@ -19,11 +32,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
   FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
-  MinusCircle, Clock3, Search, ArrowRight,
+  MinusCircle, Clock3, Search, ArrowRight, Shield,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ACCOUNTING_RULES } from '@/constants/accounting-rules';
 
 interface SettlementEvidence {
   settlement_id: string;
@@ -107,6 +121,30 @@ interface OutstandingRow {
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
   recent_bank_txns?: BankTxn[];
+  // Payment verification (Rule #11 — verification only, never accounting)
+  payment_verifications?: PaymentVerificationState[];
+}
+
+interface PaymentVerificationCandidate {
+  transaction_id: string;
+  amount: number;
+  date: string;
+  narration: string;
+  bank_account_name: string;
+  gateway_code: string;
+  order_count: number;
+  confidence: 'high' | 'medium' | 'low';
+  score: number;
+}
+
+interface PaymentVerificationState {
+  gateway_code: string;
+  gateway_label: string;
+  status: 'confirmed' | 'suggestion' | 'no_match' | 'manual' | 'no_feed';
+  candidates?: PaymentVerificationCandidate[];
+  confirmed_amount?: number;
+  confirmed_date?: string;
+  confirmed_method?: string;
 }
 
 interface OutstandingSummary {
@@ -121,6 +159,12 @@ interface OutstandingSummary {
 interface Props {
   onSwitchToUpload: () => void;
 }
+
+const GATEWAY_LABELS: Record<string, string> = {
+  paypal: 'PayPal',
+  shopify_payments: 'Shopify Payments',
+  manual_gateway: 'Manual',
+};
 
 const formatAUD = (n: number) =>
   new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
@@ -151,6 +195,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [showNonMarketplace, setShowNonMarketplace] = useState(false);
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
   const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
+  const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
@@ -199,6 +244,128 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   }, []);
 
   useEffect(() => { fetchOutstanding(); }, []);
+
+  // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
+  // PAYMENT VERIFICATION LAYER ONLY
+  // This never creates accounting entries. No invoice. No journal. No Xero push.
+  // Settlements are the only accounting source.
+  const fetchPaymentVerifications = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const resp = await supabase.functions.invoke('verify-payment-matches', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (resp.data?.candidates) {
+        setPaymentVerifications(resp.data.candidates);
+      }
+    } catch {
+      // Non-blocking — payment verification is optional
+    }
+  }, []);
+
+  useEffect(() => {
+    if (hasLoaded && data) {
+      fetchPaymentVerifications();
+    }
+  }, [hasLoaded, data, fetchPaymentVerifications]);
+
+  // ─── Confirm payment verification (writes to payment_verifications table) ───
+  // Nothing is marked as matched until user explicitly confirms.
+  // Auto-detection is always a SUGGESTION.
+  const confirmPaymentVerification = useCallback(async (
+    settlementId: string,
+    gatewayCode: string,
+    txnId: string,
+    amount: number,
+    method: 'suggested' | 'manual',
+    confidence: 'high' | 'medium' | 'low',
+    orderCount: number,
+    narration: string,
+    transactionDate: string,
+  ) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('payment_verifications')
+        .upsert({
+          user_id: session.user.id,
+          settlement_id: settlementId,
+          gateway_code: gatewayCode,
+          xero_tx_id: txnId,
+          match_amount: amount,
+          match_method: method,
+          match_confidence: confidence,
+          match_confirmed_at: new Date().toISOString(),
+          match_confirmed_by: session.user.id,
+          order_count: orderCount,
+          narration,
+          transaction_date: transactionDate,
+        }, { onConflict: 'settlement_id,gateway_code,user_id' });
+
+      if (error) throw error;
+      toast.success(`✓ ${GATEWAY_LABELS[gatewayCode] || gatewayCode} payment verified`);
+    } catch (err: any) {
+      toast.error(`Failed to confirm: ${err.message}`);
+    }
+  }, []);
+
+  // ─── Render payment verification badges for a row ───
+  const renderPaymentVerificationBadges = (row: OutstandingRow) => {
+    if (!row.settlement_id) return null;
+
+    const badges: JSX.Element[] = [];
+    for (const [gatewayCode, candidates] of Object.entries(paymentVerifications)) {
+      if (!candidates || candidates.length === 0) continue;
+
+      const label = GATEWAY_LABELS[gatewayCode] || gatewayCode;
+
+      // Check if already confirmed
+      // For now, show suggestion badges for all candidates
+      if (candidates.length === 1 && candidates[0].confidence === 'high') {
+        const c = candidates[0];
+        badges.push(
+          <div key={gatewayCode} className="flex items-center gap-1.5 text-xs">
+            <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400 gap-1">
+              <Shield className="h-2.5 w-2.5" />
+              {label}: {c.order_count} orders · {formatAUD(c.amount)}
+            </Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => confirmPaymentVerification(
+                row.settlement_id!, gatewayCode, c.transaction_id,
+                c.amount, 'suggested', c.confidence, c.order_count,
+                c.narration, c.date
+              )}
+              className="text-[10px] h-5 px-1.5"
+            >
+              Confirm
+            </Button>
+          </div>
+        );
+      } else if (candidates.length > 0) {
+        badges.push(
+          <Badge key={gatewayCode} variant="outline" className="text-[10px] border-muted text-muted-foreground gap-1">
+            <Shield className="h-2.5 w-2.5" />
+            {label}: {candidates.length} possible match{candidates.length > 1 ? 'es' : ''}
+          </Badge>
+        );
+      }
+    }
+
+    if (badges.length === 0) return null;
+
+    return (
+      <div className="flex flex-wrap gap-1 mt-1">
+        {badges}
+      </div>
+    );
+  };
 
   // ─── Confirm bank match (writes to settlements table) ───
   // Nothing is marked as matched until user explicitly confirms.
@@ -950,6 +1117,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                             {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || (row.match_status === 'no_bank_deposit' && isAmazon(row))) && (
                               <div className="mb-3">
                                 {renderBankMatchPanel(row)}
+                              </div>
+                            )}
+
+                            {/* Payment verification badges (Rule #11 — verification only) */}
+                            {Object.keys(paymentVerifications).length > 0 && row.settlement_id && (
+                              <div className="mb-3 p-3 rounded-lg bg-muted/30 border border-border">
+                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-2">
+                                  <Shield className="h-3 w-3" /> Payment Verification
+                                </p>
+                                {renderPaymentVerificationBadges(row)}
                               </div>
                             )}
 
