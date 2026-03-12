@@ -241,7 +241,14 @@ Deno.serve(async (req) => {
         console.error('Xero bank fetch error:', e)
       }
 
+      // ══════════════════════════════════════════════════════════════
+      // GOLDEN RULE: Nothing is marked as matched until user explicitly
+      // confirms. Auto-detection is always a SUGGESTION, never a fact.
+      // This function NEVER writes bank_verified or bank_match fields.
+      // All matches are returned as suggestions for the UI to present.
+      // ══════════════════════════════════════════════════════════════
       let matchFound = false
+      const candidates: any[] = []
 
       for (const txn of bankTxns) {
         const txnAmount = Math.abs(txn.Total || 0)
@@ -250,50 +257,62 @@ Deno.serve(async (req) => {
         const narration = txn.LineItems?.[0]?.Description || ''
         const contactName = txn.Contact?.Name || ''
         const txnRef = txn.Reference || ''
+        const bankAccountName = txn.BankAccount?.Name || ''
 
-        // Force match override
-        if (forceMatch && forceTransactionId && txn.BankTransactionID === forceTransactionId) {
-          await applyMatch(adminSupabase, userId, s, txn, txnAmount, txnDate, txnRef)
-          results.push({ matched: true, settlement_id: s.settlement_id, marketplace, transaction: { amount: txnAmount, date: txnDate, reference: txnRef } })
-          matchFound = true
-          break
-        }
+        // Score each candidate — NEVER auto-write to DB
+        let score = 0
+        const nameMatch = narrationMatchesMarketplace(narration, contactName, marketplace) ||
+          narration.includes(s.settlement_id) || txnRef.includes(s.settlement_id)
 
-        // EXACT MATCH: amount within $0.05 AND narration/contact matches
-        if (amountDiff <= 0.05) {
-          const nameMatch = narrationMatchesMarketplace(narration, contactName, marketplace) ||
-            narration.includes(s.settlement_id) || txnRef.includes(s.settlement_id)
+        if (amountDiff <= 0.05) score += 50
+        else if (amountDiff <= 1.00) score += 30
+        else if (amountDiff <= 10) score += 15
 
-          if (nameMatch) {
-            await applyMatch(adminSupabase, userId, s, txn, txnAmount, txnDate, txnRef)
-            results.push({ matched: true, settlement_id: s.settlement_id, marketplace, transaction: { amount: txnAmount, date: txnDate, reference: txnRef } })
-            matchFound = true
-            break
-          }
-        }
+        if (nameMatch) score += 30
 
-        // FUZZY MATCH: amount within $10 AND date within 30 days
-        if (!matchFound && amountDiff <= 10 && txnDate) {
+        if (txnDate) {
           const daysDiff = Math.abs((new Date(txnDate).getTime() - new Date(periodEnd).getTime()) / (1000 * 60 * 60 * 24))
-          if (daysDiff <= 30) {
-            results.push({
-              matched: false,
-              settlement_id: s.settlement_id,
-              marketplace,
-              possible_match: {
-                date: txnDate,
-                amount: txnAmount,
-                reference: txnRef,
-                narration,
-                transaction_id: txn.BankTransactionID,
-              },
-              confidence: amountDiff <= 1 ? 0.85 : 0.7,
-              difference: amountDiff,
-            })
-            matchFound = true
-            break
-          }
+          if (daysDiff <= 2) score += 20
+          else if (daysDiff <= 7) score += 10
+          else if (daysDiff <= 30) score += 5
         }
+
+        if (score >= 15) {
+          const confidence = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low'
+          candidates.push({
+            transaction_id: txn.BankTransactionID,
+            amount: txnAmount,
+            date: txnDate,
+            reference: txnRef,
+            narration,
+            bank_account_name: bankAccountName,
+            confidence,
+            score,
+            amount_diff: amountDiff,
+          })
+        }
+      }
+
+      // Sort candidates by score descending
+      candidates.sort((a: any, b: any) => b.score - a.score)
+
+      if (candidates.length > 0) {
+        const best = candidates[0]
+        results.push({
+          matched: false, // GOLDEN RULE: never auto-confirmed
+          settlement_id: s.settlement_id,
+          marketplace,
+          possible_match: {
+            date: best.date,
+            amount: best.amount,
+            reference: best.reference,
+            narration: best.narration,
+            transaction_id: best.transaction_id,
+          },
+          confidence: best.score >= 70 ? 0.9 : best.score >= 40 ? 0.7 : 0.5,
+          difference: best.amount_diff,
+        })
+        matchFound = true
       }
 
       if (!matchFound) {
