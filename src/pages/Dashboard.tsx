@@ -391,9 +391,10 @@ export default function Dashboard() {
 
           await Promise.allSettled(scanPromises);
 
-          // Follow up with channel scan + provisioning + validation sweep
+          // Follow up with channel scan + settlement generation + provisioning + validation sweep
           if (caps.hasShopify) {
             await callEdgeFunctionSafe('scan-shopify-channels', caps.accessToken);
+            await callEdgeFunctionSafe('auto-generate-shopify-settlements', caps.accessToken);
           }
           if (caps.userId) {
             await provisionAllMarketplaceConnections(caps.userId);
