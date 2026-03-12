@@ -747,8 +747,8 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1 text-xs">
-                      <X className="h-3.5 w-3.5" /> Not a marketplace
+                    <Button size="sm" variant="outline" onClick={() => setClassifyingAlert(alert)} className="gap-1 text-xs">
+                      Classify <ArrowRight className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => {
                       setSetupChannel({
