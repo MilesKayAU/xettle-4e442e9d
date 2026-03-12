@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronRight, MessageSquarePlus, X, Send, Clock } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronRight, MessageSquarePlus, X, Send, Clock, History } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow, differenceInDays, subMonths, subDays } from 'date-fns';
 import { toast } from 'sonner';
+
+const HistoricalAudit = lazy(() => import('./HistoricalAudit'));
 
 // ─── Types ──────────────────────────────────────────────────────────
 type UrgencyTier = 'critical' | 'action' | 'info';
