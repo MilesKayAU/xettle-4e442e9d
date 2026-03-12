@@ -659,10 +659,15 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
               {depositAlerts.length > 0 && (
                 <AlertSection
                   icon={<Banknote className="h-4 w-4 text-primary" />}
-                  title="Possible deposits detected"
+                  title="Bank deposits found — set up marketplaces to reconcile"
                   count={depositAlerts.length}
                   defaultOpen={false}
                 >
+                  <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                    We found payments in your bank feed that match known marketplace patterns. 
+                    To track and reconcile these, set up each marketplace below — this lets Xettle match 
+                    settlement files to bank deposits and push accurate entries to Xero.
+                  </p>
                   <div className="space-y-2">
                     {depositAlerts.map(alert => {
                       const displayName = getDisplayName(alert);
@@ -705,7 +710,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
                               Not now
                             </Button>
                             <Button size="sm" onClick={() => handleSetup(alert)} className="h-7 gap-1 text-xs">
-                              Set up <ArrowRight className="h-3 w-3" />
+                              Set up {displayName} <ArrowRight className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>
