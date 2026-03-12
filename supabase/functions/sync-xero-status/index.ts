@@ -403,8 +403,6 @@ serve(async (req) => {
         console.log(`[step-3b] Pulled ${outstandingInvoices.length} candidate Xero invoices`);
 
         const localSettlementIds = new Set((allSettlements || []).map(s => s.settlement_id));
-
-      const localSettlementIds = new Set((allSettlements || []).map(s => s.settlement_id));
       let seededCount = 0;
 
       for (const inv of outstandingInvoices) {
