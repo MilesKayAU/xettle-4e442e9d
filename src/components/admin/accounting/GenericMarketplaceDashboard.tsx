@@ -959,6 +959,13 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     );
                   })}
                 </div>
+                <TablePaginationBar
+                  page={settPage}
+                  totalPages={settTotalPages}
+                  totalItems={filteredSettlements.length}
+                  pageSize={DEFAULT_PAGE_SIZE}
+                  onPageChange={setSettPage}
+                />
               </CardContent>
             </Card>
           </div>
