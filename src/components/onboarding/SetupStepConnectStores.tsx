@@ -99,6 +99,7 @@ export default function SetupStepConnectStores({
   const [shopDomain, setShopDomain] = useState('mileskayaustralia.myshopify.com');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customName, setCustomName] = useState('');
+  const [persistingSelections, setPersistingSelections] = useState(false);
 
   const handleConnectAmazon = async () => {
     setConnectingAmazon(true);
