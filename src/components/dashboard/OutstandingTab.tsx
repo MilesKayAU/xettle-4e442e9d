@@ -934,6 +934,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </Button>
       </div>
 
+      {/* Sync-in-progress banner — shown when most invoices have no settlement match */}
+      {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <Loader2 className="h-5 w-5 text-amber-600 dark:text-amber-400 animate-spin shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Settlement sync in progress
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              Xettle is fetching your Amazon and Shopify settlement data in the background. This can take a few minutes
+              on first setup — settlements will automatically match to these invoices as they arrive.
+              Refresh this page shortly to see updated matches.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Filter toggle */}
       {data && nonMarketplaceCount > 0 && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
