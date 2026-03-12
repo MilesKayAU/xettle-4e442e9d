@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
-  FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard, MinusCircle,
+  FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard, MinusCircle, Clock3,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
@@ -246,11 +246,27 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     setSelected(allSelected ? new Set() : new Set(balancedIds));
   };
 
+  const isAmazon = (row: OutstandingRow) => row.marketplace?.toLowerCase().includes('amazon');
+
   const getStatusIcon = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status.startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
-    if (row.match_status === 'no_bank_deposit' && row.has_settlement) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+    if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
+      if (isAmazon(row)) {
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Clock3 className="h-4 w-4 text-muted-foreground" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">
+              Amazon deposits funds on a regular schedule — this will match automatically once your bank feed updates.
+            </TooltipContent>
+          </Tooltip>
+        );
+      }
+      return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+    }
     return <XCircle className="h-4 w-4 text-destructive" />;
   };
 
@@ -261,13 +277,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
     }
-    if (row.match_status === 'no_bank_deposit') return 'No bank deposit';
+    if (row.match_status === 'no_bank_deposit') {
+      return isAmazon(row) ? 'Awaiting bank deposit' : 'No bank deposit';
+    }
     return 'No settlement';
   };
 
   const getRowBgClass = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
+    if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
     if (row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
   };
