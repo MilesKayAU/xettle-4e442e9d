@@ -330,7 +330,9 @@ Deno.serve(async (req) => {
     }
 
     // ─── 2. Scan Bank Transactions (with IsReconciled + BankAccount) ─
+    // SKIP in light discovery mode to preserve Xero rate limit budget
     let bankScanError: string | null = null
+    if (!isLightDiscovery) {
     try {
       const bankData = await xeroGet(
         `https://api.xero.com/api.xro/2.0/BankTransactions?order=Date DESC&pageSize=100`,
@@ -381,6 +383,7 @@ Deno.serve(async (req) => {
         bankScanError = `Bank scan failed: ${errMsg}`
       }
     }
+    } // end !isLightDiscovery
 
     // ─── 3. Scan ALL Contacts (standalone detection) ────────────────
     try {
