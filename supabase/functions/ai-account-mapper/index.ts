@@ -132,22 +132,26 @@ Deno.serve(async (req) => {
           synced_at: new Date().toISOString(),
         }));
 
-      if (xeroAccountRows.length > 0) {
-        // Upsert current accounts
-        await supabase.from('xero_chart_of_accounts').upsert(
-          xeroAccountRows,
-          { onConflict: 'user_id,xero_account_id' }
-        );
-
-        // Mark accounts not in current fetch as inactive (soft-delete)
-        const currentIds = xeroAccountRows.map((r: any) => r.xero_account_id);
-        await supabase
-          .from('xero_chart_of_accounts')
-          .update({ is_active: false })
-          .eq('user_id', userId)
-          .eq('is_active', true)
-          .not('xero_account_id', 'in', `(${currentIds.map((id: string) => `"${id}"`).join(',')})`);
+      // GUARD: Never soft-delete if Xero returns empty (API timeout, token issue, etc.)
+      if (xeroAccountRows.length === 0) {
+        console.warn('[ai-account-mapper] No accounts returned from Xero — skipping soft delete');
+        return;
       }
+
+      // Upsert current accounts
+      await supabase.from('xero_chart_of_accounts').upsert(
+        xeroAccountRows,
+        { onConflict: 'user_id,xero_account_id' }
+      );
+
+      // Mark accounts not in current fetch as inactive (soft-delete)
+      const currentIds = xeroAccountRows.map((r: any) => r.xero_account_id);
+      await supabase
+        .from('xero_chart_of_accounts')
+        .update({ is_active: false })
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .not('xero_account_id', 'in', `(${currentIds.join(',')})`);
 
       console.log(`[ai-account-mapper] Cached ${xeroAccountRows.length} CoA accounts for user ${userId}`);
     } catch (coaErr: any) {
