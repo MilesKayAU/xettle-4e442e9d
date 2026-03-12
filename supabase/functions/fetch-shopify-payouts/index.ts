@@ -401,7 +401,7 @@ async function syncPayoutsForUser(
           settlement_uploaded_at: new Date().toISOString(),
           settlement_id: String(payout.id),
           settlement_net: netPayout,
-          overall_status: isBeforeBoundary ? "already_recorded" : "ready_to_push",
+          overall_status: isBeforeBoundary ? "already_recorded" : "saved",
         } as any);
       }
 
