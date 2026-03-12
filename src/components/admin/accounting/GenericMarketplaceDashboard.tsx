@@ -204,17 +204,52 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   // Filter settlements
   const filteredSettlements = useMemo(() => {
-    return settlements.filter(s => {
-      // Gateway filter — exclude payment gateway settlements by default
+    const filtered = settlements.filter(s => {
       if (!includeGateways && GATEWAY_CODES.has(s.marketplace)) return false;
-      // Marketplace filter
       if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
-      // Status filter
       if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
+      if (settlementFilter === 'ready') return s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push';
+      if (settlementFilter === 'in_xero') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
+      if (settlementFilter === 'bank_matched') return !!s.bank_verified;
+      if (settlementFilter === 'failed') return s.status === 'push_failed' || s.status === 'push_failed_permanent';
       if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '');
       return true;
     });
-  }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
+
+    // Sort
+    filtered.sort((a, b) => {
+      let cmp = 0;
+      switch (sortColumn) {
+        case 'settlement_id':
+          cmp = a.settlement_id.localeCompare(b.settlement_id);
+          break;
+        case 'date':
+          cmp = a.period_start.localeCompare(b.period_start);
+          break;
+        case 'amount':
+          cmp = (a.bank_deposit || 0) - (b.bank_deposit || 0);
+          break;
+        case 'status':
+          cmp = (a.status || '').localeCompare(b.status || '');
+          break;
+        case 'xero': {
+          const aX = a.xero_journal_id ? 1 : 0;
+          const bX = b.xero_journal_id ? 1 : 0;
+          cmp = aX - bX;
+          break;
+        }
+        case 'bank': {
+          const aB = a.bank_verified ? 1 : 0;
+          const bB = b.bank_verified ? 1 : 0;
+          cmp = aB - bB;
+          break;
+        }
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return filtered;
+  }, [settlements, settlementFilter, marketplaceFilter, includeGateways, sortColumn, sortDir]);
 
   // Pagination
   const [settPage, setSettPage] = useState(1);
@@ -224,7 +259,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     return filteredSettlements.slice(start, start + DEFAULT_PAGE_SIZE);
   }, [filteredSettlements, settPage]);
   // Reset page when filter changes
-  useEffect(() => { setSettPage(1); }, [settlementFilter, marketplaceFilter, includeGateways]);
+  useEffect(() => { setSettPage(1); }, [settlementFilter, marketplaceFilter, includeGateways, sortColumn, sortDir]);
 
   const baseFiltered = useMemo(() => {
     return settlements.filter(s => {
@@ -236,6 +271,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   const attentionCount = baseFiltered.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
   const syncedCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '')).length;
+  const readyCount = baseFiltered.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push').length;
+  const inXeroCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
+  const bankMatchedCount = baseFiltered.filter(s => !!s.bank_verified).length;
+  const failedCount = baseFiltered.filter(s => s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
 
   return (
     <div className="space-y-6">
