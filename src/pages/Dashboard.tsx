@@ -820,6 +820,7 @@ export default function Dashboard() {
                     onMarketplaceChange={setSelectedMarketplace}
                     userMarketplaces={userMarketplaces}
                     onMarketplacesChanged={loadMarketplaces}
+                    settlementCounts={settlementCounts}
                   />
                 )}
               </div>
