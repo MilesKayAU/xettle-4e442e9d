@@ -175,15 +175,41 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const marketplaceName = def?.name || marketplace.marketplace_name;
 
 
-  // Filter settlements
-  const filteredSettlements = settlements.filter(s => {
-    if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
-    if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
-    return true;
-  });
+  // Detect unique marketplace codes in settlements for the marketplace filter
+  const uniqueMarketplaceCodes = useMemo(() => {
+    const codes = new Set(settlements.map(s => s.marketplace));
+    return Array.from(codes).sort();
+  }, [settlements]);
 
-  const attentionCount = settlements.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
-  const syncedCount = settlements.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
+  // Detect if any settlements are from payment gateways
+  const hasGatewaySettlements = useMemo(() => 
+    settlements.some(s => GATEWAY_CODES.has(s.marketplace)),
+  [settlements]);
+
+  // Filter settlements
+  const filteredSettlements = useMemo(() => {
+    return settlements.filter(s => {
+      // Gateway filter — exclude payment gateway settlements by default
+      if (!includeGateways && GATEWAY_CODES.has(s.marketplace)) return false;
+      // Marketplace filter
+      if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
+      // Status filter
+      if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
+      if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
+      return true;
+    });
+  }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
+
+  const baseFiltered = useMemo(() => {
+    return settlements.filter(s => {
+      if (!includeGateways && GATEWAY_CODES.has(s.marketplace)) return false;
+      if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
+      return true;
+    });
+  }, [settlements, marketplaceFilter, includeGateways]);
+
+  const attentionCount = baseFiltered.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
+  const syncedCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
 
   return (
     <div className="space-y-6">
