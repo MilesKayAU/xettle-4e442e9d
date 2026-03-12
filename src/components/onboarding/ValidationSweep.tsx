@@ -342,14 +342,26 @@ export default function ValidationSweep({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Here's your complete picture</h2>
-          {boundaryDate && (
-            <p className="text-sm text-muted-foreground mt-1">
-              From {new Date(boundaryDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })} to today
-            </p>
-          )}
+          {boundaryDate && (() => {
+            const boundaryStr = new Date(boundaryDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+            const todayStr = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+            // If boundary is today (or very recent with no data), show helpful empty state
+            if (boundaryStr === todayStr && actionableRows.length === 0) {
+              return (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Upload your first settlement to see your complete picture
+                </p>
+              );
+            }
+            return (
+              <p className="text-sm text-muted-foreground mt-1">
+                From {boundaryStr} to today
+              </p>
+            );
+          })()}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {lastChecked && (

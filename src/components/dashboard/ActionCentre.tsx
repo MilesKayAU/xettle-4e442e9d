@@ -460,7 +460,7 @@ export default function ActionCentre({
                   {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
                       <span className="text-blue-500">•</span>
-                      {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start)}
+                      {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start, r.period_end)}
                       {r.settlement_net ? ` — ${formatAUD(r.settlement_net)}` : ''}
                     </li>
                   ))}
@@ -715,11 +715,16 @@ function formatPeriod(dateStr: string): string {
   return `${months[m - 1]} ${y}`;
 }
 
-function formatPeriodShort(dateStr: string): string {
+function formatPeriodShort(dateStr: string, endDateStr?: string): string {
   if (!dateStr || dateStr.length < 10) return dateStr;
   const [, m, d] = dateStr.split('-').map(Number);
   if (!m || !d || m < 1 || m > 12) return dateStr;
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (endDateStr && endDateStr.length >= 10) {
+    const [, em, ed] = endDateStr.split('-').map(Number);
+    if (em === m && ed !== d) return `${months[m - 1]} ${d}–${ed}`;
+    if (em !== m) return `${months[m - 1]} ${d}–${months[(em || 1) - 1]} ${ed}`;
+  }
   return `${months[m - 1]} ${d}`;
 }
 
