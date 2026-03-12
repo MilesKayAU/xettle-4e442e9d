@@ -564,6 +564,108 @@ serve(async (req) => {
       return userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
     };
 
+    // ─── CoA VALIDATION: verify mapped codes exist and are correct type ──
+    // Revenue categories must map to REVENUE accounts; expense categories to EXPENSE
+    const REVENUE_CATEGORIES = ['Sales', 'Shipping', 'Refunds', 'Reimbursements', 'Promotional Discounts'];
+    const EXPENSE_CATEGORIES = ['Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees', 'Advertising Costs'];
+    const REVENUE_ACCOUNT_TYPES = ['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS'];
+    const EXPENSE_ACCOUNT_TYPES = ['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY'];
+
+    // Load user's cached Chart of Accounts
+    const { data: coaAccounts } = await supabase
+      .from('xero_chart_of_accounts')
+      .select('account_code, account_name, account_type, is_active')
+      .eq('user_id', userId);
+
+    const coaMap = new Map<string, { name: string; type: string; active: boolean }>();
+    for (const acc of (coaAccounts || [])) {
+      if (acc.account_code) {
+        coaMap.set(acc.account_code, {
+          name: acc.account_name,
+          type: (acc.account_type || '').toUpperCase(),
+          active: acc.is_active !== false,
+        });
+      }
+    }
+
+    // Only validate if we have CoA data cached (skip if no CoA yet — backwards compat)
+    if (coaMap.size > 0) {
+      const validationErrors: string[] = [];
+
+      // Collect all account codes actually used in this push's line items
+      const usedCodes = new Set<string>();
+      if (!isNegativeSettlement && lineItems) {
+        for (const item of lineItems) {
+          usedCodes.add(item.AccountCode);
+        }
+      } else {
+        usedCodes.add(getCode('Other Fees'));
+      }
+
+      for (const code of usedCodes) {
+        const coaEntry = coaMap.get(code);
+        if (!coaEntry) {
+          validationErrors.push(`Account code "${code}" does not exist in your Xero Chart of Accounts`);
+          continue;
+        }
+        if (!coaEntry.active) {
+          validationErrors.push(`Account code "${code}" (${coaEntry.name}) is inactive in Xero`);
+        }
+      }
+
+      // Validate account type correctness for mapped categories
+      const allCategories = [...REVENUE_CATEGORIES, ...EXPENSE_CATEGORIES];
+      for (const cat of allCategories) {
+        const code = getCode(cat);
+        if (!code || code === '400') continue; // Skip unmapped defaults
+        const coaEntry = coaMap.get(code);
+        if (!coaEntry) continue; // Already caught above
+
+        const isRevenueCat = REVENUE_CATEGORIES.includes(cat);
+        const validTypes = isRevenueCat ? REVENUE_ACCOUNT_TYPES : EXPENSE_ACCOUNT_TYPES;
+        if (!validTypes.includes(coaEntry.type)) {
+          validationErrors.push(
+            `"${cat}" mapped to "${code}" (${coaEntry.name}) which is type "${coaEntry.type}" — expected ${isRevenueCat ? 'Revenue' : 'Expense'} account`
+          );
+        }
+      }
+
+      if (validationErrors.length > 0) {
+        console.error('MAPPING_INVALID:', validationErrors);
+
+        // Update settlement status to mapping_error
+        if (body.settlementData?.settlement_id) {
+          await supabase
+            .from('settlements')
+            .update({ status: 'mapping_error' })
+            .eq('settlement_id', body.settlementData.settlement_id)
+            .eq('user_id', userId);
+        }
+
+        // Log to system_events
+        await supabase.from('system_events').insert({
+          user_id: userId,
+          event_type: 'xero_push_mapping_invalid',
+          severity: 'error',
+          settlement_id: body.settlementData?.settlement_id || null,
+          marketplace_code: body.settlementData?.marketplace || null,
+          details: { errors: validationErrors },
+        });
+
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'MAPPING_INVALID',
+          validationErrors,
+          message: 'Your account mapping references invalid or inactive Xero accounts. Please review your Account Mapping.',
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`[coa-validation] All ${usedCodes.size} account codes validated against Chart of Accounts ✓`);
+    }
+
     // ─── Fetch tracking category setting ────────────────────────────
     let trackingArray: any[] | null = null;
     try {

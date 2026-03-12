@@ -5,9 +5,17 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
+
+interface CoaEntry {
+  name: string;
+  type: string;
+  active: boolean;
+}
 
 interface XeroAccount {
   code: string;
@@ -62,6 +70,8 @@ export default function AccountMapperCard() {
   // Marketplace split state
   const [splitByMarketplace, setSplitByMarketplace] = useState(false);
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
+  // CoA validation state
+  const [coaMap, setCoaMap] = useState<Map<string, CoaEntry>>(new Map());
 
   // Load current state on mount
   useEffect(() => {
@@ -73,6 +83,23 @@ export default function AccountMapperCard() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      // Load cached Chart of Accounts for validation badges
+      const { data: coaAccounts } = await supabase
+        .from('xero_chart_of_accounts')
+        .select('account_code, account_name, account_type, is_active')
+        .eq('user_id', user.id);
+      const newCoaMap = new Map<string, CoaEntry>();
+      for (const acc of (coaAccounts || [])) {
+        if (acc.account_code) {
+          newCoaMap.set(acc.account_code, {
+            name: acc.account_name,
+            type: (acc.account_type || '').toUpperCase(),
+            active: acc.is_active !== false,
+          });
+        }
+      }
+      setCoaMap(newCoaMap);
 
       // Load split toggle state
       const { data: splitSetting } = await supabase
@@ -309,6 +336,44 @@ export default function AccountMapperCard() {
     return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">❌ Low</Badge>;
   };
 
+  const REVENUE_CATEGORIES_SET = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
+  const REVENUE_ACCOUNT_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS']);
+  const EXPENSE_ACCOUNT_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
+
+  /** Validate a single account code against the cached CoA */
+  const validateCode = (code: string | undefined, category: string): CoaValidation => {
+    if (!code || coaMap.size === 0) return 'valid'; // No CoA data — skip validation
+    const entry = coaMap.get(code);
+    if (!entry) return 'missing';
+    if (!entry.active) return 'inactive';
+    const isRevenue = REVENUE_CATEGORIES_SET.has(category);
+    const validTypes = isRevenue ? REVENUE_ACCOUNT_TYPES : EXPENSE_ACCOUNT_TYPES;
+    if (!validTypes.has(entry.type)) return 'wrong_type';
+    return 'valid';
+  };
+
+  /** Render a validation badge next to a mapping */
+  const renderValidationBadge = (code: string | undefined, category: string) => {
+    if (!code || coaMap.size === 0) return null;
+    const status = validateCode(code, category);
+    if (status === 'valid') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
+    if (status === 'missing') return (
+      <span className="flex items-center gap-1 text-[10px] text-red-600">
+        <XCircle className="h-3.5 w-3.5 shrink-0" /> Missing
+      </span>
+    );
+    if (status === 'inactive') return (
+      <span className="flex items-center gap-1 text-[10px] text-red-600">
+        <XCircle className="h-3.5 w-3.5 shrink-0" /> Inactive
+      </span>
+    );
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-amber-600">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Wrong type
+      </span>
+    );
+  };
+
   /** Render an account code selector (dropdown or text input) */
   const renderAccountSelector = (key: string, placeholder?: string) => {
     if (accounts.length > 0) {
@@ -523,10 +588,14 @@ export default function AccountMapperCard() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           {CATEGORIES.map((cat) => {
             const entry = mapping[cat];
+            const code = entry?.code;
             return (
-              <div key={cat} className="flex justify-between py-1 border-b border-border/50">
+              <div key={cat} className="flex items-center justify-between py-1 border-b border-border/50 gap-2">
                 <span className="text-muted-foreground">{cat}</span>
-                <span className="font-mono">{entry?.code || '—'}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-mono">{code || '—'}</span>
+                  {renderValidationBadge(code, cat)}
+                </span>
               </div>
             );
           })}
@@ -539,10 +608,14 @@ export default function AccountMapperCard() {
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
               {marketplaceOverrideKeys.map(key => {
                 const [cat, mp] = key.split(':');
+                const code = mapping[key]?.code;
                 return (
-                  <div key={key} className="flex justify-between py-1 border-b border-border/50">
+                  <div key={key} className="flex items-center justify-between py-1 border-b border-border/50 gap-2">
                     <span className="text-muted-foreground">{mp} {cat}</span>
-                    <span className="font-mono">{mapping[key]?.code || '—'}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-mono">{code || '—'}</span>
+                      {renderValidationBadge(code, cat || 'Sales')}
+                    </span>
                   </div>
                 );
               })}
