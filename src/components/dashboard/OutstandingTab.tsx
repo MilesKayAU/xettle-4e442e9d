@@ -1476,6 +1476,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             </tbody>
           </table>
         </div>
+        <TablePaginationBar
+          page={safeOutPage}
+          totalPages={outTotalPages}
+          totalItems={filteredRows.length}
+          pageSize={DEFAULT_PAGE_SIZE}
+          onPageChange={setOutPage}
+        />
       )}
     </div>
   );
