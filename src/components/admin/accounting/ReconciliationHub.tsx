@@ -163,6 +163,17 @@ export default function ReconciliationHub() {
           date: s.period_start,
           status: s.status || 'unknown',
           sourceId: s.id,
+          settlementId: s.settlement_id,
+          depositDate: s.deposit_date || undefined,
+          periodStart: s.period_start,
+          periodEnd: s.period_end,
+          xeroStatus: s.xero_status || undefined,
+          reconStatus: s.reconciliation_status || undefined,
+          salesPrincipal: s.sales_principal || undefined,
+          sellerFees: s.seller_fees || undefined,
+          fbaFees: s.fba_fees || undefined,
+          refunds: s.refunds || undefined,
+          otherFees: s.other_fees || undefined,
         });
       }
 
