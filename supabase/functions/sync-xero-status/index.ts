@@ -434,7 +434,7 @@ serve(async (req) => {
             xero_invoice_number: bestMatch.InvoiceNumber || null,
             xero_status: bestMatch.Status || null,
             xero_type: bestMatch.Type === 'ACCPAY' ? 'bill' : 'invoice',
-            match_method: 'fuzzy_amount_date',
+            match_method: bestMatchMethod,
             confidence: bestConfidence,
             matched_amount: bestMatch.Total || null,
             matched_date: parseXeroDate(bestMatch.Date),
