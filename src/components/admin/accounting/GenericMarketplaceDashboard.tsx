@@ -13,7 +13,8 @@ import { Separator } from '@/components/ui/separator';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
   CheckSquare, Square, Eye, ShieldCheck, ShieldAlert,
-  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CloudUpload, BarChart3, Scale, Filter
+  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CloudUpload, BarChart3, Scale, Filter,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -112,10 +113,25 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
+  const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced' | 'ready' | 'in_xero' | 'bank_matched' | 'failed'>('all');
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
   const [includeGateways, setIncludeGateways] = useState(false);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
+
+  // ── Sort state ──────────────────────────────────────────────────────────────
+  type SortColumn = 'settlement_id' | 'date' | 'amount' | 'status' | 'xero' | 'bank';
+  type SortDir = 'asc' | 'desc';
+  const [sortColumn, setSortColumn] = useState<SortColumn>('date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const toggleSort = useCallback((col: SortColumn) => {
+    if (sortColumn === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(col);
+      setSortDir('asc');
+    }
+  }, [sortColumn]);
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
@@ -189,17 +205,52 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   // Filter settlements
   const filteredSettlements = useMemo(() => {
-    return settlements.filter(s => {
-      // Gateway filter — exclude payment gateway settlements by default
+    const filtered = settlements.filter(s => {
       if (!includeGateways && GATEWAY_CODES.has(s.marketplace)) return false;
-      // Marketplace filter
       if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
-      // Status filter
       if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
+      if (settlementFilter === 'ready') return s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push';
+      if (settlementFilter === 'in_xero') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
+      if (settlementFilter === 'bank_matched') return !!s.bank_verified;
+      if (settlementFilter === 'failed') return s.status === 'push_failed' || s.status === 'push_failed_permanent';
       if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '');
       return true;
     });
-  }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
+
+    // Sort
+    filtered.sort((a, b) => {
+      let cmp = 0;
+      switch (sortColumn) {
+        case 'settlement_id':
+          cmp = a.settlement_id.localeCompare(b.settlement_id);
+          break;
+        case 'date':
+          cmp = a.period_start.localeCompare(b.period_start);
+          break;
+        case 'amount':
+          cmp = (a.bank_deposit || 0) - (b.bank_deposit || 0);
+          break;
+        case 'status':
+          cmp = (a.status || '').localeCompare(b.status || '');
+          break;
+        case 'xero': {
+          const aX = a.xero_journal_id ? 1 : 0;
+          const bX = b.xero_journal_id ? 1 : 0;
+          cmp = aX - bX;
+          break;
+        }
+        case 'bank': {
+          const aB = a.bank_verified ? 1 : 0;
+          const bB = b.bank_verified ? 1 : 0;
+          cmp = aB - bB;
+          break;
+        }
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return filtered;
+  }, [settlements, settlementFilter, marketplaceFilter, includeGateways, sortColumn, sortDir]);
 
   // Pagination
   const [settPage, setSettPage] = useState(1);
@@ -209,7 +260,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     return filteredSettlements.slice(start, start + DEFAULT_PAGE_SIZE);
   }, [filteredSettlements, settPage]);
   // Reset page when filter changes
-  useEffect(() => { setSettPage(1); }, [settlementFilter, marketplaceFilter, includeGateways]);
+  useEffect(() => { setSettPage(1); }, [settlementFilter, marketplaceFilter, includeGateways, sortColumn, sortDir]);
 
   const baseFiltered = useMemo(() => {
     return settlements.filter(s => {
@@ -221,6 +272,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   const attentionCount = baseFiltered.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
   const syncedCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '')).length;
+  const readyCount = baseFiltered.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push').length;
+  const inXeroCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
+  const bankMatchedCount = baseFiltered.filter(s => !!s.bank_verified).length;
+  const failedCount = baseFiltered.filter(s => s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
 
   return (
     <div className="space-y-6">
@@ -284,31 +339,25 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
           {/* Filter tabs */}
           {settlements.length > 0 && (
-            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
-              <button
-                onClick={() => setSettlementFilter('all')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  settlementFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                All ({baseFiltered.length})
-              </button>
-              <button
-                onClick={() => setSettlementFilter('attention')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  settlementFilter === 'attention' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Needs Attention {attentionCount > 0 && <span className="ml-1 text-amber-600">({attentionCount})</span>}
-              </button>
-              <button
-                onClick={() => setSettlementFilter('synced')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  settlementFilter === 'synced' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Synced {syncedCount > 0 && <span className="ml-1 text-emerald-600">({syncedCount})</span>}
-              </button>
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5 flex-wrap">
+              {([
+                { key: 'all', label: 'All', count: baseFiltered.length, color: '' },
+                { key: 'ready', label: 'Ready to Push', count: readyCount, color: 'text-primary' },
+                { key: 'in_xero', label: 'In Xero', count: inXeroCount, color: 'text-emerald-600 dark:text-emerald-400' },
+                { key: 'bank_matched', label: 'Bank Matched', count: bankMatchedCount, color: 'text-emerald-600 dark:text-emerald-400' },
+                { key: 'failed', label: 'Failed', count: failedCount, color: 'text-destructive' },
+              ] as const).filter(f => f.key === 'all' || f.count > 0).map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setSettlementFilter(f.key as any)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                    settlementFilter === f.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {f.label}
+                  {f.count > 0 && <span className={`ml-1 ${f.color}`}>({f.count})</span>}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -448,13 +497,28 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               <CardContent className="p-0">
                 <div className="hidden sm:grid sm:grid-cols-[auto_1fr_80px_80px_80px_80px_50px_120px_auto] gap-2 px-3 py-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                   <div className="w-5" />
-                  <div>Settlement</div>
-                  <div className="text-center">Xero</div>
-                  <div className="text-center">Bank</div>
-                  <div className="text-right">Expected</div>
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors text-left" onClick={() => toggleSort('settlement_id')}>
+                    Settlement
+                    {sortColumn === 'settlement_id' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                  <button className="flex items-center gap-1 justify-center hover:text-foreground transition-colors" onClick={() => toggleSort('xero')}>
+                    Xero
+                    {sortColumn === 'xero' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                  <button className="flex items-center gap-1 justify-center hover:text-foreground transition-colors" onClick={() => toggleSort('bank')}>
+                    Bank
+                    {sortColumn === 'bank' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                  <button className="flex items-center gap-1 justify-end hover:text-foreground transition-colors" onClick={() => toggleSort('amount')}>
+                    Expected
+                    {sortColumn === 'amount' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
                   <div className="text-right">Actual</div>
                   <div className="text-right">Diff</div>
-                  <div className="text-center">Status</div>
+                  <button className="flex items-center gap-1 justify-center hover:text-foreground transition-colors" onClick={() => toggleSort('status')}>
+                    Status
+                    {sortColumn === 'status' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
                   <div className="text-right">Actions</div>
                 </div>
 
