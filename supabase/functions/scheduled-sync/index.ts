@@ -167,6 +167,20 @@ Deno.serve(async (req) => {
     if (auditResult?.error) stepErrors.push('xero_audit');
   }
 
+  // 6. Fetch Xero bank transactions (with 30-min guard built into the function)
+  console.log("[scheduled-sync] Step 6: Bank transaction ingestion...");
+  results.bank_txn_fetch = await callFunction("fetch-xero-bank-transactions");
+  if (results.bank_txn_fetch?.error) stepErrors.push('bank_txn_fetch');
+
+  // 7. Match bank deposits against settlements (using local cache)
+  console.log("[scheduled-sync] Step 7: Bank deposit matching...");
+  results.bank_matching = { users: xeroUserIds.length, results: [] };
+  for (const uid of xeroUserIds) {
+    const matchResult = await callFunction("match-bank-deposits", {}, { userId: uid });
+    (results.bank_matching.results as any[]).push({ user_id: uid, ...matchResult });
+    if (matchResult?.error) stepErrors.push('bank_matching');
+  }
+
   const durationMs = Date.now() - startTime;
 
   // ─── Aggregate totals ──────────────────────────────────────────
