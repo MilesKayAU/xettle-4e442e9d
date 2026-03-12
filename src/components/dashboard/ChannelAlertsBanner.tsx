@@ -109,6 +109,21 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
   const [classifyingAlert, setClassifyingAlert] = useState<ChannelAlert | null>(null);
 
+  /** Count only genuinely actionable alerts for badge display */
+  const getActionableCount = (alertList: ChannelAlert[], excludeId?: string) => {
+    return alertList.filter(a => {
+      if (excludeId && a.id === excludeId) return false;
+      // Exclude unclassified Xero contacts (info-only)
+      const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
+      if (isXeroContactOnly) return false;
+      // Exclude payment gateway deposits
+      if (a.alert_type === 'payment_gateway_deposit') return false;
+      // Exclude micro-deposits under $5 (gateway noise)
+      if (a.alert_type === 'unmatched_deposit' && a.deposit_amount != null && Math.abs(a.deposit_amount) < 5) return false;
+      return true;
+    }).length;
+  };
+
   const loadAlerts = async () => {
     try {
       // Load payment processor registry to auto-exclude gateways
