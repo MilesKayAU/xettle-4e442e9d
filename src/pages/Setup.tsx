@@ -778,7 +778,7 @@ export default function Setup() {
       case 'gap_detected':
         return 'Settlement gap detected — possible missing period';
       case 'already_recorded':
-        return 'Pre-boundary historical record';
+        return 'Already recorded in Xero';
       default:
         return p.status;
     }
