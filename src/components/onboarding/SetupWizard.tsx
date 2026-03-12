@@ -106,6 +106,7 @@ export default function SetupWizard({
                 onNext={handleNext}
                 onSkip={handleSkip}
                 hasXero={hasXero}
+                onConnecting={setIsSyncing}
               />
             )}
             {step === 2 && (
