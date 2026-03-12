@@ -27,6 +27,7 @@ import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
