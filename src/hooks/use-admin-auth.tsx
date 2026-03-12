@@ -76,15 +76,19 @@ export function useAdminAuth() {
   };
 
   const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
+    // Clear state immediately for instant UI feedback
+    setSession(null);
+    setUser(null);
+    setIsAuthenticated(false);
     
     toast({
       title: "Signed Out",
       description: "You have been signed out successfully",
+    });
+
+    // Fire-and-forget the actual sign out
+    supabase.auth.signOut().catch((error) => {
+      console.error("Error signing out:", error);
     });
   };
 
