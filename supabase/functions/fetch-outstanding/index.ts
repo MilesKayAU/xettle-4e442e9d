@@ -326,12 +326,15 @@ Deno.serve(async (req) => {
         const confidence: 'high' | 'medium' | 'low' =
           score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
 
+        // Nothing is marked as matched until user explicitly confirms.
+        // Auto-detection is always a SUGGESTION.
         group.candidates.push({
           transaction_id: txn.BankTransactionID,
           amount: txnAmount,
           date: txnDate,
           reference: txn.Reference || '',
           narration: txn.LineItems?.[0]?.Description || '',
+          bank_account_name: txn.BankAccount?.Name || '',
           confidence,
           score,
           match_type: 'aggregate',
