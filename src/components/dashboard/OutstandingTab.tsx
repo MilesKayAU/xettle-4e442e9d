@@ -1197,6 +1197,7 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
                 Retry now
               </Button>
             )}
+          </CardContent>
         </Card>
       )}
 
