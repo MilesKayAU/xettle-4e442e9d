@@ -129,16 +129,16 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
 
       if (settlementCount && settlementCount > 0) continue;
 
-      // Check channel_alerts (match by source_name or detected_label)
-      const { count: alertCount } = await supabase
-        .from('channel_alerts')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .or(`source_name.eq.${conn.marketplace_code},detected_label.ilike.%${conn.marketplace_code.replace('_', '%')}%`);
+      // For auto_detected connections, settlements are the ONLY valid backing.
+      // Channel alerts alone are NOT sufficient — a Xero contact or bank narration
+      // doesn't prove the user sells on that platform. Only actual settlement data does.
+      if (conn.connection_type === 'auto_detected') {
+        console.log(`[ghost-cleanup] Removing auto_detected connection with no settlements: ${conn.marketplace_code}`);
+        await supabase.from('marketplace_connections').delete().eq('id', conn.id);
+        continue;
+      }
 
-      if (alertCount && alertCount > 0) continue;
-
-      // Check shopify_sub_channels
+      // For other connection types (shopify_sub_channel, etc.), check sub-channels
       const { count: subChannelCount } = await supabase
         .from('shopify_sub_channels')
         .select('id', { count: 'exact', head: true })
