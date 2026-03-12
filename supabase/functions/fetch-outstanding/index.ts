@@ -71,6 +71,35 @@ function extractSettlementId(reference: string): { id: string | null; part: numb
   return { id: null, part: null };
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchXeroWithRetry(url: string, headers: Record<string, string>, maxAttempts = 4) {
+  let lastStatus = 0;
+  let lastBody = '';
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const resp = await fetch(url, { headers });
+
+    if (resp.ok) {
+      return { ok: true as const, data: await resp.json() };
+    }
+
+    lastStatus = resp.status;
+    lastBody = await resp.text();
+
+    if (resp.status === 429 && attempt < maxAttempts) {
+      const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+      console.warn(`Xero rate limited (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs}ms`);
+      await sleep(delayMs);
+      continue;
+    }
+
+    return { ok: false as const, status: lastStatus, body: lastBody };
+  }
+
+  return { ok: false as const, status: lastStatus, body: lastBody };
+}
+
 function detectMarketplace(reference: string, contactName: string): string {
   const ref = reference.toLowerCase();
   const contact = contactName.toLowerCase();
