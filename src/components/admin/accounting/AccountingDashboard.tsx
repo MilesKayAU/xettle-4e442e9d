@@ -2464,6 +2464,13 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
             </tbody>
           </table>
         </div>
+        <TablePaginationBar
+          page={histPage}
+          totalPages={histTotalPages}
+          totalItems={displayRows.length}
+          pageSize={DEFAULT_PAGE_SIZE}
+          onPageChange={setHistPage}
+        />
       </CardContent>
 
       {/* Rollback Confirmation Dialog */}
