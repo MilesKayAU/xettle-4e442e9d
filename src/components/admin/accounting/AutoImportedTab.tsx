@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 
 interface AutoImportedSettlement {
   id: string;
