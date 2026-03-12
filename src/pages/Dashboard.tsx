@@ -790,6 +790,18 @@ export default function Dashboard() {
                   }}
                 />
               </Suspense>
+
+              {/* Workflow options — below the uploader */}
+              <WelcomeGuide
+                onUpload={() => {
+                  // Scroll to the upload zone above
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onConnectStore={() => {
+                  setWizardInitialStep(1);
+                  setShowWizard(true);
+                }}
+              />
             </div>
           </ErrorBoundary>
         )}
