@@ -584,6 +584,7 @@ Deno.serve(async (req) => {
                 date: parseXeroDate(t.Date),
                 reference: t.Reference || '',
                 narration: t.LineItems?.[0]?.Description || '',
+                bank_account_name: t.BankAccount?.Name || '',
               }))
           : [],
       });
