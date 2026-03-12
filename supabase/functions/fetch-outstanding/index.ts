@@ -176,24 +176,54 @@ Deno.serve(async (req) => {
     // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
     const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
     const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
-    const xeroResp = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token.access_token}`,
-        'Accept': 'application/json',
-        'Xero-tenant-id': token.tenant_id,
-      },
+
+    let allInvoices: any[] = [];
+    let usingCacheFallback = false;
+
+    const xeroResult = await fetchXeroWithRetry(url, {
+      'Authorization': `Bearer ${token.access_token}`,
+      'Accept': 'application/json',
+      'Xero-tenant-id': token.tenant_id,
     });
 
-    if (!xeroResp.ok) {
-      const errText = await xeroResp.text();
-      console.error('Xero invoice fetch failed:', xeroResp.status, errText);
-      return new Response(JSON.stringify({ error: 'Failed to fetch Xero invoices', detail: errText.substring(0, 500) }), {
-        status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    if (xeroResult.ok) {
+      allInvoices = xeroResult.data.Invoices || [];
+    } else {
+      console.error('Xero invoice fetch failed:', xeroResult.status, xeroResult.body);
 
-    const xeroData = await xeroResp.json();
-    const allInvoices = xeroData.Invoices || [];
+      // Fallback: serve cached outstanding invoices from xero_accounting_matches
+      // so the Outstanding tab still has actionable data during temporary rate limits.
+      const { data: cachedOutstanding } = await supabase
+        .from('xero_accounting_matches')
+        .select('settlement_id, marketplace_code, xero_invoice_id, xero_invoice_number, xero_status, matched_amount, matched_date, matched_contact, matched_reference')
+        .eq('user_id', userId)
+        .in('xero_status', ['DRAFT', 'SUBMITTED', 'AUTHORISED'])
+        .not('xero_invoice_id', 'is', null);
+
+      if (!cachedOutstanding || cachedOutstanding.length === 0) {
+        return new Response(JSON.stringify({
+          error: 'Failed to fetch Xero invoices',
+          detail: (xeroResult.body || '').substring(0, 500),
+          rate_limited: xeroResult.status === 429,
+        }), {
+          status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      usingCacheFallback = true;
+      allInvoices = cachedOutstanding.map((m: any) => ({
+        InvoiceID: m.xero_invoice_id,
+        InvoiceNumber: m.xero_invoice_number || null,
+        Reference: m.matched_reference || (m.settlement_id ? `AMZN-${m.settlement_id}` : ''),
+        Contact: { Name: m.matched_contact || m.marketplace_code || 'Marketplace' },
+        Date: m.matched_date || null,
+        DueDate: null,
+        AmountDue: Math.abs(Number(m.matched_amount || 0)),
+        Total: Math.abs(Number(m.matched_amount || 0)),
+        CurrencyCode: 'AUD',
+      }));
+      console.log(`[fetch-outstanding] Using cached fallback for ${allInvoices.length} invoices`);
+    }
 
     // ─── Filter to known marketplace contacts only ───
     const MARKETPLACE_CONTACT_PATTERNS = [
