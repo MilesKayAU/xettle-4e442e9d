@@ -15,14 +15,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   CheckCircle2, AlertTriangle, SkipForward, RefreshCw, ArrowRight,
   Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink, ArrowLeft, Copy, Check,
-  Square, HelpCircle
+  Square, HelpCircle, Clock3
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 
 // ─── Types ──────────────────────────────────────────────────────────
-type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'pending';
+type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'pending' | 'rate_limited';
 
 interface StepState {
   status: StepStatus;
@@ -316,14 +316,15 @@ export default function Setup() {
       if (isRetryable && attempt < 2) {
         const waitSec = (attempt + 1) * 5;
         console.warn(`[setup] Shopify payouts ${payoutsResult.statusCode} — retrying in ${waitSec}s (attempt ${attempt + 1})`);
-        setShopifyPayoutsStep({ status: 'running', message: `Shopify temporarily unavailable — retrying in ${waitSec}s…` });
+        setShopifyPayoutsStep({ status: 'rate_limited', message: `Rate limited — retrying in ${waitSec}s…`, error: payoutsResult.error });
         await new Promise(r => setTimeout(r, waitSec * 1000));
         if (!mountedRef.current) return;
+        setShopifyPayoutsStep({ status: 'running', message: `Retrying payouts fetch (attempt ${attempt + 2}/3)…` });
         continue;
       }
       // Non-retryable or exhausted retries
       if (isRetryable) {
-        setShopifyPayoutsStep({ status: 'error', message: 'Shopify temporarily unavailable — click Retry to try again', error: payoutsResult.error });
+        setShopifyPayoutsStep({ status: 'rate_limited', message: 'Shopify rate limited — click Retry to try again', error: payoutsResult.error });
       } else {
         const isCooldown = payoutsResult.error?.includes('429');
         const isTimeout = payoutsResult.error?.includes('timed out');
@@ -417,14 +418,34 @@ export default function Setup() {
     const ac = new AbortController();
     amazonAbortRef.current = ac;
     setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements (this can take several minutes)...' });
-    const result = await callEdgeFunctionSafe('fetch-amazon-settlements', token, {}, { signal: ac.signal, headers: { 'x-action': 'smart-sync' } });
-    amazonAbortRef.current = null;
-    if (!mountedRef.current) return;
 
-    if (result.aborted) {
-      setAmazonStep({ status: 'error', message: 'Amazon fetch stopped', error: 'Stopped by user' });
-      setAmazonProgress(0);
-      return;
+    // Retry loop for 503/429 with backoff
+    let result: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      result = await callEdgeFunctionSafe('fetch-amazon-settlements', token, {}, { signal: ac.signal, headers: { 'x-action': 'smart-sync' } });
+      amazonAbortRef.current = null;
+      if (!mountedRef.current) return;
+
+      if (result.aborted) {
+        setAmazonStep({ status: 'error', message: 'Amazon fetch stopped', error: 'Stopped by user' });
+        setAmazonProgress(0);
+        return;
+      }
+      if (result.ok) break;
+
+      const isRetryable = result.rateLimited || result.statusCode === 503 || result.statusCode === 429;
+      if (isRetryable && attempt < 2) {
+        const waitSec = (attempt + 1) * 10;
+        console.warn(`[setup] Amazon ${result.statusCode} — retrying in ${waitSec}s (attempt ${attempt + 1})`);
+        setAmazonStep({ status: 'rate_limited', message: `Rate limited — retrying in ${waitSec}s…`, error: result.error });
+        await new Promise(r => setTimeout(r, waitSec * 1000));
+        if (!mountedRef.current) return;
+        setAmazonStep({ status: 'running', message: `Retrying Amazon fetch (attempt ${attempt + 2}/3)…` });
+        amazonAbortRef.current = ac;
+        continue;
+      }
+      // Exhausted retries or non-retryable
+      break;
     }
 
     if (result.ok) {
@@ -461,20 +482,18 @@ export default function Setup() {
       setPhase1Amazon(true);
       await upsertSetting(userId, 'setup_phase1_amazon', 'true');
     } else {
-      // Check for rate limit / mutex / cooldown — show calm message
+      // Check for rate limit / mutex / cooldown
       const errorData = result.data || {};
       const errorType = errorData.error_type || errorData.error || '';
-      const isRateLimit = errorType === 'rate_limit' || errorType === 'rate_limited' || result.error?.includes('429');
+      const isRateLimit = result.rateLimited || errorType === 'rate_limit' || errorType === 'rate_limited' || result.statusCode === 503 || result.statusCode === 429;
       const isMutex = errorType === 'mutex' || errorType === 'sync_in_progress';
       const isCooldown = errorType === 'cooldown' || result.error?.includes('cooldown');
 
       if (isRateLimit || isMutex || isCooldown) {
-        // Show as pending/warning — not complete, but not blocking
-        console.info('[setup] Amazon rate-limited/mutex/cooldown — showing pending state');
-        setAmazonStep({ status: 'pending', message: 'Amazon settlement sync will run automatically once the rate limit clears — you can continue setting up in the meantime.' });
+        console.info('[setup] Amazon rate-limited/mutex/cooldown — showing rate_limited state');
+        setAmazonStep({ status: 'rate_limited', message: 'Amazon rate limited — click Retry to try again', error: result.error });
         setAmazonProgress(80);
-        setPhase1Amazon(true);
-        await upsertSetting(userId, 'setup_phase1_amazon', 'true');
+        // Don't mark as complete — user needs to retry
       } else {
         setAmazonStep({ status: 'error', message: 'Amazon sync encountered an issue — check your connection', error: result.error });
         setAmazonProgress(0);
@@ -742,6 +761,7 @@ export default function Setup() {
     switch (status) {
       case 'success': return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
       case 'pending': return <Loader2 className="h-4 w-4 text-amber-500" />;
+      case 'rate_limited': return <Clock3 className="h-4 w-4 text-amber-500" />;
       case 'error': return <AlertTriangle className="h-4 w-4 text-destructive" />;
       case 'skipped': return <SkipForward className="h-4 w-4 text-muted-foreground" />;
       case 'running': return <Loader2 className="h-4 w-4 text-primary animate-spin" />;
@@ -763,12 +783,17 @@ export default function Setup() {
         <div className="flex items-start gap-3 py-1.5">
           <StatusIcon status={s.status} />
           <span className="text-sm text-foreground flex-1">{s.message}</span>
-          {s.status === 'error' && onRetry && (
+          {(s.status === 'error' || s.status === 'rate_limited') && onRetry && (
             <Button variant="ghost" size="sm" onClick={onRetry} className="h-6 px-2 text-xs">
               <RefreshCw className="h-3 w-3 mr-1" /> Retry
             </Button>
           )}
         </div>
+        {s.status === 'rate_limited' && s.error && (
+          <div className="ml-7 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs space-y-1">
+            <code className="block whitespace-pre-wrap break-all font-mono text-[11px] text-amber-700">{s.error}</code>
+          </div>
+        )}
         {s.status === 'error' && s.error && (
           <div className="ml-7 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs space-y-1.5">
             <div className="flex items-center justify-between">

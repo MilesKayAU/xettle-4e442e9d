@@ -130,8 +130,8 @@ export default function PostSetupBanner({
             setAmazonMessage(found > 0 ? `${found} settlement${found > 1 ? 's' : ''} imported` : 'No settlements found yet');
             setAmazonStatus('done');
             await setAppFlag('amazon_scan_completed');
-          } else if (result.rateLimited || result.statusCode === 429) {
-            setAmazonMessage('Amazon is rate limited — will retry automatically');
+          } else if (result.rateLimited || result.statusCode === 429 || result.statusCode === 503) {
+            setAmazonMessage('Amazon rate limited — scheduled sync will retry shortly');
             setAmazonStatus('rate_limited');
           } else {
             setAmazonMessage('Amazon connection error — check your connection');
