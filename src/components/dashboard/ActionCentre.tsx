@@ -279,10 +279,19 @@ export default function ActionCentre({
   }, [normalisedRows, connectedMarketplaces]);
 
   const getStatusForCell = (marketplace: string, monthKey: string): { status: string; tooltip: string } => {
-    // Before accounting boundary — don't assume, just mark as not tracked
+    // Before accounting boundary — check if there's actual already_recorded data
     if (accountingBoundary) {
       const boundaryMonth = accountingBoundary.substring(0, 7); // YYYY-MM
       if (monthKey < boundaryMonth) {
+        // Check if this marketplace has already_recorded rows for this month
+        const hasRecordedData = normalisedRows.some(r =>
+          r.marketplace_code === marketplace &&
+          r.period_start?.substring(0, 7) === monthKey &&
+          r.overall_status === 'already_recorded'
+        );
+        if (hasRecordedData) {
+          return { status: 'already_in_xero', tooltip: 'Already recorded in Xero before you connected Xettle' };
+        }
         return { status: 'not_tracked', tooltip: 'Before accounting boundary' };
       }
     }
