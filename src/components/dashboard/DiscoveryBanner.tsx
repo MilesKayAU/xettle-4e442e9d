@@ -14,11 +14,25 @@ interface DetectedChannel {
 export default function DiscoveryBanner({ onDiscoveryComplete }: DiscoveryBannerProps) {
   const [status, setStatus] = useState<'running' | 'complete' | 'hidden'>('running');
   const [detectedChannels, setDetectedChannels] = useState<DetectedChannel[]>([]);
+  const startTime = useState(() => Date.now())[0];
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
+    const MAX_POLL_MS = 120_000; // 2 minutes max
 
     const poll = async () => {
+      // Timeout: stop polling after 2 minutes and treat as complete
+      if (Date.now() - startTime > MAX_POLL_MS) {
+        console.warn('[DiscoveryBanner] Polling timeout — treating as complete');
+        clearInterval(interval);
+        setStatus('complete');
+        setTimeout(() => {
+          onDiscoveryComplete();
+          setStatus('hidden');
+        }, 1500);
+        return;
+      }
+
       const { data: setting } = await supabase
         .from('app_settings')
         .select('value')
@@ -62,7 +76,7 @@ export default function DiscoveryBanner({ onDiscoveryComplete }: DiscoveryBanner
     interval = setInterval(poll, 3000);
 
     return () => clearInterval(interval);
-  }, [onDiscoveryComplete]);
+  }, [onDiscoveryComplete, startTime]);
 
   if (status === 'hidden') return null;
 
