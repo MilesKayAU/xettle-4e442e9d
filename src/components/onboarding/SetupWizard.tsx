@@ -106,10 +106,8 @@ export default function SetupWizard({
     sessionStorage.removeItem(SELECTED_MARKETPLACES_KEY);
     // Always mark wizard as complete so it doesn't reappear
     onComplete();
-    // API-connected users → Setup Hub; CSV-only → Dashboard
-    if (hasXero || hasAmazon || hasShopify) {
-      nav('/setup');
-    }
+    // Always land on dashboard — Setup Hub is accessible from there if needed
+    nav('/dashboard');
   };
 
   const handleCloseAttempt = () => {
