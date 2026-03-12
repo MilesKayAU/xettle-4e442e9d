@@ -36,6 +36,7 @@ import SettlementStatusBadge from './shared/SettlementStatusBadge';
 import ReconChecksInline from './shared/ReconChecksInline';
 import BulkDeleteDialog from './shared/BulkDeleteDialog';
 import GapDetector, { hasSettlementGap } from './shared/GapDetector';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 
 interface GenericMarketplaceDashboardProps {
   marketplace: UserMarketplace;
