@@ -191,7 +191,7 @@ serve(async (req) => {
     const dedupedInvoices = Array.from(invoiceMap.values());
     const seen = new Map<string, any>();
 
-    for (const inv of allInvoices) {
+    for (const inv of dedupedInvoices) {
       const sid = extractSettlementId(inv.Reference || '');
       if (!sid) continue;
       if (!seen.has(sid) || inv.Reference.startsWith('Xettle-')) {
