@@ -201,12 +201,29 @@ Deno.serve(async (req) => {
         .not('xero_invoice_id', 'is', null);
 
       if (!cachedOutstanding || cachedOutstanding.length === 0) {
+        const retryAfter = xeroResult.status === 429 ? 60 : 0;
         return new Response(JSON.stringify({
-          error: 'Failed to fetch Xero invoices',
-          detail: (xeroResult.body || '').substring(0, 500),
-          rate_limited: xeroResult.status === 429,
+          invoices: [],
+          rows: [],
+          total_outstanding: 0,
+          invoice_count: 0,
+          matched_with_settlement: 0,
+          bank_deposit_found: 0,
+          ready_to_reconcile: 0,
+          sync_info: {
+            xero_rate_limited: xeroResult.status === 429,
+            xero_auth_error: xeroResult.status === 401 || xeroResult.status === 403,
+            xero_error: xeroResult.status !== 429,
+            xero_status: xeroResult.status,
+            retry_after_seconds: retryAfter,
+            from_cache: false,
+            message: xeroResult.status === 429
+              ? 'Xero rate limited — retrying automatically'
+              : `Xero returned ${xeroResult.status}`,
+            status: xeroResult.status === 429 ? 'rate_limited_no_cache' : 'xero_error',
+          },
         }), {
-          status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
