@@ -424,6 +424,20 @@ Deno.serve(async (req) => {
       else console.error(`[auto-gen-settlements] insert error for ${settlementId}:`, error);
     }
 
+    // ══════════════════════════════════════════════════════════════
+    // INTERNAL FINANCIAL CATEGORIES (canonical)
+    // Source: src/constants/financial-categories.ts
+    //
+    //   revenue          — item sale (ex GST)
+    //   marketplace_fee  — commission / referral fee
+    //   payment_fee      — gateway fee (Stripe, PayPal)
+    //   refund           — refunded sale
+    //   gst_income       — GST collected on sales
+    //   gst_expense      — GST on fees
+    //   promotion        — discount / promotional rebate
+    //   adjustment       — reserve, correction, reimbursement
+    // ══════════════════════════════════════════════════════════════
+
     // ─── Write settlement_lines (individual order rows) ─────────────
     // Delete existing lines for this settlement_id (idempotent rebuild)
     await adminClient
@@ -444,7 +458,7 @@ Deno.serve(async (req) => {
       amount_type: 'ItemPrice',
       amount_description: 'Shopify Order Revenue',
       amount: Math.round((order.total_price - order.total_tax) * 100) / 100,
-      accounting_category: 'Sales',
+      accounting_category: 'revenue',
     }));
 
     // Add tax lines
@@ -461,7 +475,7 @@ Deno.serve(async (req) => {
         amount_type: 'Tax',
         amount_description: 'GST on Income',
         amount: Math.round(order.total_tax * 100) / 100,
-        accounting_category: 'GST',
+        accounting_category: 'gst_income',
       }));
 
     // Add discount lines
@@ -478,7 +492,7 @@ Deno.serve(async (req) => {
         amount_type: 'Promotion',
         amount_description: 'Discount',
         amount: -Math.round(order.total_discounts * 100) / 100,
-        accounting_category: 'PromotionalDiscounts',
+        accounting_category: 'promotion',
       }));
 
     const allLines = [...lineItems, ...taxLines, ...discountLines];
