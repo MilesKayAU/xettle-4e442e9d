@@ -2116,6 +2116,11 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
     }
   }
 
+  // Pagination for displayRows
+  const [histPage, setHistPage] = useState(1);
+  const histTotalPages = Math.max(1, Math.ceil(displayRows.length / DEFAULT_PAGE_SIZE));
+  const paginatedDisplayRows = displayRows.slice((histPage - 1) * DEFAULT_PAGE_SIZE, histPage * DEFAULT_PAGE_SIZE);
+
   const allSelected = selectedIds.size === settlements.length;
   const someSelected = selectedIds.size > 0;
 
