@@ -457,14 +457,20 @@ Deno.serve(async (req) => {
       const hasBankDeposit = !!bankMatch;
       if (hasBankDeposit) bankDepositFound++;
 
+      // ─── Check aggregate match for Amazon invoices ───
+      const aggGroup = aggregateLookup.get(inv.InvoiceID);
+      const hasAggregateMatch = !!aggGroup;
+      if (hasAggregateMatch && !hasBankDeposit) bankDepositFound++;
+
       // Determine match status
       let matchStatus: string;
-      if (hasSettlement && hasBankDeposit && (bankDifference || 0) <= 0.05) {
-        matchStatus = 'balanced';
+      if (hasSettlement && (hasBankDeposit || hasAggregateMatch) && (bankDifference || 0) <= 0.05) {
+        matchStatus = hasAggregateMatch && !hasBankDeposit ? 'aggregate_matched' : 'balanced';
         readyToReconcile++;
-      } else if (hasSettlement && hasBankDeposit) {
-        matchStatus = `gap_${bankDifference?.toFixed(2)}`;
-      } else if (hasSettlement && !hasBankDeposit) {
+      } else if (hasSettlement && (hasBankDeposit || hasAggregateMatch)) {
+        matchStatus = hasAggregateMatch && !hasBankDeposit ? 'aggregate_matched' : `gap_${bankDifference?.toFixed(2)}`;
+        if (hasAggregateMatch && !hasBankDeposit) readyToReconcile++;
+      } else if (hasSettlement && !hasBankDeposit && !hasAggregateMatch) {
         matchStatus = 'no_bank_deposit';
       } else if (!hasSettlement && hasBankDeposit) {
         matchStatus = 'no_settlement';
@@ -493,10 +499,16 @@ Deno.serve(async (req) => {
         settlement_id: settlementId,
         settlement_status: settlement?.status || null,
         settlement_evidence: settlementEvidence,
-        has_bank_deposit: hasBankDeposit,
+        has_bank_deposit: hasBankDeposit || hasAggregateMatch,
         bank_match: bankMatch,
         bank_difference: bankDifference,
         match_status: matchStatus,
+        // Aggregate match fields
+        aggregate_match: hasAggregateMatch,
+        aggregate_group_id: aggGroup?.id || null,
+        aggregate_sum: aggGroup ? aggGroup.sum : null,
+        aggregate_settlement_count: aggGroup ? aggGroup.invoiceIds.length : null,
+        aggregate_bank_match: aggGroup?.bankMatch || null,
       });
     }
 
