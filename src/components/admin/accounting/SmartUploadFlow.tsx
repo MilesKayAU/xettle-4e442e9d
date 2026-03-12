@@ -859,9 +859,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 } else if (csvFormat === 'payout_level') {
                   // Save 3 summary lines so drill-down shows something
                   const summaryLines = [
-                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.metadata?.grossSalesInclGst || s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Charges total', marketplace_name: 'Shopify Payments', accounting_category: 'sales' },
-                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.metadata?.refundsInclGst || 0, amount_type: 'refund', transaction_type: 'Summary', amount_description: 'Refunds total', marketplace_name: 'Shopify Payments', accounting_category: 'refunds' },
-                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst || 0, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Fees total', marketplace_name: 'Shopify Payments', accounting_category: 'fees' },
+                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.metadata?.grossSalesInclGst || s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Charges total', marketplace_name: 'Shopify Payments', accounting_category: 'revenue' },
+                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.metadata?.refundsInclGst || 0, amount_type: 'refund', transaction_type: 'Summary', amount_description: 'Refunds total', marketplace_name: 'Shopify Payments', accounting_category: 'refund' },
+                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst || 0, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Fees total', marketplace_name: 'Shopify Payments', accounting_category: 'marketplace_fee' },
                   ].filter(l => l.amount !== 0);
                   if (summaryLines.length > 0) {
                     await supabase.from('settlement_lines').insert(summaryLines as any);
