@@ -314,7 +314,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     }
 
     setAlerts(prev => prev.filter(a => a.id !== alert.id));
-    onAlertCountChange?.(alerts.length - 1);
+    onAlertCountChange?.(getActionableCount(alerts, alert.id));
     toast.info(`"${getDisplayName(alert)}" ignored — you can re-enable in Settings.`);
   };
 
