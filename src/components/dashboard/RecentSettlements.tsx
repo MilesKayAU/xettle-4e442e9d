@@ -1,12 +1,11 @@
 /**
  * RecentSettlements — Dashboard settlement action center.
  * 
- * Mirrors the Link My Books UX pattern:
- *   - Clickable status summary cards (Ready to Push, Posted, Needs Attention)
+ * Features:
+ *   - Clickable status summary cards (Ready to Push, Posted, Needs Attention, Hidden)
  *   - Clean table with Gateway, Period, Amount, Bank, Status, Actions
- *   - Action dropdown per row (View, Recalculate, Push to Xero, Hide, Download)
+ *   - Action dropdown: View (inline drill-down), Refresh, Send to Xero, Download CSV, Hide/Unhide
  *   - Pagination (25 per page)
- *   - Only real settlement/payout records, never order aggregates
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -18,12 +17,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   FileText, ArrowRight, CheckCircle2, Clock, Send, AlertTriangle,
   MoreHorizontal, Eye, RefreshCw, EyeOff, Download, ChevronLeft, ChevronRight,
-  Ban,
+  EyeIcon, ChevronDown, ChevronUp, Loader2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,14 @@ interface SettlementRow {
   source: string;
   created_at: string;
   bank_verified: boolean | null;
+  sales_principal: number | null;
+  seller_fees: number | null;
+  fba_fees: number | null;
+  refunds: number | null;
+  gst_on_income: number | null;
+  other_fees: number | null;
+  storage_fees: number | null;
+  advertising_costs: number | null;
 }
 
 const MARKETPLACE_DISPLAY: Record<string, string> = {
@@ -81,9 +89,10 @@ function formatDateRange(start: string, end: string): string {
   return `${startStr} – ${endStr}`;
 }
 
-type StatusCategory = 'ready' | 'posted' | 'attention' | 'other';
+type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'other';
 
 function categorize(row: SettlementRow): StatusCategory {
+  if (row.status === 'hidden') return 'hidden';
   if (row.xero_status === 'posted' || row.xero_status === 'AUTHORISED') return 'posted';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
   if (row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') return 'ready';
@@ -91,6 +100,14 @@ function categorize(row: SettlementRow): StatusCategory {
 }
 
 function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: string | null }) {
+  if (status === 'hidden') {
+    return (
+      <Badge variant="outline" className="text-muted-foreground text-xs opacity-60">
+        <EyeOff className="h-3 w-3 mr-1" />
+        Hidden
+      </Badge>
+    );
+  }
   if (xeroStatus === 'posted' || xeroStatus === 'AUTHORISED') {
     return (
       <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
@@ -123,6 +140,101 @@ function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: strin
   );
 }
 
+// ── Inline drill-down panel ──
+function SettlementDrillDown({ row }: { row: SettlementRow }) {
+  const [lines, setLines] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('settlement_lines')
+        .select('order_id, sku, amount, amount_description, transaction_type')
+        .eq('settlement_id', row.settlement_id)
+        .order('amount', { ascending: true })
+        .limit(50);
+      setLines(data || []);
+      setLoading(false);
+    })();
+  }, [row.settlement_id]);
+
+  const summaryItems = [
+    { label: 'Gross Sales', value: row.sales_principal },
+    { label: 'Seller Fees', value: row.seller_fees },
+    { label: 'FBA Fees', value: row.fba_fees },
+    { label: 'Storage Fees', value: row.storage_fees },
+    { label: 'Advertising', value: row.advertising_costs },
+    { label: 'Other Fees', value: row.other_fees },
+    { label: 'Refunds', value: row.refunds },
+    { label: 'GST on Income', value: row.gst_on_income },
+    { label: 'Net Deposit', value: row.bank_deposit },
+  ].filter(i => i.value !== null && i.value !== 0);
+
+  return (
+    <div className="bg-muted/30 border-t border-border/50 px-6 py-4 space-y-4">
+      {/* Financial summary */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Financial Summary</p>
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+          {summaryItems.map(item => (
+            <div key={item.label} className="space-y-0.5">
+              <p className="text-[11px] text-muted-foreground">{item.label}</p>
+              <p className={cn(
+                'text-sm font-semibold',
+                (item.value || 0) < 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'
+              )}>
+                {formatAUD(item.value || 0)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Line items */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          Transaction Lines {lines && `(${lines.length}${lines.length >= 50 ? '+' : ''})`}
+        </p>
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+          </div>
+        ) : lines && lines.length > 0 ? (
+          <div className="max-h-48 overflow-y-auto rounded border border-border/50">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-muted/40 border-b border-border/50">
+                  <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Type</th>
+                  <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Description</th>
+                  <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Order</th>
+                  <th className="px-3 py-1.5 text-right font-medium text-muted-foreground">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line, i) => (
+                  <tr key={i} className="border-b border-border/20 last:border-0">
+                    <td className="px-3 py-1.5 text-muted-foreground">{line.transaction_type || '—'}</td>
+                    <td className="px-3 py-1.5 text-foreground">{line.amount_description || line.sku || '—'}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground font-mono">{line.order_id || '—'}</td>
+                    <td className={cn(
+                      'px-3 py-1.5 text-right font-mono',
+                      (line.amount || 0) < 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'
+                    )}>
+                      {formatAUD(line.amount || 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground/70 py-2">No line items recorded for this settlement</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const PAGE_SIZE = 25;
 
 interface RecentSettlementsProps {
@@ -134,14 +246,16 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [activeFilter, setActiveFilter] = useState<StatusCategory | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
 
   const fetchAll = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('settlements')
-        .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified')
+        .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs')
         .neq('source', 'api_sync')
-        .not('status', 'in', '("duplicate_suppressed","hidden")')
+        .neq('status', 'duplicate_suppressed')
         .order('period_end', { ascending: false });
 
       if (error) throw error;
@@ -157,7 +271,7 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
 
   // Summary counts
   const counts = useMemo(() => {
-    const c = { ready: 0, posted: 0, attention: 0, other: 0, readyTotal: 0, postedTotal: 0 };
+    const c = { ready: 0, posted: 0, attention: 0, hidden: 0, other: 0, readyTotal: 0, postedTotal: 0 };
     for (const r of allRows) {
       const cat = categorize(r);
       c[cat]++;
@@ -169,9 +283,11 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
 
   // Filtered + paginated
   const filtered = useMemo(() => {
-    if (!activeFilter) return allRows;
-    return allRows.filter(r => categorize(r) === activeFilter);
-  }, [allRows, activeFilter]);
+    if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
+    const visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
+    if (!activeFilter) return visible;
+    return visible.filter(r => categorize(r) === activeFilter);
+  }, [allRows, activeFilter, showHidden]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = useMemo(() => {
@@ -179,14 +295,50 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  // Reset page when filter changes
-  useEffect(() => { setPage(1); }, [activeFilter]);
+  useEffect(() => { setPage(1); }, [activeFilter, showHidden]);
 
-  // Actions
+  // ── Actions ──
   const handleHide = async (row: SettlementRow) => {
     await supabase.from('settlements').update({ status: 'hidden' }).eq('id', row.id);
-    toast.success(`Hidden settlement ${row.settlement_id}`);
+    toast.success(`Hidden: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
     fetchAll();
+  };
+
+  const handleUnhide = async (row: SettlementRow) => {
+    await supabase.from('settlements').update({ status: 'parsed' }).eq('id', row.id);
+    toast.success(`Restored: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
+    fetchAll();
+  };
+
+  const handleView = (row: SettlementRow) => {
+    setExpandedId(prev => prev === row.id ? null : row.id);
+  };
+
+  const handleDownloadCSV = (row: SettlementRow) => {
+    const headers = ['Field', 'Amount'];
+    const rows = [
+      ['Marketplace', getMarketplaceLabel(row.marketplace)],
+      ['Period', `${row.period_start} to ${row.period_end}`],
+      ['Settlement ID', row.settlement_id],
+      ['Gross Sales', String(row.sales_principal || 0)],
+      ['Seller Fees', String(row.seller_fees || 0)],
+      ['FBA Fees', String(row.fba_fees || 0)],
+      ['Storage Fees', String(row.storage_fees || 0)],
+      ['Advertising', String(row.advertising_costs || 0)],
+      ['Other Fees', String(row.other_fees || 0)],
+      ['Refunds', String(row.refunds || 0)],
+      ['GST on Income', String(row.gst_on_income || 0)],
+      ['Net Deposit', String(row.bank_deposit || 0)],
+    ];
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `settlement-${row.settlement_id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV downloaded');
   };
 
   if (loading) {
@@ -248,12 +400,25 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
             <FileText className="h-4 w-4 text-primary" />
             Settlements
           </CardTitle>
-          {onViewAll && (
-            <Button variant="ghost" size="sm" onClick={onViewAll} className="text-xs text-muted-foreground hover:text-foreground">
-              Full ledger
-              <ArrowRight className="h-3 w-3 ml-1" />
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {counts.hidden > 0 && (
+              <Button
+                variant={activeFilter === 'hidden' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setActiveFilter(prev => prev === 'hidden' ? null : 'hidden')}
+              >
+                <EyeOff className="h-3 w-3 mr-1" />
+                {counts.hidden} hidden
+              </Button>
+            )}
+            {onViewAll && (
+              <Button variant="ghost" size="sm" onClick={onViewAll} className="text-xs text-muted-foreground hover:text-foreground">
+                Full ledger
+                <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
@@ -286,7 +451,7 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
         {activeFilter && (
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-xs">
-              Showing: {summaryCards.find(c => c.key === activeFilter)?.label}
+              Showing: {activeFilter === 'hidden' ? 'Hidden' : summaryCards.find(c => c.key === activeFilter)?.label}
             </Badge>
             <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setActiveFilter(null)}>
               Clear filter
@@ -316,63 +481,97 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                 </tr>
               )}
               {pageRows.map((row, idx) => (
-                <tr
-                  key={row.id}
-                  className={cn(
-                    'border-b border-border/30 last:border-0 transition-colors hover:bg-muted/30',
-                    idx % 2 === 1 && 'bg-muted/10'
-                  )}
-                >
-                  <td className="px-4 py-3 font-medium text-foreground">
-                    {getMarketplaceLabel(row.marketplace)}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                    {formatDateRange(row.period_start, row.period_end)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold text-foreground whitespace-nowrap">
-                    {formatAUD(row.bank_deposit || 0)}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {row.bank_verified ? (
-                      <span className="text-emerald-600 dark:text-emerald-400" title="Bank deposit matched">✔</span>
-                    ) : (
-                      <span className="text-muted-foreground/40" title="Awaiting bank match">—</span>
+                <React.Fragment key={row.id}>
+                  <tr
+                    className={cn(
+                      'border-b border-border/30 last:border-0 transition-colors hover:bg-muted/30',
+                      idx % 2 === 1 && 'bg-muted/10',
+                      expandedId === row.id && 'bg-muted/20',
+                      row.status === 'hidden' && 'opacity-60'
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} />
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-medium">
-                          Action
-                          <MoreHorizontal className="h-3 w-3 ml-1" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem className="text-xs" onClick={() => toast.info('Settlement drill-down coming soon')}>
-                          <Eye className="h-3.5 w-3.5 mr-2" />
-                          View
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-xs" onClick={() => toast.info('Recalculate coming soon')}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-2" />
-                          Refresh
-                        </DropdownMenuItem>
-                        {(row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') && (
-                          <DropdownMenuItem className="text-xs" onClick={() => toast.info('Push to Xero from Settlements tab')}>
-                            <Send className="h-3.5 w-3.5 mr-2" />
-                            Send to Xero
+                  >
+                    <td className="px-4 py-3 font-medium text-foreground">
+                      {getMarketplaceLabel(row.marketplace)}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                      {formatDateRange(row.period_start, row.period_end)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-foreground whitespace-nowrap">
+                      {formatAUD(row.bank_deposit || 0)}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {row.bank_verified ? (
+                        <span className="text-emerald-600 dark:text-emerald-400" title="Bank deposit matched">✔</span>
+                      ) : (
+                        <span className="text-muted-foreground/40" title="Awaiting bank match">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-medium">
+                            Action
+                            <MoreHorizontal className="h-3 w-3 ml-1" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem className="text-xs" onClick={() => handleView(row)}>
+                            <Eye className="h-3.5 w-3.5 mr-2" />
+                            {expandedId === row.id ? 'Close breakdown' : 'View breakdown'}
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem className="text-xs" onClick={() => handleHide(row)}>
-                          <EyeOff className="h-3.5 w-3.5 mr-2" />
-                          Hide
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
+
+                          <DropdownMenuItem className="text-xs" onClick={() => handleDownloadCSV(row)}>
+                            <Download className="h-3.5 w-3.5 mr-2" />
+                            Download CSV
+                          </DropdownMenuItem>
+
+                          <DropdownMenuSeparator />
+
+                          <DropdownMenuItem className="text-xs" onClick={() => {
+                            toast.info('Recalculate: re-parse from the Settlements tab');
+                          }}>
+                            <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                            Recalculate
+                          </DropdownMenuItem>
+
+                          {(row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') && (
+                            <DropdownMenuItem className="text-xs" onClick={() => {
+                              toast.info('Push to Xero from the Settlements tab');
+                            }}>
+                              <Send className="h-3.5 w-3.5 mr-2" />
+                              Send to Xero
+                            </DropdownMenuItem>
+                          )}
+
+                          <DropdownMenuSeparator />
+
+                          {row.status === 'hidden' ? (
+                            <DropdownMenuItem className="text-xs" onClick={() => handleUnhide(row)}>
+                              <EyeIcon className="h-3.5 w-3.5 mr-2" />
+                              Unhide
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem className="text-xs text-destructive" onClick={() => handleHide(row)}>
+                              <EyeOff className="h-3.5 w-3.5 mr-2" />
+                              Hide
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                  {/* ── Inline drill-down ── */}
+                  {expandedId === row.id && (
+                    <tr>
+                      <td colSpan={6} className="p-0">
+                        <SettlementDrillDown row={row} />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
