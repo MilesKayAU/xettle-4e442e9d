@@ -565,7 +565,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                       </td>
                       <td className="px-3 py-2 text-center">
                         {row.has_bank_deposit ? (
-                          row.bank_match?.fuzzy ? (
+                          row.aggregate_match && !row.bank_match ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-xs">
+                                Batched deposit: {formatAUD(row.aggregate_sum || 0)} across {row.aggregate_settlement_count} settlements
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : row.bank_match?.fuzzy ? (
                             <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
                           ) : (
                             <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
