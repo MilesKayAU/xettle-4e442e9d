@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
-  FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard, MinusCircle,
+  FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard, MinusCircle, Clock3,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
