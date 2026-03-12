@@ -1,3 +1,16 @@
+// ══════════════════════════════════════════════════════════════
+// ACCOUNTING RULES (hardcoded, never configurable)
+// Canonical source: src/constants/accounting-rules.ts
+// 
+// Rule #11 — Three-Layer Accounting Source Model:
+//   Orders     → NEVER create accounting entries
+//   Payments   → NEVER create accounting entries
+//   Settlements → ONLY source of accounting entries
+//
+// This function scans Xero history and detects payment bank accounts
+// for VERIFICATION ONLY. No accounting entries created here.
+// ══════════════════════════════════════════════════════════════
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
