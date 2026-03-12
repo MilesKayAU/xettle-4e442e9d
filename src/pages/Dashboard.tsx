@@ -278,6 +278,27 @@ export default function Dashboard() {
         }
 
         if (discoverySetting?.value === 'running') {
+          // Check if it's been stuck running for more than 3 minutes (stale)
+          const { data: updatedRow } = await supabase
+            .from('app_settings')
+            .select('updated_at')
+            .eq('key', 'xero_discovery_status')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          
+          const updatedAt = updatedRow?.updated_at ? new Date(updatedRow.updated_at).getTime() : 0;
+          const isStale = Date.now() - updatedAt > 3 * 60 * 1000;
+          
+          if (isStale) {
+            console.log('[dashboard] Discovery stuck in running state — resetting and re-triggering');
+            // Reset to allow re-trigger
+            await supabase.from('app_settings').upsert(
+              { user_id: user.id, key: 'xero_discovery_status', value: 'complete' },
+              { onConflict: 'user_id,key' }
+            );
+            return;
+          }
+          
           setShowDiscoveryBanner(true);
           return;
         }
