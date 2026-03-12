@@ -493,8 +493,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono font-medium text-foreground">
-                        {formatAUD(row.amount)}
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="font-mono font-medium text-foreground">{formatAUD(row.amount)}</span>
+                          {row.currency_code && row.currency_code !== 'AUD' && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-semibold border-amber-300 text-amber-700 dark:text-amber-400">
+                              {row.currency_code}
+                            </Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-center">
                         {row.has_settlement ? (
