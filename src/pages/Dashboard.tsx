@@ -165,19 +165,34 @@ export default function Dashboard() {
       } else if (connected === 'amazon') {
         setHasAmazon(true);
         toast.success('Amazon connected — syncing settlements…');
-        // Fire Amazon-only sync
+        // Fire Amazon-only sync (user explicitly connected — Xero-first already satisfied by this point)
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
-            callEdgeFunctionSafe('fetch-amazon-settlements', session.access_token, {}, { headers: { 'x-action': 'smart-sync' } });
+            // Verify Xero discovery is done before API sync
+            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').maybeSingle()
+              .then(({ data }) => {
+                if (data?.value === 'complete') {
+                  callEdgeFunctionSafe('fetch-amazon-settlements', session.access_token, {}, { headers: { 'x-action': 'smart-sync' } });
+                } else {
+                  toast.info('Amazon will sync after Xero analysis completes.');
+                }
+              });
           }
         });
       } else if (connected === 'shopify') {
         setHasShopify(true);
         toast.success('Shopify connected — syncing payouts…');
-        // Fire Shopify-only sync
+        // Fire Shopify-only sync (gated by Xero discovery)
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
-            callEdgeFunctionSafe('fetch-shopify-payouts', session.access_token);
+            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').maybeSingle()
+              .then(({ data }) => {
+                if (data?.value === 'complete') {
+                  callEdgeFunctionSafe('fetch-shopify-payouts', session.access_token);
+                } else {
+                  toast.info('Shopify will sync after Xero analysis completes.');
+                }
+              });
           }
         });
       }
@@ -433,7 +448,8 @@ export default function Dashboard() {
   }, [user, loadMarketplaces]);
 
   // ─── First-load scan trigger ─────────────────────────────────
-  // Catches users with connected tokens but no scan flags (e.g. completed wizard before scanning was wired up)
+  // RULE: Xero must be connected and discovery complete BEFORE any Amazon/Shopify API syncs fire.
+  // Manual CSV uploads are always allowed — they use user-controlled data, not unlimited API calls.
   const firstLoadTriggered = useRef(false);
   useEffect(() => {
     if (!user || firstLoadTriggered.current) return;
@@ -442,69 +458,80 @@ export default function Dashboard() {
     const triggerFirstLoadScan = async () => {
       try {
         const caps = await detectCapabilities();
-        const hasAnyToken = caps.hasXero || caps.hasAmazon || caps.hasShopify;
-        if (!hasAnyToken) return;
+        if (!caps.accessToken) return;
 
-        // Check if any scan flag exists
+        // Check existing scan flags
         const { data: scanFlags } = await supabase
           .from('app_settings')
-          .select('key')
-          .in('key', ['xero_scan_completed', 'amazon_scan_completed', 'shopify_scan_completed'])
-          .limit(1);
+          .select('key, value')
+          .in('key', ['xero_scan_completed', 'xero_discovery_status', 'amazon_scan_completed', 'shopify_scan_completed']);
 
-        const hasAnyScanFlag = !!(scanFlags && scanFlags.length > 0);
+        const flagMap = new Map(scanFlags?.map(f => [f.key, f.value]) || []);
+        const xeroDiscoveryComplete = flagMap.get('xero_discovery_status') === 'complete' || !!flagMap.get('xero_scan_completed');
         const hasAnyData = caps.hasSettlements || caps.hasShopifyOrders;
 
-        if (!hasAnyScanFlag && !hasAnyData && caps.accessToken) {
-          console.log('[dashboard] Tokens found but no scans ran — triggering first-load scan');
+        // If Xero is connected but discovery hasn't run, the discovery effect handles it — don't duplicate
+        if (caps.hasXero && !xeroDiscoveryComplete) {
+          console.log('[dashboard] Xero connected but discovery not complete — deferring API syncs');
+          return;
+        }
 
-          // Fire scans in parallel (fire-and-forget)
-          const scanPromises: Promise<any>[] = [];
+        // Only fire Amazon/Shopify API syncs if:
+        // 1. Xero discovery is complete (so we have context), AND
+        // 2. Those channel scans haven't run yet
+        if (xeroDiscoveryComplete && caps.accessToken) {
+          const amazonNeedsScan = caps.hasAmazon && !flagMap.get('amazon_scan_completed') && !hasAnyData;
+          const shopifyNeedsScan = caps.hasShopify && !flagMap.get('shopify_scan_completed') && !hasAnyData;
 
-          if (caps.hasXero) {
-            scanPromises.push(callEdgeFunctionSafe('scan-xero-history', caps.accessToken));
-          }
-          if (caps.hasAmazon) {
-            scanPromises.push(callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken, {}, { headers: { 'x-action': 'smart-sync' } }));
-          }
-          if (caps.hasShopify) {
-            scanPromises.push(callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken));
-            scanPromises.push(callEdgeFunctionSafe('fetch-shopify-orders', caps.accessToken, {
-              ...(caps.shopDomain ? { shopDomain: caps.shopDomain } : {}),
-              channelDetectionOnly: true,
-            }));
-          }
+          if (amazonNeedsScan || shopifyNeedsScan) {
+            console.log('[dashboard] Xero discovery complete — triggering channel syncs:', {
+              amazon: amazonNeedsScan,
+              shopify: shopifyNeedsScan,
+            });
 
-          await Promise.allSettled(scanPromises);
+            const scanPromises: Promise<any>[] = [];
 
-          // Follow up with channel scan + settlement generation + provisioning + validation sweep
-          if (caps.hasShopify) {
-            await callEdgeFunctionSafe('scan-shopify-channels', caps.accessToken);
-            await callEdgeFunctionSafe('auto-generate-shopify-settlements', caps.accessToken);
-          }
-          if (caps.userId) {
-            await provisionAllMarketplaceConnections(caps.userId);
-          }
-          await callEdgeFunctionSafe('run-validation-sweep', caps.accessToken);
+            if (amazonNeedsScan) {
+              scanPromises.push(callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken, {}, { headers: { 'x-action': 'smart-sync' } }));
+            }
+            if (shopifyNeedsScan) {
+              scanPromises.push(callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken));
+              scanPromises.push(callEdgeFunctionSafe('fetch-shopify-orders', caps.accessToken, {
+                ...(caps.shopDomain ? { shopDomain: caps.shopDomain } : {}),
+                channelDetectionOnly: true,
+              }));
+            }
 
-          // Write scan completion flags
-          const flagPromises: Promise<any>[] = [];
-          const writeFlag = async (key: string) => {
-            await supabase.from('app_settings').upsert(
-              { user_id: caps.userId!, key, value: 'true' },
-              { onConflict: 'user_id,key' }
-            );
-          };
-          if (caps.hasXero) flagPromises.push(writeFlag('xero_scan_completed'));
-          if (caps.hasAmazon) flagPromises.push(writeFlag('amazon_scan_completed'));
-          if (caps.hasShopify) {
-            flagPromises.push(writeFlag('shopify_scan_completed'));
-            flagPromises.push(writeFlag('shopify_channel_scan_triggered'));
-          }
-          await Promise.allSettled(flagPromises);
+            await Promise.allSettled(scanPromises);
 
-          console.log('[dashboard] First-load scan complete — reloading marketplaces');
-          loadMarketplaces();
+            // Follow up with channel scan + settlement generation + provisioning
+            if (shopifyNeedsScan) {
+              await callEdgeFunctionSafe('scan-shopify-channels', caps.accessToken);
+              await callEdgeFunctionSafe('auto-generate-shopify-settlements', caps.accessToken);
+            }
+            if (caps.userId) {
+              await provisionAllMarketplaceConnections(caps.userId);
+            }
+            await callEdgeFunctionSafe('run-validation-sweep', caps.accessToken);
+
+            // Write scan completion flags
+            const writeFlag = async (key: string) => {
+              await supabase.from('app_settings').upsert(
+                { user_id: caps.userId!, key, value: 'true' },
+                { onConflict: 'user_id,key' }
+              );
+            };
+            const flagPromises: Promise<any>[] = [];
+            if (amazonNeedsScan) flagPromises.push(writeFlag('amazon_scan_completed'));
+            if (shopifyNeedsScan) {
+              flagPromises.push(writeFlag('shopify_scan_completed'));
+              flagPromises.push(writeFlag('shopify_channel_scan_triggered'));
+            }
+            await Promise.allSettled(flagPromises);
+
+            console.log('[dashboard] Channel syncs complete — reloading marketplaces');
+            loadMarketplaces();
+          }
         }
       } catch (err) {
         console.warn('[dashboard] first-load scan failed:', err);
