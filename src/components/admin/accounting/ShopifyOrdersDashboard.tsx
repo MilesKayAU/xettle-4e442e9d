@@ -375,7 +375,7 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
               transaction_type: 'Order',
               posted_date: order.paidAt ? order.paidAt.split('T')[0] : null,
               marketplace_name: s.metadata?.displayName || mktKey,
-              accounting_category: 'sales',
+              accounting_category: 'revenue',
             }));
 
             // Insert in batches of 500
