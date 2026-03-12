@@ -193,7 +193,7 @@ export default function Dashboard() {
         // Fire Shopify-only sync (gated by Xero discovery)
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
-            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').maybeSingle()
+            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').eq('user_id', user.id).maybeSingle()
               .then(({ data }) => {
                 if (data?.value === 'complete') {
                   callEdgeFunctionSafe('fetch-shopify-payouts', session.access_token);
