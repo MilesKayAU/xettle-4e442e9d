@@ -150,10 +150,11 @@ Deno.serve(async (req) => {
     let token = tokens[0] as XeroToken;
     token = await refreshToken(supabase, token);
 
-    // ─── Fetch AUTHORISED sales invoices (ACCREC) from Xero ───
-    // Only fetch accounts receivable from the accounting boundary onwards
-    const invoiceWhere = encodeURIComponent(`Type=="ACCREC" AND Date>=DateTime(${bY}, ${bM}, ${bD})`);
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
+    // ─── Fetch AUTHORISED + DRAFT sales invoices (ACCREC) from Xero ───
+    // Include DRAFT invoices regardless of boundary (user may need to approve pre-boundary drafts)
+    // AUTHORISED invoices filtered from boundary onwards
+    const invoiceWhere = encodeURIComponent(`Type=="ACCREC" AND (Status=="DRAFT" OR Date>=DateTime(${bY}, ${bM}, ${bD}))`);
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
     const xeroResp = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token.access_token}`,
