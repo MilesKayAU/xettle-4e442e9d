@@ -274,12 +274,17 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           <h2 className="text-xl font-bold text-foreground">
             {hasAnyApi ? "Scanning your accounts…" : "Setting things up…"}
           </h2>
-          <p className="text-sm text-muted-foreground">
+           <p className="text-sm text-muted-foreground">
             {hasAnyApi
-              ? "This takes 1–3 minutes. You can wait here or go to your dashboard and watch it update in real time."
+              ? "This takes 2–15 minutes depending on your account size."
               : "Almost done — just finalising your setup."
             }
           </p>
+          {hasAnyApi && (
+            <p className="text-xs text-muted-foreground">
+              Larger accounts with many orders or invoices may take longer. You can leave and come back — we'll notify you when it's ready.
+            </p>
+          )}
         </div>
 
         {/* Progress bar */}
