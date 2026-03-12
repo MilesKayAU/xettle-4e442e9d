@@ -663,9 +663,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
     }
-    if (row.match_status === 'no_bank_deposit') {
-      return isAmazon(row) ? 'No deposit found' : 'No bank deposit';
+    if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
+      return isAmazon(row) ? 'Awaiting deposit' : 'No deposit found';
     }
+    if (row.match_status === 'no_bank_deposit') return 'No deposit found';
     return 'No settlement';
   };
 
@@ -795,14 +796,24 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       );
     }
 
-    // STATE 3: No match found (Amazon)
+    // STATE 3: No match found (Amazon — settlement verified, awaiting batched deposit)
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) {
       const isPickerOpen = manualPickerOpen === row.xero_invoice_id;
       return (
         <div className="p-3 rounded-lg bg-muted/30 border border-border space-y-2">
           <div className="flex items-center gap-2">
-            <Clock3 className="h-4 w-4 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">No deposit found yet</p>
+            {row.has_settlement ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <p className="text-sm text-foreground font-medium">Settlement verified ✓</p>
+                <span className="text-xs text-muted-foreground">— awaiting batched Amazon deposit</span>
+              </>
+            ) : (
+              <>
+                <Clock3 className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No deposit found yet</p>
+              </>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
@@ -954,10 +965,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <p className="text-xs text-muted-foreground">{filteredRows.length} invoices</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={data.matched_with_settlement === data.invoice_count ? 'border-emerald-200 dark:border-emerald-800' : ''}>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Settlement found</p>
-              <p className="text-xl font-bold text-foreground">{data.matched_with_settlement}</p>
+              <p className={`text-xl font-bold ${data.matched_with_settlement === data.invoice_count ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
+                {data.matched_with_settlement}
+              </p>
               <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
             </CardContent>
           </Card>
