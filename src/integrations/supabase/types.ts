@@ -1739,6 +1739,7 @@ export type Database = {
           matched_date: string | null
           matched_reference: string | null
           notes: string | null
+          reference_hash: string | null
           settlement_id: string
           updated_at: string
           user_id: string
@@ -1758,6 +1759,7 @@ export type Database = {
           matched_date?: string | null
           matched_reference?: string | null
           notes?: string | null
+          reference_hash?: string | null
           settlement_id: string
           updated_at?: string
           user_id: string
@@ -1777,6 +1779,7 @@ export type Database = {
           matched_date?: string | null
           matched_reference?: string | null
           notes?: string | null
+          reference_hash?: string | null
           settlement_id?: string
           updated_at?: string
           user_id?: string
