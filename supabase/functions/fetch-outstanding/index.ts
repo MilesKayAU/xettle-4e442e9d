@@ -633,6 +633,12 @@ Deno.serve(async (req) => {
       bank_deposit_found: bankDepositFound,
       ready_to_reconcile: readyToReconcile,
       rows,
+      sync_info: {
+        unmatched_count: Math.max(0, invoices.length - matchedWithSettlement),
+        awaiting_sync_count: awaitingSyncCount,
+        amazon_rate_limited: amazonRateLimited,
+        amazon_rate_limit_until: amazonRateLimitUntil,
+      },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
