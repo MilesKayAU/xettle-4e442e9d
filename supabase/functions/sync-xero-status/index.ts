@@ -414,6 +414,24 @@ serve(async (req) => {
         value: nowIso,
       }, { onConflict: 'user_id,key' });
 
+      // Persist oldest outstanding invoice date for downstream sync window calculation
+      let oldestOutstandingDate: string | null = null;
+      for (const inv of outstandingInvoices) {
+        if (!['DRAFT', 'SUBMITTED', 'AUTHORISED'].includes(inv.Status || '')) continue;
+        const invDate = parseXeroDate(inv.Date);
+        if (invDate && (!oldestOutstandingDate || invDate < oldestOutstandingDate)) {
+          oldestOutstandingDate = invDate;
+        }
+      }
+      if (oldestOutstandingDate) {
+        await supabase.from('app_settings').upsert({
+          user_id: userId,
+          key: 'xero_oldest_outstanding_date',
+          value: oldestOutstandingDate,
+        }, { onConflict: 'user_id,key' });
+        console.log(`[step-3b] Oldest outstanding Xero invoice date: ${oldestOutstandingDate}`);
+      }
+
       const { data: stillUnmatched } = await supabase
         .from('settlements').select('settlement_id').eq('user_id', userId)
         .is('xero_journal_id', null).in('status', ['parsed', 'ready_to_push']);
@@ -428,18 +446,26 @@ serve(async (req) => {
           cache_status_changed: cacheStatusChanged,
           outstanding_seeded: seededCount,
           invoices_scanned: outstandingInvoices.length,
+          oldest_outstanding_date: oldestOutstandingDate,
           unmatched: stillUnmatched?.length || 0,
           cursor_saved: nowIso,
         },
       });
+    }
+
+    // If there are no uncached local settlements, we're done after the outstanding discovery
+    if (uncachedSettlements.length === 0) {
+      const { data: stillUnmatched } = await supabase
+        .from('settlements').select('settlement_id').eq('user_id', userId)
+        .is('xero_journal_id', null).in('status', ['parsed', 'ready_to_push']);
 
       return new Response(JSON.stringify({
         success: true,
         updated: cacheStatusChanged,
         fuzzy_matched: 0,
-        pre_seeded: seededCount,
+        pre_seeded: 0,
         unmatched: stillUnmatched?.length || 0,
-        total: cacheVerified + seededCount,
+        total: cacheVerified,
         mode: 'cache_plus_outstanding_seed',
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

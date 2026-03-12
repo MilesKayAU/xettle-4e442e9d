@@ -291,8 +291,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, []);
 
-  // On mount, just fetch cached data — don't auto-trigger a full Xero sync
-  useEffect(() => { fetchOutstanding({ runSync: false }); }, [fetchOutstanding]);
+  // On mount, run sync to discover outstanding invoices from Xero (priority)
+  useEffect(() => { fetchOutstanding({ runSync: true }); }, [fetchOutstanding]);
 
   // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
   // PAYMENT VERIFICATION LAYER ONLY
