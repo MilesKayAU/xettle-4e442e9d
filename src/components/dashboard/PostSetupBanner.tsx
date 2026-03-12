@@ -335,10 +335,15 @@ export default function PostSetupBanner({
               <div className="space-y-2 flex-1">
                 <h3 className="text-base font-semibold text-foreground">
                   {isActivelyScanning
-                    ? scanPhase === 'detecting' ? 'Checking your connections…' : 'Xettle is scanning your accounts…'
+                    ? scanPhase === 'detecting' ? 'Checking your connections…' : 'Checking for new marketplaces and deposits…'
                     : 'Scan complete!'
                   }
                 </h3>
+                {isActivelyScanning && (
+                  <p className="text-xs text-muted-foreground">
+                    This runs automatically in the background — your data is ready to use.
+                  </p>
+                )}
                 <div className="space-y-1.5">
                   {hasXero && xeroStatus !== 'skipped' && (
                     <p className="text-sm text-foreground">
