@@ -88,7 +88,8 @@ async function fetchXeroWithRetry(url: string, headers: Record<string, string>, 
     lastBody = await resp.text();
 
     if (resp.status === 429 && attempt < maxAttempts) {
-      const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+      const retryAfterHeader = resp.headers.get('Retry-After');
+      const delayMs = retryAfterHeader ? parseInt(retryAfterHeader) * 1000 : Math.min(2000 * Math.pow(2, attempt - 1), 16000);
       console.warn(`Xero rate limited (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs}ms`);
       await sleep(delayMs);
       continue;
