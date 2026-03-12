@@ -616,6 +616,21 @@ async function sweepUser(adminSupabase: any, userId: string) {
           }
         }
 
+        // ── Derive overall_status from collected signals ──────────────────────
+        if (settlement?.status === 'already_recorded' || (settlement && boundaryDate && settlement.period_end < boundaryDate)) {
+          record.overall_status = 'already_recorded'
+        } else if (record.xero_pushed && record.bank_matched) {
+          record.overall_status = 'complete'
+        } else if (record.xero_pushed) {
+          record.overall_status = settlement?.status === 'synced_external' ? 'pushed_to_xero' : 'pushed_to_xero'
+        } else if (settlement && (settlement.status === 'synced_external' || settlement.status === 'synced' || settlement.status === 'pushed_to_xero' || settlement.status === 'draft_in_xero' || settlement.status === 'authorised_in_xero' || settlement.status === 'reconciled_in_xero')) {
+          record.overall_status = 'pushed_to_xero'
+        } else if (record.settlement_uploaded) {
+          record.overall_status = 'ready_to_push'
+        } else {
+          record.overall_status = 'settlement_needed'
+        }
+
         const { error: upsertErr } = await adminSupabase
           .from('marketplace_validation')
           .upsert(record, { onConflict: 'user_id,marketplace_code,period_label' })
