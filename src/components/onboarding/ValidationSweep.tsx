@@ -464,15 +464,16 @@ export default function ValidationSweep({
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Period</th>
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Orders</th>
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Settlement</th>
+                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Net Payout</th>
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Xero</th>
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Bank</th>
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Status</th>
                 <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/50">
-              {filteredRows.map(row => (
-                <tr key={row.id} className="hover:bg-muted/20 transition-colors">
+            <tbody>
+              {filteredRows.map((row, idx) => (
+                <tr key={row.id} className={cn("transition-colors hover:bg-muted/30", idx % 2 === 1 && "bg-muted/10")}>
                   {/* Marketplace */}
                   <td className="px-4 py-3 font-medium text-foreground">
                     {MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}

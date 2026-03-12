@@ -747,3 +747,39 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     </>
   );
 }
+
+// ─── Grouped alert section with collapsible ─────────────────────────
+function AlertSection({
+  icon,
+  title,
+  count,
+  defaultOpen,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  count: number;
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className="border-border">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors">
+            {icon}
+            <span className="text-sm font-semibold text-foreground flex-1">{title}</span>
+            <Badge variant="secondary" className="text-xs">{count}</Badge>
+            {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-4 pb-3">
+            {children}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
+  );
+}
