@@ -1180,12 +1180,23 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
         <Card>
           <CardContent className="p-8 text-center">
             <Clock3 className="h-12 w-12 text-amber-500 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-foreground">Sync paused</h3>
-            <p className="text-sm text-muted-foreground mt-1">We’re waiting for Xero API capacity to return.</p>
+            <h3 className="text-lg font-semibold text-foreground">
+              {rateLimitRetrySeconds !== null ? 'Waiting for Xero API\u2026' : 'Sync paused'}
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {rateLimitRetrySeconds !== null
+                ? `Retrying automatically in ${rateLimitRetrySeconds}s — this is normal.`
+                : "We're waiting for Xero API capacity to return."}
+            </p>
             <p className="text-xs text-muted-foreground mt-2">
               Your data is not cleared — it will appear automatically once the API window reopens.
             </p>
-          </CardContent>
+            {rateLimitRetrySeconds === null && (
+              <Button variant="outline" size="sm" className="mt-4" onClick={fetchOutstanding}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Retry now
+              </Button>
+            )}
         </Card>
       )}
 
