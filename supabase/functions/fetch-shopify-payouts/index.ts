@@ -61,18 +61,8 @@ async function syncPayoutsForUser(
     }
   }
 
-  // ─── Enforce accounting boundary ──────────────────────────────────
-  let dateMin: string | undefined;
-  const { data: boundarySetting } = await supabase
-    .from("app_settings")
-    .select("value")
-    .eq("key", "accounting_boundary_date")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (boundarySetting?.value) {
-    dateMin = boundarySetting.value;
-  }
+  // ─── Boundary note: accounting_boundary_date only applies to Xero push,
+  //     never to payout fetching. All paid payouts are fetched. ──────
 
   // ─── Fetch paid payouts from Shopify ──────────────────────────────
   const allPayouts: ShopifyPayout[] = [];
@@ -82,7 +72,6 @@ async function syncPayoutsForUser(
 
   const buildInitialUrl = () => {
     const params = new URLSearchParams({ status: "paid" });
-    if (dateMin) params.set("date_min", dateMin);
     return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/shopify_payments/payouts.json?${params.toString()}`;
   };
 
