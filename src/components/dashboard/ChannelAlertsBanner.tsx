@@ -881,6 +881,30 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
           onComplete={handleSetupComplete}
         />
       )}
+
+      {classifyingAlert && (
+        <ContactClassificationModal
+          open={!!classifyingAlert}
+          onClose={() => setClassifyingAlert(null)}
+          contactName={getDisplayName(classifyingAlert)}
+          alertId={classifyingAlert.id}
+          onClassified={async (alertId) => {
+            await supabase
+              .from('channel_alerts' as any)
+              .update({ status: 'classified', actioned_at: new Date().toISOString() } as any)
+              .eq('id', alertId);
+            setAlerts(prev => prev.filter(a => a.id !== alertId));
+            const remaining = alerts.length - 1;
+            const actionableCount = alerts.filter(a => {
+              if (a.id === alertId) return false;
+              const isXC = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
+              return !isXC;
+            }).length;
+            onAlertCountChange?.(actionableCount);
+            setClassifyingAlert(null);
+          }}
+        />
+      )}
     </>
   );
 }
