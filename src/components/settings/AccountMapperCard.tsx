@@ -5,9 +5,17 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
+
+interface CoaEntry {
+  name: string;
+  type: string;
+  active: boolean;
+}
 
 interface XeroAccount {
   code: string;

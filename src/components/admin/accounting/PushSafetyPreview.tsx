@@ -445,7 +445,12 @@ function buildLineItemsFromSettlement(s: SettlementPreview): LineItemPreview[] {
   return items;
 }
 
-function buildValidationChecks(s: SettlementPreview, lineItems: LineItemPreview[]): ValidationCheck[] {
+function buildValidationChecks(
+  s: SettlementPreview,
+  lineItems: LineItemPreview[],
+  coaMap?: Map<string, { name: string; type: string; active: boolean }>,
+  userCodes?: Record<string, string>,
+): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
 
   // 1. Line items sum to settlement net
@@ -460,13 +465,60 @@ function buildValidationChecks(s: SettlementPreview, lineItems: LineItemPreview[
     checks.push({ label: 'Line items do NOT sum to settlement net', status: 'red', detail: `Difference: ${formatAUD(diff)} — review required` });
   }
 
-  // 2. Account codes confirmed
-  const allCodesKnown = lineItems.every(li => ACCOUNT_NAMES[li.accountCode]);
-  checks.push({
-    label: 'Account codes confirmed',
-    status: allCodesKnown ? 'green' : 'amber',
-    detail: allCodesKnown ? undefined : 'Some account codes are custom — verify in Xero',
-  });
+  // 2. Account codes validated against Chart of Accounts
+  if (coaMap && coaMap.size > 0) {
+    const invalidCodes: string[] = [];
+    const inactiveCodes: string[] = [];
+    const wrongTypeCodes: string[] = [];
+    const REVENUE_TYPES = ['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS'];
+    const EXPENSE_TYPES = ['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY'];
+    const REVENUE_DESCS = ['Sales', 'Refunds', 'Reimbursements'];
+
+    for (const li of lineItems) {
+      const entry = coaMap.get(li.accountCode);
+      if (!entry) {
+        invalidCodes.push(li.accountCode);
+      } else if (!entry.active) {
+        inactiveCodes.push(`${li.accountCode} (${entry.name})`);
+      } else {
+        const isRevenue = REVENUE_DESCS.some(r => li.description.includes(r));
+        const validTypes = isRevenue ? REVENUE_TYPES : EXPENSE_TYPES;
+        if (!validTypes.includes(entry.type)) {
+          wrongTypeCodes.push(`${li.accountCode} (${entry.name}) — ${isRevenue ? 'expected Revenue' : 'expected Expense'}, got ${entry.type}`);
+        }
+      }
+    }
+
+    if (invalidCodes.length > 0) {
+      checks.push({
+        label: 'Account codes NOT found in Xero',
+        status: 'red',
+        detail: `Missing: ${invalidCodes.join(', ')} — review Account Mapping`,
+      });
+    } else if (inactiveCodes.length > 0) {
+      checks.push({
+        label: 'Some accounts are inactive in Xero',
+        status: 'red',
+        detail: `Inactive: ${inactiveCodes.join(', ')}`,
+      });
+    } else if (wrongTypeCodes.length > 0) {
+      checks.push({
+        label: 'Account type mismatch',
+        status: 'red',
+        detail: wrongTypeCodes.join('; '),
+      });
+    } else {
+      checks.push({ label: 'All account codes verified in Xero ✓', status: 'green' });
+    }
+  } else {
+    // No CoA cached — fallback to old check
+    const allCodesKnown = lineItems.every(li => ACCOUNT_NAMES[li.accountCode]);
+    checks.push({
+      label: 'Account codes confirmed',
+      status: allCodesKnown ? 'green' : 'amber',
+      detail: allCodesKnown ? undefined : 'Some account codes are custom — verify in Xero',
+    });
+  }
 
   // 3. GST treatment correct
   const hasGstData = s.gst_on_income !== 0 || s.gst_on_expenses !== 0;
