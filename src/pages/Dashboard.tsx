@@ -752,6 +752,8 @@ export default function Dashboard() {
                   switchSettlementsSubTab('overview');
                 }}
                 userName={user?.email?.split('@')[0]}
+                userId={user?.id}
+                userCreatedAt={user?.created_at}
               />
 
               {/* Recent settlements — real payout/settlement records only */}
@@ -901,7 +903,7 @@ export default function Dashboard() {
                   Settlement vs order reconciliation across all connected marketplaces.
                 </p>
               </div>
-              <ReconciliationHealth />
+              <ReconciliationHealth userId={user?.id} />
             </div>
           </ErrorBoundary>
         )}
