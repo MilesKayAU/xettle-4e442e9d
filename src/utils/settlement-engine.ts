@@ -61,12 +61,25 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   paypal: 'PayPal',
   manual_orders: 'Manual Orders',
   theiconic: 'The Iconic',
+  tiktok_shop: 'TikTok Shop',
+  temu: 'Temu',
+  shein: 'Shein',
   // Composite codes from parsers
   woolworths_marketplus_bigw: 'Big W',
   woolworths_marketplus_woolworths: 'Everyday Market',
   woolworths_marketplus_mydeal: 'MyDeal',
   woolworths_marketplus_everyday_market: 'Everyday Market',
 };
+
+/**
+ * Get a display label for any marketplace code.
+ * Falls back to title-casing the code if not in the hardcoded registry.
+ * e.g. 'shopify_temu' → 'Shopify Temu'
+ */
+export function getMarketplaceLabel(code: string): string {
+  if (MARKETPLACE_LABELS[code]) return MARKETPLACE_LABELS[code];
+  return code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
 
 /**
  * Marketplace codes that are payment gateways, not settlement sources.

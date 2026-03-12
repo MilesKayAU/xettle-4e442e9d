@@ -326,7 +326,7 @@ async function syncPayoutsForUser(
           transaction_type: tx.type || "charge",
           posted_date: tx.processed_at ? tx.processed_at.substring(0, 10) : payoutDate,
           marketplace_name: "Shopify Payments",
-          accounting_category: tx.type === "refund" ? "refunds" : tx.type === "charge" ? "sales" : "fees",
+          accounting_category: tx.type === "refund" ? "refund" : tx.type === "charge" ? "revenue" : "marketplace_fee",
         }));
 
         for (let i = 0; i < lineRows.length; i += 500) {

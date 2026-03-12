@@ -791,7 +791,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 transaction_type: row.totalSalePrice < 0 ? 'Refund' : (row.commissionFee !== 0 && row.totalSalePrice === 0 ? 'Fee' : 'Order'),
                 posted_date: row.orderedDate || null,
                 marketplace_name: s.metadata?.displayName || orderSource,
-                accounting_category: row.totalSalePrice < 0 ? 'refunds' : (row.totalSalePrice === 0 ? 'fees' : 'sales'),
+                accounting_category: row.totalSalePrice < 0 ? 'refund' : (row.totalSalePrice === 0 ? 'marketplace_fee' : 'revenue'),
               }));
               for (let i = 0; i < lineRows.length; i += 500) {
                 await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
@@ -820,7 +820,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     transaction_type: 'Order',
                     posted_date: order.paidAt ? order.paidAt.split('T')[0] : null,
                     marketplace_name: s.metadata?.displayName || mktKey,
-                    accounting_category: 'sales',
+                    accounting_category: 'revenue',
                   }));
                   for (let i = 0; i < lineRows.length; i += 500) {
                     await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
@@ -850,7 +850,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                       transaction_type: row.type || 'charge',
                       posted_date: row.transactionDate ? (row.transactionDate.length >= 10 ? row.transactionDate.substring(0, 10) : row.transactionDate) : null,
                       marketplace_name: 'Shopify Payments',
-                      accounting_category: row.type === 'refund' ? 'refunds' : row.fee !== 0 ? 'fees' : 'sales',
+                      accounting_category: row.type === 'refund' ? 'refund' : row.fee !== 0 ? 'marketplace_fee' : 'revenue',
                     }));
                     for (let i = 0; i < lineRows.length; i += 500) {
                       await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
@@ -859,9 +859,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 } else if (csvFormat === 'payout_level') {
                   // Save 3 summary lines so drill-down shows something
                   const summaryLines = [
-                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.metadata?.grossSalesInclGst || s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Charges total', marketplace_name: 'Shopify Payments', accounting_category: 'sales' },
-                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.metadata?.refundsInclGst || 0, amount_type: 'refund', transaction_type: 'Summary', amount_description: 'Refunds total', marketplace_name: 'Shopify Payments', accounting_category: 'refunds' },
-                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst || 0, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Fees total', marketplace_name: 'Shopify Payments', accounting_category: 'fees' },
+                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.metadata?.grossSalesInclGst || s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Charges total', marketplace_name: 'Shopify Payments', accounting_category: 'revenue' },
+                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.metadata?.refundsInclGst || 0, amount_type: 'refund', transaction_type: 'Summary', amount_description: 'Refunds total', marketplace_name: 'Shopify Payments', accounting_category: 'refund' },
+                    { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst || 0, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Fees total', marketplace_name: 'Shopify Payments', accounting_category: 'marketplace_fee' },
                   ].filter(l => l.amount !== 0);
                   if (summaryLines.length > 0) {
                     await supabase.from('settlement_lines').insert(summaryLines as any);
@@ -902,7 +902,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     transaction_type: 'Order',
                     posted_date: dateCol ? (rawRow[dateCol] || null) : null,
                     marketplace_name: MARKETPLACE_LABELS[marketplace] || marketplace,
-                    accounting_category: 'sales',
+                    accounting_category: 'revenue',
                   });
                 }
                 if (lineRows.length > 0) {
@@ -918,9 +918,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           if (user && marketplace === 'bunnings') {
             try {
               const summaryLines = [
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Bunnings sales total (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'sales' },
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Bunnings commission (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'fees' },
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.gst_on_sales, amount_type: 'tax', transaction_type: 'Summary', amount_description: 'GST on sales', marketplace_name: 'Bunnings Marketplace', accounting_category: 'gst' },
+                { user_id: user.id, settlement_id: s.settlement_id, amount: s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Bunnings sales total (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'revenue' },
+                { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Bunnings commission (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'marketplace_fee' },
+                { user_id: user.id, settlement_id: s.settlement_id, amount: s.gst_on_sales, amount_type: 'tax', transaction_type: 'Summary', amount_description: 'GST on sales', marketplace_name: 'Bunnings Marketplace', accounting_category: 'gst_income' },
               ].filter(l => l.amount !== 0);
               if (summaryLines.length > 0) {
                 await supabase.from('settlement_lines').insert(summaryLines as any);
