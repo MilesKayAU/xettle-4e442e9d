@@ -112,10 +112,25 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
+  const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced' | 'ready' | 'in_xero' | 'bank_matched' | 'failed'>('all');
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
   const [includeGateways, setIncludeGateways] = useState(false);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
+
+  // ── Sort state ──────────────────────────────────────────────────────────────
+  type SortColumn = 'settlement_id' | 'date' | 'amount' | 'status' | 'xero' | 'bank';
+  type SortDir = 'asc' | 'desc';
+  const [sortColumn, setSortColumn] = useState<SortColumn>('date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const toggleSort = useCallback((col: SortColumn) => {
+    if (sortColumn === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(col);
+      setSortDir('asc');
+    }
+  }, [sortColumn]);
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
