@@ -155,7 +155,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
               } catch {}
               }
             } else if (result.rateLimited || result.statusCode === 429) {
-              updateStep(i, 'rate_limited', 'Rate limited — retrying automatically in background');
+              updateStep(i, 'rate_limited', 'Waiting for API — will retry automatically');
             } else {
               updateStep(i, 'error', result.error || 'Failed');
             }

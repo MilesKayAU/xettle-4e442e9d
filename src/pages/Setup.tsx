@@ -316,7 +316,7 @@ export default function Setup() {
       if (isRetryable && attempt < 2) {
         const waitSec = (attempt + 1) * 5;
         console.warn(`[setup] Shopify payouts ${payoutsResult.statusCode} — retrying in ${waitSec}s (attempt ${attempt + 1})`);
-        setShopifyPayoutsStep({ status: 'rate_limited', message: `Rate limited — retrying in ${waitSec}s…`, error: payoutsResult.error });
+        setShopifyPayoutsStep({ status: 'rate_limited', message: `Waiting for Shopify API — retrying in ${waitSec}s…` });
         await new Promise(r => setTimeout(r, waitSec * 1000));
         if (!mountedRef.current) return;
         setShopifyPayoutsStep({ status: 'running', message: `Retrying payouts fetch (attempt ${attempt + 2}/3)…` });
@@ -324,7 +324,7 @@ export default function Setup() {
       }
       // Non-retryable or exhausted retries
       if (isRetryable) {
-        setShopifyPayoutsStep({ status: 'rate_limited', message: 'Shopify rate limited — click Retry to try again', error: payoutsResult.error });
+        setShopifyPayoutsStep({ status: 'rate_limited', message: 'Waiting for Shopify API — will retry automatically' });
       } else {
         const isCooldown = payoutsResult.error?.includes('429');
         const isTimeout = payoutsResult.error?.includes('timed out');
@@ -437,7 +437,7 @@ export default function Setup() {
       if (isRetryable && attempt < 2) {
         const waitSec = (attempt + 1) * 10;
         console.warn(`[setup] Amazon ${result.statusCode} — retrying in ${waitSec}s (attempt ${attempt + 1})`);
-        setAmazonStep({ status: 'rate_limited', message: `Rate limited — retrying in ${waitSec}s…`, error: result.error });
+        setAmazonStep({ status: 'rate_limited', message: `Waiting for Amazon API — retrying in ${waitSec}s…` });
         await new Promise(r => setTimeout(r, waitSec * 1000));
         if (!mountedRef.current) return;
         setAmazonStep({ status: 'running', message: `Retrying Amazon fetch (attempt ${attempt + 2}/3)…` });
@@ -491,9 +491,9 @@ export default function Setup() {
 
       if (isRateLimit || isMutex || isCooldown) {
         console.info('[setup] Amazon rate-limited/mutex/cooldown — showing rate_limited state');
-        setAmazonStep({ status: 'rate_limited', message: 'Amazon rate limited — click Retry to try again', error: result.error });
+        setAmazonStep({ status: 'rate_limited', message: 'Waiting for Amazon API — will retry automatically' });
         setAmazonProgress(80);
-        // Don't mark as complete — user needs to retry
+        // System will retry on next scheduled sync
       } else {
         setAmazonStep({ status: 'error', message: 'Amazon sync encountered an issue — check your connection', error: result.error });
         setAmazonProgress(0);
@@ -783,16 +783,21 @@ export default function Setup() {
         <div className="flex items-start gap-3 py-1.5">
           <StatusIcon status={s.status} />
           <span className="text-sm text-foreground flex-1">{s.message}</span>
-          {(s.status === 'error' || s.status === 'rate_limited') && onRetry && (
+          {s.status === 'error' && onRetry && (
             <Button variant="ghost" size="sm" onClick={onRetry} className="h-6 px-2 text-xs">
               <RefreshCw className="h-3 w-3 mr-1" /> Retry
             </Button>
           )}
+          {s.status === 'rate_limited' && onRetry && (
+            <Button variant="ghost" size="sm" onClick={onRetry} className="h-6 px-2 text-xs text-muted-foreground">
+              <RefreshCw className="h-3 w-3 mr-1" /> Retry now
+            </Button>
+          )}
         </div>
-        {s.status === 'rate_limited' && s.error && (
-          <div className="ml-7 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs space-y-1">
-            <code className="block whitespace-pre-wrap break-all font-mono text-[11px] text-amber-700">{s.error}</code>
-          </div>
+        {s.status === 'rate_limited' && (
+          <p className="ml-7 text-xs text-muted-foreground">
+            This is normal — the API will be available again shortly. No action required.
+          </p>
         )}
         {s.status === 'error' && s.error && (
           <div className="ml-7 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs space-y-1.5">
