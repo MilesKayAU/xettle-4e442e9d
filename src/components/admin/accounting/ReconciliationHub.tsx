@@ -538,6 +538,15 @@ export default function ReconciliationHub() {
           </CollapsibleContent>
         </Collapsible>
       )}
+
+        </TabsContent>
+
+        <TabsContent value="audit" className="mt-4">
+          <Suspense fallback={<div className="h-32 bg-muted animate-pulse rounded" />}>
+            <HistoricalAudit />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
