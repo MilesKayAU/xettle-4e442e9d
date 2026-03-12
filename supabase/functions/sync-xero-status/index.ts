@@ -614,36 +614,52 @@ serve(async (req) => {
     console.log(`[step-5] Fuzzy matching: ${fuzzyMatched} additional settlements matched`);
 
     // ════════════════════════════════════════════════════════════════════
-    // STEP 5b: Promote unmatched 'saved' settlements to 'ready_to_push'
-    // After scanning Xero, any 'saved' settlement with no match is genuinely
-    // new and needs to be pushed. This separates "awaiting Xero check" from
-    // "confirmed not in Xero yet".
+    // STEP 5b: Triage unmatched 'saved' settlements after Xero scan.
+    // - Recent (≤60 days old) → promote to 'ready_to_push' (genuinely new)
+    // - Older → mark 'already_recorded' (pre-existing, handled outside Xettle)
+    // This prevents hundreds of historical payouts appearing as "Ready to Push"
+    // when the user already reconciled them via LinkMyBooks/manual entry.
     // ════════════════════════════════════════════════════════════════════
-    const finalMatchedIds = new Set([
-      ...Array.from(cacheBySettlement.keys()),
-      ...Array.from(seen.keys()),
-    ]);
-    // Add fuzzy-matched settlement IDs
-    for (const s of needFuzzy) {
-      if (finalMatchedIds.has(s.settlement_id)) continue;
-      // Check if it was fuzzy matched (has xero_journal_id now)
-    }
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    const cutoffDate = sixtyDaysAgo.toISOString().split('T')[0];
 
-    const { data: savedUnmatched } = await supabase
+    const { data: savedUnmatchedRecent } = await supabase
       .from('settlements')
       .select('settlement_id')
       .eq('user_id', userId)
       .eq('status', 'saved')
-      .is('xero_journal_id', null);
+      .is('xero_journal_id', null)
+      .gte('period_end', cutoffDate);
 
-    if (savedUnmatched && savedUnmatched.length > 0) {
-      const idsToPromote = savedUnmatched.map(s => s.settlement_id);
+    if (savedUnmatchedRecent && savedUnmatchedRecent.length > 0) {
+      const ids = savedUnmatchedRecent.map(s => s.settlement_id);
       await supabase.from('settlements')
         .update({ status: 'ready_to_push' })
         .eq('user_id', userId)
         .eq('status', 'saved')
-        .is('xero_journal_id', null);
-      console.log(`[step-5b] Promoted ${idsToPromote.length} saved settlements to ready_to_push`);
+        .is('xero_journal_id', null)
+        .gte('period_end', cutoffDate);
+      console.log(`[step-5b] Promoted ${ids.length} RECENT saved settlements to ready_to_push`);
+    }
+
+    // Mark older unmatched 'saved' as already_recorded — they predate Xettle
+    const { data: savedUnmatchedOld } = await supabase
+      .from('settlements')
+      .select('settlement_id')
+      .eq('user_id', userId)
+      .eq('status', 'saved')
+      .is('xero_journal_id', null)
+      .lt('period_end', cutoffDate);
+
+    if (savedUnmatchedOld && savedUnmatchedOld.length > 0) {
+      await supabase.from('settlements')
+        .update({ status: 'already_recorded' })
+        .eq('user_id', userId)
+        .eq('status', 'saved')
+        .is('xero_journal_id', null)
+        .lt('period_end', cutoffDate);
+      console.log(`[step-5b] Marked ${savedUnmatchedOld.length} OLD saved settlements as already_recorded`);
     }
 
     // ════════════════════════════════════════════════════════════════════
