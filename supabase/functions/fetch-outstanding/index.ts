@@ -112,27 +112,6 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // ─── Get accounting boundary date ───
-    let boundaryDate: Date;
-    const { data: boundaryRow } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', userId)
-      .eq('key', 'accounting_boundary_date')
-      .maybeSingle();
-
-    if (boundaryRow?.value) {
-      boundaryDate = new Date(boundaryRow.value);
-    } else {
-      // Default: 12 months ago
-      boundaryDate = new Date();
-      boundaryDate.setFullYear(boundaryDate.getFullYear() - 1);
-    }
-
-    const bY = boundaryDate.getFullYear();
-    const bM = boundaryDate.getMonth() + 1;
-    const bD = boundaryDate.getDate();
-
     // Get Xero token
     const { data: tokens } = await supabase
       .from('xero_tokens')
