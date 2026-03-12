@@ -149,7 +149,7 @@ export default function Dashboard() {
       setXeroConnected(true);
       setJustConnectedXero(true);
     }
-    supabase.from('xero_tokens').select('id').limit(1)
+    supabase.from('xero_tokens').select('id').eq('user_id', user.id).limit(1)
       .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
   }, [user]);
 
@@ -168,10 +168,10 @@ export default function Dashboard() {
     const checkWizard = async () => {
       try {
         const [settRes, amazonRes, shopifyRes, wizardRes] = await Promise.all([
-          supabase.from('settlements').select('id').limit(1),
-          supabase.from('amazon_tokens').select('id').limit(1),
-          supabase.from('shopify_tokens').select('id').limit(1),
-          supabase.from('app_settings').select('value').eq('key', 'onboarding_wizard_complete').maybeSingle(),
+          supabase.from('settlements').select('id').eq('user_id', user.id).limit(1),
+          supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1),
+          supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1),
+          supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'onboarding_wizard_complete').maybeSingle(),
         ]);
 
         const hasSettlements = !!(settRes.data && settRes.data.length > 0);
@@ -284,6 +284,7 @@ export default function Dashboard() {
       const { count } = await supabase
         .from('settlements')
         .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
         .eq('xero_status', 'authorised_in_xero');
       setOutstandingCount(count ?? 0);
     }
@@ -297,6 +298,7 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('marketplace_connections')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -313,18 +315,27 @@ export default function Dashboard() {
           return activeConnections.length > 0 ? activeConnections[0].marketplace_code : '';
         });
 
-        // Fetch settlement counts per marketplace
-        const codes = activeConnections.map((m: any) => m.marketplace_code);
-        const { data: countData } = await supabase
-          .from('settlements')
-          .select('marketplace')
-          .in('marketplace', codes);
-        if (countData) {
+        // Fetch settlement counts per marketplace (lightweight count-only queries)
+        const codes = activeConnections.map((m: any) => m.marketplace_code).filter(Boolean);
+        if (codes.length > 0) {
+          const countPairs = await Promise.all(
+            codes.map(async (code: string) => {
+              const { count } = await supabase
+                .from('settlements')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('marketplace', code);
+              return [code, count ?? 0] as const;
+            })
+          );
+
           const counts: Record<string, number> = {};
-          for (const row of countData) {
-            counts[row.marketplace || ''] = (counts[row.marketplace || ''] || 0) + 1;
+          for (const [code, count] of countPairs) {
+            counts[code] = count;
           }
           setSettlementCounts(counts);
+        } else {
+          setSettlementCounts({});
         }
       } else {
         setUserMarketplaces([]);
