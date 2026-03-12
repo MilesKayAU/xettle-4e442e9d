@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       event_type: "scheduled_sync",
       status: "running",
       settlements_affected: 0,
-      details: { started_at: new Date().toISOString() },
+      details: { started_at: new Date().toISOString(), pipeline: 'xero_first_v1' },
     } as any).select('id').single();
     if (data?.id) interimIds[userId] = data.id;
   }
@@ -83,11 +83,60 @@ Deno.serve(async (req) => {
 
   // Track which steps errored
   const stepErrors: string[] = [];
+  const xeroUserIds = [...new Set((xeroTokens || []).map(t => t.user_id))];
+  const shopifyUserIds = [...new Set((shopifyTokens || []).map(t => t.user_id))];
 
-  // 1. Fetch Amazon settlements (check mutex/rate-limit per user first)
-  console.log("[scheduled-sync] Step 1: Amazon fetch...");
-  
-  // Check if any user has an active lock or rate limit
+  // ═══════════════════════════════════════════════════════════════════
+  // XERO-FIRST PIPELINE: Discover what exists before fetching marketplace data
+  // ═══════════════════════════════════════════════════════════════════
+
+  // 1. Xero status audit (discover what's already in Xero)
+  console.log("[scheduled-sync] Step 1: Xero status audit (discovery)...");
+  results.xero_audit = { users: xeroUserIds.length, results: [] };
+  for (const uid of xeroUserIds) {
+    const auditResult = await callFunction("sync-xero-status", {}, { userId: uid });
+    (results.xero_audit.results as any[]).push({ user_id: uid, ...auditResult });
+    if (auditResult?.error) stepErrors.push('xero_audit');
+  }
+
+  // 2. Fetch Xero bank transactions (with 30-min guard built into the function)
+  console.log("[scheduled-sync] Step 2: Bank transaction ingestion...");
+  results.bank_txn_fetch = await callFunction("fetch-xero-bank-transactions");
+  if (results.bank_txn_fetch?.error) stepErrors.push('bank_txn_fetch');
+
+  // 3. Auto-verify: PAID Xero invoices → bank_verified = true
+  //    (This is now handled inside sync-xero-status itself)
+  //    Additionally, compute smart sync window per user
+  console.log("[scheduled-sync] Step 3: Computing smart sync windows...");
+  const userSyncFromMap: Record<string, string> = {};
+  const twoMonthsAgo = new Date();
+  twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+  const defaultSyncFrom = twoMonthsAgo.toISOString().split('T')[0];
+
+  for (const uid of allUserIds) {
+    try {
+      // Find the oldest unreconciled settlement
+      const { data: oldestGap } = await adminClient
+        .from('settlements')
+        .select('period_start')
+        .eq('user_id', uid)
+        .not('status', 'in', '("reconciled_in_xero","synced_external","already_recorded","duplicate_suppressed")')
+        .order('period_start', { ascending: true })
+        .limit(1);
+
+      const syncFrom = oldestGap?.[0]?.period_start || defaultSyncFrom;
+      userSyncFromMap[uid] = syncFrom;
+      console.log(`[scheduled-sync] User ${uid}: sync_from = ${syncFrom}`);
+    } catch (err) {
+      userSyncFromMap[uid] = defaultSyncFrom;
+      console.error(`[scheduled-sync] Sync window calc failed for ${uid}:`, err);
+    }
+  }
+  results.sync_windows = { ...userSyncFromMap };
+
+  // 4. Fetch Amazon settlements (with smart sync window)
+  console.log("[scheduled-sync] Step 4: Amazon fetch (smart window)...");
+
   let amazonSkipped = false;
   for (const uid of [...new Set((amazonTokens || []).map(t => t.user_id))]) {
     const { data: lockData } = await adminClient
@@ -96,7 +145,7 @@ Deno.serve(async (req) => {
       .eq('key', 'amazon_sync_lock_expiry')
       .eq('user_id', uid)
       .maybeSingle();
-    
+
     if (lockData?.value && new Date(lockData.value) > new Date()) {
       console.log(`[scheduled-sync] Amazon sync skipped for ${uid} — manual sync in progress`);
       amazonSkipped = true;
@@ -116,20 +165,39 @@ Deno.serve(async (req) => {
   }
 
   if (!amazonSkipped) {
-    results.amazon = await callFunction("fetch-amazon-settlements", { "x-action": "sync" });
+    // Pass the earliest sync_from across all Amazon users
+    const amazonUserIds = [...new Set((amazonTokens || []).map(t => t.user_id))];
+    const earliestAmazonSyncFrom = amazonUserIds.reduce((earliest, uid) => {
+      const sf = userSyncFromMap[uid] || defaultSyncFrom;
+      return sf < earliest ? sf : earliest;
+    }, defaultSyncFrom);
+
+    results.amazon = await callFunction("fetch-amazon-settlements", { "x-action": "sync" }, {
+      time: new Date().toISOString(),
+      sync_from: earliestAmazonSyncFrom,
+    });
     if (results.amazon?.error) stepErrors.push('amazon');
   } else {
     results.amazon = { skipped: true, reason: 'mutex_or_rate_limit' };
   }
 
-  // 2. Fetch Shopify payouts
-  console.log("[scheduled-sync] Step 2: Shopify fetch...");
-  results.shopify = await callFunction("fetch-shopify-payouts", { "x-action": "sync" });
-  if (results.shopify?.error) stepErrors.push('shopify');
+  // 5. Fetch Shopify payouts (with smart sync window)
+  console.log("[scheduled-sync] Step 5: Shopify payouts fetch (smart window)...");
+  {
+    const earliestShopifySyncFrom = shopifyUserIds.reduce((earliest, uid) => {
+      const sf = userSyncFromMap[uid] || defaultSyncFrom;
+      return sf < earliest ? sf : earliest;
+    }, defaultSyncFrom);
 
-  // 2.5. Scan Shopify channels for sub-channel detection
-  console.log("[scheduled-sync] Step 2.5: Shopify channel scan...");
-  const shopifyUserIds = [...new Set((shopifyTokens || []).map(t => t.user_id))];
+    results.shopify = await callFunction("fetch-shopify-payouts", { "x-action": "sync" }, {
+      time: new Date().toISOString(),
+      sync_from: earliestShopifySyncFrom,
+    });
+    if (results.shopify?.error) stepErrors.push('shopify');
+  }
+
+  // 5.5. Scan Shopify channels for sub-channel detection
+  console.log("[scheduled-sync] Step 5.5: Shopify channel scan...");
   results.channel_scan = { users: shopifyUserIds.length, results: [] };
   for (const uid of shopifyUserIds) {
     const scanResult = await callFunction("scan-shopify-channels", {}, { userId: uid });
@@ -137,8 +205,8 @@ Deno.serve(async (req) => {
     if (scanResult?.error) stepErrors.push('channel_scan');
   }
 
-  // 2.6. Auto-generate settlements from Shopify orders
-  console.log("[scheduled-sync] Step 2.6: Auto-generate Shopify settlements...");
+  // 5.6. Auto-generate settlements from Shopify orders
+  console.log("[scheduled-sync] Step 5.6: Auto-generate Shopify settlements...");
   results.shopify_settlements = { users: shopifyUserIds.length, results: [] };
   for (const uid of shopifyUserIds) {
     const genResult = await callFunction("auto-generate-shopify-settlements", {}, { userId: uid, days: 60 });
@@ -146,13 +214,16 @@ Deno.serve(async (req) => {
     if (genResult?.error) stepErrors.push('shopify_settlements');
   }
 
-  // 3. Run validation sweep
-  console.log("[scheduled-sync] Step 3: Validation sweep...");
+  // 6. Shopify orders fetch (always 90-day window for marketplace discovery — unchanged)
+  // This is handled by fetch-shopify-orders which already uses its own 90-day window
+
+  // 7. Run validation sweep
+  console.log("[scheduled-sync] Step 7: Validation sweep...");
   results.validation = await callFunction("run-validation-sweep");
   if (results.validation?.error) stepErrors.push('validation');
 
-  // 4. Auto-push ready settlements to Xero
-  console.log("[scheduled-sync] Step 4: Auto-push to Xero (checking live mode)...");
+  // 8. Auto-push ready settlements to Xero
+  console.log("[scheduled-sync] Step 8: Auto-push to Xero (checking live mode)...");
   let autoPushLive = false;
   const { data: liveModeSettings } = await adminClient
     .from('app_settings')
@@ -166,23 +237,8 @@ Deno.serve(async (req) => {
   results.xero_push = await callFunction("auto-push-xero", {}, { dry_run: !autoPushLive });
   if (results.xero_push?.error || (results.xero_push?.errors && results.xero_push.errors > 0)) stepErrors.push('xero_push');
 
-  // 5. Sync Xero status back
-  console.log("[scheduled-sync] Step 5: Xero status audit...");
-  const xeroUserIds = [...new Set((xeroTokens || []).map(t => t.user_id))];
-  results.xero_audit = { users: xeroUserIds.length, results: [] };
-  for (const uid of xeroUserIds) {
-    const auditResult = await callFunction("sync-xero-status", {}, { userId: uid });
-    (results.xero_audit.results as any[]).push({ user_id: uid, ...auditResult });
-    if (auditResult?.error) stepErrors.push('xero_audit');
-  }
-
-  // 6. Fetch Xero bank transactions (with 30-min guard built into the function)
-  console.log("[scheduled-sync] Step 6: Bank transaction ingestion...");
-  results.bank_txn_fetch = await callFunction("fetch-xero-bank-transactions");
-  if (results.bank_txn_fetch?.error) stepErrors.push('bank_txn_fetch');
-
-  // 7. Match bank deposits against settlements (using local cache)
-  console.log("[scheduled-sync] Step 7: Bank deposit matching...");
+  // 9. Match bank deposits against settlements (using local cache)
+  console.log("[scheduled-sync] Step 9: Bank deposit matching...");
   results.bank_matching = { users: xeroUserIds.length, results: [] };
   for (const uid of xeroUserIds) {
     const matchResult = await callFunction("match-bank-deposits", {}, { userId: uid });
@@ -199,7 +255,7 @@ Deno.serve(async (req) => {
   const totalSynced = totalAmazonSynced + totalShopifySynced;
 
   // ─── Determine overall status ─────────────────────────────────
-  const totalSteps = 7;
+  const totalSteps = 9;
   const uniqueStepErrors = [...new Set(stepErrors)];
   let overallStatus: string;
   if (uniqueStepErrors.length === 0) {
@@ -214,6 +270,8 @@ Deno.serve(async (req) => {
   for (const userId of allUserIds) {
     const interimId = interimIds[userId];
     const details = {
+      pipeline: 'xero_first_v1',
+      sync_from: userSyncFromMap[userId] || defaultSyncFrom,
       amazon: results.amazon?.results?.find((r: any) => r.user_id === userId) || (results.amazon?.error ? { error: results.amazon.error, timed_out: results.amazon.timed_out || false } : null),
       shopify: results.shopify?.results?.find((r: any) => r.user_id === userId) || (results.shopify?.error ? { error: results.shopify.error, timed_out: results.shopify.timed_out || false } : null),
       xero_push: results.xero_push?.results?.find((r: any) => r.userId === userId) || null,
@@ -253,12 +311,14 @@ Deno.serve(async (req) => {
     JSON.stringify({
       success: overallStatus !== 'error',
       status: overallStatus,
+      pipeline: 'xero_first_v1',
       duration_ms: durationMs,
       amazon_synced: totalAmazonSynced,
       shopify_synced: totalShopifySynced,
       xero_pushed: totalXeroPushed,
       xero_audited_users: xeroUserIds.length,
       users_processed: allUserIds.size,
+      sync_windows: userSyncFromMap,
       step_errors: uniqueStepErrors,
       results,
     }),

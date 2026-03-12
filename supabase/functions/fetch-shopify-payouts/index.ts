@@ -39,7 +39,8 @@ async function syncPayoutsForUser(
   userId: string,
   accessToken: string,
   shopDomain: string,
-  skipCooldown: boolean
+  skipCooldown: boolean,
+  syncFromParam?: string,
 ): Promise<{ synced: number; skipped: number; errors: string[] }> {
   const errors: string[] = [];
 
@@ -82,6 +83,11 @@ async function syncPayoutsForUser(
 
   const buildInitialUrl = () => {
     const params = new URLSearchParams({ status: "paid" });
+    // Smart sync window: if sync_from provided, only fetch payouts from that date
+    if (syncFromParam) {
+      params.set("date_min", syncFromParam);
+      console.log(`[fetch-shopify-payouts] Using sync_from filter: date_min=${syncFromParam}`);
+    }
     return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/shopify_payments/payouts.json?${params.toString()}`;
   };
 
@@ -454,6 +460,13 @@ Deno.serve(async (req) => {
 
       const results: Array<{ user_id: string; synced: number; skipped: number; errors: string[] }> = [];
 
+      // Parse optional sync_from from request body
+      let syncFromParam: string | undefined;
+      try {
+        const body = await req.json();
+        syncFromParam = body?.sync_from;
+      } catch { /* no body */ }
+
       for (const token of allTokens) {
         try {
           const result = await syncPayoutsForUser(
@@ -461,7 +474,8 @@ Deno.serve(async (req) => {
             token.user_id,
             token.access_token,
             token.shop_domain,
-            true // skip cooldown for cron
+            true, // skip cooldown for cron
+            syncFromParam,
           );
           results.push({ user_id: token.user_id, ...result });
         } catch (err) {

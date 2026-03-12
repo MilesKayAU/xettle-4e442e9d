@@ -219,14 +219,24 @@ serve(async (req) => {
         derivedStatus = 'synced_external';
       }
 
+      // Build update payload — auto-verify if PAID in Xero
+      const updatePayload: Record<string, any> = {
+        xero_invoice_number: inv.InvoiceNumber || null,
+        xero_status: inv.Status || null,
+        xero_journal_id: inv.InvoiceID,
+        status: derivedStatus,
+      };
+
+      // Auto-verify: if Xero says PAID, the bank deposit is confirmed
+      if (inv.Status === 'PAID') {
+        updatePayload.bank_verified = true;
+        updatePayload.bank_verified_at = new Date().toISOString();
+        updatePayload.bank_verified_by = null; // system auto-verified
+      }
+
       const { error } = await supabase
         .from('settlements')
-        .update({
-          xero_invoice_number: inv.InvoiceNumber || null,
-          xero_status: inv.Status || null,
-          xero_journal_id: inv.InvoiceID,
-          status: derivedStatus,
-        })
+        .update(updatePayload)
         .eq('settlement_id', settlementId)
         .eq('user_id', userId);
 

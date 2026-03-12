@@ -362,7 +362,7 @@ async function upsertSetting(supabase: any, userId: string, key: string, value: 
 // ═══════════════════════════════════════════════════════════════
 // SYNC ACTION: Full server-side fetch-parse-save loop (cron)
 // ═══════════════════════════════════════════════════════════════
-async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported: number; skipped: number; errors: number; details: string[] }> {
+async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{ users: number; imported: number; skipped: number; errors: number; details: string[] }> {
   const details: string[] = [];
   let totalImported = 0, totalSkipped = 0, totalErrors = 0;
 
@@ -426,6 +426,7 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
       const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
       const accountingBoundary = settingsMap['accounting_boundary_date'] || null;
 
+      // Smart sync window: use sync_from if provided, otherwise default to 90 days
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 90);
       const params = new URLSearchParams({
@@ -473,6 +474,16 @@ async function handleSync(supabaseAdmin: any): Promise<{ users: number; imported
       for (let i = 0; i < sorted.length; i++) {
         const report = sorted[i];
         if (!report.reportDocumentId) continue;
+
+        // Smart sync window: skip reports that ended before sync_from
+        if (syncFromParam && report.dataEndTime) {
+          const reportEnd = report.dataEndTime.split('T')[0];
+          if (reportEnd < syncFromParam) {
+            console.log(`[Sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${syncFromParam}`);
+            userSkipped++;
+            continue;
+          }
+        }
 
         if (i > 0) await new Promise(r => setTimeout(r, 3000));
 
@@ -990,7 +1001,14 @@ serve(async (req) => {
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-      const result = await handleSync(supabaseAdmin);
+      // Accept optional sync_from from request body (Xero-first smart sync window)
+      let syncFromParam: string | undefined;
+      try {
+        const body = await req.json();
+        syncFromParam = body?.sync_from;
+      } catch { /* no body */ }
+
+      const result = await handleSync(supabaseAdmin, syncFromParam);
       console.log(`[Sync Complete]`, result);
 
       return new Response(JSON.stringify(result), {
