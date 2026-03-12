@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -298,6 +299,16 @@ export default function ValidationSweep({
     return actionableRows;
   }, [actionableRows, filter]);
 
+  const [vsPage, setVsPage] = useState(1);
+  const vsTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
+  const safeVsPage = Math.min(vsPage, vsTotalPages);
+  const paginatedRows = useMemo(() => {
+    if (maxRows) return filteredRows.slice(0, maxRows);
+    const start = (safeVsPage - 1) * DEFAULT_PAGE_SIZE;
+    return filteredRows.slice(start, start + DEFAULT_PAGE_SIZE);
+  }, [filteredRows, safeVsPage, maxRows]);
+  useEffect(() => { setVsPage(1); }, [filter]);
+
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at)
     : null;
@@ -477,7 +488,7 @@ export default function ValidationSweep({
               </tr>
             </thead>
             <tbody>
-              {(maxRows ? filteredRows.slice(0, maxRows) : filteredRows).map((row, idx) => (
+              {paginatedRows.map((row, idx) => (
                 <tr key={row.id} className={cn("transition-colors hover:bg-muted/30", idx % 2 === 1 && "bg-muted/10")}>
                   {/* Marketplace */}
                   <td className="px-4 py-3 font-medium text-foreground">
@@ -562,8 +573,17 @@ export default function ValidationSweep({
                 </tr>
               )}
             </tbody>
-          </table>
+           </table>
         </div>
+        {!maxRows && (
+          <TablePaginationBar
+            page={safeVsPage}
+            totalPages={vsTotalPages}
+            totalItems={filteredRows.length}
+            pageSize={DEFAULT_PAGE_SIZE}
+            onPageChange={setVsPage}
+          />
+        )}
         {/* View all link when truncated */}
         {maxRows && filteredRows.length > maxRows && (
           <div className="border-t border-border px-4 py-3 text-center">
@@ -769,6 +789,7 @@ function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch:
     </TooltipProvider>
   );
 }
+
 
 
 function SummaryCard({

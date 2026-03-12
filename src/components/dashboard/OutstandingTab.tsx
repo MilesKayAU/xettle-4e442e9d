@@ -25,6 +25,7 @@
 
 import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
 import { Switch } from '@/components/ui/switch';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -218,6 +219,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const filteredTotal = useMemo(() => {
     return filteredRows.reduce((sum, r) => sum + r.amount, 0);
   }, [filteredRows]);
+
+  const [outPage, setOutPage] = useState(1);
+  const outTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
+  const safeOutPage = Math.min(outPage, outTotalPages);
+  const paginatedRows = useMemo(() => {
+    const start = (safeOutPage - 1) * DEFAULT_PAGE_SIZE;
+    return filteredRows.slice(start, start + DEFAULT_PAGE_SIZE);
+  }, [filteredRows, safeOutPage]);
+  useEffect(() => { setOutPage(1); }, [showNonMarketplace]);
 
   const [noXeroConnection, setNoXeroConnection] = useState(false);
 
@@ -1056,6 +1066,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
       {/* Main table */}
       {data && filteredRows.length > 0 && (
+        <>
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -1072,7 +1083,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map(row => {
+              {paginatedRows.map(row => {
                 const isExpanded = expandedRow === row.xero_invoice_id;
                 const isApplying = applying.has(row.xero_invoice_id);
                 const isBalanced = row.match_status === 'balanced' || row.match_status === 'confirmed';
@@ -1466,6 +1477,14 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             </tbody>
           </table>
         </div>
+        <TablePaginationBar
+          page={safeOutPage}
+          totalPages={outTotalPages}
+          totalItems={filteredRows.length}
+          pageSize={DEFAULT_PAGE_SIZE}
+          onPageChange={setOutPage}
+        />
+        </>
       )}
     </div>
   );
