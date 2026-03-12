@@ -582,6 +582,36 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               )}
                             </div>
 
+                            {/* Expected Deposit */}
+                            <div className="text-right">
+                              <span className="text-xs font-mono text-muted-foreground">{formatAUD(net)}</span>
+                            </div>
+
+                            {/* Actual Deposit */}
+                            <div className="text-right">
+                              {s.bank_verified && s.bank_verified_amount != null ? (
+                                <span className="text-xs font-mono font-medium text-foreground">{formatAUD(s.bank_verified_amount)}</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </div>
+
+                            {/* Difference */}
+                            <div className="text-right">
+                              {s.bank_verified && s.bank_verified_amount != null ? (() => {
+                                const diff = Math.abs((s.bank_verified_amount || 0) - net);
+                                return diff <= 0.05 ? (
+                                  <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400">$0.00 ✓</span>
+                                ) : (
+                                  <span className="text-xs font-mono text-amber-600 dark:text-amber-400">
+                                    −{formatAUD(diff)} ⚠
+                                  </span>
+                                );
+                              })() : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </div>
+
                             {/* Status badge */}
                             <div className="flex justify-center">
                               <SettlementStatusBadge
