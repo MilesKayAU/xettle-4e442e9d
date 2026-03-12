@@ -915,8 +915,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                               <tr
                                                 key={lIdx}
                                                 className={`border-t border-border/50 ${
-                                                  isRefund ? 'text-destructive' :
-                                                  isFee ? 'text-amber-600 dark:text-amber-400' :
+                                                  isRefund ? 'text-orange-600 dark:text-orange-400' :
+                                                  isFee ? 'text-destructive' :
+                                                  (line.amount || 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' :
                                                   ''
                                                 }`}
                                               >
