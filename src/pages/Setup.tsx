@@ -916,7 +916,7 @@ export default function Setup() {
         <Card>
           <CardContent className="pt-6 space-y-5">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              Phase 1 — Fetching your data
+              Step 1 — Import your data
             </h2>
 
             {caps.hasXero && (
@@ -1003,7 +1003,7 @@ export default function Setup() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              Phase 2 — Identify your marketplaces
+              Step 2 — Detect your sales channels
             </h2>
 
             {phase2Complete ? (
@@ -1098,7 +1098,7 @@ export default function Setup() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              Phase 3 — Settlement status by marketplace
+              Step 3 — Build settlements
             </h2>
             <p className="text-xs text-muted-foreground">
               Upload settlement files for each marketplace to reconcile with your Xero account. Amazon syncs automatically once connected.
