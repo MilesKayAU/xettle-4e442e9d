@@ -104,11 +104,11 @@ export default function SetupWizard({
   const handleComplete = () => {
     sessionStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SELECTED_MARKETPLACES_KEY);
+    // Always mark wizard as complete so it doesn't reappear
+    onComplete();
     // API-connected users → Setup Hub; CSV-only → Dashboard
     if (hasXero || hasAmazon || hasShopify) {
       nav('/setup');
-    } else {
-      onComplete();
     }
   };
 
