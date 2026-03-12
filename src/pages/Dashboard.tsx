@@ -903,7 +903,7 @@ export default function Dashboard() {
                   Settlement vs order reconciliation across all connected marketplaces.
                 </p>
               </div>
-              <ReconciliationHealth />
+              <ReconciliationHealth userId={user?.id} />
             </div>
           </ErrorBoundary>
         )}

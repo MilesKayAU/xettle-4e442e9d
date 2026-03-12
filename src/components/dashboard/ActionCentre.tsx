@@ -98,6 +98,8 @@ export default function ActionCentre({
   onSwitchToUpload,
   onSwitchToSettlements,
   userName,
+  userId,
+  userCreatedAt,
 }: ActionCentreProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);

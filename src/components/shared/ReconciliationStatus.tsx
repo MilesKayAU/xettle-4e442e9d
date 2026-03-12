@@ -270,9 +270,10 @@ export default function ReconciliationStatus({ marketplaceCode, userId }: Reconc
 
 interface ReconciliationHealthProps {
   className?: string;
+  userId?: string;
 }
 
-export function ReconciliationHealth({ className }: ReconciliationHealthProps) {
+export function ReconciliationHealth({ className, userId }: ReconciliationHealthProps) {
   const [data, setData] = useState<{
     total: number;
     matched: number;
