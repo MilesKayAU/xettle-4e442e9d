@@ -24,6 +24,7 @@ import DashboardConnectionStrip from '@/components/dashboard/DashboardConnection
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
+import RecentUploads from '@/components/dashboard/RecentUploads';
 import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
@@ -766,14 +767,18 @@ export default function Dashboard() {
         {activeView === 'smart_upload' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              {/* Hero message — immediate clarity */}
+              {/* Hero message — stronger AI detection messaging */}
               <div className="text-center space-y-2 pt-2">
                 <h2 className="text-2xl font-bold text-foreground">
-                  Drop any settlement file — we'll do the rest
+                  Upload any settlement file — Xettle handles the rest
                 </h2>
-                <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-                  CSV, XLSX, PDF — from Amazon, Shopify, Kogan, Bunnings, or any marketplace.
-                  Xettle detects the format, extracts fees & GST, and prepares it for Xero.
+                <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+                  Drop a CSV, XLSX, or PDF from any marketplace. Xettle automatically detects the platform,
+                  extracts fees, refunds, sales & GST, and prepares it for Xero.
+                </p>
+                <p className="text-xs text-muted-foreground/70 max-w-md mx-auto">
+                  Works alongside your API connections — use automated imports for Amazon & Shopify, 
+                  then upload files for everything else. Xettle learns new formats instantly.
                 </p>
               </div>
 
@@ -791,10 +796,12 @@ export default function Dashboard() {
                 />
               </Suspense>
 
+              {/* Recent uploads — confirmation that files were processed */}
+              <RecentUploads />
+
               {/* Workflow options — below the uploader */}
               <WelcomeGuide
                 onUpload={() => {
-                  // Scroll to the upload zone above
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 onConnectStore={() => {

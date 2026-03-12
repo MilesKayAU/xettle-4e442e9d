@@ -54,7 +54,7 @@ export default function WelcomeGuide({ onUpload, onConnectStore }: WelcomeGuideP
               Welcome to Xettle — here's how it works
             </h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Choose your workflow — or use both together.
+              Most sellers use <strong className="text-foreground">both together</strong> — APIs for automated imports, file uploads for everything else.
             </p>
           </div>
 
