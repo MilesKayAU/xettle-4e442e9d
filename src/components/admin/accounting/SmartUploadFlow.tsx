@@ -902,7 +902,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     transaction_type: 'Order',
                     posted_date: dateCol ? (rawRow[dateCol] || null) : null,
                     marketplace_name: MARKETPLACE_LABELS[marketplace] || marketplace,
-                    accounting_category: 'sales',
+                    accounting_category: 'revenue',
                   });
                 }
                 if (lineRows.length > 0) {
