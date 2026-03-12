@@ -663,9 +663,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
     }
-    if (row.match_status === 'no_bank_deposit') {
-      return isAmazon(row) ? 'No deposit found' : 'No bank deposit';
+    if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
+      return isAmazon(row) ? 'Awaiting deposit' : 'No deposit found';
     }
+    if (row.match_status === 'no_bank_deposit') return 'No deposit found';
     return 'No settlement';
   };
 
