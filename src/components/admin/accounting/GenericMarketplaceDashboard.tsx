@@ -195,7 +195,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
       // Status filter
       if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
-      if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'awaiting_deposit', 'deposit_matched', 'verified_payout'].includes(s.status || '');
+      if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '');
       return true;
     });
   }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
@@ -209,7 +209,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   }, [settlements, marketplaceFilter, includeGateways]);
 
   const attentionCount = baseFiltered.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
-  const syncedCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'awaiting_deposit', 'deposit_matched', 'verified_payout'].includes(s.status || '')).length;
+  const syncedCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '')).length;
 
   return (
     <div className="space-y-6">
