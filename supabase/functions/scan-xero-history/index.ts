@@ -290,8 +290,6 @@ Deno.serve(async (req) => {
         ? `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED,PAID&order=Date DESC&pageSize=50${dateFilter}`
         : `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED,PAID&order=Date DESC&pageSize=100`
       const invoiceData = await xeroGet(invoiceUrl, accessToken, tenantId)
-        accessToken, tenantId
-      )
 
       for (const inv of (invoiceData.Invoices || [])) {
         const contactName = inv.Contact?.Name || ''
