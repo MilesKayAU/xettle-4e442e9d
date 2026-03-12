@@ -149,7 +149,7 @@ export default function Dashboard() {
       setXeroConnected(true);
       setJustConnectedXero(true);
     }
-    supabase.from('xero_tokens').select('id').limit(1)
+    supabase.from('xero_tokens').select('id').eq('user_id', user.id).limit(1)
       .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
   }, [user]);
 
