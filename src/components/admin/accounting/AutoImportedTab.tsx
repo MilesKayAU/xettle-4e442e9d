@@ -488,6 +488,11 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     else setSelected(new Set(settlements.map(s => s.id)));
   };
 
+  // Pagination
+  const [autoPage, setAutoPage] = useState(1);
+  const autoTotalPages = Math.max(1, Math.ceil(settlements.length / DEFAULT_PAGE_SIZE));
+  const paginatedAutoSettlements = settlements.slice((autoPage - 1) * DEFAULT_PAGE_SIZE, autoPage * DEFAULT_PAGE_SIZE);
+
   const handleDeleteSelected = async () => {
     const toDelete = settlements.filter(s => selected.has(s.id));
     if (toDelete.length === 0) return;
