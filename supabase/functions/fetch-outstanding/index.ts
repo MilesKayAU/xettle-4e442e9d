@@ -373,28 +373,33 @@ Deno.serve(async (req) => {
     const amazonRateLimitUntil = amazonRateLimitSetting?.value || null;
     const amazonRateLimited = !!amazonRateLimitUntil && new Date(amazonRateLimitUntil) > new Date();
 
-    // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
+    // ─── Use cached bank transactions from our local ingestion pipeline (last 90 days) ───
+    // This avoids an extra live Xero call per request and reduces rate-limit pressure.
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const [y, m, d] = ninetyDaysAgo.toISOString().split('T')[0].split('-');
-    const bankWhere = `Type=="RECEIVE" AND Date>=DateTime(${y}, ${m}, ${d})`;
+    const ninetyDaysAgoIso = ninetyDaysAgo.toISOString().split('T')[0];
 
     let bankTxns: any[] = [];
     try {
-      const bankUrl = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(bankWhere)}`;
-      const bankResp = await fetch(bankUrl, {
-        headers: {
-          'Authorization': `Bearer ${token.access_token}`,
-          'Accept': 'application/json',
-          'Xero-tenant-id': token.tenant_id,
-        },
-      });
-      if (bankResp.ok) {
-        const bankData = await bankResp.json();
-        bankTxns = bankData?.BankTransactions || [];
-      }
+      const { data: bankRows } = await supabase
+        .from('bank_transactions')
+        .select('xero_transaction_id, amount, date, reference, description, contact_name, bank_account_name')
+        .eq('user_id', userId)
+        .gte('date', ninetyDaysAgoIso)
+        .order('date', { ascending: false })
+        .limit(1000);
+
+      bankTxns = (bankRows || []).map((row: any) => ({
+        BankTransactionID: row.xero_transaction_id,
+        Total: row.amount || 0,
+        Date: row.date,
+        Reference: row.reference || '',
+        LineItems: [{ Description: row.description || '' }],
+        Contact: { Name: row.contact_name || '' },
+        BankAccount: { Name: row.bank_account_name || '' },
+      }));
     } catch (e) {
-      console.error('Bank txn fetch error:', e);
+      console.error('Bank txn cache read error:', e);
     }
 
     // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
