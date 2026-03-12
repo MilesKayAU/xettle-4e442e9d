@@ -617,7 +617,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
         }
 
         // ── Derive overall_status from collected signals ──────────────────────
-        if (settlement?.status === 'already_recorded' || (settlement && accountingBoundary && settlement.period_end < accountingBoundary)) {
+        if (settlement?.status === 'already_recorded' || (settlement && boundaryDate && settlement.period_end < boundaryDate)) {
           record.overall_status = 'already_recorded'
         } else if (record.xero_pushed && record.bank_matched) {
           record.overall_status = 'complete'
