@@ -187,7 +187,10 @@ const MARKETPLACE_LABELS: Record<string, string> = {
   bunnings: 'Bunnings',
   mydeal: 'MyDeal',
   catch: 'Catch',
+  catch_au: 'Catch',
   ebay_au: 'eBay',
+  woolworths_marketplus: 'Woolworths Everyday Market',
+  woolworths_mp: 'Woolworths Everyday Market',
   unknown: 'Unknown',
 };
 
@@ -216,6 +219,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (showNonMarketplace) return data.rows;
     return data.rows.filter(r => r.is_marketplace !== false);
   }, [data, showNonMarketplace]);
+
+  const hasOnlyUnclassifiedRows = useMemo(() => {
+    if (!data || showNonMarketplace) return false;
+    return data.rows.length > 0 && filteredRows.length === 0 && data.rows.some(r => r.is_marketplace === false);
+  }, [data, filteredRows.length, showNonMarketplace]);
+
+  useEffect(() => {
+    if (hasOnlyUnclassifiedRows) setShowNonMarketplace(true);
+  }, [hasOnlyUnclassifiedRows]);
 
   const nonMarketplaceCount = useMemo(() => {
     if (!data) return 0;
