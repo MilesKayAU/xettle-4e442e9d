@@ -97,6 +97,13 @@ Deno.serve(async (req) => {
       .eq("user_id", userId);
     results["app_settings"] = settingsErr ? `error: ${settingsErr.message}` : "cleared";
 
+    // Re-seed essential defaults that the trigger only creates on first signup
+    const { error: reseedErr } = await adminClient.from("app_settings").insert([
+      { user_id: userId, key: "trial_started_at", value: new Date().toISOString() },
+      { user_id: userId, key: "unmatched_deposit_threshold", value: "50" },
+    ]);
+    results["app_settings_reseed"] = reseedErr ? `error: ${reseedErr.message}` : "reseeded";
+
     // Clear marketplace_fingerprints (user-specific only)
     const { error: fpErr } = await adminClient
       .from("marketplace_fingerprints")

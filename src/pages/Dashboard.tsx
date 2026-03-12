@@ -367,8 +367,25 @@ export default function Dashboard() {
   useEffect(() => {
     async function checkAdmin() {
       if (!user) return;
-      const { data } = await supabase.rpc('has_role', { _role: 'admin' });
-      setIsAdmin(!!data);
+      try {
+        const { data, error } = await supabase.rpc('has_role', { _role: 'admin' });
+        if (error) {
+          console.error('[dashboard] has_role error:', error);
+          // Fallback: direct query
+          const { data: roleRow } = await supabase
+            .from('user_roles')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('role', 'admin')
+            .maybeSingle();
+          setIsAdmin(!!roleRow);
+        } else {
+          setIsAdmin(!!data);
+        }
+        console.log('[dashboard] isAdmin:', !!data);
+      } catch (err) {
+        console.error('[dashboard] Admin check failed:', err);
+      }
     }
     checkAdmin();
   }, [user]);
