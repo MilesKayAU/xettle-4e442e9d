@@ -734,7 +734,31 @@ serve(async (req) => {
 
     token = await refreshXeroToken(supabase, token);
 
-    // Check for duplicate — also checks legacy AMZN-{id} and LMB-{id} formats
+    // ─── CACHE-FIRST DUPLICATE CHECK ─────────────────────────────────
+    // Check local reference index before hitting the Xero API
+    const settlementIdFromRef = extractSettlementIdFromReference(reference);
+    if (settlementIdFromRef) {
+      const { data: cachedMatch } = await supabase
+        .from('xero_accounting_matches')
+        .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference')
+        .eq('user_id', userId)
+        .eq('settlement_id', settlementIdFromRef)
+        .maybeSingle();
+
+      if (cachedMatch?.xero_invoice_id) {
+        const cachedRef = cachedMatch.matched_reference || '';
+        const refInfo = cachedRef && cachedRef !== reference
+          ? ` (matched reference: "${cachedRef}")`
+          : '';
+        console.log(`[duplicate-guard] Cache hit: settlement ${settlementIdFromRef} already in Xero as ${cachedMatch.xero_invoice_id}`);
+        throw new Error(
+          `An invoice for this settlement already exists in Xero${refInfo} (ID: ${cachedMatch.xero_invoice_id}, Status: ${cachedMatch.xero_status}). ` +
+          `Void it in Xero first if you need to re-push.`
+        );
+      }
+    }
+
+    // Fallback: Check Xero API directly (covers cases where cache is empty)
     const existing = await checkExistingInvoice(token, reference);
     if (existing.exists) {
       const refInfo = existing.matchedReference && existing.matchedReference !== reference
@@ -818,6 +842,28 @@ serve(async (req) => {
     const invoiceNumber = result.Invoices?.[0]?.InvoiceNumber;
     const xeroInvoiceTotal = result.Invoices?.[0]?.Total ?? null;
     console.log('Invoice created successfully:', invoiceId, 'Number:', invoiceNumber);
+
+    // ─── Write to reference index cache (prevents future duplicates) ──
+    if (invoiceId && settlementIdFromRef) {
+      const sd = body.settlementData || {};
+      await supabase.from('xero_accounting_matches').upsert({
+        user_id: userId,
+        settlement_id: settlementIdFromRef,
+        marketplace_code: sd.marketplace || 'unknown',
+        xero_invoice_id: invoiceId,
+        xero_invoice_number: invoiceNumber || null,
+        xero_status: 'DRAFT',
+        xero_type: isNegativeSettlement ? 'bill' : 'invoice',
+        match_method: 'push',
+        confidence: 1.0,
+        matched_amount: xeroInvoiceTotal || null,
+        matched_date: date,
+        matched_contact: contactName || null,
+        matched_reference: reference,
+        reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
+      }, { onConflict: 'user_id,settlement_id' });
+      console.log(`[cache-write] Indexed ${settlementIdFromRef} → ${invoiceId}`);
+    }
 
     // ─── Balance check: settlement vs Xero invoice total ──────────
     const settlementTotal = typeof netAmount === 'number' ? Math.round(netAmount * 100) / 100 : null;
