@@ -73,6 +73,18 @@ interface OutstandingRow {
   } | null;
   bank_difference: number | null;
   match_status: string;
+  // Aggregate match fields
+  aggregate_match?: boolean;
+  aggregate_group_id?: string | null;
+  aggregate_sum?: number | null;
+  aggregate_settlement_count?: number | null;
+  aggregate_bank_match?: {
+    amount: number;
+    date: string | null;
+    reference: string;
+    narration: string;
+    transaction_id: string;
+  } | null;
 }
 
 interface OutstandingSummary {
@@ -250,6 +262,17 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getStatusIcon = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+    if (row.match_status === 'aggregate_matched') return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-xs">
+          Amazon deposit of {formatAUD(row.aggregate_sum || 0)} matched across {row.aggregate_settlement_count} settlements
+          {row.aggregate_bank_match?.date ? ` on ${new Date(row.aggregate_bank_match.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}` : ''}
+        </TooltipContent>
+      </Tooltip>
+    );
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status.startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
@@ -260,7 +283,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <Clock3 className="h-4 w-4 text-muted-foreground" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs">
-              Amazon batches multiple settlements into one deposit — automatic matching coming soon
+              Amazon batches multiple settlements into one deposit — no matching deposit found yet
             </TooltipContent>
           </Tooltip>
         );
@@ -272,6 +295,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'balanced') return 'Balanced';
+    if (row.match_status === 'aggregate_matched') return 'Deposit matched (batched)';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
     if (row.match_status.startsWith('gap_')) {
       const gap = row.match_status.replace('gap_', '');
@@ -284,7 +308,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   };
 
   const getRowBgClass = (row: OutstandingRow) => {
-    if (row.match_status === 'balanced') return 'bg-green-50/50 dark:bg-green-950/10';
+    if (row.match_status === 'balanced' || row.match_status === 'aggregate_matched') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
     if (row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
@@ -541,7 +565,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                       </td>
                       <td className="px-3 py-2 text-center">
                         {row.has_bank_deposit ? (
-                          row.bank_match?.fuzzy ? (
+                          row.aggregate_match && !row.bank_match ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-xs">
+                                Batched deposit: {formatAUD(row.aggregate_sum || 0)} across {row.aggregate_settlement_count} settlements
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : row.bank_match?.fuzzy ? (
                             <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
                           ) : (
                             <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
@@ -706,6 +739,20 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                     )}
                                     {row.bank_difference != null && row.bank_difference > 0.05 && (
                                       <p className="text-amber-600 font-medium">Difference: {formatAUD(row.bank_difference)}</p>
+                                    )}
+                                  </>
+                                ) : row.aggregate_match && row.aggregate_bank_match ? (
+                                  <>
+                                    <p className="flex items-center gap-1">
+                                      <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                      <span className="font-bold">{formatAUD(row.aggregate_bank_match.amount)}</span> on {row.aggregate_bank_match.date ? new Date(row.aggregate_bank_match.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'}
+                                    </p>
+                                    <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">Batched deposit</Badge>
+                                    <p className="text-muted-foreground mt-1">
+                                      Amazon deposit of {formatAUD(row.aggregate_sum || 0)} matched across {row.aggregate_settlement_count} settlements
+                                    </p>
+                                    {row.aggregate_bank_match.narration && (
+                                      <p className="text-muted-foreground">Narration: {row.aggregate_bank_match.narration}</p>
                                     )}
                                   </>
                                 ) : (
