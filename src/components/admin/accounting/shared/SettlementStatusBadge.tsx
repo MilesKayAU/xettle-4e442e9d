@@ -13,6 +13,8 @@
  * synced_external                 → ⚪ Outline "Already in Xero (legacy)"
  * already_recorded                → ⚫ Secondary "Pre-accounting boundary"
  * push_failed                     → 🔴 Red "Push failed"
+ * deposit_matched                 → 🔵 Blue "Deposit Matched"
+ * verified_payout                 → 🟢 Green "Verified ✓"
  */
 
 import React from 'react';
