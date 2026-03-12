@@ -850,8 +850,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* Summary strip */}
-      {data && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      {data && (() => {
+        const verifiedCount = filteredRows.filter(r =>
+          r.settlement_status === 'verified_payout' ||
+          (r.match_status === 'confirmed' && r.bank_match_confirmed_at)
+        ).length;
+        const depositMatchedCount = filteredRows.filter(r =>
+          r.settlement_status === 'deposit_matched' ||
+          r.match_status === 'suggestion_high'
+        ).length;
+
+        return (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Total outstanding</p>
@@ -884,8 +894,26 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Ready to reconcile</p>
-              <p className="text-xl font-bold text-green-600 dark:text-green-400">{data.ready_to_reconcile}</p>
+              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{data.ready_to_reconcile}</p>
               <p className="text-xs text-muted-foreground">balanced</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Verified payouts</p>
+                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {verifiedCount}
+                    </p>
+                    <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-center">
+                  Settlements with confirmed bank deposits
+                </TooltipContent>
+              </Tooltip>
             </CardContent>
           </Card>
           <Card>
@@ -907,7 +935,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             </CardContent>
           </Card>
         </div>
-      )}
+        );
+      })()}
 
       {/* Bulk action bar */}
       {data && balancedCount > 0 && (
