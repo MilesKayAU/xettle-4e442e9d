@@ -25,6 +25,7 @@
 
 import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
 import { Switch } from '@/components/ui/switch';
+import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
