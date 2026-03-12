@@ -237,9 +237,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const [noXeroConnection, setNoXeroConnection] = useState(false);
 
+  const [xeroSyncMessage, setXeroSyncMessage] = useState<string | null>(null);
+
   const fetchOutstanding = useCallback(async () => {
     setLoading(true);
     setNoXeroConnection(false);
+    setXeroSyncMessage(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
@@ -256,11 +259,19 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       }
 
       if (resp.error) throw resp.error;
+
+      // Handle soft Xero errors (rate limit, auth, transient)
+      const syncInfo = resp.data?.sync_info;
+      if (syncInfo?.xero_auth_error || syncInfo?.xero_rate_limited || syncInfo?.xero_error) {
+        setXeroSyncMessage(syncInfo.message || 'Xero temporarily unavailable');
+      }
+
       setData(resp.data as OutstandingSummary);
       setHasLoaded(true);
       setSelected(new Set());
     } catch (err: any) {
       toast.error(`Failed to fetch outstanding: ${err.message}`);
+      setHasLoaded(true);
     } finally {
       setLoading(false);
     }
