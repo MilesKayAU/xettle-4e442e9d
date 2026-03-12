@@ -521,7 +521,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => confirmBankMatch(row, c.transaction_id, 'suggested', c.confidence)}
+                  onClick={() => confirmBankMatch(row, c.transaction_id, c.amount, 'suggested', c.confidence)}
                   disabled={isConfirmingRow}
                   className="text-xs h-6 px-2"
                 >
