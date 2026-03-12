@@ -1193,11 +1193,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                       </Badge>
                                     )}
                                     <div className="border-t border-border pt-1.5 mt-1.5 space-y-0.5">
-                                      <p>Sales: <span className="font-medium text-green-600">{formatAUD(Math.abs(row.settlement_evidence.sales_principal))}</span></p>
+                                      <p>Sales: <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatAUD(Math.abs(row.settlement_evidence.sales_principal))}</span></p>
                                       <p>Fees: <span className="font-medium text-destructive">{formatAUD(Math.abs(row.settlement_evidence.seller_fees + row.settlement_evidence.fba_fees))}</span></p>
-                                      <p>Refunds: <span className="font-medium">{formatAUD(Math.abs(row.settlement_evidence.refunds))}</span></p>
-                                      <p>Net ex GST: <span className="font-bold">{formatAUD(row.settlement_evidence.split_net ?? row.settlement_evidence.net_ex_gst)}</span></p>
-                                      <p>Bank deposit: <span className="font-bold">{formatAUD(row.settlement_evidence.bank_deposit)}</span></p>
+                                      <p>Refunds: <span className="font-medium text-orange-600 dark:text-orange-400">{formatAUD(Math.abs(row.settlement_evidence.refunds))}</span></p>
+                                      <p>Net ex GST: <span className="font-bold text-foreground">{formatAUD(row.settlement_evidence.split_net ?? row.settlement_evidence.net_ex_gst)}</span></p>
+                                      <p>Bank deposit: <span className="font-bold text-foreground">{formatAUD(row.settlement_evidence.bank_deposit)}</span></p>
                                     </div>
                                     {row.settlement_evidence.bank_verified && (
                                       <p className="flex items-center gap-1 text-green-600 mt-1">
