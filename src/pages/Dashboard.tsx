@@ -167,6 +167,8 @@ export default function Dashboard() {
           { onConflict: 'user_id,key' }
         );
         setShowWizard(false);
+        // Discovery will be triggered by the discovery effect below — don't double-fire
+        discoveryTriggered.current = false; // allow the effect to pick it up
         toast.success('Xero connected — analysing your account…');
       } else if (connected === 'amazon') {
         setHasAmazon(true);
