@@ -976,11 +976,19 @@ export default function Setup() {
                         {items.map(m => (
                           <span
                             key={m.code}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-secondary text-secondary-foreground"
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${
+                              m.isConfirmed === false
+                                ? 'bg-muted text-muted-foreground border border-border'
+                                : 'bg-secondary text-secondary-foreground'
+                            }`}
                           >
+                            {m.isConfirmed === false && <HelpCircle className="h-3 w-3 text-muted-foreground" />}
                             {m.name}
                             {m.orderCount != null && m.orderCount > 0 && (
                               <span className="text-muted-foreground">({m.orderCount} orders)</span>
+                            )}
+                            {m.isConfirmed === false && (
+                              <span className="text-[10px] text-muted-foreground">· needs classification</span>
                             )}
                           </span>
                         ))}
