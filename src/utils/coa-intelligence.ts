@@ -79,13 +79,13 @@ export interface CoaAccount {
 export interface RegistryEntry {
   marketplace_code: string;
   marketplace_name: string;
-  detection_keywords: string[] | null;
+  detection_keywords: string[] | unknown[] | null;
 }
 
 export interface ProcessorEntry {
   processor_code: string;
   processor_name: string;
-  detection_keywords: string[] | null;
+  detection_keywords: string[] | unknown[] | null;
 }
 
 // ─── Normalization ──────────────────────────────────────────────
