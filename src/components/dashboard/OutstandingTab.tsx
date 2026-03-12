@@ -506,6 +506,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                       <td className="px-3 py-2 text-center">
                         {row.has_settlement ? (
                           <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
+                        ) : row.is_pre_boundary ? (
+                          <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
                         ) : (
                           <XCircle className="h-4 w-4 text-destructive inline" />
                         )}
@@ -517,6 +519,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                           ) : (
                             <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
                           )
+                        ) : row.is_pre_boundary ? (
+                          <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
                         ) : (
                           <XCircle className="h-4 w-4 text-destructive inline" />
                         )}
