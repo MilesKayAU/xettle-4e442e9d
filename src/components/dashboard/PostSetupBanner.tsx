@@ -259,7 +259,7 @@ export default function PostSetupBanner({
   // Auto-dismiss when fully synced with enough data
   const allScansTerminal =
     (xeroStatus === 'done' || xeroStatus === 'skipped') &&
-    (amazonStatus === 'done' || amazonStatus === 'skipped') &&
+    (amazonStatus === 'done' || amazonStatus === 'skipped' || amazonStatus === 'rate_limited') &&
     (shopifyStatus === 'done' || shopifyStatus === 'skipped');
   if (allConnected && allScansTerminal && scanPhase === 'done' && settlementCount !== null && settlementCount > 3) return null;
 
