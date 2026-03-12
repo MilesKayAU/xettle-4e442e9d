@@ -184,7 +184,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
   if (meta.refundsExGst && meta.refundsExGst !== 0) {
     lines.push({
       Description: 'Customer Refunds',
-      AccountCode: getCode('Refunds'),
+      AccountCode: getCode('Refunds', mpLabel),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round((meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) * 100) / 100,
       Quantity: 1,
