@@ -854,12 +854,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                       </div>
                                       <div className="text-xs">
                                         <span className="text-muted-foreground">Fees: </span>
-                                        <span className="font-semibold text-amber-600 dark:text-amber-400">−{formatAUD(feesTotal)}</span>
+                                        <span className="font-semibold text-destructive">−{formatAUD(feesTotal)}</span>
                                       </div>
                                       {refundsTotal > 0 && (
                                         <div className="text-xs">
                                           <span className="text-muted-foreground">Refunds: </span>
-                                          <span className="font-semibold text-destructive">−{formatAUD(refundsTotal)}</span>
+                                          <span className="font-semibold text-orange-600 dark:text-orange-400">−{formatAUD(refundsTotal)}</span>
                                         </div>
                                       )}
                                       <div className="text-xs">
