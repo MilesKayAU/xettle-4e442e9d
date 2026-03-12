@@ -573,6 +573,39 @@ export default function ActionCentre({
             </Card>
             );
           })()}
+
+          {/* Already in Xero (pre-boundary) */}
+          {preBoundary.length > 0 && (() => {
+            // Group pre-boundary by marketplace
+            const mpSet = new Set(preBoundary.map(r => r.marketplace_code));
+            const mpList = [...mpSet].map(code => ({
+              code,
+              label: MARKETPLACE_LABELS[code] || code,
+              count: preBoundary.filter(r => r.marketplace_code === code).length,
+            }));
+            return (
+            <Card className="border-border bg-muted/30">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">📋</span>
+                  <h3 className="font-semibold text-sm">Already in Xero</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  These settlements exist in Xero before you connected Xettle — we won't touch them.
+                </p>
+                <ul className="space-y-1">
+                  {mpList.map(m => (
+                    <li key={m.code} className="text-xs flex items-center gap-1.5">
+                      <span className="text-muted-foreground">•</span>
+                      <span>{m.label}</span>
+                      <span className="text-muted-foreground">· {m.count} settlement{m.count > 1 ? 's' : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+            );
+          })()}
         </div>
       )}
 
