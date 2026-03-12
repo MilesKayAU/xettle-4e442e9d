@@ -201,6 +201,16 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     });
   }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
 
+  // Pagination
+  const [settPage, setSettPage] = useState(1);
+  const settTotalPages = Math.max(1, Math.ceil(filteredSettlements.length / DEFAULT_PAGE_SIZE));
+  const paginatedSettlements = useMemo(() => {
+    const start = (settPage - 1) * DEFAULT_PAGE_SIZE;
+    return filteredSettlements.slice(start, start + DEFAULT_PAGE_SIZE);
+  }, [filteredSettlements, settPage]);
+  // Reset page when filter changes
+  useEffect(() => { setSettPage(1); }, [settlementFilter, marketplaceFilter, includeGateways]);
+
   const baseFiltered = useMemo(() => {
     return settlements.filter(s => {
       if (!includeGateways && GATEWAY_CODES.has(s.marketplace)) return false;
