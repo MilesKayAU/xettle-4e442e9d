@@ -134,15 +134,103 @@ export default function SetupStepConnectStores({
     onMarketplacesChange(updated);
   };
 
-  const handleAddCustom = () => {
+  // ─── Smart marketplace search ───
+  const [registryResults, setRegistryResults] = useState<Array<{ marketplace_code: string; marketplace_name: string }>>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [nearMatch, setNearMatch] = useState<{ marketplace_code: string; marketplace_name: string } | null>(null);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+
+  const searchRegistry = useCallback(async (query: string) => {
+    if (query.trim().length < 2) {
+      setRegistryResults([]);
+      setNearMatch(null);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const { data } = await supabase
+        .from('marketplace_registry')
+        .select('marketplace_code, marketplace_name')
+        .eq('is_active', true)
+        .ilike('marketplace_name', `%${query.trim()}%`)
+        .limit(6);
+
+      const results = (data || []).filter(
+        r => !CSV_MARKETPLACES.some(m => m.id === r.marketplace_code) &&
+             !selectedMarketplaces.includes(r.marketplace_code)
+      );
+      setRegistryResults(results);
+
+      // Check for near-match (fuzzy): if no exact results but query is 3+ chars
+      if (results.length === 0 && query.trim().length >= 3) {
+        // Broader search — check if any marketplace contains part of the query
+        const { data: broader } = await supabase
+          .from('marketplace_registry')
+          .select('marketplace_code, marketplace_name')
+          .eq('is_active', true)
+          .limit(50);
+        const q = query.trim().toLowerCase();
+        const fuzzy = (broader || []).find(r => {
+          const name = r.marketplace_name.toLowerCase();
+          // Check if first 3+ chars match
+          return name.includes(q.slice(0, 3)) || q.includes(name.slice(0, 3));
+        });
+        setNearMatch(fuzzy && !selectedMarketplaces.includes(fuzzy.marketplace_code) ? fuzzy : null);
+      } else {
+        setNearMatch(null);
+      }
+    } catch {
+      setRegistryResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [selectedMarketplaces]);
+
+  const handleCustomNameChange = (value: string) => {
+    setCustomName(value);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => searchRegistry(value), 250);
+  };
+
+  const handleSelectRegistryMatch = (match: { marketplace_code: string; marketplace_name: string }) => {
+    if (!selectedMarketplaces.includes(match.marketplace_code)) {
+      onMarketplacesChange([...selectedMarketplaces, match.marketplace_code]);
+    }
+    setCustomName('');
+    setRegistryResults([]);
+    setNearMatch(null);
+    setShowCustomInput(false);
+    toast.success(`${match.marketplace_name} added`);
+  };
+
+  const handleAddCustom = async () => {
     if (!customName.trim()) return;
-    const id = customName.trim().toLowerCase().replace(/\s+/g, '_');
+    const name = customName.trim();
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+    // Save to marketplace_registry so all users benefit
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('marketplace_registry').upsert({
+        marketplace_code: id,
+        marketplace_name: name,
+        country: 'AU',
+        type: 'marketplace',
+        added_by: user?.id ? 'user' : 'system',
+        is_active: true,
+      }, { onConflict: 'marketplace_code' });
+    } catch {
+      // Non-fatal — still add locally
+    }
+
     if (!selectedMarketplaces.includes(id)) {
       onMarketplacesChange([...selectedMarketplaces, id]);
     }
     setCustomName('');
+    setRegistryResults([]);
+    setNearMatch(null);
     setShowCustomInput(false);
-    toast.success(`${customName.trim()} added — you can upload its files in the next step.`);
+    toast.success(`${name} added — you can upload its files in the next step.`);
   };
 
   // Back within sub-steps goes to previous sub-step, or to wizard back
