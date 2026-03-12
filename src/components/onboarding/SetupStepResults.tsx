@@ -180,13 +180,23 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           await writeFlag('shopify_channel_scan_triggered');
           await writeFlag('shopify_scan_completed');
         }
-        if (caps.hasAmazon) await writeFlag('amazon_scan_completed');
         if (caps.hasXero) await writeFlag('xero_scan_completed');
+
+        // Check if any step ended in rate_limited — don't mark as fully complete
+        const hasRateLimited = stepStatuses.some(s => s === 'rate_limited');
+        if (caps.hasAmazon && !hasRateLimited) {
+          await writeFlag('amazon_scan_completed');
+        }
 
         if (!cancelled) {
           setProgressPercent(100);
           await loadPhaseBData();
-          setPhase('complete');
+          if (hasRateLimited) {
+            // Stay in scanning phase but show a "still syncing" message
+            setTimedOut(true);
+          } else {
+            setPhase('complete');
+          }
         }
       } catch (err) {
         console.error('[results] scan orchestration failed:', err);
