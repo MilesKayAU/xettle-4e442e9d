@@ -203,6 +203,8 @@ export default function PostSetupBanner({
 
           if (orderCount && orderCount > 0) {
             await callEdgeFunctionSafe('scan-shopify-channels', caps.accessToken!);
+            // Auto-generate settlements from cached orders
+            await callEdgeFunctionSafe('auto-generate-shopify-settlements', caps.accessToken!, { days: 60 });
           } else {
             console.warn('[sync] Skipping scan-shopify-channels — no orders found');
           }

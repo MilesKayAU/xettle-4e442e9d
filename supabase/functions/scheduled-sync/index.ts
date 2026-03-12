@@ -137,6 +137,15 @@ Deno.serve(async (req) => {
     if (scanResult?.error) stepErrors.push('channel_scan');
   }
 
+  // 2.6. Auto-generate settlements from Shopify orders
+  console.log("[scheduled-sync] Step 2.6: Auto-generate Shopify settlements...");
+  results.shopify_settlements = { users: shopifyUserIds.length, results: [] };
+  for (const uid of shopifyUserIds) {
+    const genResult = await callFunction("auto-generate-shopify-settlements", {}, { userId: uid, days: 60 });
+    (results.shopify_settlements.results as any[]).push({ user_id: uid, ...genResult });
+    if (genResult?.error) stepErrors.push('shopify_settlements');
+  }
+
   // 3. Run validation sweep
   console.log("[scheduled-sync] Step 3: Validation sweep...");
   results.validation = await callFunction("run-validation-sweep");
