@@ -73,6 +73,18 @@ interface OutstandingRow {
   } | null;
   bank_difference: number | null;
   match_status: string;
+  // Aggregate match fields
+  aggregate_match?: boolean;
+  aggregate_group_id?: string | null;
+  aggregate_sum?: number | null;
+  aggregate_settlement_count?: number | null;
+  aggregate_bank_match?: {
+    amount: number;
+    date: string | null;
+    reference: string;
+    narration: string;
+    transaction_id: string;
+  } | null;
 }
 
 interface OutstandingSummary {
