@@ -916,7 +916,7 @@ export default function Setup() {
         <Card>
           <CardContent className="pt-6 space-y-5">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              Phase 1 — Fetching your data
+              Step 1 — Import your data
             </h2>
 
             {caps.hasXero && (
