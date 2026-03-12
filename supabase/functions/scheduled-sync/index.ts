@@ -115,16 +115,23 @@ Deno.serve(async (req) => {
 
   for (const uid of allUserIds) {
     try {
-      // Find the oldest unreconciled settlement
+      // Find the oldest unreconciled settlement using period_end (not period_start)
+      // period_end is the optimal boundary: still captures the settlement while reducing unnecessary earlier fetches
       const { data: oldestGap } = await adminClient
         .from('settlements')
-        .select('period_start')
+        .select('period_end')
         .eq('user_id', uid)
         .not('status', 'in', '("reconciled_in_xero","synced_external","already_recorded","duplicate_suppressed")')
-        .order('period_start', { ascending: true })
+        .order('period_end', { ascending: true })
         .limit(1);
 
-      const syncFrom = oldestGap?.[0]?.period_start || defaultSyncFrom;
+      // Apply 3-day safety buffer to handle timezone differences and overlapping settlement reports
+      let syncFrom = defaultSyncFrom;
+      if (oldestGap?.[0]?.period_end) {
+        const gapDate = new Date(oldestGap[0].period_end + 'T00:00:00Z');
+        gapDate.setUTCDate(gapDate.getUTCDate() - 3);
+        syncFrom = gapDate.toISOString().split('T')[0];
+      }
       userSyncFromMap[uid] = syncFrom;
       console.log(`[scheduled-sync] User ${uid}: sync_from = ${syncFrom}`);
     } catch (err) {
