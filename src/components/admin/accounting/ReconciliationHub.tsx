@@ -379,12 +379,30 @@ export default function ReconciliationHub() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Reconciliation Hub</h2>
-        <p className="text-muted-foreground mt-1">
-          {summary.total} item{summary.total !== 1 ? 's' : ''} need attention
-          {summary.critical > 0 && <span className="text-destructive font-medium"> · {summary.critical} critical</span>}
-          {summary.action > 0 && <span className="text-amber-600 font-medium"> · {summary.action} action needed</span>}
-        </p>
+        <p className="text-muted-foreground mt-1">Your bookkeeping command centre.</p>
       </div>
+
+      <Tabs defaultValue="open" className="w-full">
+        <TabsList>
+          <TabsTrigger value="open" className="flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Open Items
+            {summary.total > 0 && (
+              <Badge variant="secondary" className="text-[10px] ml-1">{summary.total}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="audit" className="flex items-center gap-1.5">
+            <History className="h-3.5 w-3.5" />
+            Historical Audit
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="open" className="mt-4">
+      <p className="text-muted-foreground mb-4">
+        {summary.total} item{summary.total !== 1 ? 's' : ''} need attention
+        {summary.critical > 0 && <span className="text-destructive font-medium"> · {summary.critical} critical</span>}
+        {summary.action > 0 && <span className="text-amber-600 font-medium"> · {summary.action} action needed</span>}
+      </p>
 
       {/* ─── Open items ──────────────────────────────────────────── */}
       <div className="space-y-3">
