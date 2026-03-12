@@ -220,6 +220,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     return filteredRows.reduce((sum, r) => sum + r.amount, 0);
   }, [filteredRows]);
 
+  const [outPage, setOutPage] = useState(1);
+  const outTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
+  const safeOutPage = Math.min(outPage, outTotalPages);
+  const paginatedRows = useMemo(() => {
+    const start = (safeOutPage - 1) * DEFAULT_PAGE_SIZE;
+    return filteredRows.slice(start, start + DEFAULT_PAGE_SIZE);
+  }, [filteredRows, safeOutPage]);
+  useEffect(() => { setOutPage(1); }, [showNonMarketplace]);
+
   const [noXeroConnection, setNoXeroConnection] = useState(false);
 
   const fetchOutstanding = useCallback(async () => {
