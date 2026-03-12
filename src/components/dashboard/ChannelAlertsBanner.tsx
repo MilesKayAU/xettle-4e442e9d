@@ -511,7 +511,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
   return (
     <>
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex justify-end gap-1">
           <TooltipProvider>
             <Tooltip>
@@ -524,364 +524,198 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
               <TooltipContent>Re-scan your Xero and Shopify accounts for new marketplaces and deposits</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          {alerts.length >= 3 && (
-            <Button size="sm" variant="ghost" onClick={() => setExpanded(false)} className="gap-1 text-xs">
-              Collapse <ChevronUp className="h-3 w-3" />
-            </Button>
-          )}
         </div>
-        {alerts.map(alert => {
-          const displayName = getDisplayName(alert);
-          const isUnknown = alert.detection_method === 'unknown' || (!alert.detected_label && isNumericChannelId(alert.source_name));
-          const isTagDetected = alert.detection_method === 'tag';
-          const candidateTags = alert.candidate_tags || [];
-          const connectorNote = getConnectorNote(candidateTags);
-          const isNaming = namingAlertId === alert.id;
-          const isUnlinked = alert.alert_type === 'unlinked';
-          const isLinking = linkingAlertId === alert.id;
 
-          const isUnmatchedDeposit = alert.alert_type === 'unmatched_deposit';
-          const isUnknownDeposit = alert.alert_type === 'unknown_deposit';
-          const isGatewayDeposit = alert.alert_type === 'payment_gateway_deposit';
+        {/* ─── Group alerts by type ─── */}
+        {(() => {
+          const unlinkedAlerts = alerts.filter(a => a.alert_type === 'unlinked');
+          const xeroContactAlerts = alerts.filter(a => {
+            const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
+            return isXeroContactOnly;
+          });
+          const depositAlerts = alerts.filter(a => a.alert_type === 'unmatched_deposit' || a.alert_type === 'unknown_deposit' || a.alert_type === 'payment_gateway_deposit');
+          const newChannelAlerts = alerts.filter(a => {
+            if (a.alert_type === 'unlinked') return false;
+            if (a.alert_type === 'unmatched_deposit' || a.alert_type === 'unknown_deposit' || a.alert_type === 'payment_gateway_deposit') return false;
+            const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
+            if (isXeroContactOnly) return false;
+            return true;
+          });
 
-          // ─── PAYMENT GATEWAY DEPOSIT — rich evidence card ───
-          if (isGatewayDeposit) {
-            return (
-              <GatewayDepositEvidence
-                key={alert.id}
-                alertId={alert.id}
-                gatewayName={displayName}
-                depositAmount={alert.deposit_amount || alert.total_revenue}
-                depositDate={alert.deposit_date || null}
-                depositDescription={alert.deposit_description || null}
-                matchConfidence={alert.match_confidence || null}
-                onDismiss={() => handleIgnore(alert)}
-                onConfirmIncluded={() => handleConfirmGatewayIncluded(alert)}
-                formatCurrency={formatCurrency}
-              />
-            );
-          }
-
-          // ─── DEPOSIT ALERTS — curious, not alarming ───
-          if (isUnmatchedDeposit || isUnknownDeposit) {
-            const depositAmt = alert.deposit_amount
-              ? formatCurrency(alert.deposit_amount)
-              : formatCurrency(alert.total_revenue);
-            const depositDate = alert.deposit_date
-              ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
-              : null;
-            const depositDateFull = alert.deposit_date
-              ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-              : null;
-            const isDetailOpen = expandedAlertId === alert.id;
-
-            return (
-              <Card key={alert.id} className="border-primary/20 bg-primary/5">
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-3 p-4">
-                    <Banknote className="h-5 w-5 text-primary shrink-0" />
-                    <div className="flex-1 text-sm">
-                      {isUnmatchedDeposit ? (
-                        <>
-                          <p className="font-medium text-foreground">
-                            💰 We spotted a possible {displayName} deposit — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
-                          </p>
-                          <p className="text-muted-foreground mt-0.5">
-                            Upload {displayName} settlements to reconcile it.
-                            {alert.match_confidence && (
-                              <span className="ml-1 text-xs opacity-60">({alert.match_confidence}% confidence)</span>
-                            )}
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="font-medium text-foreground">
-                            💰 We found a deposit we couldn't match — {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
-                          </p>
-                          <p className="text-muted-foreground mt-0.5">
-                            Is this a marketplace payment? Set up the marketplace to reconcile it.
-                          </p>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setExpandedAlertId(isDetailOpen ? null : alert.id)}
-                        className="gap-1 text-xs text-muted-foreground"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        {isDetailOpen ? 'Hide' : 'Details'}
-                        {isDetailOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
-                        Not now
-                      </Button>
-                      <Button size="sm" onClick={() => handleSetup(alert)} className="gap-1">
-                        {isUnmatchedDeposit ? `Set up ${displayName}` : 'Identify this deposit'} <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* ─── Expandable evidence panel ─── */}
-                  {isDetailOpen && (
-                    <div className="border-t border-primary/10 bg-background/50 px-4 py-3 space-y-3">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Evidence — why we think this is {displayName}
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {/* Deposit amount */}
-                        <div className="flex items-start gap-2 text-sm">
-                          <Banknote className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-xs text-muted-foreground">Deposit amount</p>
-                            <p className="font-semibold text-foreground">{depositAmt}</p>
-                          </div>
-                        </div>
-
-                        {/* Date */}
-                        {depositDateFull && (
-                          <div className="flex items-start gap-2 text-sm">
-                            <Calendar className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-xs text-muted-foreground">Transaction date</p>
-                              <p className="font-semibold text-foreground">{depositDateFull}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Bank narration / reference */}
-                        {alert.deposit_description && (
-                          <div className="flex items-start gap-2 text-sm">
-                            <FileText className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-xs text-muted-foreground">Bank narration / reference</p>
-                              <p className="font-semibold text-foreground break-all">{alert.deposit_description}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Confidence */}
-                        {alert.match_confidence && (
-                          <div className="flex items-start gap-2 text-sm">
-                            <TrendingUp className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-xs text-muted-foreground">Match confidence</p>
-                              <p className="font-semibold text-foreground">{alert.match_confidence}%</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {alert.match_confidence >= 80 ? 'High — narration strongly matches known patterns' :
-                                 alert.match_confidence >= 65 ? 'Medium — partial keyword match in narration' :
-                                 'Low — weak signal, verify manually'}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Detection method detail */}
-                      <div className="text-xs text-muted-foreground border-t border-primary/10 pt-2 space-y-1">
-                        <p>
-                          <span className="font-medium">Source:</span>{' '}
-                          {alert.detection_method === 'bank_transaction'
-                            ? 'Detected from a bank transaction in your accounting software'
-                            : alert.detection_method === 'xero_bank_deposit'
-                            ? 'Found in your Xero bank feed'
-                            : alert.detection_method === 'xero_contact'
-                            ? 'Matched to a Xero contact name'
-                            : `Detection method: ${alert.detection_method || 'automatic'}`}
-                        </p>
-                        {alert.deposit_description && (
-                          <p>
-                            <span className="font-medium">How we matched:</span>{' '}
-                            The bank narration "<span className="font-mono text-foreground">{alert.deposit_description}</span>" contains keywords associated with {displayName}.
-                          </p>
-                        )}
-                        <p className="italic">
-                          Review the amount and date above against your {displayName} seller portal to confirm this deposit matches a settlement period.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          }
-
-          // ─── UNLINKED ALERT — marketplace exists, just needs linking ───
-          if (isUnlinked) {
-            return (
-              <Card key={alert.id} className="border-primary/30 bg-primary/5">
-                <CardContent className="flex items-center gap-3 p-4">
-                  <LinkIcon className="h-5 w-5 text-primary shrink-0" />
-                  <div className="flex-1 text-sm">
-                    <p className="font-medium text-foreground">
-                      🔗 Link Shopify orders to {displayName}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5">
-                      We found {alert.order_count} {displayName} order{alert.order_count !== 1 ? 's' : ''} in Shopify
-                      {' '}({formatCurrency(alert.total_revenue)}).
-                      You already have {displayName} settlements set up. Link them to enable cross-reference reconciliation.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
-                      Not now
-                    </Button>
-                    <Button size="sm" onClick={() => handleLinkNow(alert)} disabled={isLinking} className="gap-1">
-                      {isLinking ? (
-                        <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Linking...</>
-                      ) : (
-                        <>Link now <ArrowRight className="h-3.5 w-3.5" /></>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          }
-
-          // ─── XERO CONTACT with 0 orders — needs classification, not a channel ───
-          const isXeroContactOnly = (alert.detection_method === 'xero_contact_standalone' || alert.detection_method === 'xero_contact') && (alert.order_count === 0 || alert.order_count === null);
-          if (isXeroContactOnly) {
-            return (
-              <Card key={alert.id} className="border-border bg-muted/30">
-                <CardContent className="flex items-center gap-3 p-4">
-                  <Search className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 text-sm">
-                    <p className="font-medium text-foreground">
-                      ❓ Xero contact needs classification:{' '}
-                      <span className="font-semibold">{displayName}</span>
-                    </p>
-                    <p className="text-muted-foreground mt-0.5">
-                      Found in your Xero contacts but no matching orders. This may be a business expense, personal contact, or inactive marketplace.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => setClassifyingAlert(alert)} className="gap-1 text-xs">
-                      Classify <ArrowRight className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => {
-                      setSetupChannel({
-                        source_name: alert.source_name,
-                        order_count: alert.order_count || 0,
-                        total_revenue: alert.total_revenue || 0,
-                        sample_order_names: [],
-                        is_new: true,
-                      });
-                    }} className="gap-1 text-xs">
-                      Set up as marketplace
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          }
-
-          // ─── NEW ALERT — brand new channel, needs full setup ───
           return (
-            <Card key={alert.id} className="border-amber-500/30 bg-amber-500/5">
-              <CardContent className="flex flex-col gap-2 p-4">
-                <div className="flex items-center gap-3">
-                  <Search className="h-5 w-5 text-amber-600 shrink-0" />
-                  <div className="flex-1 text-sm">
-                    <p className="font-medium text-foreground">
-                      🔍 New sales channel detected:{' '}
-                      <span className="font-semibold">{displayName}</span>
-                      {isTagDetected && (
-                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">(detected from order tags)</span>
-                      )}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5">
-                      {alert.order_count} order{alert.order_count !== 1 ? 's' : ''} totalling{' '}
-                      {formatCurrency(alert.total_revenue)}.
-                      {isUnknown ? (
-                        <> Can you identify this marketplace?</>
-                      ) : (
-                        <> Set up tracking to see this in your settlements and reports.</>
-                      )}
-                    </p>
-
-                    {/* Show candidate tags for unknown channels */}
-                    {isUnknown && candidateTags.length > 0 && (
-                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                        <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
-                        <span className="text-xs text-muted-foreground">Tags found:</span>
-                        {candidateTags.slice(0, 6).map(tag => (
-                          <span key={tag} className="text-xs bg-muted px-1.5 py-0.5 rounded font-medium">
-                            {tag}
-                          </span>
-                        ))}
-                        {candidateTags.length > 6 && (
-                          <span className="text-xs text-muted-foreground">+{candidateTags.length - 6} more</span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Smart help for unknown numeric channel IDs */}
-                    {isNumericChannelId(alert.source_name) && shopHandle && isUnknown && (
-                      <div className="mt-2 text-xs text-muted-foreground space-y-1 border-t border-amber-200/50 pt-2">
-                        <p className="font-medium">❓ We couldn't identify this channel automatically.</p>
-                        {connectorNote ? (
-                          <p className="italic">{connectorNote}</p>
-                        ) : (
-                          <p>To find out what it is, check your installed Shopify apps (marketplace connectors like CedCommerce, Codisto, M2E Pro create orders with numeric channel IDs), or open one of these orders in Shopify to check its tags.</p>
-                        )}
-                        <div className="flex gap-3 mt-1">
-                          <a href={`https://admin.shopify.com/store/${shopHandle}/apps`} target="_blank" rel="noopener noreferrer" className="text-primary underline inline-flex items-center gap-0.5">
-                            Search your Shopify apps <ExternalLink className="h-3 w-3" />
-                          </a>
-                          <a href={`https://admin.shopify.com/store/${shopHandle}/orders`} target="_blank" rel="noopener noreferrer" className="text-primary underline inline-flex items-center gap-0.5">
-                            View orders in Shopify <ExternalLink className="h-3 w-3" />
-                          </a>
+            <>
+              {/* ─── Section 1: Marketplace Connections (unlinked + new channels) ─── */}
+              {(unlinkedAlerts.length > 0 || newChannelAlerts.length > 0) && (
+                <AlertSection
+                  icon={<LinkIcon className="h-4 w-4 text-primary" />}
+                  title="Link Shopify orders to marketplaces"
+                  count={unlinkedAlerts.length + newChannelAlerts.length}
+                  defaultOpen={true}
+                >
+                  <div className="space-y-2">
+                    {unlinkedAlerts.map(alert => {
+                      const displayName = getDisplayName(alert);
+                      const isLinking = linkingAlertId === alert.id;
+                      return (
+                        <div key={alert.id} className="flex items-center justify-between py-2 px-1 border-b border-border/30 last:border-0">
+                          <div className="flex-1 text-sm">
+                            <span className="font-medium text-foreground">{displayName}</span>
+                            <span className="text-muted-foreground ml-2">
+                              {alert.order_count} order{alert.order_count !== 1 ? 's' : ''} · {formatCurrency(alert.total_revenue)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button size="sm" variant="ghost" onClick={() => handleIgnore(alert)} className="h-7 px-2 text-xs text-muted-foreground">
+                              Not now
+                            </Button>
+                            <Button size="sm" onClick={() => handleLinkNow(alert)} disabled={isLinking} className="h-7 gap-1 text-xs">
+                              {isLinking ? <><RefreshCw className="h-3 w-3 animate-spin" /> Linking...</> : <>Link now <ArrowRight className="h-3 w-3" /></>}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {/* Tag-detected confirmation for numeric IDs */}
-                    {isNumericChannelId(alert.source_name) && isTagDetected && (
-                      <p className="text-xs text-green-600 mt-1">
-                        ✓ Identified as {alert.detected_label} based on order tags
-                      </p>
-                    )}
+                      );
+                    })}
+                    {newChannelAlerts.map(alert => {
+                      const displayName = getDisplayName(alert);
+                      const isUnknown = alert.detection_method === 'unknown' || (!alert.detected_label && isNumericChannelId(alert.source_name));
+                      const isNaming = namingAlertId === alert.id;
+                      return (
+                        <div key={alert.id} className="py-2 px-1 border-b border-border/30 last:border-0 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 text-sm">
+                              <span className="font-medium text-foreground">🔍 {displayName}</span>
+                              <span className="text-muted-foreground ml-2">
+                                {alert.order_count} order{alert.order_count !== 1 ? 's' : ''} · {formatCurrency(alert.total_revenue)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isUnknown && !isNaming && (
+                                <Button size="sm" variant="outline" onClick={() => { setNamingAlertId(alert.id); setCustomName(''); }} className="h-7 text-xs">Name it</Button>
+                              )}
+                              <Button size="sm" variant="ghost" onClick={() => handleIgnore(alert)} className="h-7 px-2 text-xs text-muted-foreground">
+                                <X className="h-3 w-3" />
+                              </Button>
+                              <Button size="sm" onClick={() => handleSetup(alert)} className="h-7 gap-1 text-xs">
+                                Set up <ArrowRight className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                          {isNaming && (
+                            <div className="flex items-center gap-2 ml-4">
+                              <Input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="e.g. Kogan, Big W" className="h-7 text-sm max-w-xs" onKeyDown={e => e.key === 'Enter' && handleNameChannel(alert)} autoFocus />
+                              <Button size="sm" onClick={() => handleNameChannel(alert)} disabled={!customName.trim()} className="h-7 text-xs">Save</Button>
+                              <Button size="sm" variant="ghost" onClick={() => setNamingAlertId(null)} className="h-7 text-xs">Cancel</Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {isUnknown && !isNaming && (
-                      <Button size="sm" variant="outline" onClick={() => { setNamingAlertId(alert.id); setCustomName(''); }} className="gap-1 text-xs">
-                        Name it
-                      </Button>
-                    )}
-                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1">
-                      <X className="h-3.5 w-3.5" /> Ignore
-                    </Button>
-                    <Button size="sm" onClick={() => handleSetup(alert)} className="gap-1">
-                      Set up tracking <ArrowRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
+                </AlertSection>
+              )}
 
-                {/* Inline naming input for unknown channels */}
-                {isNaming && (
-                  <div className="flex items-center gap-2 ml-8">
-                    <Input
-                      value={customName}
-                      onChange={e => setCustomName(e.target.value)}
-                      placeholder="e.g. Kogan, Big W, Pinduoduo"
-                      className="h-8 text-sm max-w-xs"
-                      onKeyDown={e => e.key === 'Enter' && handleNameChannel(alert)}
-                      autoFocus
-                    />
-                    <Button size="sm" variant="default" onClick={() => handleNameChannel(alert)} disabled={!customName.trim()} className="h-8 text-xs">
-                      Save
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setNamingAlertId(null)} className="h-8 text-xs">
-                      Cancel
-                    </Button>
+              {/* ─── Section 2: Accounting Classification ─── */}
+              {xeroContactAlerts.length > 0 && (
+                <AlertSection
+                  icon={<Search className="h-4 w-4 text-muted-foreground" />}
+                  title="Xero contacts requiring classification"
+                  count={xeroContactAlerts.length}
+                  defaultOpen={false}
+                >
+                  <div className="space-y-1">
+                    {xeroContactAlerts.map(alert => {
+                      const displayName = getDisplayName(alert);
+                      return (
+                        <div key={alert.id} className="flex items-center justify-between py-2 px-1 border-b border-border/30 last:border-0">
+                          <div className="text-sm">
+                            <span className="font-medium text-foreground">{displayName}</span>
+                            <span className="text-muted-foreground ml-2 text-xs">Found in Xero · no matching orders</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button size="sm" variant="outline" onClick={() => setClassifyingAlert(alert)} className="h-7 text-xs gap-1">
+                              Classify
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => {
+                              setSetupChannel({
+                                source_name: alert.source_name,
+                                order_count: alert.order_count || 0,
+                                total_revenue: alert.total_revenue || 0,
+                                sample_order_names: [],
+                                is_new: true,
+                              });
+                            }} className="h-7 text-xs">
+                              Set up as marketplace
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </AlertSection>
+              )}
+
+              {/* ─── Section 3: Deposit Detection ─── */}
+              {depositAlerts.length > 0 && (
+                <AlertSection
+                  icon={<Banknote className="h-4 w-4 text-primary" />}
+                  title="Possible deposits detected"
+                  count={depositAlerts.length}
+                  defaultOpen={false}
+                >
+                  <div className="space-y-2">
+                    {depositAlerts.map(alert => {
+                      const displayName = getDisplayName(alert);
+                      const isGatewayDeposit = alert.alert_type === 'payment_gateway_deposit';
+
+                      if (isGatewayDeposit) {
+                        return (
+                          <GatewayDepositEvidence
+                            key={alert.id}
+                            alertId={alert.id}
+                            gatewayName={displayName}
+                            depositAmount={alert.deposit_amount || alert.total_revenue}
+                            depositDate={alert.deposit_date || null}
+                            depositDescription={alert.deposit_description || null}
+                            matchConfidence={alert.match_confidence || null}
+                            onDismiss={() => handleIgnore(alert)}
+                            onConfirmIncluded={() => handleConfirmGatewayIncluded(alert)}
+                            formatCurrency={formatCurrency}
+                          />
+                        );
+                      }
+
+                      const depositAmt = alert.deposit_amount
+                        ? formatCurrency(alert.deposit_amount)
+                        : formatCurrency(alert.total_revenue);
+                      const depositDate = alert.deposit_date
+                        ? new Date(alert.deposit_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+                        : null;
+
+                      return (
+                        <div key={alert.id} className="flex items-center justify-between py-2 px-1 border-b border-border/30 last:border-0">
+                          <div className="text-sm">
+                            <span className="font-medium text-foreground">{displayName} deposit</span>
+                            <span className="text-muted-foreground ml-2">
+                              {depositAmt}{depositDate ? ` on ${depositDate}` : ''}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="h-7 text-xs">
+                              Not now
+                            </Button>
+                            <Button size="sm" onClick={() => handleSetup(alert)} className="h-7 gap-1 text-xs">
+                              Set up <ArrowRight className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </AlertSection>
+              )}
+            </>
           );
-        })}
+        })()}
       </div>
 
       {setupChannel && (
