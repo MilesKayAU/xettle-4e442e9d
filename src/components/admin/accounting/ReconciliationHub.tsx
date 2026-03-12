@@ -110,7 +110,7 @@ export default function ReconciliationHub() {
         // Settlements with issues
         supabase
           .from('settlements')
-          .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, reconciliation_status, deposit_date')
+          .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, reconciliation_status, deposit_date, sales_principal, seller_fees, fba_fees, refunds, other_fees')
           .gte('period_start', effectiveStartStr)
           .in('status', ['parsed', 'saved', 'push_failed', 'ready_to_push'])
           .order('period_start', { ascending: false }),
