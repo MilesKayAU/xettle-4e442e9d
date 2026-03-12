@@ -114,9 +114,13 @@ const DEFAULT_ACCOUNT_CODES: Record<string, string> = {
 
 /**
  * Fetch the user's custom account code overrides from app_settings.
- * Returns a getCode(category) helper that falls back to defaults.
+ * Returns a getCode(category, marketplace?) helper that resolves:
+ *   1. userCodes["category:marketplace"] (if marketplace provided)
+ *   2. userCodes["category"]
+ *   3. DEFAULT_ACCOUNT_CODES["category"]
+ *   4. '400' (catch-all)
  */
-async function loadUserAccountCodes(): Promise<(category: string) => string> {
+async function loadUserAccountCodes(): Promise<(category: string, marketplace?: string) => string> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return (cat) => DEFAULT_ACCOUNT_CODES[cat] || '400';
@@ -130,7 +134,13 @@ async function loadUserAccountCodes(): Promise<(category: string) => string> {
 
     if (acSetting?.value) {
       const userCodes = JSON.parse(acSetting.value);
-      return (cat: string) => userCodes[cat] || DEFAULT_ACCOUNT_CODES[cat] || '400';
+      return (cat: string, marketplace?: string) => {
+        if (marketplace) {
+          const mpKey = `${cat}:${marketplace}`;
+          if (userCodes[mpKey]) return userCodes[mpKey];
+        }
+        return userCodes[cat] || DEFAULT_ACCOUNT_CODES[cat] || '400';
+      };
     }
   } catch (e) {
     console.error('Failed to load user account codes, using defaults:', e);
