@@ -93,6 +93,38 @@ function detectMarketplace(reference: string, contactName: string): string {
   return 'unknown';
 }
 
+async function loadOutstandingCache(supabase: any, userId: string) {
+  try {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'xero_outstanding_cache_v1')
+      .maybeSingle();
+
+    if (!data?.value) return null;
+    const parsed = JSON.parse(data.value);
+    return parsed?.payload || null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveOutstandingCache(supabase: any, userId: string, payload: any) {
+  try {
+    await supabase.from('app_settings').upsert({
+      user_id: userId,
+      key: 'xero_outstanding_cache_v1',
+      value: JSON.stringify({
+        cached_at: new Date().toISOString(),
+        payload,
+      }),
+    }, { onConflict: 'user_id,key' });
+  } catch (e) {
+    console.warn('[fetch-outstanding] Failed to write cache:', e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
