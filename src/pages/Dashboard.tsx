@@ -284,6 +284,7 @@ export default function Dashboard() {
       const { count } = await supabase
         .from('settlements')
         .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
         .eq('xero_status', 'authorised_in_xero');
       setOutstandingCount(count ?? 0);
     }
