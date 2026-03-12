@@ -342,23 +342,11 @@ serve(async (req) => {
     );
     console.log(`[step-3] ${uncachedSettlements.length} settlements have no cache entry (of ${allSettlements?.length || 0} total)`);
 
-    // If everything is cached, skip expensive API queries
+    // IMPORTANT: Even when local settlements are fully cached (or zero), we still continue
+    // to Step 4 so we can discover NEW outstanding invoices in Xero and pre-seed them.
+    // This keeps the Outstanding tab aligned with Xero Awaiting Payment in near real-time.
     if (uncachedSettlements.length === 0) {
-      console.log(`[sync-xero-status] All settlements cached — skipping Xero API scan`);
-
-      const { data: stillUnmatched } = await supabase
-        .from('settlements').select('settlement_id').eq('user_id', userId)
-        .is('xero_journal_id', null).in('status', ['saved', 'parsed', 'ready_to_push']);
-
-      await supabase.from('system_events').insert({
-        user_id: userId, event_type: 'xero_audit_complete', severity: 'info',
-        details: { cache_verified: cacheVerified, cache_status_changed: cacheStatusChanged, api_calls_saved: '7+', mode: 'cache_only', unmatched: stillUnmatched?.length || 0 },
-      });
-
-      return new Response(JSON.stringify({
-        success: true, updated: cacheStatusChanged, fuzzy_matched: 0,
-        unmatched: stillUnmatched?.length || 0, total: cacheVerified, mode: 'cache_first',
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.log(`[step-3] No uncached local settlements — continuing to Xero incremental scan for outstanding discovery`);
     }
 
     // ════════════════════════════════════════════════════════════════════
