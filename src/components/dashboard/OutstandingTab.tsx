@@ -260,7 +260,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <Clock3 className="h-4 w-4 text-muted-foreground" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs">
-              Amazon deposits funds on a regular schedule — this will match automatically once your bank feed updates.
+              Amazon batches multiple settlements into one deposit — automatic matching coming soon
             </TooltipContent>
           </Tooltip>
         );
