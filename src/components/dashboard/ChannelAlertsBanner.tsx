@@ -416,7 +416,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         .eq('source_name', setupChannel.source_name);
 
       setAlerts(prev => prev.filter(a => a.source_name !== setupChannel.source_name));
-      onAlertCountChange?.(alerts.length - 1);
+      onAlertCountChange?.(getActionableCount(alerts.filter(a => a.source_name !== setupChannel.source_name)));
     }
     setSetupChannel(null);
   };
