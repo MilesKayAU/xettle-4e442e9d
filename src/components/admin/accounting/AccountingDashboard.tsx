@@ -2201,7 +2201,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
               </tr>
             </thead>
             <tbody>
-              {displayRows.map((row, idx) => {
+              {paginatedDisplayRows.map((row, idx) => {
                 if (row.type === 'gap') {
                   return (
                     <tr key={`gap-${idx}`} className="border-b bg-amber-50/60">
