@@ -566,6 +566,7 @@ Deno.serve(async (req) => {
       } else if (!hasSettlement && settlementId && preSeededSet.has(settlementId)) {
         // Pre-seeded by sync-xero-status — settlement data is expected from API sync
         matchStatus = 'awaiting_sync';
+        awaitingSyncCount++;
       } else {
         matchStatus = 'no_settlement';
       }
