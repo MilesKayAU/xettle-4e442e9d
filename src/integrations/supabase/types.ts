@@ -350,6 +350,39 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_account_mapping: {
+        Row: {
+          account_code: string
+          account_name: string | null
+          category: string
+          created_at: string
+          id: string
+          marketplace_code: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_code: string
+          account_name?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          marketplace_code: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_code?: string
+          account_name?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          marketplace_code?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       marketplace_ad_spend: {
         Row: {
           created_at: string
@@ -430,6 +463,39 @@ export type Database = {
           settings?: Json | null
           suggested_at?: string | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      marketplace_discovery_log: {
+        Row: {
+          confirmed_at: string | null
+          created_at: string
+          detected_value: string
+          detection_field: string
+          id: string
+          status: string
+          suggested_code: string | null
+          user_id: string
+        }
+        Insert: {
+          confirmed_at?: string | null
+          created_at?: string
+          detected_value: string
+          detection_field: string
+          id?: string
+          status?: string
+          suggested_code?: string | null
+          user_id: string
+        }
+        Update: {
+          confirmed_at?: string | null
+          created_at?: string
+          detected_value?: string
+          detection_field?: string
+          id?: string
+          status?: string
+          suggested_code?: string | null
           user_id?: string
         }
         Relationships: []
@@ -1106,6 +1172,7 @@ export type Database = {
           amount: number | null
           amount_description: string | null
           amount_type: string | null
+          connection_id: string | null
           created_at: string
           id: string
           marketplace_name: string | null
@@ -1121,6 +1188,7 @@ export type Database = {
           amount?: number | null
           amount_description?: string | null
           amount_type?: string | null
+          connection_id?: string | null
           created_at?: string
           id?: string
           marketplace_name?: string | null
@@ -1136,6 +1204,7 @@ export type Database = {
           amount?: number | null
           amount_description?: string | null
           amount_type?: string | null
+          connection_id?: string | null
           created_at?: string
           id?: string
           marketplace_name?: string | null
@@ -1255,6 +1324,7 @@ export type Database = {
           bank_verified_amount: number | null
           bank_verified_at: string | null
           bank_verified_by: string | null
+          connection_id: string | null
           created_at: string
           deposit_date: string | null
           fba_fees: number | null
@@ -1306,6 +1376,7 @@ export type Database = {
           bank_verified_amount?: number | null
           bank_verified_at?: string | null
           bank_verified_by?: string | null
+          connection_id?: string | null
           created_at?: string
           deposit_date?: string | null
           fba_fees?: number | null
@@ -1357,6 +1428,7 @@ export type Database = {
           bank_verified_amount?: number | null
           bank_verified_at?: string | null
           bank_verified_by?: string | null
+          connection_id?: string | null
           created_at?: string
           deposit_date?: string | null
           fba_fees?: number | null

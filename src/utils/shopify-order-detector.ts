@@ -1,19 +1,23 @@
 /**
  * Shopify Order Marketplace Detector
  * 
- * 5-priority detection algorithm:
- * 1. Tags (split by comma, match against MARKETPLACE_REGISTRY)
- * 2. Note Attributes (match values against MARKETPLACE_REGISTRY)
+ * 6-priority detection algorithm:
+ * 1. Tags (split by comma, match against registries)
+ * 2. Note Attributes (match values against registries)
  * 3. Entity Library (DB lookup for user/global classifications)
- * 4. Gateway (match against GATEWAY_REGISTRY)
- * 5. Source Name (web → Shopify Store, pos → Shopify POS)
+ * 4. Marketplace Registry (DB — single source of truth)
+ * 5. Gateway (match against known gateways)
+ * 6. Source Name (web → Shopify Store, pos → Shopify POS)
  * 
  * First match wins. Stop after first match.
+ * 
+ * FALLBACK_REGISTRY is used only if the DB marketplace_registry query fails.
+ * The DB marketplace_registry table is the canonical source of truth.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 
-// ─── Registries ─────────────────────────────────────────────────────────────
+// ─── Fallback Registries (seed data — used only if DB unavailable) ──────────
 
 export const DETECTOR_MARKETPLACE_REGISTRY: Record<string, { code: string; name: string }> = {
   'kogan':            { code: 'kogan', name: 'Kogan' },
@@ -40,7 +44,7 @@ export const AGGREGATOR_REGISTRY: string[] = [
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type DetectionMethod = 'tags' | 'note_attributes' | 'entity_library' | 'gateway' | 'source_name' | 'unknown';
+export type DetectionMethod = 'tags' | 'note_attributes' | 'entity_library' | 'marketplace_registry' | 'gateway' | 'source_name' | 'unknown';
 
 export interface OrderDetectionResult {
   marketplace_code: string | null;
@@ -72,13 +76,60 @@ export interface BatchDetectionResult {
   mcf_order_count: number;
 }
 
+// ─── DB Registry Cache ─────────────────────────────────────────────────────
+
+interface CachedRegistry {
+  entries: Array<{ marketplace_code: string; marketplace_name: string; detection_keywords: string[]; shopify_source_names: string[] }>;
+  loadedAt: number;
+}
+
+let _registryCache: CachedRegistry | null = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function loadRegistryFromDb(): Promise<CachedRegistry['entries']> {
+  if (_registryCache && Date.now() - _registryCache.loadedAt < CACHE_TTL_MS) {
+    return _registryCache.entries;
+  }
+  try {
+    const { data } = await supabase
+      .from('marketplace_registry')
+      .select('marketplace_code, marketplace_name, detection_keywords, shopify_source_names')
+      .eq('is_active', true);
+    if (data && data.length > 0) {
+      const entries = data.map(r => ({
+        marketplace_code: r.marketplace_code,
+        marketplace_name: r.marketplace_name,
+        detection_keywords: (r.detection_keywords as string[]) || [],
+        shopify_source_names: (r.shopify_source_names as string[]) || [],
+      }));
+      _registryCache = { entries, loadedAt: Date.now() };
+      return entries;
+    }
+  } catch {
+    // DB unavailable — fall through to fallback
+  }
+  return [];
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function matchRegistry(value: string): { code: string; name: string } | null {
+function matchFallbackRegistry(value: string): { code: string; name: string } | null {
   const lower = value.toLowerCase().trim();
   for (const [key, entry] of Object.entries(DETECTOR_MARKETPLACE_REGISTRY)) {
     if (lower === key || lower.includes(key)) {
       return entry;
+    }
+  }
+  return null;
+}
+
+function matchDbRegistry(value: string, registry: CachedRegistry['entries']): { code: string; name: string } | null {
+  const lower = value.toLowerCase().trim();
+  for (const row of registry) {
+    for (const kw of row.detection_keywords) {
+      if (lower.includes(kw.toLowerCase())) {
+        return { code: row.marketplace_code, name: row.marketplace_name };
+      }
     }
   }
   return null;
@@ -89,13 +140,8 @@ function isAggregator(value: string): boolean {
   return AGGREGATOR_REGISTRY.some(a => lower === a || lower.includes(a));
 }
 
-// ─── Single Order Detection ─────────────────────────────────────────────────
+// ─── Single Order Detection (Sync — uses fallback only) ─────────────────────
 
-/**
- * Detect marketplace from a single Shopify order.
- * This is synchronous for steps 1, 2, 4, 5.
- * Step 3 (entity_library) requires async DB lookup — use detectMarketplaceFromOrderAsync.
- */
 export function detectMarketplaceFromOrder(order: ShopifyOrderInput): OrderDetectionResult {
   const aggregators: string[] = [];
   const unknown_tags: string[] = [];
@@ -104,22 +150,14 @@ export function detectMarketplaceFromOrder(order: ShopifyOrderInput): OrderDetec
   let confidence = 0;
   let detection_method: DetectionMethod = 'unknown';
 
-  // ── Step 1: Tags ──────────────────────────────────────────────────
+  // ── Step 1: Tags
   if (order.tags) {
     const tagList = order.tags.split(',').map(t => t.trim()).filter(Boolean);
-    
     for (const tag of tagList) {
       const tagLower = tag.toLowerCase();
-      
-      // Check aggregator
-      if (isAggregator(tagLower)) {
-        aggregators.push(tagLower);
-        continue;
-      }
-      
-      // Check marketplace
+      if (isAggregator(tagLower)) { aggregators.push(tagLower); continue; }
       if (!marketplace_code) {
-        const match = matchRegistry(tagLower);
+        const match = matchFallbackRegistry(tagLower);
         if (match) {
           marketplace_code = match.code;
           marketplace_name = match.name;
@@ -130,29 +168,25 @@ export function detectMarketplaceFromOrder(order: ShopifyOrderInput): OrderDetec
         }
       }
     }
-    
     if (marketplace_code) {
       return buildResult(marketplace_code, marketplace_name, aggregators, confidence, detection_method, unknown_tags);
     }
   }
 
-  // ── Step 2: Note Attributes ───────────────────────────────────────
+  // ── Step 2: Note Attributes
   const noteAttrs = parseNoteAttributes(order.note_attributes);
   for (const attr of noteAttrs) {
-    const match = matchRegistry(attr.value);
+    const match = matchFallbackRegistry(attr.value);
     if (match) {
-      marketplace_code = match.code;
-      marketplace_name = match.name;
-      confidence = 0.85;
-      detection_method = 'note_attributes';
-      return buildResult(marketplace_code, marketplace_name, aggregators, confidence, detection_method, unknown_tags);
+      return buildResult(match.code, match.name, aggregators, 0.85, 'note_attributes', unknown_tags);
     }
   }
 
-  // ── Step 3: Entity Library — skipped in sync version ──────────────
-  // Use detectMarketplaceFromOrderAsync for DB lookup
+  // ── Step 3: Entity Library — skipped in sync version (use async)
 
-  // ── Step 4: Gateway ───────────────────────────────────────────────
+  // ── Step 4: Marketplace Registry — skipped in sync version (use async)
+
+  // ── Step 5: Gateway
   if (order.gateway) {
     const gwLower = order.gateway.toLowerCase().trim();
     const gwMatch = GATEWAY_REGISTRY[gwLower];
@@ -161,78 +195,60 @@ export function detectMarketplaceFromOrder(order: ShopifyOrderInput): OrderDetec
     }
   }
 
-  // ── Guard: aggregators present but no marketplace → don't guess source_name
+  // ── Guard: aggregators present but no marketplace → don't guess
   if (aggregators.length > 0) {
     const result = buildResult(null, null, aggregators, 0, 'unknown', unknown_tags);
     result.needs_classification = true;
     return result;
   }
 
-  // ── Step 5: Source Name (only if no aggregators) ───────────────────
+  // ── Step 6: Source Name
   if (order.source_name) {
     const srcLower = order.source_name.toLowerCase().trim();
-    if (srcLower === 'web') {
-      return buildResult('shopify_web', 'Shopify Store', aggregators, 0.5, 'source_name', unknown_tags);
-    }
-    if (srcLower === 'pos') {
-      return buildResult('shopify_pos', 'Shopify POS', aggregators, 0.5, 'source_name', unknown_tags);
-    }
+    if (srcLower === 'web') return buildResult('shopify_web', 'Shopify Store', aggregators, 0.5, 'source_name', unknown_tags);
+    if (srcLower === 'pos') return buildResult('shopify_pos', 'Shopify POS', aggregators, 0.5, 'source_name', unknown_tags);
   }
 
   return buildResult(null, null, aggregators, 0, 'unknown', unknown_tags);
 }
 
-/**
- * Async version that includes entity_library DB lookup (Step 3).
- */
+// ─── Async Detection (Full 6-priority pipeline with DB) ─────────────────────
+
 export async function detectMarketplaceFromOrderAsync(
   order: ShopifyOrderInput
 ): Promise<OrderDetectionResult> {
   const aggregators: string[] = [];
   const unknown_tags: string[] = [];
-  let marketplace_code: string | null = null;
-  let marketplace_name: string | null = null;
-
-  // ── Step 1: Tags ──────────────────────────────────────────────────
   const allTags: string[] = [];
+
+  // Load DB registry
+  const dbRegistry = await loadRegistryFromDb();
+
+  // ── Step 1: Tags
   if (order.tags) {
     const tagList = order.tags.split(',').map(t => t.trim()).filter(Boolean);
-    
     for (const tag of tagList) {
       const tagLower = tag.toLowerCase();
-      
-      if (isAggregator(tagLower)) {
-        aggregators.push(tagLower);
-        continue;
+      if (isAggregator(tagLower)) { aggregators.push(tagLower); continue; }
+      const match = matchFallbackRegistry(tagLower);
+      if (match) {
+        return buildResult(match.code, match.name, aggregators, 0.9, 'tags', unknown_tags);
       }
-      
-      if (!marketplace_code) {
-        const match = matchRegistry(tagLower);
-        if (match) {
-          marketplace_code = match.code;
-          marketplace_name = match.name;
-        } else {
-          unknown_tags.push(tag);
-          allTags.push(tagLower);
-        }
-      }
-    }
-    
-    if (marketplace_code) {
-      return buildResult(marketplace_code, marketplace_name, aggregators, 0.9, 'tags', unknown_tags);
+      unknown_tags.push(tag);
+      allTags.push(tagLower);
     }
   }
 
-  // ── Step 2: Note Attributes ───────────────────────────────────────
+  // ── Step 2: Note Attributes
   const noteAttrs = parseNoteAttributes(order.note_attributes);
   for (const attr of noteAttrs) {
-    const match = matchRegistry(attr.value);
+    const match = matchFallbackRegistry(attr.value);
     if (match) {
       return buildResult(match.code, match.name, aggregators, 0.85, 'note_attributes', unknown_tags);
     }
   }
 
-  // ── Step 3: Entity Library (DB) ───────────────────────────────────
+  // ── Step 3: Entity Library (DB)
   if (allTags.length > 0) {
     try {
       const { data } = await supabase
@@ -246,42 +262,52 @@ export async function detectMarketplaceFromOrderAsync(
         return buildResult(
           entity.entity_name,
           entity.entity_name.charAt(0).toUpperCase() + entity.entity_name.slice(1),
-          aggregators,
-          0.8,
-          'entity_library',
+          aggregators, 0.8, 'entity_library',
           unknown_tags.filter(t => t.toLowerCase() !== entity.entity_name.toLowerCase())
         );
       }
-    } catch {
-      // DB lookup failed — continue
+    } catch { /* DB lookup failed — continue */ }
+  }
+
+  // ── Step 4: Marketplace Registry (DB) — check tags against DB keywords
+  if (allTags.length > 0 && dbRegistry.length > 0) {
+    for (const tag of allTags) {
+      const match = matchDbRegistry(tag, dbRegistry);
+      if (match) {
+        return buildResult(match.code, match.name, aggregators, 0.75, 'marketplace_registry', unknown_tags);
+      }
     }
   }
 
-  // ── Step 4: Gateway ───────────────────────────────────────────────
+  // ── Step 5: Gateway
   if (order.gateway) {
     const gwLower = order.gateway.toLowerCase().trim();
     const gwMatch = GATEWAY_REGISTRY[gwLower];
-    if (gwMatch) {
-      return buildResult(gwMatch.code, gwMatch.name, aggregators, 0.6, 'gateway', unknown_tags);
-    }
+    if (gwMatch) return buildResult(gwMatch.code, gwMatch.name, aggregators, 0.6, 'gateway', unknown_tags);
+    const dbGw = matchDbRegistry(gwLower, dbRegistry);
+    if (dbGw) return buildResult(dbGw.code, dbGw.name, aggregators, 0.6, 'gateway', unknown_tags);
   }
 
-  // ── Guard: aggregators present but no marketplace → don't guess source_name
+  // ── Guard: aggregators present but no marketplace → don't guess
   if (aggregators.length > 0) {
     const result = buildResult(null, null, aggregators, 0, 'unknown', unknown_tags);
     result.needs_classification = true;
     return result;
   }
 
-  // ── Step 5: Source Name (only if no aggregators) ───────────────────
+  // ── Step 6: Source Name
   if (order.source_name) {
     const srcLower = order.source_name.toLowerCase().trim();
-    if (srcLower === 'web') {
-      return buildResult('shopify_web', 'Shopify Store', aggregators, 0.5, 'source_name', unknown_tags);
+    // Check DB registry shopify_source_names first
+    for (const row of dbRegistry) {
+      for (const sn of row.shopify_source_names) {
+        if (srcLower === sn.toLowerCase()) {
+          return buildResult(row.marketplace_code, row.marketplace_name, aggregators, 0.5, 'source_name', unknown_tags);
+        }
+      }
     }
-    if (srcLower === 'pos') {
-      return buildResult('shopify_pos', 'Shopify POS', aggregators, 0.5, 'source_name', unknown_tags);
-    }
+    if (srcLower === 'web') return buildResult('shopify_web', 'Shopify Store', aggregators, 0.5, 'source_name', unknown_tags);
+    if (srcLower === 'pos') return buildResult('shopify_pos', 'Shopify POS', aggregators, 0.5, 'source_name', unknown_tags);
   }
 
   return buildResult(null, null, aggregators, 0, 'unknown', unknown_tags);
@@ -312,7 +338,6 @@ function parseNoteAttributes(
 ): Array<{ name: string; value: string }> {
   if (!attrs) return [];
   if (Array.isArray(attrs)) return attrs;
-  // String format from CSV: "name: value\nname2: value2"
   return attrs.split('\n').map(line => {
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) return { name: '', value: line.trim() };
@@ -327,9 +352,6 @@ export interface OrderWithName extends ShopifyOrderInput {
   id?: string | number;
 }
 
-/**
- * Detect marketplaces across all orders and return aggregated results.
- */
 export async function detectAllMarketplaces(
   orders: OrderWithName[]
 ): Promise<BatchDetectionResult> {
@@ -338,7 +360,9 @@ export async function detectAllMarketplaces(
   const allUnknownTags = new Set<string>();
   let mcf_order_count = 0;
 
-  // Collect all unique tags for a single entity_library batch query
+  // Load DB registry + entity_library once for batch
+  const dbRegistry = await loadRegistryFromDb();
+
   const allTags = new Set<string>();
   for (const order of orders) {
     if (order.tags) {
@@ -355,21 +379,19 @@ export async function detectAllMarketplaces(
         .select('entity_name, entity_type')
         .in('entity_name', Array.from(allTags))
         .eq('entity_type', 'marketplace');
-      
       if (data) {
         for (const row of data) {
           entityMap.set(row.entity_name.toLowerCase(), row.entity_name);
         }
       }
-    } catch {
-      // Non-fatal
-    }
+    } catch { /* Non-fatal */ }
   }
 
   for (const order of orders) {
+    // Use sync detection first (steps 1, 2, 5, 6)
     const result = detectMarketplaceFromOrder(order);
-    
-    // If sync detection failed, check entity_library cache
+
+    // If sync detection failed, check entity_library cache (step 3)
     if (!result.marketplace_code && result.unknown_tags.length > 0) {
       for (const tag of result.unknown_tags) {
         const entityMatch = entityMap.get(tag.toLowerCase());
@@ -383,7 +405,20 @@ export async function detectAllMarketplaces(
       }
     }
 
-    // Collect aggregators
+    // If still no match, check DB registry (step 4)
+    if (!result.marketplace_code && result.unknown_tags.length > 0 && dbRegistry.length > 0) {
+      for (const tag of result.unknown_tags) {
+        const match = matchDbRegistry(tag.toLowerCase(), dbRegistry);
+        if (match) {
+          result.marketplace_code = match.code;
+          result.marketplace_name = match.name;
+          result.confidence = 0.75;
+          result.detection_method = 'marketplace_registry';
+          break;
+        }
+      }
+    }
+
     result.aggregators.forEach(a => allAggregators.add(a));
     result.unknown_tags.forEach(t => allUnknownTags.add(t));
     if (result.mcf_fulfillment) mcf_order_count++;
@@ -403,17 +438,15 @@ export async function detectAllMarketplaces(
     }
   }
 
-  const marketplaces = Array.from(marketplaceMap.values())
-    .map(m => ({
-      code: m.code,
-      name: m.name,
-      order_count: m.orders.length,
-      sample_orders: m.orders.slice(0, 5),
-    }))
-    .sort((a, b) => b.order_count - a.order_count);
-
   return {
-    marketplaces,
+    marketplaces: Array.from(marketplaceMap.values())
+      .map(m => ({
+        code: m.code,
+        name: m.name,
+        order_count: m.orders.length,
+        sample_orders: m.orders.slice(0, 5),
+      }))
+      .sort((a, b) => b.order_count - a.order_count),
     aggregators_found: Array.from(allAggregators),
     unknown_tags: Array.from(allUnknownTags),
     mcf_order_count,
@@ -430,9 +463,6 @@ const ENTITY_TYPE_IMPACT: Record<string, string> = {
   ignore: 'neutral',
 };
 
-/**
- * Save a user's classification of an unknown tag to entity_library.
- */
 export async function classifyUnknownTag(
   tag: string,
   entityType: string,
