@@ -364,7 +364,7 @@ export default function PostSetupBanner({
                     </p>
                   )}
                   {hasAmazon && amazonStatus !== 'skipped' && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className={`text-sm ${amazonStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {renderStatusIcon(amazonStatus)}
                       {amazonStatus === 'scanning'
                         ? amazonFound > 0
