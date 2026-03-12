@@ -26,13 +26,10 @@ import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
 import AskAiButton from '@/components/ai-assistant/AskAiButton';
-import DiscoveryBanner from '@/components/dashboard/DiscoveryBanner';
-import ConnectChannelsPrompt from '@/components/dashboard/ConnectChannelsPrompt';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
-import { toast } from 'sonner';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
@@ -143,200 +140,79 @@ export default function Dashboard() {
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
   const [hasAmazon, setHasAmazon] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
+  const [justConnectedXero, setJustConnectedXero] = useState(false);
 
-  // Discovery flow state
-  const [showDiscoveryBanner, setShowDiscoveryBanner] = useState(false);
-  const [showChannelsPrompt, setShowChannelsPrompt] = useState(false);
-  const discoveryTriggered = useRef(false);
-
-  // Check Xero connection + handle OAuth callbacks
   useEffect(() => {
     if (!user) return;
     const connected = searchParams.get('connected');
-
-    // Handle OAuth callbacks — show toast and trigger per-channel sync
-    if (connected) {
-      searchParams.delete('connected');
-      setSearchParams(searchParams, { replace: true });
-
-      if (connected === 'xero') {
-        setXeroConnected(true);
-        // Mark wizard complete so it doesn't reopen
-        supabase.from('app_settings').upsert(
-          { user_id: user.id, key: 'onboarding_wizard_complete', value: 'true' },
-          { onConflict: 'user_id,key' }
-        );
-        setShowWizard(false);
-        // Discovery will be triggered by the discovery effect below — don't double-fire
-        discoveryTriggered.current = false; // allow the effect to pick it up
-        toast.success('Xero connected — analysing your account…');
-      } else if (connected === 'amazon') {
-        setHasAmazon(true);
-        toast.success('Amazon connected — syncing settlements…');
-        // Fire Amazon-only sync (user explicitly connected — Xero-first already satisfied by this point)
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session) {
-            // Verify Xero discovery is done before API sync
-            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').eq('user_id', user.id).maybeSingle()
-              .then(({ data }) => {
-                if (data?.value === 'complete') {
-                  callEdgeFunctionSafe('fetch-amazon-settlements', session.access_token, {}, { headers: { 'x-action': 'smart-sync' } });
-                } else {
-                  toast.info('Amazon will sync after Xero analysis completes.');
-                }
-              });
-          }
-        });
-      } else if (connected === 'shopify') {
-        setHasShopify(true);
-        toast.success('Shopify connected — syncing payouts…');
-        // Fire Shopify-only sync (gated by Xero discovery)
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session) {
-            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').eq('user_id', user.id).maybeSingle()
-              .then(({ data }) => {
-                if (data?.value === 'complete') {
-                  callEdgeFunctionSafe('fetch-shopify-payouts', session.access_token);
-                } else {
-                  toast.info('Shopify will sync after Xero analysis completes.');
-                }
-              });
-          }
-        });
-      }
+    if (connected === 'xero') {
+      setXeroConnected(true);
+      setJustConnectedXero(true);
     }
-
-    // Check token existence for all three platforms
-    Promise.all([
-      supabase.from('xero_tokens').select('id').eq('user_id', user.id).limit(1),
-      supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1),
-      supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1),
-    ]).then(([xero, amazon, shopify]) => {
-      setXeroConnected(!!(xero.data && xero.data.length > 0));
-      setHasAmazon(!!(amazon.data && amazon.data.length > 0));
-      setHasShopify(!!(shopify.data && shopify.data.length > 0));
-    });
+    supabase.from('xero_tokens').select('id').limit(1)
+      .then(({ data }) => setXeroConnected(!!(data && data.length > 0)));
   }, [user]);
 
-  // ─── Setup wizard pre-check (simplified: Xero-first) ────────────
+  // ─── Setup wizard pre-check ───────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const isTestMode = searchParams.get('test_wizard') === 'true';
     if (isTestMode) {
+      const connected = searchParams.get('connected');
+      if (connected === 'amazon' || connected === 'shopify') setWizardInitialStep(2);
+      else if (connected === 'xero') setWizardInitialStep(2);
       setShowWizard(true);
       return;
     }
-
+    const connected = searchParams.get('connected');
     const checkWizard = async () => {
       try {
-        const [settRes, wizardRes] = await Promise.all([
-          supabase.from('settlements').select('id').eq('user_id', user.id).limit(1),
-          supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'onboarding_wizard_complete').maybeSingle(),
+        const [settRes, amazonRes, shopifyRes, wizardRes] = await Promise.all([
+          supabase.from('settlements').select('id').limit(1),
+          supabase.from('amazon_tokens').select('id').limit(1),
+          supabase.from('shopify_tokens').select('id').limit(1),
+          supabase.from('app_settings').select('value').eq('key', 'onboarding_wizard_complete').maybeSingle(),
         ]);
 
         const hasSettlements = !!(settRes.data && settRes.data.length > 0);
+        const hasAmz = !!(amazonRes.data && amazonRes.data.length > 0);
+        const hasShp = !!(shopifyRes.data && shopifyRes.data.length > 0);
         const wizardComplete = wizardRes.data?.value === 'true';
 
-        const dismissKey = `xettle_wizard_dismiss_count_${user.id}`;
+        setHasAmazon(hasAmz);
+        setHasShopify(hasShp);
+
+        const dismissKey = user ? `xettle_wizard_dismiss_count_${user.id}` : 'xettle_wizard_dismiss_count';
         const dismissCount = parseInt(sessionStorage.getItem(dismissKey) || '0', 10);
 
-        if (hasSettlements || wizardComplete || dismissCount >= 3) {
+        // If user just connected via OAuth callback, always show wizard regardless of existing data
+        if (connected) {
+          // Don't skip — let the wizard handle the post-connection flow
+        } else if (hasSettlements || wizardComplete || dismissCount >= 3) {
           setShowWizard(false);
           return;
         }
 
-        setShowWizard(true);
+        if (!hasAmz || !hasShp || !xeroConnected) {
+          if (connected === 'amazon' || connected === 'shopify') {
+            setWizardInitialStep(2);
+            if (connected === 'amazon') setHasAmazon(true);
+            if (connected === 'shopify') setHasShopify(true);
+          } else if (connected === 'xero') {
+            setWizardInitialStep(2);
+          }
+          if (connected) {
+            searchParams.delete('connected');
+            setSearchParams(searchParams, { replace: true });
+          }
+          setShowWizard(true);
+        }
       } catch (error) {
-        console.error("Wizard check failed:", error);
+        console.error("Wizard check failed, defaulting to show:", error);
         setShowWizard(true);
       }
     };
     checkWizard();
-  }, [user]);
-
-  // ─── Xero Discovery scan (light mode — 90 days only) ──────────
-  useEffect(() => {
-    if (!user || !xeroConnected || discoveryTriggered.current) return;
-    discoveryTriggered.current = true;
-
-    const triggerDiscovery = async () => {
-      try {
-        // Check if discovery already ran
-        const { data: discoverySetting } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'xero_discovery_status')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (discoverySetting?.value === 'complete') {
-          // Discovery already done — check if channels prompt should show
-          const { data: promptDismissed } = await supabase
-            .from('app_settings')
-            .select('value')
-            .eq('key', 'channels_prompt_dismissed')
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-          if (promptDismissed?.value !== 'true') {
-            setShowChannelsPrompt(true);
-          }
-          return;
-        }
-
-        if (discoverySetting?.value === 'running') {
-          // Check if it's been stuck running for more than 3 minutes (stale)
-          const { data: updatedRow } = await supabase
-            .from('app_settings')
-            .select('updated_at')
-            .eq('key', 'xero_discovery_status')
-            .eq('user_id', user.id)
-            .maybeSingle();
-          
-          const updatedAt = updatedRow?.updated_at ? new Date(updatedRow.updated_at).getTime() : 0;
-          const isStale = Date.now() - updatedAt > 3 * 60 * 1000;
-          
-          if (isStale) {
-            console.log('[dashboard] Discovery stuck in running state — resetting and re-triggering');
-            // Reset to allow re-trigger
-            await supabase.from('app_settings').upsert(
-              { user_id: user.id, key: 'xero_discovery_status', value: 'complete' },
-              { onConflict: 'user_id,key' }
-            );
-            return;
-          }
-          
-          setShowDiscoveryBanner(true);
-          return;
-        }
-
-        // Mark discovery as running
-        await supabase.from('app_settings').upsert(
-          { user_id: user.id, key: 'xero_discovery_status', value: 'running' },
-          { onConflict: 'user_id,key' }
-        );
-        setShowDiscoveryBanner(true);
-
-        // Fire light discovery scan
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-          await fetch(`https://${projectId}.supabase.co/functions/v1/scan-xero-history`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-              'x-action': 'light-discovery',
-            },
-            body: JSON.stringify({}),
-          });
-        }
-      } catch (err) {
-        console.warn('[dashboard] Discovery scan failed:', err);
-      }
-    };
-
-    triggerDiscovery();
   }, [user, xeroConnected]);
 
   const handleWizardClose = () => {
@@ -395,25 +271,8 @@ export default function Dashboard() {
   useEffect(() => {
     async function checkAdmin() {
       if (!user) return;
-      try {
-        const { data, error } = await supabase.rpc('has_role', { _role: 'admin' });
-        if (error) {
-          console.error('[dashboard] has_role error:', error);
-          // Fallback: direct query
-          const { data: roleRow } = await supabase
-            .from('user_roles')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('role', 'admin')
-            .maybeSingle();
-          setIsAdmin(!!roleRow);
-        } else {
-          setIsAdmin(!!data);
-        }
-        console.log('[dashboard] isAdmin:', !!data);
-      } catch (err) {
-        console.error('[dashboard] Admin check failed:', err);
-      }
+      const { data } = await supabase.rpc('has_role', { _role: 'admin' });
+      setIsAdmin(!!data);
     }
     checkAdmin();
   }, [user]);
@@ -425,7 +284,6 @@ export default function Dashboard() {
       const { count } = await supabase
         .from('settlements')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
         .eq('xero_status', 'authorised_in_xero');
       setOutstandingCount(count ?? 0);
     }
@@ -439,7 +297,6 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('marketplace_connections')
         .select('*')
-        .eq('user_id', user.id)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -456,27 +313,18 @@ export default function Dashboard() {
           return activeConnections.length > 0 ? activeConnections[0].marketplace_code : '';
         });
 
-        // Fetch settlement counts per marketplace (lightweight count-only queries)
-        const codes = activeConnections.map((m: any) => m.marketplace_code).filter(Boolean);
-        if (codes.length > 0) {
-          const countPairs = await Promise.all(
-            codes.map(async (code: string) => {
-              const { count } = await supabase
-                .from('settlements')
-                .select('id', { count: 'exact', head: true })
-                .eq('user_id', user.id)
-                .eq('marketplace', code);
-              return [code, count ?? 0] as const;
-            })
-          );
-
+        // Fetch settlement counts per marketplace
+        const codes = activeConnections.map((m: any) => m.marketplace_code);
+        const { data: countData } = await supabase
+          .from('settlements')
+          .select('marketplace')
+          .in('marketplace', codes);
+        if (countData) {
           const counts: Record<string, number> = {};
-          for (const [code, count] of countPairs) {
-            counts[code] = count;
+          for (const row of countData) {
+            counts[row.marketplace || ''] = (counts[row.marketplace || ''] || 0) + 1;
           }
           setSettlementCounts(counts);
-        } else {
-          setSettlementCounts({});
         }
       } else {
         setUserMarketplaces([]);
@@ -501,8 +349,7 @@ export default function Dashboard() {
   }, [user, loadMarketplaces]);
 
   // ─── First-load scan trigger ─────────────────────────────────
-  // RULE: Xero must be connected and discovery complete BEFORE any Amazon/Shopify API syncs fire.
-  // Manual CSV uploads are always allowed — they use user-controlled data, not unlimited API calls.
+  // Catches users with connected tokens but no scan flags (e.g. completed wizard before scanning was wired up)
   const firstLoadTriggered = useRef(false);
   useEffect(() => {
     if (!user || firstLoadTriggered.current) return;
@@ -511,80 +358,69 @@ export default function Dashboard() {
     const triggerFirstLoadScan = async () => {
       try {
         const caps = await detectCapabilities();
-        if (!caps.accessToken) return;
+        const hasAnyToken = caps.hasXero || caps.hasAmazon || caps.hasShopify;
+        if (!hasAnyToken) return;
 
-        // Check existing scan flags
+        // Check if any scan flag exists
         const { data: scanFlags } = await supabase
           .from('app_settings')
-          .select('key, value')
-          .in('key', ['xero_scan_completed', 'xero_discovery_status', 'amazon_scan_completed', 'shopify_scan_completed']);
+          .select('key')
+          .in('key', ['xero_scan_completed', 'amazon_scan_completed', 'shopify_scan_completed'])
+          .limit(1);
 
-        const flagMap = new Map(scanFlags?.map(f => [f.key, f.value]) || []);
-        const xeroDiscoveryComplete = flagMap.get('xero_discovery_status') === 'complete' || !!flagMap.get('xero_scan_completed');
+        const hasAnyScanFlag = !!(scanFlags && scanFlags.length > 0);
         const hasAnyData = caps.hasSettlements || caps.hasShopifyOrders;
 
-        // If Xero is connected but discovery hasn't run, the discovery effect handles it — don't duplicate
-        if (caps.hasXero && !xeroDiscoveryComplete) {
-          console.log('[dashboard] Xero connected but discovery not complete — deferring API syncs');
-          return;
-        }
+        if (!hasAnyScanFlag && !hasAnyData && caps.accessToken) {
+          console.log('[dashboard] Tokens found but no scans ran — triggering first-load scan');
 
-        // Only fire Amazon/Shopify API syncs if:
-        // 1. Xero discovery is complete (so we have context), AND
-        // 2. Those channel scans haven't run yet
-        if (xeroDiscoveryComplete && caps.accessToken) {
-          const amazonNeedsScan = caps.hasAmazon && !flagMap.get('amazon_scan_completed') && !hasAnyData;
-          const shopifyNeedsScan = caps.hasShopify && !flagMap.get('shopify_scan_completed') && !hasAnyData;
+          // Fire scans in parallel (fire-and-forget)
+          const scanPromises: Promise<any>[] = [];
 
-          if (amazonNeedsScan || shopifyNeedsScan) {
-            console.log('[dashboard] Xero discovery complete — triggering channel syncs:', {
-              amazon: amazonNeedsScan,
-              shopify: shopifyNeedsScan,
-            });
-
-            const scanPromises: Promise<any>[] = [];
-
-            if (amazonNeedsScan) {
-              scanPromises.push(callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken, {}, { headers: { 'x-action': 'smart-sync' } }));
-            }
-            if (shopifyNeedsScan) {
-              scanPromises.push(callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken));
-              scanPromises.push(callEdgeFunctionSafe('fetch-shopify-orders', caps.accessToken, {
-                ...(caps.shopDomain ? { shopDomain: caps.shopDomain } : {}),
-                channelDetectionOnly: true,
-              }));
-            }
-
-            await Promise.allSettled(scanPromises);
-
-            // Follow up with channel scan + settlement generation + provisioning
-            if (shopifyNeedsScan) {
-              await callEdgeFunctionSafe('scan-shopify-channels', caps.accessToken);
-              await callEdgeFunctionSafe('auto-generate-shopify-settlements', caps.accessToken);
-            }
-            if (caps.userId) {
-              await provisionAllMarketplaceConnections(caps.userId);
-            }
-            await callEdgeFunctionSafe('run-validation-sweep', caps.accessToken);
-
-            // Write scan completion flags
-            const writeFlag = async (key: string) => {
-              await supabase.from('app_settings').upsert(
-                { user_id: caps.userId!, key, value: 'true' },
-                { onConflict: 'user_id,key' }
-              );
-            };
-            const flagPromises: Promise<any>[] = [];
-            if (amazonNeedsScan) flagPromises.push(writeFlag('amazon_scan_completed'));
-            if (shopifyNeedsScan) {
-              flagPromises.push(writeFlag('shopify_scan_completed'));
-              flagPromises.push(writeFlag('shopify_channel_scan_triggered'));
-            }
-            await Promise.allSettled(flagPromises);
-
-            console.log('[dashboard] Channel syncs complete — reloading marketplaces');
-            loadMarketplaces();
+          if (caps.hasXero) {
+            scanPromises.push(callEdgeFunctionSafe('scan-xero-history', caps.accessToken));
           }
+          if (caps.hasAmazon) {
+            scanPromises.push(callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken, {}, { headers: { 'x-action': 'smart-sync' } }));
+          }
+          if (caps.hasShopify) {
+            scanPromises.push(callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken));
+            scanPromises.push(callEdgeFunctionSafe('fetch-shopify-orders', caps.accessToken, {
+              ...(caps.shopDomain ? { shopDomain: caps.shopDomain } : {}),
+              channelDetectionOnly: true,
+            }));
+          }
+
+          await Promise.allSettled(scanPromises);
+
+          // Follow up with channel scan + settlement generation + provisioning + validation sweep
+          if (caps.hasShopify) {
+            await callEdgeFunctionSafe('scan-shopify-channels', caps.accessToken);
+            await callEdgeFunctionSafe('auto-generate-shopify-settlements', caps.accessToken);
+          }
+          if (caps.userId) {
+            await provisionAllMarketplaceConnections(caps.userId);
+          }
+          await callEdgeFunctionSafe('run-validation-sweep', caps.accessToken);
+
+          // Write scan completion flags
+          const flagPromises: Promise<any>[] = [];
+          const writeFlag = async (key: string) => {
+            await supabase.from('app_settings').upsert(
+              { user_id: caps.userId!, key, value: 'true' },
+              { onConflict: 'user_id,key' }
+            );
+          };
+          if (caps.hasXero) flagPromises.push(writeFlag('xero_scan_completed'));
+          if (caps.hasAmazon) flagPromises.push(writeFlag('amazon_scan_completed'));
+          if (caps.hasShopify) {
+            flagPromises.push(writeFlag('shopify_scan_completed'));
+            flagPromises.push(writeFlag('shopify_channel_scan_triggered'));
+          }
+          await Promise.allSettled(flagPromises);
+
+          console.log('[dashboard] First-load scan complete — reloading marketplaces');
+          loadMarketplaces();
         }
       } catch (err) {
         console.warn('[dashboard] first-load scan failed:', err);
@@ -718,9 +554,11 @@ export default function Dashboard() {
         open={showWizard}
         onClose={handleWizardClose}
         onComplete={handleWizardComplete}
-        hasXero={xeroConnected}
+        initialStep={wizardInitialStep}
         hasAmazon={hasAmazon}
         hasShopify={hasShopify}
+        hasXero={xeroConnected}
+        justConnectedXero={justConnectedXero}
       />
       {/* Top bar */}
       <header className="border-b border-border bg-card">
@@ -846,25 +684,7 @@ export default function Dashboard() {
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
         {activeView === 'dashboard' && <SetupInProgressBanner />}
-        {activeView === 'dashboard' && showDiscoveryBanner && (
-          <div className="mb-4">
-            <DiscoveryBanner
-              onDiscoveryComplete={() => {
-                setShowDiscoveryBanner(false);
-                setShowChannelsPrompt(true);
-                loadMarketplaces();
-              }}
-            />
-          </div>
-        )}
-        {activeView === 'dashboard' && showChannelsPrompt && !showDiscoveryBanner && (
-          <div className="mb-4">
-            <ConnectChannelsPrompt
-              onDismiss={() => setShowChannelsPrompt(false)}
-              onSwitchToUpload={() => switchView('smart_upload')}
-            />
-          </div>
-        )}
+
         {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
         {/* ─── Dashboard (always useful — strip, actions, validation) ──── */}
         {activeView === 'dashboard' && (
@@ -921,8 +741,6 @@ export default function Dashboard() {
                   switchSettlementsSubTab('overview');
                 }}
                 userName={user?.email?.split('@')[0]}
-                userId={user?.id}
-                userCreatedAt={user?.created_at}
               />
 
               {/* Recent settlements — real payout/settlement records only */}
@@ -940,10 +758,7 @@ export default function Dashboard() {
         {activeView === 'outstanding' && (
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-              <OutstandingTab
-                onSwitchToUpload={() => switchView('smart_upload')}
-                discoveryComplete={!showDiscoveryBanner}
-              />
+              <OutstandingTab onSwitchToUpload={() => switchView('smart_upload')} />
             </Suspense>
           </ErrorBoundary>
         )}
@@ -1075,7 +890,7 @@ export default function Dashboard() {
                   Settlement vs order reconciliation across all connected marketplaces.
                 </p>
               </div>
-              <ReconciliationHealth userId={user?.id} />
+              <ReconciliationHealth />
             </div>
           </ErrorBoundary>
         )}

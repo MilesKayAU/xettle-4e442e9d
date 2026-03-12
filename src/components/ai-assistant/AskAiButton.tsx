@@ -17,16 +17,10 @@ export default function AskAiButton({ context, suggestedPrompts }: AskAiButtonPr
 
   useEffect(() => {
     let mounted = true;
-
-    const updateFromSession = async (session: any) => {
-      const currentUser = session?.user;
-      if (!mounted) return;
-
-      setIsAuthenticated(!!currentUser);
-      if (!currentUser) {
-        setIsPro(null);
-        return;
-      }
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !mounted) return;
+      setIsAuthenticated(true);
 
       const [proRes, adminRes, starterRes] = await Promise.all([
         supabase.rpc('has_role', { _role: 'pro' }),
@@ -37,18 +31,9 @@ export default function AskAiButton({ context, suggestedPrompts }: AskAiButtonPr
       if (mounted) setIsPro(!!proRes.data || !!adminRes.data || !!starterRes.data);
     };
 
-    supabase.auth.getSession().then(({ data }) => {
-      updateFromSession(data.session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      updateFromSession(session);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    check();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { check(); });
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
   if (!isAuthenticated) return null;

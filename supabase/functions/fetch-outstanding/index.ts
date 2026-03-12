@@ -23,20 +23,13 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
   const expiresAt = new Date(token.expires_at);
   if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) return token;
 
-  // Optimistic locking: re-read to detect concurrent refresh
-  const { data: freshToken } = await supabase
-    .from('xero_tokens').select('*').eq('id', token.id).single();
-  if (freshToken && freshToken.expires_at !== token.expires_at) {
-    return { ...token, ...freshToken } as XeroToken;
-  }
-
   const resp = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Authorization': `Basic ${btoa(`${xeroClientId}:${xeroClientSecret}`)}`,
     },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: freshToken?.refresh_token || token.refresh_token }),
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: token.refresh_token }),
   });
 
   if (!resp.ok) throw new Error(`Token refresh failed: ${await resp.text()}`);
@@ -78,99 +71,19 @@ function extractSettlementId(reference: string): { id: string | null; part: numb
   return { id: null, part: null };
 }
 
-const MARKETPLACE_SIGNAL_MAP: Array<{ code: string; signals: string[] }> = [
-  { code: 'amazon_au', signals: ['amazon', 'amzn', 'lmb-'] },
-  { code: 'shopify_payments', signals: ['shopify', 'shopify payments'] },
-  { code: 'kogan', signals: ['kogan'] },
-  { code: 'bigw', signals: ['big w', 'bigw'] },
-  { code: 'bunnings', signals: ['bunnings'] },
-  { code: 'mydeal', signals: ['mydeal', 'my deal'] },
-  { code: 'catch', signals: ['catch', 'catch_au'] },
-  { code: 'ebay_au', signals: ['ebay', 'ebay_au'] },
-  { code: 'woolworths_marketplus', signals: ['woolworths', 'woolworths_mp', 'everyday market', 'marketplus'] },
-];
-
-function normaliseMarketplaceCode(code: string | null | undefined): string {
-  if (!code) return 'unknown';
-  const lower = code.toLowerCase().trim();
-  const aliases: Record<string, string> = {
-    shopify: 'shopify_payments',
-    shopify_orders: 'shopify_payments',
-    catch_au: 'catch',
-    ebay: 'ebay_au',
-    woolworths_mp: 'woolworths_marketplus',
-  };
-  return aliases[lower] || lower;
-}
-
 function detectMarketplace(reference: string, contactName: string): string {
-  const ref = (reference || '').toLowerCase();
-  const contact = (contactName || '').toLowerCase();
-  const haystack = `${ref} ${contact}`;
-
-  if (ref.startsWith('xettle-') || ref.startsWith('amzn-') || ref.startsWith('lmb-')) {
-    return 'amazon_au';
-  }
-
-  for (const entry of MARKETPLACE_SIGNAL_MAP) {
-    if (entry.signals.some(signal => haystack.includes(signal))) {
-      return entry.code;
-    }
-  }
-
+  const ref = reference.toLowerCase();
+  const contact = contactName.toLowerCase();
+  if (ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon')) return 'amazon_au';
+  if (ref.includes('shopify') || contact.includes('shopify')) return 'shopify_payments';
+  if (contact.includes('kogan')) return 'kogan';
+  if (contact.includes('big w') || contact.includes('bigw')) return 'bigw';
+  if (contact.includes('bunnings')) return 'bunnings';
+  if (contact.includes('mydeal') || contact.includes('my deal')) return 'mydeal';
+  if (contact.includes('catch')) return 'catch';
+  if (contact.includes('ebay')) return 'ebay_au';
+  if (ref.startsWith('lmb-')) return 'amazon_au';
   return 'unknown';
-}
-
-function isLikelyMarketplaceInvoice(reference: string, contactName: string): boolean {
-  if (detectMarketplace(reference, contactName) !== 'unknown') return true;
-  const ref = (reference || '').toLowerCase();
-  return ref.startsWith('xettle-') || ref.startsWith('amzn-') || ref.startsWith('lmb-') || ref.includes('settlement') || ref.includes('payout');
-}
-
-async function loadOutstandingCache(supabase: any, userId: string): Promise<{ payload: any; cached_at: string | null } | null> {
-  try {
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', userId)
-      .eq('key', 'xero_outstanding_cache_v1')
-      .maybeSingle();
-
-    if (!data?.value) return null;
-
-    const parsed = JSON.parse(data.value);
-
-    // Current cache shape
-    if (parsed?.payload) {
-      return {
-        payload: parsed.payload,
-        cached_at: parsed.cached_at || null,
-      };
-    }
-
-    // Backward-compatible fallback (legacy payload-only cache)
-    return {
-      payload: parsed,
-      cached_at: null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function saveOutstandingCache(supabase: any, userId: string, payload: any) {
-  try {
-    await supabase.from('app_settings').upsert({
-      user_id: userId,
-      key: 'xero_outstanding_cache_v1',
-      value: JSON.stringify({
-        cached_at: new Date().toISOString(),
-        payload,
-      }),
-    }, { onConflict: 'user_id,key' });
-  } catch (e) {
-    console.warn('[fetch-outstanding] Failed to write cache:', e);
-  }
 }
 
 Deno.serve(async (req) => {
@@ -199,27 +112,6 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const cachedRecord = await loadOutstandingCache(supabase, userId);
-    const cachedPayload = cachedRecord?.payload || null;
-    const cacheAgeSeconds = cachedRecord?.cached_at
-      ? Math.max(0, Math.floor((Date.now() - new Date(cachedRecord.cached_at).getTime()) / 1000))
-      : null;
-
-    // Serve warm cache for a short window to reduce Xero API pressure
-    if (cachedPayload && cacheAgeSeconds !== null && cacheAgeSeconds < 90) {
-      return new Response(JSON.stringify({
-        ...cachedPayload,
-        sync_info: {
-          ...(cachedPayload.sync_info || {}),
-          from_cache: true,
-          cache_age_seconds: cacheAgeSeconds,
-        },
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     // Get Xero token
     const { data: tokens } = await supabase
       .from('xero_tokens')
@@ -229,14 +121,11 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (!tokens?.length) {
+      // No Xero connection — return empty result instead of error
       return new Response(JSON.stringify({
-        error: 'No Xero connection',
-        rows: [],
-        total_outstanding: 0,
-        invoice_count: 0,
-        matched_with_settlement: 0,
-        bank_deposit_found: 0,
-        ready_to_reconcile: 0,
+        invoices: [],
+        summary: { total_outstanding: 0, matched_with_settlement: 0, bank_deposit_found: 0, ready_to_reconcile: 0, total_invoices: 0 },
+        aggregate_groups: [],
       }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -254,10 +143,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const accountingBoundary = boundaryRow?.value || null;
 
-    // ─── Fetch only outstanding sales invoices (ACCREC + AUTHORISED + AmountDue>0) ───
-    // Keep this query narrow to avoid hitting Xero rate limits.
-    const invoiceWhere = encodeURIComponent(`Type=="ACCREC" AND Status=="AUTHORISED" AND AmountDue>0`);
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${invoiceWhere}&order=Date DESC`;
+    // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
+    // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
+    const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
     const xeroResp = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token.access_token}`,
@@ -269,64 +158,24 @@ Deno.serve(async (req) => {
     if (!xeroResp.ok) {
       const errText = await xeroResp.text();
       console.error('Xero invoice fetch failed:', xeroResp.status, errText);
-
-      // Soft-fail and preserve UX: if we have cached outstanding rows, return them.
-      const retryAfter = xeroResp.headers.get('Retry-After') || '60';
-      const isRateLimited = xeroResp.status === 429;
-      const isAuthError = xeroResp.status === 401 || xeroResp.status === 403;
-      const cached = cachedPayload;
-
-      const syncInfo = {
-        xero_rate_limited: isRateLimited,
-        xero_auth_error: isAuthError,
-        xero_error: !isRateLimited && !isAuthError,
-        xero_status: xeroResp.status,
-        retry_after_seconds: isRateLimited ? (parseInt(retryAfter) || 60) : undefined,
-        from_cache: !!cached,
-        message: isAuthError
-          ? 'Xero token expired — please reconnect Xero'
-          : isRateLimited
-          ? 'Xero rate limited — retrying automatically'
-          : 'Xero temporarily unavailable',
-      };
-
-      if (cached) {
-        return new Response(JSON.stringify({
-          ...cached,
-          sync_info: {
-            ...(cached.sync_info || {}),
-            ...syncInfo,
-          },
-        }), {
-          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      return new Response(JSON.stringify({
-        invoices: [],
-        rows: [],
-        total_outstanding: 0,
-        invoice_count: 0,
-        matched_with_settlement: 0,
-        bank_deposit_found: 0,
-        ready_to_reconcile: 0,
-        sync_info: {
-          ...syncInfo,
-          status: 'rate_limited_no_cache',
-        },
-      }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      return new Response(JSON.stringify({ error: 'Failed to fetch Xero invoices', detail: errText.substring(0, 500) }), {
+        status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const xeroData = await xeroResp.json();
     const allInvoices = xeroData.Invoices || [];
 
-    // ─── Filter to likely marketplace invoices (contact OR reference signals) ───
+    // ─── Filter to known marketplace contacts only ───
+    const MARKETPLACE_CONTACT_PATTERNS = [
+      'amazon', 'shopify', 'ebay', 'catch', 'kogan', 'bigw', 'big w',
+      'everyday market', 'mydeal', 'bunnings', 'woolworths', 'mirakl',
+      'tradesquare', 'temu', 'walmart',
+    ];
+
     const invoices = allInvoices.filter((inv: any) => {
-      const contact = inv.Contact?.Name || '';
-      const reference = inv.Reference || '';
-      return isLikelyMarketplaceInvoice(reference, contact);
+      const contact = (inv.Contact?.Name || '').toLowerCase();
+      return MARKETPLACE_CONTACT_PATTERNS.some(p => contact.includes(p));
     });
 
     // ─── Get user's settlements for matching (including bank match fields) ───
@@ -365,44 +214,28 @@ Deno.serve(async (req) => {
       preSeededSet.add(m.settlement_id);
     }
 
-    // ─── Read Amazon rate-limit cooldown (for UI messaging) ───
-    const { data: amazonRateLimitSetting } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', userId)
-      .eq('key', 'amazon_rate_limit_until')
-      .maybeSingle();
-
-    const amazonRateLimitUntil = amazonRateLimitSetting?.value || null;
-    const amazonRateLimited = !!amazonRateLimitUntil && new Date(amazonRateLimitUntil) > new Date();
-
-    // ─── Use cached bank transactions from our local ingestion pipeline (last 90 days) ───
-    // This avoids an extra live Xero call per request and reduces rate-limit pressure.
+    // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const ninetyDaysAgoIso = ninetyDaysAgo.toISOString().split('T')[0];
+    const [y, m, d] = ninetyDaysAgo.toISOString().split('T')[0].split('-');
+    const bankWhere = `Type=="RECEIVE" AND Date>=DateTime(${y}, ${m}, ${d})`;
 
     let bankTxns: any[] = [];
     try {
-      const { data: bankRows } = await supabase
-        .from('bank_transactions')
-        .select('xero_transaction_id, amount, date, reference, description, contact_name, bank_account_name')
-        .eq('user_id', userId)
-        .gte('date', ninetyDaysAgoIso)
-        .order('date', { ascending: false })
-        .limit(1000);
-
-      bankTxns = (bankRows || []).map((row: any) => ({
-        BankTransactionID: row.xero_transaction_id,
-        Total: row.amount || 0,
-        Date: row.date,
-        Reference: row.reference || '',
-        LineItems: [{ Description: row.description || '' }],
-        Contact: { Name: row.contact_name || '' },
-        BankAccount: { Name: row.bank_account_name || '' },
-      }));
+      const bankUrl = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(bankWhere)}`;
+      const bankResp = await fetch(bankUrl, {
+        headers: {
+          'Authorization': `Bearer ${token.access_token}`,
+          'Accept': 'application/json',
+          'Xero-tenant-id': token.tenant_id,
+        },
+      });
+      if (bankResp.ok) {
+        const bankData = await bankResp.json();
+        bankTxns = bankData?.BankTransactions || [];
+      }
     } catch (e) {
-      console.error('Bank txn cache read error:', e);
+      console.error('Bank txn fetch error:', e);
     }
 
     // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
@@ -546,7 +379,6 @@ Deno.serve(async (req) => {
     let matchedWithSettlement = 0;
     let bankDepositFound = 0;
     let readyToReconcile = 0;
-    let awaitingSyncCount = 0;
 
     for (const inv of invoices) {
       const reference = inv.Reference || '';
@@ -610,10 +442,8 @@ Deno.serve(async (req) => {
       const isConfirmed = settlement?.bank_tx_id && settlement?.bank_match_confirmed_at;
 
       // Try to find matching bank deposit (exact 1:1 for non-Amazon)
-      const detectedMarketplace = detectMarketplace(reference, contactName);
-      const settlementMarketplace = normaliseMarketplaceCode(settlement?.marketplace);
-      const marketplace = detectedMarketplace !== 'unknown' ? detectedMarketplace : settlementMarketplace;
-      const isMarketplace = marketplace !== 'unknown' || isLikelyMarketplaceInvoice(reference, contactName);
+      const marketplace = detectMarketplace(reference, contactName);
+      const isMarketplace = marketplace !== 'unknown';
       let bankMatch: any = null;
       let bankDifference: number | null = null;
 
@@ -676,7 +506,6 @@ Deno.serve(async (req) => {
             mydeal: ['mydeal'],
             catch: ['catch'],
             ebay_au: ['ebay'],
-            woolworths_marketplus: ['woolworths', 'everyday market', 'marketplus'],
           };
 
           const patterns = marketplacePatterns[marketplace] || [];
@@ -725,7 +554,6 @@ Deno.serve(async (req) => {
       } else if (!hasSettlement && settlementId && preSeededSet.has(settlementId)) {
         // Pre-seeded by sync-xero-status — settlement data is expected from API sync
         matchStatus = 'awaiting_sync';
-        awaitingSyncCount++;
       } else {
         matchStatus = 'no_settlement';
       }
@@ -784,7 +612,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const responsePayload = {
+    return new Response(JSON.stringify({
       success: true,
       total_outstanding: totalOutstanding,
       invoice_count: invoices.length,
@@ -792,17 +620,7 @@ Deno.serve(async (req) => {
       bank_deposit_found: bankDepositFound,
       ready_to_reconcile: readyToReconcile,
       rows,
-      sync_info: {
-        unmatched_count: Math.max(0, invoices.length - matchedWithSettlement),
-        awaiting_sync_count: awaitingSyncCount,
-        amazon_rate_limited: amazonRateLimited,
-        amazon_rate_limit_until: amazonRateLimitUntil,
-      },
-    };
-
-    await saveOutstandingCache(supabase, userId, responsePayload);
-
-    return new Response(JSON.stringify(responsePayload), {
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

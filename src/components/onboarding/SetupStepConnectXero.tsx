@@ -9,17 +9,15 @@ interface Props {
   onNext: () => void;
   onSkip: () => void;
   hasXero: boolean;
-  onConnecting?: (connecting: boolean) => void;
-  onFireBackgroundScan?: (fnName: string) => void; // Legacy — no longer used
+  onFireBackgroundScan?: (fnName: string) => void;
 }
 
-export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onConnecting }: Props) {
+export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onFireBackgroundScan }: Props) {
   const [connecting, setConnecting] = useState(false);
   const [showSkipWarning, setShowSkipWarning] = useState(false);
 
   const handleConnect = async () => {
     setConnecting(true);
-    onConnecting?.(true);
     try {
       const redirectUri = 'https://xettle.app/xero/callback';
       const { data, error } = await supabase.functions.invoke('xero-auth', {
@@ -38,12 +36,14 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onConnec
     } catch (err: any) {
       toast.error(err.message || 'Failed to start Xero connection');
       setConnecting(false);
-      onConnecting?.(false);
     }
   };
 
-  // No background scan fired from wizard — dashboard handles discovery
   const handleContinue = () => {
+    // Fire background scan if Xero is connected
+    if (hasXero && onFireBackgroundScan) {
+      onFireBackgroundScan('scan-xero-history');
+    }
     onNext();
   };
 

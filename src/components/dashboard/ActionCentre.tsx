@@ -60,8 +60,6 @@ interface ActionCentreProps {
   onSwitchToUpload: (missing?: MissingSettlement[]) => void;
   onSwitchToSettlements: () => void;
   userName?: string;
-  userId?: string;
-  userCreatedAt?: string;
 }
 
 // Status icons for the timeline grid
@@ -98,8 +96,6 @@ export default function ActionCentre({
   onSwitchToUpload,
   onSwitchToSettlements,
   userName,
-  userId,
-  userCreatedAt: authUserCreatedAt,
 }: ActionCentreProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);
@@ -121,73 +117,28 @@ export default function ActionCentre({
   };
 
   const loadData = useCallback(async () => {
-    if (!userId) {
-      setRows([]);
-      setEvents([]);
-      setApiSyncedMarketplaces(new Set());
-      setConnectedMarketplaces([]);
-      setLastAutoSync(null);
-      setUnmatchedDeposits({ count: 0, total: 0 });
-      setLoading(false);
-      return;
-    }
-
     try {
-      const [validationRes, eventsRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, depositAlertsRes] = await Promise.all([
-        supabase
-          .from('marketplace_validation')
-          .select('*')
-          .eq('user_id', userId)
-          .order('marketplace_code')
-          .order('period_start', { ascending: false }),
-        supabase
-          .from('system_events')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(5),
-        supabase
-          .from('settlements')
-          .select('marketplace')
-          .eq('user_id', userId)
-          .eq('source', 'api'),
-        supabase
-          .from('app_settings')
-          .select('value')
-          .eq('user_id', userId)
-          .eq('key', 'accounting_boundary_date')
-          .maybeSingle(),
-        supabase
-          .from('marketplace_connections')
-          .select('marketplace_code')
-          .eq('user_id', userId)
-          .order('created_at'),
-        supabase
-          .from('sync_history')
-          .select('created_at')
-          .eq('user_id', userId)
-          .eq('event_type', 'scheduled_sync')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('channel_alerts')
-          .select('deposit_amount, total_revenue, alert_type')
-          .eq('user_id', userId)
-          .eq('status', 'pending')
-          .eq('alert_type', 'unmatched_deposit'),
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, depositAlertsRes] = await Promise.all([
+        supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
+        supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
+        supabase.auth.getUser(),
+        supabase.from('settlements').select('marketplace').eq('source', 'api'),
+        supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
+        supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
+        supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('channel_alerts').select('deposit_amount, total_revenue, alert_type').eq('status', 'pending').eq('alert_type', 'unmatched_deposit'),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
       if (eventsRes.data) setEvents(eventsRes.data as SystemEvent[]);
-      if (authUserCreatedAt) setUserCreatedAt(new Date(authUserCreatedAt));
+      if (userRes.data?.user?.created_at) setUserCreatedAt(new Date(userRes.data.user.created_at));
       if (apiSettlementsRes.data) {
         setApiSyncedMarketplaces(new Set(apiSettlementsRes.data.map((s: any) => s.marketplace)));
       }
       if (boundaryRes.data?.value) {
         setAccountingBoundary(boundaryRes.data.value);
-      } else if (authUserCreatedAt) {
-        setAccountingBoundary(authUserCreatedAt.substring(0, 10));
+      } else if (userRes.data?.user?.created_at) {
+        setAccountingBoundary(userRes.data.user.created_at.substring(0, 10));
       }
       if (connectionsRes.data) {
         setConnectedMarketplaces(connectionsRes.data.map((c: any) => c.marketplace_code));
@@ -195,6 +146,7 @@ export default function ActionCentre({
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
+      // Unmatched deposit alerts
       if (depositAlertsRes.data && depositAlertsRes.data.length > 0) {
         const total = (depositAlertsRes.data as any[]).reduce((sum: number, a: any) => sum + (a.deposit_amount || a.total_revenue || 0), 0);
         setUnmatchedDeposits({ count: depositAlertsRes.data.length, total });
@@ -206,7 +158,7 @@ export default function ActionCentre({
     } finally {
       setLoading(false);
     }
-  }, [authUserCreatedAt, userId]);
+  }, []);
 
 
 
@@ -220,20 +172,16 @@ export default function ActionCentre({
   }, [loadData]);
 
   useEffect(() => {
-    if (!userId) return;
-
-    const userFilter = `user_id=eq.${userId}`;
     const channel = supabase
-      .channel(`action-centre-live-${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation', filter: userFilter }, () => debouncedLoadData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_events', filter: userFilter }, () => debouncedLoadData())
+      .channel('action-centre-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation' }, () => debouncedLoadData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_events' }, () => debouncedLoadData())
       .subscribe();
-
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
-  }, [debouncedLoadData, userId]);
+  }, [debouncedLoadData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

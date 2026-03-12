@@ -55,34 +55,18 @@ export default function Auth() {
     }
     setIsLoading(true);
     try {
-      let lastError: any = null;
-
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const { error } = await supabase.auth.signInWithPassword({ email: sanitizedEmail, password: signInData.password });
-
-        if (!error) {
-          toast({ title: "Welcome back!", description: "You have been signed in successfully." });
-          navigate('/dashboard');
-          return;
-        }
-
-        lastError = error;
-        const retryable = /timeout|deadline|network|failed to fetch|request_timeout|unexpected_failure|context canceled|context deadline exceeded/i.test(error.message || '');
-        if (attempt === 0 && retryable) {
-          await new Promise((resolve) => setTimeout(resolve, 700));
-          continue;
-        }
-
+      const { error } = await supabase.auth.signInWithPassword({ email: sanitizedEmail, password: signInData.password });
+      if (error) {
+        // If email not confirmed, offer resend
         if (error.message.toLowerCase().includes('email not confirmed')) {
           setResendEmail(sanitizedEmail);
           setShowResendVerification(true);
         }
-
         toast({ title: "Sign In Failed", description: error.message, variant: "destructive" });
         return;
       }
-
-      toast({ title: "Sign In Failed", description: lastError?.message || "Please try again.", variant: "destructive" });
+      toast({ title: "Welcome back!", description: "You have been signed in successfully." });
+      navigate('/dashboard');
     } catch {
       toast({ title: "Sign In Failed", description: "An unexpected error occurred", variant: "destructive" });
     } finally {

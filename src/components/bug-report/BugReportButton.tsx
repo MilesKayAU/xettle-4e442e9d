@@ -16,36 +16,20 @@ export default function BugReportButton() {
   const [userEmail, setUserEmail] = useState('');
   const errorsRef = useRef<ConsoleError[]>([]);
 
+  // Check if user has admin role
   useEffect(() => {
     let mounted = true;
-
-    const updateFromSession = async (session: any) => {
-      const currentUser = session?.user;
-      if (!mounted) return;
-
-      if (!currentUser) {
-        setUserEmail('');
-        setVisible(false);
-        return;
-      }
-
-      setUserEmail(currentUser.email || '');
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !mounted) return;
+      setUserEmail(user.email || '');
       const { data } = await supabase.rpc('has_role', { _role: 'admin' });
       if (mounted) setVisible(!!data);
     };
 
-    supabase.auth.getSession().then(({ data }) => {
-      updateFromSession(data.session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      updateFromSession(session);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    check();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { check(); });
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
   // Intercept console errors

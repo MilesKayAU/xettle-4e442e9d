@@ -270,10 +270,9 @@ export default function ReconciliationStatus({ marketplaceCode, userId }: Reconc
 
 interface ReconciliationHealthProps {
   className?: string;
-  userId?: string;
 }
 
-export function ReconciliationHealth({ className, userId }: ReconciliationHealthProps) {
+export function ReconciliationHealth({ className }: ReconciliationHealthProps) {
   const [data, setData] = useState<{
     total: number;
     matched: number;
@@ -284,23 +283,18 @@ export function ReconciliationHealth({ className, userId }: ReconciliationHealth
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!userId) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
-
     loadHealth();
-  }, [userId]);
+  }, []);
 
   async function loadHealth() {
-    if (!userId) return;
-
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data: checks, error } = await supabase
         .from('reconciliation_checks')
         .select('marketplace_code, status')
-        .eq('user_id', userId);
+        .eq('user_id', user.id);
 
       if (error) throw error;
       if (!checks || checks.length === 0) {

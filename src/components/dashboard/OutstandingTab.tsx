@@ -23,7 +23,7 @@
  * See: architecture rule #11
  */
 
-import { useState, useCallback, useEffect, Fragment, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
 import { Switch } from '@/components/ui/switch';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -155,17 +155,10 @@ interface OutstandingSummary {
   bank_deposit_found: number;
   ready_to_reconcile: number;
   rows: OutstandingRow[];
-  sync_info?: {
-    unmatched_count: number;
-    awaiting_sync_count: number;
-    amazon_rate_limited: boolean;
-    amazon_rate_limit_until: string | null;
-  };
 }
 
 interface Props {
   onSwitchToUpload: () => void;
-  discoveryComplete?: boolean;
 }
 
 const GATEWAY_LABELS: Record<string, string> = {
@@ -188,19 +181,14 @@ const MARKETPLACE_LABELS: Record<string, string> = {
   bunnings: 'Bunnings',
   mydeal: 'MyDeal',
   catch: 'Catch',
-  catch_au: 'Catch',
   ebay_au: 'eBay',
-  woolworths_marketplus: 'Woolworths Everyday Market',
-  woolworths_mp: 'Woolworths Everyday Market',
   unknown: 'Unknown',
 };
 
-export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = true }: Props) {
+export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [data, setData] = useState<OutstandingSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const [rateLimitRetrySeconds, setRateLimitRetrySeconds] = useState<number | null>(null);
-  const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<Set<string>>(new Set());
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -223,15 +211,6 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
     return data.rows.filter(r => r.is_marketplace !== false);
   }, [data, showNonMarketplace]);
 
-  const hasOnlyUnclassifiedRows = useMemo(() => {
-    if (!data || showNonMarketplace) return false;
-    return data.rows.length > 0 && filteredRows.length === 0 && data.rows.some(r => r.is_marketplace === false);
-  }, [data, filteredRows.length, showNonMarketplace]);
-
-  useEffect(() => {
-    if (hasOnlyUnclassifiedRows) setShowNonMarketplace(true);
-  }, [hasOnlyUnclassifiedRows]);
-
   const nonMarketplaceCount = useMemo(() => {
     if (!data) return 0;
     return data.rows.filter(r => r.is_marketplace === false).length;
@@ -252,12 +231,9 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
 
   const [noXeroConnection, setNoXeroConnection] = useState(false);
 
-  const [xeroSyncMessage, setXeroSyncMessage] = useState<string | null>(null);
-
   const fetchOutstanding = useCallback(async () => {
     setLoading(true);
     setNoXeroConnection(false);
-    setXeroSyncMessage(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
@@ -274,61 +250,17 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
       }
 
       if (resp.error) throw resp.error;
-
-      // Handle soft Xero errors (rate limit, auth, transient)
-      const syncInfo = resp.data?.sync_info;
-      if (syncInfo?.xero_auth_error || syncInfo?.xero_rate_limited || syncInfo?.xero_error) {
-        setXeroSyncMessage(syncInfo.message || 'Xero temporarily unavailable');
-      }
-
-      // Auto-retry on rate limit with no cache (empty rows)
-      const rows = resp.data?.rows || [];
-      if (syncInfo?.xero_rate_limited && rows.length === 0 && syncInfo?.retry_after_seconds) {
-        const retryIn = Math.min(syncInfo.retry_after_seconds, 90);
-        setRateLimitRetrySeconds(retryIn);
-        // Start countdown
-        if (retryTimerRef.current) clearInterval(retryTimerRef.current);
-        retryTimerRef.current = setInterval(() => {
-          setRateLimitRetrySeconds(prev => {
-            if (prev === null || prev <= 1) {
-              if (retryTimerRef.current) clearInterval(retryTimerRef.current);
-              retryTimerRef.current = null;
-              // Auto-retry
-              setTimeout(() => fetchOutstanding(), 500);
-              return null;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-      } else {
-        setRateLimitRetrySeconds(null);
-        if (retryTimerRef.current) clearInterval(retryTimerRef.current);
-      }
-
       setData(resp.data as OutstandingSummary);
       setHasLoaded(true);
       setSelected(new Set());
     } catch (err: any) {
       toast.error(`Failed to fetch outstanding: ${err.message}`);
-      setHasLoaded(true);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Only auto-fetch when discovery is complete (prevents Xero API call storm)
-  useEffect(() => {
-    if (discoveryComplete) {
-      fetchOutstanding();
-    }
-  }, [discoveryComplete]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (retryTimerRef.current) clearInterval(retryTimerRef.current);
-    };
-  }, []);
+  useEffect(() => { fetchOutstanding(); }, []);
 
   // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
   // PAYMENT VERIFICATION LAYER ONLY
@@ -734,7 +666,6 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
       return `Gap: $${gap}`;
     }
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      if (isAmazon(row) && row.settlement_status === 'synced_external') return 'In Xero — awaiting deposit';
       return isAmazon(row) ? 'Awaiting deposit' : 'No deposit found';
     }
     if (row.match_status === 'no_bank_deposit') return 'No deposit found';
@@ -1006,46 +937,22 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
         </Button>
       </div>
 
-      {/* Xero sync issue banner */}
-      {xeroSyncMessage && (
-        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
-          <Clock3 className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{xeroSyncMessage}</p>
-            <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">This is normal — no action required. Will retry automatically.</p>
+      {/* Sync-in-progress banner — shown when most invoices have no settlement match */}
+      {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <Loader2 className="h-5 w-5 text-amber-600 dark:text-amber-400 animate-spin shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Settlement sync in progress
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              Xettle is fetching your Amazon and Shopify settlement data in the background. This can take a few minutes
+              on first setup — settlements will automatically match to these invoices as they arrive.
+              Refresh this page shortly to see updated matches.
+            </p>
           </div>
-          <Button variant="outline" size="sm" onClick={fetchOutstanding} disabled={loading} className="gap-1.5 text-xs">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Retry
-          </Button>
         </div>
       )}
-
-      {data && data.invoice_count > 0 && (() => {
-        const unmatchedCount = data.sync_info?.unmatched_count ?? Math.max(0, data.invoice_count - data.matched_with_settlement);
-        if (unmatchedCount <= 0) return null;
-
-        const rateLimited = !!data.sync_info?.amazon_rate_limited;
-        const retryAt = data.sync_info?.amazon_rate_limit_until
-          ? new Date(data.sync_info.amazon_rate_limit_until).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })
-          : null;
-
-        return (
-          <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
-            <Loader2 className="h-5 w-5 text-amber-600 dark:text-amber-400 animate-spin shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                {rateLimited ? 'Amazon sync is temporarily rate limited' : 'Settlement sync in progress'}
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                We&apos;ve matched {data.matched_with_settlement} of {data.invoice_count} invoices. {rateLimited && retryAt
-                  ? `Amazon will retry automatically after ${retryAt}.`
-                  : 'Remaining settlements will attach automatically as they import in the background.'}
-              </p>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Filter toggle */}
       {data && nonMarketplaceCount > 0 && (
@@ -1176,32 +1083,7 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
       )}
 
       {/* No data */}
-      {data && filteredRows.length === 0 && xeroSyncMessage && (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <Clock3 className="h-12 w-12 text-amber-500 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-foreground">
-              {rateLimitRetrySeconds !== null ? 'Waiting for Xero API\u2026' : 'Sync paused'}
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {rateLimitRetrySeconds !== null
-                ? `Retrying automatically in ${rateLimitRetrySeconds}s — this is normal.`
-                : "We're waiting for Xero API capacity to return."}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Your data is not cleared — it will appear automatically once the API window reopens.
-            </p>
-            {rateLimitRetrySeconds === null && (
-              <Button variant="outline" size="sm" className="mt-4" onClick={fetchOutstanding}>
-                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                Retry now
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {data && filteredRows.length === 0 && !xeroSyncMessage && (
+      {data && filteredRows.length === 0 && (
         <Card>
           <CardContent className="p-8 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-3" />

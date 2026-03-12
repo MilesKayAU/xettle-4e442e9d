@@ -61,34 +61,6 @@ export async function auditSubChannels(
     return { new_channels: [], existing_channels: [], total_new_orders: 0 };
   }
 
-  // ─── Skip source_names that match an already-connected API marketplace ───
-  // If the user has Amazon connected via SP-API, don't prompt them to "set up amazon tracking"
-  const { data: amazonToken } = await supabase
-    .from('amazon_tokens')
-    .select('id')
-    .limit(1)
-    .maybeSingle();
-
-  const apiConnectedPatterns = new Set<string>();
-  if (amazonToken) {
-    apiConnectedPatterns.add('amazon');
-    apiConnectedPatterns.add('amzn');
-  }
-
-  // Remove API-connected sources from channelMap
-  for (const src of Array.from(channelMap.keys())) {
-    for (const pattern of apiConnectedPatterns) {
-      if (src.includes(pattern)) {
-        channelMap.delete(src);
-        break;
-      }
-    }
-  }
-
-  if (channelMap.size === 0) {
-    return { new_channels: [], existing_channels: [], total_new_orders: 0 };
-  }
-
   // Check which source_names already exist in shopify_sub_channels
   const sourceNames = Array.from(channelMap.keys());
   const { data: existingRows } = await supabase

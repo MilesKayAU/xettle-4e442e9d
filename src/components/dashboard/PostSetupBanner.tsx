@@ -184,20 +184,8 @@ export default function PostSetupBanner({
               setShopifyStatus('rate_limited');
               return;
             }
-            // Auth errors = token expired, not a scary "connection error"
-            if (payoutsResult.statusCode === 401 || payoutsResult.statusCode === 403) {
-              setShopifyMessage('Shopify token expired — please reconnect');
-              setShopifyStatus('rate_limited');
-              return;
-            }
-            // 502/500 = transient server error, don't alarm the user
-            if (payoutsResult.statusCode && payoutsResult.statusCode >= 500) {
-              setShopifyMessage('Shopify temporarily unavailable — will retry automatically');
-              setShopifyStatus('rate_limited');
-              return;
-            }
-            setShopifyMessage('Shopify sync issue — will retry on next sync');
-            setShopifyStatus('rate_limited');
+            setShopifyMessage('Shopify connection error — check your connection');
+            setShopifyStatus('error');
             return;
           }
 

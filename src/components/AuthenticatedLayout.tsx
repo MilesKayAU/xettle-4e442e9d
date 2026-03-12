@@ -8,20 +8,13 @@ export default function AuthenticatedLayout() {
   const [userId, setUserId] = useState<string | undefined>();
 
   useEffect(() => {
-    let mounted = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) setUserId(data.session?.user?.id);
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) setUserId(session?.user?.id);
+      setUserId(session?.user?.id);
     });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const trialInfo = useTrialStatus(userId);
