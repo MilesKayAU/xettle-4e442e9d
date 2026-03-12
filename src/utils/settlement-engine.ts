@@ -171,7 +171,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
     },
     {
       Description: 'Marketplace Commission',
-      AccountCode: getCode('Seller Fees'),
+      AccountCode: getCode('Seller Fees', mpLabel),
       TaxType: 'INPUT',
       UnitAmount: -Math.abs(Math.round(settlement.fees_ex_gst * 100) / 100),
       Quantity: 1,
