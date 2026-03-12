@@ -237,9 +237,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const [noXeroConnection, setNoXeroConnection] = useState(false);
 
+  const [xeroSyncMessage, setXeroSyncMessage] = useState<string | null>(null);
+
   const fetchOutstanding = useCallback(async () => {
     setLoading(true);
     setNoXeroConnection(false);
+    setXeroSyncMessage(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
@@ -256,11 +259,19 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       }
 
       if (resp.error) throw resp.error;
+
+      // Handle soft Xero errors (rate limit, auth, transient)
+      const syncInfo = resp.data?.sync_info;
+      if (syncInfo?.xero_auth_error || syncInfo?.xero_rate_limited || syncInfo?.xero_error) {
+        setXeroSyncMessage(syncInfo.message || 'Xero temporarily unavailable');
+      }
+
       setData(resp.data as OutstandingSummary);
       setHasLoaded(true);
       setSelected(new Set());
     } catch (err: any) {
       toast.error(`Failed to fetch outstanding: ${err.message}`);
+      setHasLoaded(true);
     } finally {
       setLoading(false);
     }
@@ -944,7 +955,21 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </Button>
       </div>
 
-      {/* Settlement sync banner */}
+      {/* Xero sync issue banner */}
+      {xeroSyncMessage && (
+        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <Clock3 className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{xeroSyncMessage}</p>
+            <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">This is normal — no action required. Will retry automatically.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchOutstanding} disabled={loading} className="gap-1.5 text-xs">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Retry
+          </Button>
+        </div>
+      )}
+
       {data && data.invoice_count > 0 && (() => {
         const unmatchedCount = data.sync_info?.unmatched_count ?? Math.max(0, data.invoice_count - data.matched_with_settlement);
         if (unmatchedCount <= 0) return null;
