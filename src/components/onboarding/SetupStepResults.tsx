@@ -48,6 +48,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
   const [timedOut, setTimedOut] = useState(false);
   const hasStarted = useRef(false);
   const scanStartTime = useRef(Date.now());
+  const stepStatusesRef = useRef<StepStatus[]>([]);
 
   const hasAnyApi = hasXero || hasAmazon || hasShopify;
 
@@ -71,7 +72,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
   }, []);
 
   const updateStep = useCallback((idx: number, status: StepStatus, message?: string) => {
-    setStepStatuses(prev => { const n = [...prev]; n[idx] = status; return n; });
+    setStepStatuses(prev => { const n = [...prev]; n[idx] = status; stepStatusesRef.current = n; return n; });
     if (message) setStepMessages(prev => { const n = [...prev]; n[idx] = message; return n; });
   }, []);
 
@@ -180,13 +181,23 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           await writeFlag('shopify_channel_scan_triggered');
           await writeFlag('shopify_scan_completed');
         }
-        if (caps.hasAmazon) await writeFlag('amazon_scan_completed');
         if (caps.hasXero) await writeFlag('xero_scan_completed');
+
+        // Check if any step ended in rate_limited — don't mark as fully complete
+        const hasRateLimited = stepStatusesRef.current.some(s => s === 'rate_limited');
+        if (caps.hasAmazon && !hasRateLimited) {
+          await writeFlag('amazon_scan_completed');
+        }
 
         if (!cancelled) {
           setProgressPercent(100);
           await loadPhaseBData();
-          setPhase('complete');
+          if (hasRateLimited) {
+            // Stay in scanning phase but show a "still syncing" message
+            setTimedOut(true);
+          } else {
+            setPhase('complete');
+          }
         }
       } catch (err) {
         console.error('[results] scan orchestration failed:', err);
@@ -274,12 +285,17 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           <h2 className="text-xl font-bold text-foreground">
             {hasAnyApi ? "Scanning your accounts…" : "Setting things up…"}
           </h2>
-          <p className="text-sm text-muted-foreground">
+           <p className="text-sm text-muted-foreground">
             {hasAnyApi
-              ? "This takes 1–3 minutes. You can wait here or go to your dashboard and watch it update in real time."
+              ? "This takes 2–15 minutes depending on your account size."
               : "Almost done — just finalising your setup."
             }
           </p>
+          {hasAnyApi && (
+            <p className="text-xs text-muted-foreground">
+              Larger accounts with many orders or invoices may take longer. You can leave and come back — we'll notify you when it's ready.
+            </p>
+          )}
         </div>
 
         {/* Progress bar */}
