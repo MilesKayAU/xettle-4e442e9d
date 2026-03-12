@@ -1347,6 +1347,7 @@ export type Database = {
           sales_principal: number | null
           sales_shipping: number | null
           seller_fees: number | null
+          settlement_fingerprint: string | null
           settlement_id: string
           source: string
           source_reference: string | null
@@ -1399,6 +1400,7 @@ export type Database = {
           sales_principal?: number | null
           sales_shipping?: number | null
           seller_fees?: number | null
+          settlement_fingerprint?: string | null
           settlement_id: string
           source?: string
           source_reference?: string | null
@@ -1451,6 +1453,7 @@ export type Database = {
           sales_principal?: number | null
           sales_shipping?: number | null
           seller_fees?: number | null
+          settlement_fingerprint?: string | null
           settlement_id?: string
           source?: string
           source_reference?: string | null
