@@ -437,7 +437,7 @@ export default function Setup() {
       if (isRetryable && attempt < 2) {
         const waitSec = (attempt + 1) * 10;
         console.warn(`[setup] Amazon ${result.statusCode} — retrying in ${waitSec}s (attempt ${attempt + 1})`);
-        setAmazonStep({ status: 'rate_limited', message: `Rate limited — retrying in ${waitSec}s…`, error: result.error });
+        setAmazonStep({ status: 'rate_limited', message: `Waiting for Amazon API — retrying in ${waitSec}s…` });
         await new Promise(r => setTimeout(r, waitSec * 1000));
         if (!mountedRef.current) return;
         setAmazonStep({ status: 'running', message: `Retrying Amazon fetch (attempt ${attempt + 2}/3)…` });
