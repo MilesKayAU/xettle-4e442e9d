@@ -62,8 +62,9 @@ async function syncPayoutsForUser(
     }
   }
 
-  // ─── Boundary: accounting_boundary_date controls Xero push status only,
-  //     all paid payouts are always fetched regardless. ──────────────
+  // ─── Boundary: accounting_boundary_date gates BOTH fetch window AND push status.
+  //     For API-fetched payouts, we only fetch from the boundary date forward
+  //     to avoid downloading hundreds of historical payouts already in Xero. ──
   let dateMin: string | null = null;
   const { data: boundarySetting } = await supabase
     .from("app_settings")
