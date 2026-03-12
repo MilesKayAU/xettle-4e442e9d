@@ -107,6 +107,57 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_transactions: {
+        Row: {
+          amount: number | null
+          bank_account_id: string | null
+          bank_account_name: string | null
+          contact_name: string | null
+          created_at: string | null
+          currency: string | null
+          date: string | null
+          description: string | null
+          fetched_at: string | null
+          id: string
+          reference: string | null
+          transaction_type: string | null
+          user_id: string
+          xero_transaction_id: string
+        }
+        Insert: {
+          amount?: number | null
+          bank_account_id?: string | null
+          bank_account_name?: string | null
+          contact_name?: string | null
+          created_at?: string | null
+          currency?: string | null
+          date?: string | null
+          description?: string | null
+          fetched_at?: string | null
+          id?: string
+          reference?: string | null
+          transaction_type?: string | null
+          user_id: string
+          xero_transaction_id: string
+        }
+        Update: {
+          amount?: number | null
+          bank_account_id?: string | null
+          bank_account_name?: string | null
+          contact_name?: string | null
+          created_at?: string | null
+          currency?: string | null
+          date?: string | null
+          description?: string | null
+          fetched_at?: string | null
+          id?: string
+          reference?: string | null
+          transaction_type?: string | null
+          user_id?: string
+          xero_transaction_id?: string
+        }
+        Relationships: []
+      }
       bug_reports: {
         Row: {
           ai_classification: string | null
@@ -838,6 +889,7 @@ export type Database = {
       }
       payment_verifications: {
         Row: {
+          confidence_score: number | null
           created_at: string | null
           gateway_code: string
           id: string
@@ -855,6 +907,7 @@ export type Database = {
           xero_tx_id: string | null
         }
         Insert: {
+          confidence_score?: number | null
           created_at?: string | null
           gateway_code: string
           id?: string
@@ -872,6 +925,7 @@ export type Database = {
           xero_tx_id?: string | null
         }
         Update: {
+          confidence_score?: number | null
           created_at?: string | null
           gateway_code?: string
           id?: string
