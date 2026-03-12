@@ -231,12 +231,22 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const [noXeroConnection, setNoXeroConnection] = useState(false);
 
-  const fetchOutstanding = useCallback(async () => {
+  const fetchOutstanding = useCallback(async (options?: { runSync?: boolean }) => {
     setLoading(true);
     setNoXeroConnection(false);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
+
+      if (options?.runSync) {
+        const syncResp = await supabase.functions.invoke('sync-xero-status', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+
+        if (syncResp.error) {
+          throw new Error(`Xero sync failed: ${syncResp.error.message}`);
+        }
+      }
 
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -250,6 +260,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       }
 
       if (resp.error) throw resp.error;
+      if ((resp.data as { source?: string })?.source === 'cache_fallback') {
+        toast.warning('Xero is temporarily rate limited — showing cached outstanding data while background sync continues.');
+      }
+
       setData(resp.data as OutstandingSummary);
       setHasLoaded(true);
       setSelected(new Set());
@@ -260,7 +274,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, []);
 
-  useEffect(() => { fetchOutstanding(); }, []);
+  useEffect(() => { fetchOutstanding({ runSync: true }); }, [fetchOutstanding]);
 
   // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
   // PAYMENT VERIFICATION LAYER ONLY
