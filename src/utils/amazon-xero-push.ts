@@ -53,7 +53,7 @@ export function buildAmazonInvoiceLineItems(
   parsedLines: ParsedSettlement['lines'],
   periodLabel: string,
   settlementId: string,
-  getAccountCode: (category: string) => string,
+  getAccountCode: (category: string, marketplace?: string) => string,
   ratio?: number,
   bankDeposit?: number,
 ): XeroLineItem[] {
