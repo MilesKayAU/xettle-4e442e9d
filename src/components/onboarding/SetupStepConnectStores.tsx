@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { supabase } from '@/integrations/supabase/client';
 import { supabase } from '@/integrations/supabase/client';
 import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload, ArrowRight, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
