@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import ReconciliationStatus from '@/components/shared/ReconciliationStatus';
 import FileReconciliationStatus from '@/components/shared/FileReconciliationStatus';
@@ -18,7 +18,10 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG, type UserMarketplace } from './MarketplaceSwitcher';
-import { formatSettlementDate, formatAUD } from '@/utils/settlement-engine';
+import { formatSettlementDate, formatAUD, GATEWAY_CODES } from '@/utils/settlement-engine';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
@@ -109,6 +112,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [hasShopify, setHasShopify] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
+  const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
+  const [includeGateways, setIncludeGateways] = useState(false);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
 
   // Auto-audit Xero status once settlements are loaded
@@ -170,15 +175,41 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const marketplaceName = def?.name || marketplace.marketplace_name;
 
 
-  // Filter settlements
-  const filteredSettlements = settlements.filter(s => {
-    if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
-    if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
-    return true;
-  });
+  // Detect unique marketplace codes in settlements for the marketplace filter
+  const uniqueMarketplaceCodes = useMemo(() => {
+    const codes = new Set(settlements.map(s => s.marketplace));
+    return Array.from(codes).sort();
+  }, [settlements]);
 
-  const attentionCount = settlements.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
-  const syncedCount = settlements.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
+  // Detect if any settlements are from payment gateways
+  const hasGatewaySettlements = useMemo(() => 
+    settlements.some(s => GATEWAY_CODES.has(s.marketplace)),
+  [settlements]);
+
+  // Filter settlements
+  const filteredSettlements = useMemo(() => {
+    return settlements.filter(s => {
+      // Gateway filter — exclude payment gateway settlements by default
+      if (!includeGateways && GATEWAY_CODES.has(s.marketplace)) return false;
+      // Marketplace filter
+      if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
+      // Status filter
+      if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
+      if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
+      return true;
+    });
+  }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
+
+  const baseFiltered = useMemo(() => {
+    return settlements.filter(s => {
+      if (!includeGateways && GATEWAY_CODES.has(s.marketplace)) return false;
+      if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
+      return true;
+    });
+  }, [settlements, marketplaceFilter, includeGateways]);
+
+  const attentionCount = baseFiltered.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
+  const syncedCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
 
   return (
     <div className="space-y-6">
@@ -249,7 +280,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                   settlementFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                All ({settlements.length})
+                All ({baseFiltered.length})
               </button>
               <button
                 onClick={() => setSettlementFilter('attention')}
@@ -270,6 +301,56 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             </div>
           )}
         </div>
+
+        {/* Advanced filters row */}
+        {settlements.length > 0 && (
+          <div className="flex items-center gap-4 flex-wrap">
+            {/* Marketplace filter — only show when multiple marketplace codes exist */}
+            {uniqueMarketplaceCodes.length > 1 && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Marketplace</Label>
+                <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
+                  <SelectTrigger className="h-7 w-[160px] text-xs">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All marketplaces</SelectItem>
+                    {uniqueMarketplaceCodes.filter(c => includeGateways || !GATEWAY_CODES.has(c)).map(c => {
+                      const cat = MARKETPLACE_CATALOG.find(m => m.code === c);
+                      return (
+                        <SelectItem key={c} value={c}>
+                          {cat?.icon || '📦'} {cat?.name || c}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Include gateways toggle — only show when gateway settlements exist */}
+            {hasGatewaySettlements && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="include-gateways"
+                  checked={includeGateways}
+                  onCheckedChange={setIncludeGateways}
+                  className="scale-75"
+                />
+                <Label htmlFor="include-gateways" className="text-xs text-muted-foreground cursor-pointer">
+                  Include payment gateways
+                </Label>
+              </div>
+            )}
+
+            {/* Settlement count */}
+            {filteredSettlements.length !== settlements.length && (
+              <span className="text-xs text-muted-foreground ml-auto">
+                Showing {filteredSettlements.length} of {settlements.length} settlements
+              </span>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <Card className="border-border">
