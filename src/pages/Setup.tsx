@@ -1031,6 +1031,9 @@ export default function Setup() {
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
               Phase 3 — Settlement status by marketplace
             </h2>
+            <p className="text-xs text-muted-foreground">
+              Upload settlement files for each marketplace to reconcile with your Xero account. Amazon syncs automatically once connected.
+            </p>
 
             {phase3Complete && phase3Breakdown.length > 0 ? (
               <div className="space-y-6">
