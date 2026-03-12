@@ -715,11 +715,16 @@ function formatPeriod(dateStr: string): string {
   return `${months[m - 1]} ${y}`;
 }
 
-function formatPeriodShort(dateStr: string): string {
+function formatPeriodShort(dateStr: string, endDateStr?: string): string {
   if (!dateStr || dateStr.length < 10) return dateStr;
   const [, m, d] = dateStr.split('-').map(Number);
   if (!m || !d || m < 1 || m > 12) return dateStr;
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (endDateStr && endDateStr.length >= 10) {
+    const [, em, ed] = endDateStr.split('-').map(Number);
+    if (em === m && ed !== d) return `${months[m - 1]} ${d}–${ed}`;
+    if (em !== m) return `${months[m - 1]} ${d}–${months[(em || 1) - 1]} ${ed}`;
+  }
   return `${months[m - 1]} ${d}`;
 }
 
