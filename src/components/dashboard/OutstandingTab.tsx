@@ -281,6 +281,30 @@ export default function OutstandingTab({ onSwitchToUpload, discoveryComplete = t
         setXeroSyncMessage(syncInfo.message || 'Xero temporarily unavailable');
       }
 
+      // Auto-retry on rate limit with no cache (empty rows)
+      const rows = resp.data?.rows || [];
+      if (syncInfo?.xero_rate_limited && rows.length === 0 && syncInfo?.retry_after_seconds) {
+        const retryIn = Math.min(syncInfo.retry_after_seconds, 90);
+        setRateLimitRetrySeconds(retryIn);
+        // Start countdown
+        if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+        retryTimerRef.current = setInterval(() => {
+          setRateLimitRetrySeconds(prev => {
+            if (prev === null || prev <= 1) {
+              if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+              retryTimerRef.current = null;
+              // Auto-retry
+              setTimeout(() => fetchOutstanding(), 500);
+              return null;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        setRateLimitRetrySeconds(null);
+        if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+      }
+
       setData(resp.data as OutstandingSummary);
       setHasLoaded(true);
       setSelected(new Set());
