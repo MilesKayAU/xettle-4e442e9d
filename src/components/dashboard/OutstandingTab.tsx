@@ -121,6 +121,30 @@ interface OutstandingRow {
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
   recent_bank_txns?: BankTxn[];
+  // Payment verification (Rule #11 — verification only, never accounting)
+  payment_verifications?: PaymentVerificationState[];
+}
+
+interface PaymentVerificationCandidate {
+  transaction_id: string;
+  amount: number;
+  date: string;
+  narration: string;
+  bank_account_name: string;
+  gateway_code: string;
+  order_count: number;
+  confidence: 'high' | 'medium' | 'low';
+  score: number;
+}
+
+interface PaymentVerificationState {
+  gateway_code: string;
+  gateway_label: string;
+  status: 'confirmed' | 'suggestion' | 'no_match' | 'manual' | 'no_feed';
+  candidates?: PaymentVerificationCandidate[];
+  confirmed_amount?: number;
+  confirmed_date?: string;
+  confirmed_method?: string;
 }
 
 interface OutstandingSummary {
@@ -135,6 +159,12 @@ interface OutstandingSummary {
 interface Props {
   onSwitchToUpload: () => void;
 }
+
+const GATEWAY_LABELS: Record<string, string> = {
+  paypal: 'PayPal',
+  shopify_payments: 'Shopify Payments',
+  manual_gateway: 'Manual',
+};
 
 const formatAUD = (n: number) =>
   new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
@@ -165,6 +195,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [showNonMarketplace, setShowNonMarketplace] = useState(false);
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
   const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
+  const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
