@@ -442,12 +442,9 @@ export default function Setup() {
       const isCooldown = errorType === 'cooldown' || result.error?.includes('cooldown');
 
       if (isRateLimit || isMutex || isCooldown) {
-        const msg = errorData.message || (isRateLimit
-          ? '⏱ Amazon API rate limited — this is temporary. Will retry automatically in 15 minutes.'
-          : isMutex
-            ? '⏱ Amazon sync already running. Will complete shortly.'
-            : '⏱ Amazon synced recently — will retry automatically in 1 hour.');
-        setAmazonStep({ status: 'success', message: msg });
+        // Silently mark as complete — background sync will handle the retry
+        console.info('[setup] Amazon rate-limited/mutex/cooldown — marking complete silently');
+        setAmazonStep({ status: 'success', message: '✅ Amazon connected — syncing in the background' });
         setAmazonProgress(100);
         setPhase1Amazon(true);
         await upsertSetting(userId, 'setup_phase1_amazon', 'true');
