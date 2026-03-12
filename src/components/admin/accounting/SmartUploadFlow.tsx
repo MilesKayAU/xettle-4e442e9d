@@ -850,7 +850,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                       transaction_type: row.type || 'charge',
                       posted_date: row.transactionDate ? (row.transactionDate.length >= 10 ? row.transactionDate.substring(0, 10) : row.transactionDate) : null,
                       marketplace_name: 'Shopify Payments',
-                      accounting_category: row.type === 'refund' ? 'refunds' : row.fee !== 0 ? 'fees' : 'sales',
+                      accounting_category: row.type === 'refund' ? 'refund' : row.fee !== 0 ? 'marketplace_fee' : 'revenue',
                     }));
                     for (let i = 0; i < lineRows.length; i += 500) {
                       await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
