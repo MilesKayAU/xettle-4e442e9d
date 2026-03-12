@@ -244,6 +244,7 @@ Deno.serve(async (req) => {
           const best = candidates[0]
 
           // ── Write high-confidence match to payment_verifications (suggestion only) ──
+          const singleGroupId = crypto.randomUUID()
           await adminSupabase.from('payment_verifications').upsert({
             user_id: userId,
             settlement_id: s.settlement_id,
@@ -256,6 +257,7 @@ Deno.serve(async (req) => {
             narration: best.narration,
             transaction_date: best.date,
             order_count: 0,
+            deposit_group_id: singleGroupId,
           }, { onConflict: 'settlement_id,gateway_code' } as any)
 
           // Update settlement status to deposit_matched (but NOT bank_verified)
