@@ -39,7 +39,8 @@ async function syncPayoutsForUser(
   userId: string,
   accessToken: string,
   shopDomain: string,
-  skipCooldown: boolean
+  skipCooldown: boolean,
+  syncFromParam?: string,
 ): Promise<{ synced: number; skipped: number; errors: string[] }> {
   const errors: string[] = [];
 

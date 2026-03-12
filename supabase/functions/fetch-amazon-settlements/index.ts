@@ -475,6 +475,16 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
         const report = sorted[i];
         if (!report.reportDocumentId) continue;
 
+        // Smart sync window: skip reports that ended before sync_from
+        if (syncFromParam && report.dataEndTime) {
+          const reportEnd = report.dataEndTime.split('T')[0];
+          if (reportEnd < syncFromParam) {
+            console.log(`[Sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${syncFromParam}`);
+            userSkipped++;
+            continue;
+          }
+        }
+
         if (i > 0) await new Promise(r => setTimeout(r, 3000));
 
         try {
