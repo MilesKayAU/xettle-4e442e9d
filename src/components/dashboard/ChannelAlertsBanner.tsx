@@ -86,6 +86,31 @@ function resolveMarketplaceCode(label: string | null, sourceName: string): strin
   return null;
 }
 
+const MARKETPLACE_CODE_ALIASES: Record<string, string[]> = {
+  everyday_market: ['woolworths'],
+  woolworths: ['everyday_market'],
+  ebay: ['ebay_au'],
+  ebay_au: ['ebay'],
+};
+
+function expandMarketplaceCodes(codes: string[]): Set<string> {
+  const expanded = new Set<string>();
+  for (const code of codes) {
+    const normalized = (code || '').toLowerCase().trim();
+    if (!normalized) continue;
+    expanded.add(normalized);
+    for (const alias of MARKETPLACE_CODE_ALIASES[normalized] || []) {
+      expanded.add(alias);
+    }
+  }
+  return expanded;
+}
+
+function isXeroContactOnlyAlert(alert: Pick<ChannelAlert, 'detection_method' | 'order_count'>): boolean {
+  return (alert.detection_method === 'xero_contact_standalone' || alert.detection_method === 'xero_contact')
+    && (alert.order_count === 0 || alert.order_count === null);
+}
+
 /** Get the best display name for an alert */
 function getDisplayName(alert: ChannelAlert): string {
   if (alert.detected_label) return alert.detected_label;
