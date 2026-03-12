@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   CheckCircle2, AlertTriangle, SkipForward, RefreshCw, ArrowRight,
   Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink, ArrowLeft, Copy, Check,
-  Square, HelpCircle
+  Square, HelpCircle, Clock3
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import XettleLogo from '@/components/shared/XettleLogo';
