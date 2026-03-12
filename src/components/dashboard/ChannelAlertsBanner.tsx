@@ -157,10 +157,16 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       }
 
       setAlerts(alertsData);
-      // Badge count: only genuinely actionable items (new channels needing setup, unlinked, deposits)
+      // Badge count: only genuinely actionable items
       const actionableCount = alertsData.filter(a => {
+        // Exclude unclassified Xero contacts (info-only, not actionable)
         const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-        return !isXeroContactOnly; // Exclude unclassified contacts from badge count
+        if (isXeroContactOnly) return false;
+        // Exclude payment gateway micro-transactions (PayPal $1.45 etc.)
+        if (a.alert_type === 'payment_gateway_deposit') return false;
+        // Exclude micro-deposits under $5 (noise from gateways)
+        if (a.alert_type === 'unmatched_deposit' && a.deposit_amount != null && Math.abs(a.deposit_amount) < 5) return false;
+        return true;
       }).length;
       onAlertCountChange?.(actionableCount);
 
