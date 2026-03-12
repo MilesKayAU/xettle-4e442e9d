@@ -108,6 +108,18 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
 
   const loadAlerts = async () => {
     try {
+      // Load payment processor registry to auto-exclude gateways
+      const { data: processorData } = await supabase
+        .from('payment_processor_registry')
+        .select('processor_code, processor_name, detection_keywords');
+      const gatewayKeywords = new Set<string>();
+      for (const p of (processorData || [])) {
+        gatewayKeywords.add((p.processor_name || '').toLowerCase());
+        for (const kw of (p.detection_keywords as string[] || [])) {
+          gatewayKeywords.add(kw.toLowerCase());
+        }
+      }
+
       const { data, error } = await supabase
         .from('channel_alerts' as any)
         .select('*')
@@ -116,14 +128,38 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         .order('order_count', { ascending: false });
 
       if (error) throw error;
-      const alertsData = ((data || []) as any[]).map((a: any) => ({
+      const rawAlerts = ((data || []) as any[]).map((a: any) => ({
         ...a,
         candidate_tags: typeof a.candidate_tags === 'string'
           ? JSON.parse(a.candidate_tags)
           : a.candidate_tags || [],
       })) as ChannelAlert[];
+
+      // Auto-reclassify gateway contacts as payment_gateway_deposit alerts
+      const alertsData: ChannelAlert[] = [];
+      for (const a of rawAlerts) {
+        const name = (a.source_name || '').toLowerCase();
+        const label = (a.detected_label || '').toLowerCase();
+        const isGateway = gatewayKeywords.has(name) || gatewayKeywords.has(label) ||
+          [...gatewayKeywords].some(kw => name.includes(kw) || label.includes(kw));
+        if (isGateway && a.alert_type !== 'payment_gateway_deposit') {
+          // Auto-dismiss gateway contacts silently
+          await supabase
+            .from('channel_alerts' as any)
+            .update({ status: 'auto_classified_gateway', actioned_at: new Date().toISOString() } as any)
+            .eq('id', a.id);
+          continue;
+        }
+        alertsData.push(a);
+      }
+
       setAlerts(alertsData);
-      onAlertCountChange?.(alertsData.length);
+      // Badge count: only genuinely actionable items (new channels needing setup, unlinked, deposits)
+      const actionableCount = alertsData.filter(a => {
+        const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
+        return !isXeroContactOnly; // Exclude unclassified contacts from badge count
+      }).length;
+      onAlertCountChange?.(actionableCount);
 
       if (alertsData.length === 0) {
         const { data: tokens } = await supabase
