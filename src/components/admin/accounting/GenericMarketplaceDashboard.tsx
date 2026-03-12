@@ -459,7 +459,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                 </div>
 
                 <div className="space-y-0">
-                  {filteredSettlements.map((s, idx) => {
+                  {paginatedSettlements.map((s, idx) => {
                     const sales = s.sales_principal || 0;
                     const fees = s.seller_fees || 0;
                     const net = s.bank_deposit || 0;
