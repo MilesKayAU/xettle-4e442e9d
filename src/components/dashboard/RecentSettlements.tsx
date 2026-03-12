@@ -98,7 +98,9 @@ function categorize(row: SettlementRow): StatusCategory {
   const xeroLinkedStatuses = ['synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'pushed_to_xero'];
   if (xeroLinkedStatuses.includes(row.status)) return 'posted';
   if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID' || row.xero_status === 'posted') return 'posted';
-  if (row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') return 'ready';
+  // Only 'ready_to_push' and 'parsed' are genuinely ready — 'saved' is still awaiting Xero check
+  if (row.status === 'parsed' || row.status === 'ready_to_push') return 'ready';
+  if (row.status === 'saved') return 'other';
   return 'other';
 }
 
