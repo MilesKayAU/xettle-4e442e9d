@@ -139,8 +139,9 @@ async function generateXeroFingerprint(marketplace: string, amount: number, date
 }
 
 // Generate the same fingerprint format as the DB trigger for exact matching
-async function generateSettlementStyleFingerprint(marketplace: string, periodStart: string, periodEnd: string, bankDeposit: number): Promise<string> {
-  const input = `${marketplace}|${periodStart}|${periodEnd}|${bankDeposit}`;
+// Uses net_ex_gst (net settlement amount) instead of bank_deposit for stability with split payouts
+async function generateSettlementStyleFingerprint(marketplace: string, periodStart: string, periodEnd: string, netAmount: number): Promise<string> {
+  const input = `${marketplace}|${periodStart}|${periodEnd}|${netAmount}`;
   const encoder = new TextEncoder();
   const data = encoder.encode(input);
   const hash = await crypto.subtle.digest('SHA-256', data);
