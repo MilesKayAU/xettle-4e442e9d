@@ -390,7 +390,9 @@ Deno.serve(async (req) => {
             console.log(`[scan-xero-history] Advertising platform contact ${contactName} → ignored`)
             continue
           }
-          // This marketplace exists as a Xero contact but has no invoices or bank txns yet
+          // Standalone contacts (no invoices or bank transactions) are informational only.
+          // They get a channel_alert for visibility but do NOT create marketplace_connections.
+          // A contact existing in Xero doesn't prove the user sells on that channel.
           standaloneContacts.push(contactName)
           detectedMap.set(marketplace, {
             marketplace,
@@ -402,7 +404,7 @@ Deno.serve(async (req) => {
           })
           hasMarketplaceContacts = true
 
-          // Also create a channel_alert for visibility in Setup Hub
+          // Create a channel_alert for visibility in Setup Hub (informational only)
           await supabase.from('channel_alerts').upsert({
             user_id: userId,
             source_name: marketplace,
@@ -496,6 +498,7 @@ Deno.serve(async (req) => {
 
     // ─── 6. PERSIST detected marketplaces as marketplace_connections ─
     // Payment processors get channel_alerts instead of marketplace_connections
+    // Standalone contacts (no invoices/bank txns) only get channel_alerts
     let marketplaces_created = 0
     let gateway_alerts_created = 0
     for (const det of detected_settlements) {
@@ -516,7 +519,7 @@ Deno.serve(async (req) => {
           console.log(`[scan-xero-history] Payment processor ${det.marketplace} → skipped (zero/negative amount)`)
           continue
         }
-        await supabase.from('channel_alerts').upsert({
+        await supabaseAdmin.from('channel_alerts').upsert({
           user_id: userId,
           source_name: det.marketplace,
           detected_label: displayName,
@@ -534,7 +537,15 @@ Deno.serve(async (req) => {
         continue
       }
 
-      const { error: upsertErr } = await supabase
+      // Standalone contacts (exist in Xero but no invoices or bank transactions)
+      // Only create channel_alerts, NOT marketplace_connections.
+      // A Xero contact alone doesn't prove the user sells on that platform.
+      if (det.source === 'contact_standalone') {
+        console.log(`[scan-xero-history] Standalone contact ${det.marketplace} → channel_alert only (no financial evidence)`)
+        continue
+      }
+
+      const { error: upsertErr } = await supabaseAdmin
         .from('marketplace_connections')
         .upsert({
           user_id: userId,
@@ -544,7 +555,7 @@ Deno.serve(async (req) => {
           connection_type: 'auto_detected',
           connection_status: 'active',
           settings: {
-            detected_from: det.source === 'contact_standalone' ? 'xero_contact' : 'xero_scan',
+            detected_from: 'xero_scan',
             last_xero_date: det.last_recorded_date,
             last_xero_amount: det.last_amount,
             xero_source: det.source,

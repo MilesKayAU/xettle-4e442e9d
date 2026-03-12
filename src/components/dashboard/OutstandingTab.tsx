@@ -1045,7 +1045,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <CardContent className="p-8 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-foreground">All clear!</h3>
-            <p className="text-sm text-muted-foreground mt-1">No invoices awaiting payment in Xero.</p>
+            <p className="text-sm text-muted-foreground mt-1">No marketplace invoices awaiting payment in Xero.</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              This means all invoices are either paid, or settlements haven't been pushed to Xero yet.
+              Check the <strong>Settlements</strong> tab to push any unsent settlements.
+            </p>
           </CardContent>
         </Card>
       )}
