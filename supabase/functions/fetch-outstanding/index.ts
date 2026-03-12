@@ -673,6 +673,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
+      source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
       total_outstanding: totalOutstanding,
       invoice_count: invoices.length,
       matched_with_settlement: matchedWithSettlement,
