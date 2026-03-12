@@ -121,6 +121,40 @@ Deno.serve(async (req) => {
       })
     }
 
+    // ─── STEP 1b: Check learned contact→account mappings ────────────
+    // If we have high-confidence learned mappings, use them instead of AI
+    let learnedMapping: Record<string, { code: string; name: string }> | null = null
+    if (body.contact_name) {
+      const { data: learned } = await supabase
+        .from('xero_contact_account_mappings')
+        .select('account_code, usage_count, confidence_pct')
+        .eq('user_id', userId)
+        .eq('contact_name', body.contact_name)
+        .gte('confidence_pct', 70)
+        .order('usage_count', { ascending: false })
+
+      if (learned && learned.length > 0) {
+        const accountLookup = new Map(xeroAccounts.map((a: any) => [a.code || a.Code, a.name || a.Name]))
+        // Build mapping from learned data — use the dominant account for each category
+        // Return early with learned mapping
+        console.log(`[ai-account-mapper] Using learned mapping for contact "${body.contact_name}" (${learned.length} codes, top confidence: ${learned[0].confidence_pct}%)`)
+
+        return new Response(JSON.stringify({
+          success: true,
+          mapping_source: 'learned_from_xero',
+          learned_accounts: learned.map((l: any) => ({
+            code: l.account_code,
+            name: (accountLookup.get(l.account_code) as string) || `Account ${l.account_code}`,
+            usage_count: l.usage_count,
+            confidence_pct: l.confidence_pct,
+          })),
+          accounts: xeroAccounts,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     // ─── STEP 2: AI Matching via Lovable AI ──────────────────────────
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
     if (!LOVABLE_API_KEY) {

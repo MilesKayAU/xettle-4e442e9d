@@ -60,6 +60,15 @@ export default function AccountingBoundarySettings({
 
   async function handleManualDateChange(date: Date | undefined) {
     if (!date) return;
+
+    // BUILD 1 — Reject future boundary dates
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (date > today) {
+      toast.error('Boundary date cannot be in the future — this would hide all your transactions');
+      return;
+    }
+
     setCustomDate(date);
     try {
       const { data: { user } } = await supabase.auth.getUser();

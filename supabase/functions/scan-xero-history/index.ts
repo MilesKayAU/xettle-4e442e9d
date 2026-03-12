@@ -544,8 +544,58 @@ Deno.serve(async (req) => {
       else console.error(`Failed to upsert marketplace_connection for ${det.marketplace}:`, upsertErr)
     }
 
+    // ─── 6b. Extract contact→account mappings from invoices ────────
+    const contactAccountCounts = new Map<string, Map<string, number>>()
+    try {
+      const invoiceData2 = await xeroGet(
+        `https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED,PAID&order=Date DESC&pageSize=100`,
+        accessToken, tenantId
+      )
+      for (const inv of (invoiceData2.Invoices || [])) {
+        const contactName = (inv.Contact?.Name || '').trim()
+        if (!contactName) continue
+        for (const li of (inv.LineItems || [])) {
+          const code = li.AccountCode
+          if (!code) continue
+          if (!contactAccountCounts.has(contactName)) {
+            contactAccountCounts.set(contactName, new Map())
+          }
+          const codeMap = contactAccountCounts.get(contactName)!
+          codeMap.set(code, (codeMap.get(code) || 0) + 1)
+        }
+      }
+
+      // Persist mappings with usage_count >= 3
+      for (const [contactName, codeMap] of contactAccountCounts) {
+        const totalUsage = Array.from(codeMap.values()).reduce((a, b) => a + b, 0)
+        for (const [code, count] of codeMap) {
+          if (count < 3) continue
+          const confidencePct = Math.round((count / totalUsage) * 100)
+          await supabaseAdmin.from('xero_contact_account_mappings').upsert({
+            user_id: userId,
+            contact_name: contactName,
+            account_code: code,
+            usage_count: count,
+            confidence_pct: confidencePct,
+            last_seen: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,contact_name,account_code' })
+        }
+      }
+      console.log(`[scan-xero-history] Contact→account mappings extracted for ${contactAccountCounts.size} contacts`)
+    } catch (e) {
+      console.error('Contact→account mapping extraction error:', e)
+    }
+
     // ─── 7. PERSIST accounting boundary date ────────────────────────
     if (accounting_boundary_date) {
+      // BUILD 1 — Reject future boundary dates server-side
+      const today = new Date().toISOString().split('T')[0]
+      if (accounting_boundary_date > today) {
+        console.warn(`[scan-xero-history] Boundary date ${accounting_boundary_date} is in the future — clamping to today`)
+        accounting_boundary_date = today
+      }
+
       const { data: existingBoundary } = await supabase
         .from('app_settings')
         .select('id')
