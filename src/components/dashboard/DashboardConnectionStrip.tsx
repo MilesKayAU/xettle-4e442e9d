@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 interface ConnectionStatus {
   label: string;
   connected: boolean;
+  synced?: boolean;
   detail?: string;
   lastSync?: string;
 }
