@@ -98,7 +98,9 @@ function categorize(row: SettlementRow): StatusCategory {
   const xeroLinkedStatuses = ['synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'pushed_to_xero'];
   if (xeroLinkedStatuses.includes(row.status)) return 'posted';
   if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID' || row.xero_status === 'posted') return 'posted';
-  if (row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') return 'ready';
+  // Only 'ready_to_push' and 'parsed' are genuinely ready — 'saved' is still awaiting Xero check
+  if (row.status === 'parsed' || row.status === 'ready_to_push') return 'ready';
+  if (row.status === 'saved') return 'other';
   return 'other';
 }
 
@@ -147,11 +149,19 @@ function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: strin
       </Badge>
     );
   }
-  if (status === 'parsed' || status === 'ready_to_push' || status === 'saved') {
+  if (status === 'ready_to_push' || status === 'parsed') {
     return (
       <Badge variant="outline" className="text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-900/30 dark:border-sky-800 text-xs">
         <Send className="h-3 w-3 mr-1" />
         Ready to Post
+      </Badge>
+    );
+  }
+  if (status === 'saved') {
+    return (
+      <Badge variant="outline" className="text-muted-foreground text-xs">
+        <Clock className="h-3 w-3 mr-1" />
+        Awaiting Xero Check
       </Badge>
     );
   }

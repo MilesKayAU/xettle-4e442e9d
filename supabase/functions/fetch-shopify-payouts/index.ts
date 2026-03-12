@@ -62,8 +62,9 @@ async function syncPayoutsForUser(
     }
   }
 
-  // ─── Boundary: accounting_boundary_date controls Xero push status only,
-  //     all paid payouts are always fetched regardless. ──────────────
+  // ─── Boundary: accounting_boundary_date gates BOTH fetch window AND push status.
+  //     For API-fetched payouts, we only fetch from the boundary date forward
+  //     to avoid downloading hundreds of historical payouts already in Xero. ──
   let dateMin: string | null = null;
   const { data: boundarySetting } = await supabase
     .from("app_settings")
@@ -83,10 +84,14 @@ async function syncPayoutsForUser(
 
   const buildInitialUrl = () => {
     const params = new URLSearchParams({ status: "paid" });
-    // Smart sync window: if sync_from provided, only fetch payouts from that date
+    // Smart sync window: use sync_from if provided, otherwise use boundary date
+    // This prevents downloading hundreds of historical payouts on first connect
     if (syncFromParam) {
       params.set("date_min", syncFromParam);
       console.log(`[fetch-shopify-payouts] Using sync_from filter: date_min=${syncFromParam}`);
+    } else if (dateMin) {
+      params.set("date_min", dateMin);
+      console.log(`[fetch-shopify-payouts] Using boundary date filter: date_min=${dateMin}`);
     }
     return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/shopify_payments/payouts.json?${params.toString()}`;
   };
@@ -282,8 +287,11 @@ async function syncPayoutsForUser(
       const feesExGst = Math.abs(totalFees) - gstOnExpenses;
       const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
+      // API-fetched payouts default to 'saved' — sync-xero-status determines
+      // the real status by checking if an invoice already exists in Xero.
+      // Only user-uploaded settlements get 'ready_to_push'.
       const isBeforeBoundary = dateMin && payoutDate < dateMin;
-      const settlementStatus = isBeforeBoundary ? "already_recorded" : "ready_to_push";
+      const settlementStatus = isBeforeBoundary ? "already_recorded" : "saved";
 
       // ─── Insert settlement ───────────────────────────────────
       const { error: insertError } = await supabase.from("settlements").insert({
@@ -379,7 +387,7 @@ async function syncPayoutsForUser(
             settlement_uploaded_at: new Date().toISOString(),
             settlement_id: String(payout.id),
             settlement_net: (existingVal.settlement_net || 0) + netPayout,
-            overall_status: isBeforeBoundary ? "already_recorded" : "ready_to_push",
+            overall_status: isBeforeBoundary ? "already_recorded" : "saved",
           })
           .eq("id", existingVal.id);
       } else {
@@ -393,7 +401,7 @@ async function syncPayoutsForUser(
           settlement_uploaded_at: new Date().toISOString(),
           settlement_id: String(payout.id),
           settlement_net: netPayout,
-          overall_status: isBeforeBoundary ? "already_recorded" : "ready_to_push",
+          overall_status: isBeforeBoundary ? "already_recorded" : "saved",
         } as any);
       }
 

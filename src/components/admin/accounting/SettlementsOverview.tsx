@@ -80,8 +80,10 @@ export default function SettlementsOverview({
           : null;
 
         // Unsent count
+        // Only count 'ready_to_push' and 'parsed' as unsent — NOT 'saved'
+        // 'saved' means the Xero sync hasn't checked it yet
         const unsentCount = marketplaceSettlements.filter(s =>
-          s.status === 'saved' || s.status === 'parsed'
+          s.status === 'ready_to_push' || s.status === 'parsed'
         ).length;
 
         // Determine status
@@ -151,7 +153,7 @@ export default function SettlementsOverview({
         .from('settlements')
         .select('*')
         .eq('marketplace', code)
-        .in('status', ['saved', 'parsed'])
+        .in('status', ['ready_to_push', 'parsed'])
         .order('period_end');
 
       if (error) throw error;
