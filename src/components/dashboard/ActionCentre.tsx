@@ -60,6 +60,8 @@ interface ActionCentreProps {
   onSwitchToUpload: (missing?: MissingSettlement[]) => void;
   onSwitchToSettlements: () => void;
   userName?: string;
+  userId?: string;
+  userCreatedAt?: string;
 }
 
 // Status icons for the timeline grid
