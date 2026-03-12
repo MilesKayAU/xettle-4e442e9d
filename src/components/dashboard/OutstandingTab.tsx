@@ -1484,6 +1484,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           pageSize={DEFAULT_PAGE_SIZE}
           onPageChange={setOutPage}
         />
+        </>
       )}
     </div>
   );
