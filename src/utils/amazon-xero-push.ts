@@ -268,7 +268,8 @@ export function buildJournalPreviewRows(
   };
 
   const getMapForCat = (cat: string) => {
-    if (cat === 'Sales - Principal' || cat === 'Sales - Shipping') return XERO_ACCOUNT_MAP['Sales'] || { code: '200', name: 'Amazon Sales AU' };
+    if (cat === 'Sales - Principal') return XERO_ACCOUNT_MAP['Sales'] || { code: '200', name: 'Amazon Sales AU' };
+    if (cat === 'Sales - Shipping') return XERO_ACCOUNT_MAP['Shipping'] || { code: '206', name: 'Shipping Income' };
     return XERO_ACCOUNT_MAP[cat] || { code: '000', name: cat };
   };
 
