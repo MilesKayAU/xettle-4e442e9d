@@ -1210,7 +1210,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                   </div>
                                 )}
                               </div>
-                              </div>
                             )}
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
