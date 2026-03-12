@@ -219,6 +219,106 @@ Deno.serve(async (req) => {
       console.error('Bank txn fetch error:', e);
     }
 
+    // ─── Amazon aggregate deposit matching ───
+    // Amazon batches multiple settlements into one bank deposit.
+    // Group Amazon invoices by payout date window and try to match the sum.
+    interface AggregateGroup {
+      id: string;
+      invoiceIds: string[];
+      sum: number;
+      dates: string[];
+      centreDate: Date;
+      bankMatch: any | null;
+    }
+
+    const amazonInvoices = invoices.filter((inv: any) => {
+      const contact = (inv.Contact?.Name || '').toLowerCase();
+      const ref = (inv.Reference || '').toLowerCase();
+      return ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon') || ref.startsWith('lmb-');
+    });
+
+    // Sort Amazon invoices by date
+    const sortedAmazon = [...amazonInvoices].sort((a: any, b: any) => {
+      const da = parseXeroDate(a.Date) || '';
+      const db = parseXeroDate(b.Date) || '';
+      return da.localeCompare(db);
+    });
+
+    // Group into 5-day payout windows
+    const aggregateGroups: AggregateGroup[] = [];
+    let currentGroup: AggregateGroup | null = null;
+
+    for (const inv of sortedAmazon) {
+      const invDate = parseXeroDate(inv.Date);
+      if (!invDate) continue;
+      const invDateMs = new Date(invDate).getTime();
+      const amount = inv.AmountDue || inv.Total || 0;
+
+      if (!currentGroup || (invDateMs - currentGroup.centreDate.getTime()) > 5 * 24 * 60 * 60 * 1000) {
+        // Start a new window
+        currentGroup = {
+          id: `agg_${invDate}_${aggregateGroups.length}`,
+          invoiceIds: [inv.InvoiceID],
+          sum: amount,
+          dates: [invDate],
+          centreDate: new Date(invDateMs),
+          bankMatch: null,
+        };
+        aggregateGroups.push(currentGroup);
+      } else {
+        currentGroup.invoiceIds.push(inv.InvoiceID);
+        currentGroup.sum += amount;
+        currentGroup.dates.push(invDate);
+        // Recalculate centre date
+        const allMs = currentGroup.dates.map(d => new Date(d).getTime());
+        const avgMs = allMs.reduce((a, b) => a + b, 0) / allMs.length;
+        currentGroup.centreDate = new Date(avgMs);
+      }
+    }
+
+    // Round sums and try to match each group against bank transactions
+    for (const group of aggregateGroups) {
+      if (group.invoiceIds.length < 2) continue; // Only aggregate for 2+ invoices
+      group.sum = Math.round(group.sum * 100) / 100;
+
+      for (const txn of bankTxns) {
+        const txnAmount = Math.abs(txn.Total || 0);
+        const txnDate = parseXeroDate(txn.Date);
+        if (!txnDate) continue;
+
+        const amountDiff = Math.abs(txnAmount - group.sum);
+        if (amountDiff > 1.00) continue; // Within $1.00
+
+        const daysDiff = Math.abs(
+          (new Date(txnDate).getTime() - group.centreDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        if (daysDiff > 5) continue;
+
+        // Check narration
+        const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''} ${txn.Reference || ''}`.toLowerCase();
+        if (narration.includes('amazon') || narration.includes('amzn')) {
+          group.bankMatch = {
+            amount: txnAmount,
+            date: txnDate,
+            reference: txn.Reference || '',
+            narration: txn.LineItems?.[0]?.Description || '',
+            transaction_id: txn.BankTransactionID,
+          };
+          break;
+        }
+      }
+    }
+
+    // Build lookup: invoiceId → aggregate group (if matched)
+    const aggregateLookup = new Map<string, AggregateGroup>();
+    for (const group of aggregateGroups) {
+      if (group.bankMatch) {
+        for (const invId of group.invoiceIds) {
+          aggregateLookup.set(invId, group);
+        }
+      }
+    }
+
     // ─── Build result rows ───
     const rows: any[] = [];
     let totalOutstanding = 0;
