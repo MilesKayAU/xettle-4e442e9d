@@ -109,14 +109,18 @@ export default function DashboardConnectionStrip({ onSwitchToUpload }: Props) {
           {i > 0 && <span className="text-muted-foreground mx-1">·</span>}
           {conn.connected ? (
             <span className="text-foreground">
-              <span className="text-emerald-500">🟢</span>{' '}
+              <span className={conn.synced ? 'text-emerald-500' : 'text-amber-400'}>
+                {conn.synced ? '🟢' : '🟡'}
+              </span>{' '}
               <span className="font-medium">{conn.label}</span>
               {conn.detail?.includes('rate limited') ? (
                 <span className="text-muted-foreground"> · {conn.detail}</span>
-              ) : conn.lastSync ? (
+              ) : conn.synced && conn.lastSync ? (
                 <span className="text-muted-foreground"> synced {conn.lastSync}</span>
+              ) : conn.synced ? (
+                <span className="text-muted-foreground"> synced</span>
               ) : (
-                <span className="text-muted-foreground"> connected</span>
+                <span className="text-muted-foreground"> connected — syncing…</span>
               )}
             </span>
           ) : (
