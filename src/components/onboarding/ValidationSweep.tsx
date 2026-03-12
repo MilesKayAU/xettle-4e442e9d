@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 
 interface ValidationRow {
   id: string;
@@ -88,6 +89,8 @@ export default function ValidationSweep({
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
   const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
@@ -192,54 +195,75 @@ export default function ValidationSweep({
     }
   };
 
-  const handlePushToXero = async (row: ValidationRow) => {
+  // Open preview modal for a single settlement
+  const openPushPreview = (row: ValidationRow) => {
     if (!row.settlement_id) return;
-    setPushing(row.id);
-    try {
-      const { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines } = await import('@/utils/settlement-engine');
-      
-      const { data: settlement } = await supabase
-        .from('settlements')
-        .select('*')
-        .eq('settlement_id', row.settlement_id)
-        .maybeSingle();
+    setPreviewSettlements([{ settlementId: row.settlement_id, marketplace: row.marketplace_code }]);
+    setPreviewOpen(true);
+  };
 
-      if (!settlement) throw new Error('Settlement not found');
+  // Open preview modal for ALL ready-to-push settlements
+  const openPushAllPreview = () => {
+    const items = readyToPushRows
+      .filter(r => r.settlement_id)
+      .map(r => ({ settlementId: r.settlement_id!, marketplace: r.marketplace_code }));
+    if (items.length === 0) return;
+    setPreviewSettlements(items);
+    setPreviewOpen(true);
+  };
 
-      const std = {
-        marketplace: settlement.marketplace || row.marketplace_code,
-        settlement_id: settlement.settlement_id,
-        period_start: settlement.period_start,
-        period_end: settlement.period_end,
-        sales_ex_gst: settlement.sales_principal || 0,
-        gst_on_sales: settlement.gst_on_income || 0,
-        fees_ex_gst: settlement.seller_fees || 0,
-        gst_on_fees: settlement.gst_on_expenses || 0,
-        net_payout: settlement.bank_deposit || 0,
-        source: 'csv_upload' as const,
-        reconciles: true,
-        metadata: {
-          refundsExGst: settlement.refunds || 0,
-          shippingExGst: settlement.sales_shipping || 0,
-          subscriptionAmount: (settlement.other_fees && settlement.other_fees < 0) ? 0 : (settlement.other_fees || 0),
-          refundCommissionExGst: settlement.reimbursements || 0,
-        },
-      };
-      const lineItems = await buildSimpleInvoiceLines(std);
-      const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace || row.marketplace_code, { lineItems });
-      
-      if (result.success) {
-        toast.success(`Pushed to Xero ✅`);
-        await syncXeroStatus();
-        loadData();
-      } else {
-        toast.error(result.error || 'Push failed');
+  // Actually execute the push (called after preview confirmation)
+  const executePush = async () => {
+    for (const { settlementId, marketplace } of previewSettlements) {
+      const row = rows.find(r => r.settlement_id === settlementId);
+      if (row) setPushing(row.id);
+      try {
+        const { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines } = await import('@/utils/settlement-engine');
+        
+        const { data: settlement } = await supabase
+          .from('settlements')
+          .select('*')
+          .eq('settlement_id', settlementId)
+          .maybeSingle();
+
+        if (!settlement) throw new Error('Settlement not found');
+
+        const std = {
+          marketplace: settlement.marketplace || marketplace,
+          settlement_id: settlement.settlement_id,
+          period_start: settlement.period_start,
+          period_end: settlement.period_end,
+          sales_ex_gst: settlement.sales_principal || 0,
+          gst_on_sales: settlement.gst_on_income || 0,
+          fees_ex_gst: settlement.seller_fees || 0,
+          gst_on_fees: settlement.gst_on_expenses || 0,
+          net_payout: settlement.bank_deposit || 0,
+          source: 'csv_upload' as const,
+          reconciles: true,
+          metadata: {
+            refundsExGst: settlement.refunds || 0,
+            shippingExGst: settlement.sales_shipping || 0,
+            subscriptionAmount: (settlement.other_fees && settlement.other_fees < 0) ? 0 : (settlement.other_fees || 0),
+            refundCommissionExGst: settlement.reimbursements || 0,
+          },
+        };
+        const lineItems = await buildSimpleInvoiceLines(std);
+        const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace || marketplace, { lineItems });
+        
+        if (result.success) {
+          toast.success(`Pushed to Xero ✅`);
+          await syncXeroStatus();
+        } else {
+          toast.error(result.error || 'Push failed');
+        }
+      } catch (err: any) {
+        toast.error(err.message || 'Push failed');
+      } finally {
+        setPushing(null);
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Push failed');
-    } finally {
-      setPushing(null);
     }
+    setPreviewOpen(false);
+    loadData();
   };
 
   // Counts
@@ -510,7 +534,7 @@ export default function ValidationSweep({
                       row={row}
                       pushing={pushing === row.id}
                       onUpload={() => onSwitchToUpload?.()}
-                      onPush={() => handlePushToXero(row)}
+                      onPush={() => openPushPreview(row)}
                     />
                   </td>
                 </tr>
@@ -545,11 +569,7 @@ export default function ValidationSweep({
             </div>
             <div className="flex gap-2">
               {readyToPushRows.length > 0 && (
-                <Button size="sm" className="gap-1.5" onClick={async () => {
-                  for (const r of readyToPushRows) {
-                    await handlePushToXero(r);
-                  }
-                }}>
+                <Button size="sm" className="gap-1.5" onClick={openPushAllPreview}>
                   <Send className="h-3.5 w-3.5" /> Push all to Xero
                 </Button>
               )}
@@ -562,6 +582,13 @@ export default function ValidationSweep({
           </CardContent>
         </Card>
       )}
+
+      <PushSafetyPreview
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        onConfirm={executePush}
+        settlements={previewSettlements}
+      />
     </div>
   );
 }
