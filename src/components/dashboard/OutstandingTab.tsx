@@ -201,9 +201,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   useEffect(() => { fetchOutstanding(); }, []);
 
   // ─── Confirm bank match (writes to settlements table) ───
+  // Nothing is marked as matched until user explicitly confirms.
+  // Auto-detection is always a SUGGESTION.
   const confirmBankMatch = useCallback(async (
     row: OutstandingRow,
     bankTxId: string,
+    matchedAmount: number,
     method: 'suggested' | 'manual',
     confidence: 'high' | 'medium' | 'low',
   ) => {
@@ -213,10 +216,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('Not authenticated');
 
+      // Nothing is marked as matched until user explicitly confirms.
+      // Auto-detection is always a SUGGESTION.
       const { error } = await supabase
         .from('settlements')
         .update({
           bank_tx_id: bankTxId,
+          bank_match_amount: matchedAmount,
           bank_match_method: method,
           bank_match_confidence: confidence,
           bank_match_confirmed_at: new Date().toISOString(),
