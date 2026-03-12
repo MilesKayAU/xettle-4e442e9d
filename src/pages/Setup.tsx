@@ -764,12 +764,17 @@ export default function Setup() {
         <div className="flex items-start gap-3 py-1.5">
           <StatusIcon status={s.status} />
           <span className="text-sm text-foreground flex-1">{s.message}</span>
-          {s.status === 'error' && onRetry && (
+          {(s.status === 'error' || s.status === 'rate_limited') && onRetry && (
             <Button variant="ghost" size="sm" onClick={onRetry} className="h-6 px-2 text-xs">
               <RefreshCw className="h-3 w-3 mr-1" /> Retry
             </Button>
           )}
         </div>
+        {s.status === 'rate_limited' && s.error && (
+          <div className="ml-7 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs space-y-1">
+            <code className="block whitespace-pre-wrap break-all font-mono text-[11px] text-amber-700">{s.error}</code>
+          </div>
+        )}
         {s.status === 'error' && s.error && (
           <div className="ml-7 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs space-y-1.5">
             <div className="flex items-center justify-between">
