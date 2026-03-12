@@ -965,10 +965,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <p className="text-xs text-muted-foreground">{filteredRows.length} invoices</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={data.matched_with_settlement === data.invoice_count ? 'border-emerald-200 dark:border-emerald-800' : ''}>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Settlement found</p>
-              <p className="text-xl font-bold text-foreground">{data.matched_with_settlement}</p>
+              <p className={`text-xl font-bold ${data.matched_with_settlement === data.invoice_count ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
+                {data.matched_with_settlement}
+              </p>
               <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
             </CardContent>
           </Card>
