@@ -139,9 +139,23 @@ async function generateXeroFingerprint(marketplace: string, amount: number, date
 }
 
 // Generate the same fingerprint format as the DB trigger for exact matching
-// Uses net_ex_gst (net settlement amount) instead of bank_deposit for stability with split payouts
+// Uses marketplace + derived currency + period + net_ex_gst
+function deriveCurrencyFromMarketplace(marketplace: string): string {
+  const m = marketplace.toLowerCase();
+  if (m.endsWith('_us')) return 'USD';
+  if (m.endsWith('_uk') || m.endsWith('_gb')) return 'GBP';
+  if (m.endsWith('_eu') || m.endsWith('_de') || m.endsWith('_fr') || m.endsWith('_it') || m.endsWith('_es')) return 'EUR';
+  if (m.endsWith('_ca')) return 'CAD';
+  if (m.endsWith('_jp')) return 'JPY';
+  if (m.endsWith('_in')) return 'INR';
+  if (m.endsWith('_sg')) return 'SGD';
+  if (m.endsWith('_nz')) return 'NZD';
+  return 'AUD';
+}
+
 async function generateSettlementStyleFingerprint(marketplace: string, periodStart: string, periodEnd: string, netAmount: number): Promise<string> {
-  const input = `${marketplace}|${periodStart}|${periodEnd}|${netAmount}`;
+  const currency = deriveCurrencyFromMarketplace(marketplace);
+  const input = `${marketplace}|${currency}|${periodStart}|${periodEnd}|${netAmount}`;
   const encoder = new TextEncoder();
   const data = encoder.encode(input);
   const hash = await crypto.subtle.digest('SHA-256', data);
