@@ -553,7 +553,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               Mark Paid
                             </Button>
                           )}
-                          {row.match_status === 'no_settlement' && (
+                          {row.match_status === 'no_settlement' && row.is_pre_boundary && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(`https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${row.xero_invoice_id}`, '_blank')}
+                              className="gap-1 text-xs h-7"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View in Xero →
+                            </Button>
+                          )}
+                          {row.match_status === 'no_settlement' && !row.is_pre_boundary && (
                             <Button
                               size="sm"
                               variant="outline"
