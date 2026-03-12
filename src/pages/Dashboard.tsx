@@ -177,7 +177,7 @@ export default function Dashboard() {
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
             // Verify Xero discovery is done before API sync
-            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').maybeSingle()
+            supabase.from('app_settings').select('value').eq('key', 'xero_discovery_status').eq('user_id', user.id).maybeSingle()
               .then(({ data }) => {
                 if (data?.value === 'complete') {
                   callEdgeFunctionSafe('fetch-amazon-settlements', session.access_token, {}, { headers: { 'x-action': 'smart-sync' } });
