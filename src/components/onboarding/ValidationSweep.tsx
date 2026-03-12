@@ -265,7 +265,6 @@ export default function ValidationSweep({
     setPreviewOpen(false);
     loadData();
   };
-  };
 
   // Counts
   // Filter out already_recorded rows from actionable views
