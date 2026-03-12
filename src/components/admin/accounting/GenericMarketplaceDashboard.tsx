@@ -497,13 +497,28 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
               <CardContent className="p-0">
                 <div className="hidden sm:grid sm:grid-cols-[auto_1fr_80px_80px_80px_80px_50px_120px_auto] gap-2 px-3 py-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                   <div className="w-5" />
-                  <div>Settlement</div>
-                  <div className="text-center">Xero</div>
-                  <div className="text-center">Bank</div>
-                  <div className="text-right">Expected</div>
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors text-left" onClick={() => toggleSort('settlement_id')}>
+                    Settlement
+                    {sortColumn === 'settlement_id' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                  <button className="flex items-center gap-1 justify-center hover:text-foreground transition-colors" onClick={() => toggleSort('xero')}>
+                    Xero
+                    {sortColumn === 'xero' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                  <button className="flex items-center gap-1 justify-center hover:text-foreground transition-colors" onClick={() => toggleSort('bank')}>
+                    Bank
+                    {sortColumn === 'bank' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
+                  <button className="flex items-center gap-1 justify-end hover:text-foreground transition-colors" onClick={() => toggleSort('amount')}>
+                    Expected
+                    {sortColumn === 'amount' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
                   <div className="text-right">Actual</div>
                   <div className="text-right">Diff</div>
-                  <div className="text-center">Status</div>
+                  <button className="flex items-center gap-1 justify-center hover:text-foreground transition-colors" onClick={() => toggleSort('status')}>
+                    Status
+                    {sortColumn === 'status' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                  </button>
                   <div className="text-right">Actions</div>
                 </div>
 
