@@ -48,21 +48,35 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
   return { ...token, access_token: data.access_token, refresh_token: data.refresh_token, expires_at: newExpiresAt };
 }
 
-async function queryXeroInvoices(token: XeroToken, whereClause: string): Promise<any[]> {
-  const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${encodeURIComponent(whereClause)}&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID`;
-  const resp = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token.access_token}`,
-      'Accept': 'application/json',
-      'Xero-tenant-id': token.tenant_id,
-    },
-  });
-  if (!resp.ok) {
-    console.error(`Xero query failed (${whereClause}):`, resp.status, await resp.text());
-    return [];
+// Paginated Xero invoice query — fetches ALL pages (max 100 per page)
+async function queryXeroInvoicesPaginated(token: XeroToken, whereClause: string): Promise<any[]> {
+  const allInvoices: any[] = [];
+  let page = 1;
+  const maxPages = 10; // Safety limit: 1000 invoices max per query
+
+  while (page <= maxPages) {
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${encodeURIComponent(whereClause)}&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID&page=${page}`;
+    const resp = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token.access_token}`,
+        'Accept': 'application/json',
+        'Xero-tenant-id': token.tenant_id,
+      },
+    });
+    if (!resp.ok) {
+      console.error(`Xero query failed page ${page} (${whereClause}):`, resp.status, await resp.text());
+      break;
+    }
+    const result = await resp.json();
+    const invoices = result.Invoices || [];
+    allInvoices.push(...invoices);
+
+    // Xero returns max 100 per page; if fewer, we've reached the end
+    if (invoices.length < 100) break;
+    page++;
   }
-  const result = await resp.json();
-  return result.Invoices || [];
+
+  return allInvoices;
 }
 
 function extractSettlementId(reference: string): string | null {
@@ -75,8 +89,9 @@ function extractSettlementId(reference: string): string | null {
   if (reference.startsWith('AMZN-')) {
     return reference.slice(5);
   }
-  // Split-month format: LMB-AU-{settlement_id}-1 or LMB-AU-{settlement_id}-2
-  const lmbMatch = reference.match(/^LMB-\w+-(\d+)-\d+$/);
+  // LMB format anywhere in string: LMB-{channel}-{settlement_id}-{part}
+  // Handles prefixed references like "(A$73.39) LMB-shopify-128879853815-1"
+  const lmbMatch = reference.match(/LMB-\w+-(\d+)-\d+/);
   if (lmbMatch) return lmbMatch[1];
   // Old format: "Amazon AU Settlement 12284044573 - Part 2 (March)"
   // Extract the numeric settlement ID, NOT the month in parentheses
@@ -127,19 +142,6 @@ function detectMarketplaceFromContact(contactName: string): string | null {
   return null;
 }
 
-// Generate a fingerprint for a Xero invoice to compare against settlement fingerprints
-async function generateXeroFingerprint(marketplace: string, amount: number, date: string): Promise<string> {
-  // We can't know exact period_start/period_end from Xero, so generate a simpler fingerprint
-  // used for amount+marketplace matching
-  const input = `${marketplace}|${date}|${amount}`;
-  const encoder = new TextEncoder();
-  const data = encoder.encode(input);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Generate the same fingerprint format as the DB trigger for exact matching
-// Uses marketplace + derived currency + period + net_ex_gst
 function deriveCurrencyFromMarketplace(marketplace: string): string {
   const m = marketplace.toLowerCase();
   if (m.endsWith('_us')) return 'USD';
@@ -206,16 +208,19 @@ serve(async (req) => {
     let token = tokens[0] as XeroToken;
     token = await refreshToken(supabase, token);
 
-    // ─── METHOD 1: Exact reference match (sequential to avoid Xero rate limits) ───────
-    const newFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("Xettle-")');
-    const oldFormatInvoices = await queryXeroInvoices(token, 'Reference.Contains("Settlement")');
-    const amznFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("AMZN-")');
-    const lmbFormatInvoices = await queryXeroInvoices(token, 'Reference.StartsWith("LMB-")');
+    // ─── METHOD 1: Exact reference match (paginated, sequential to avoid rate limits) ───
+    console.log(`[sync-xero-status] Starting reference scan for user ${userId}`);
+    
+    const newFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("Xettle-")');
+    const oldFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Settlement")');
+    const amznFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("AMZN-")');
+    // LMB format: use Contains since references may have amount prefix like "(A$73.39) LMB-..."
+    const lmbFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("LMB-")');
     // Shopify: catch references like "Shopify Payout 12345" or "Payout #12345"
-    const shopifyFormatInvoices = await queryXeroInvoices(token, 'Reference.Contains("Shopify")');
-    const payoutFormatInvoices = await queryXeroInvoices(token, 'Reference.Contains("Payout")');
+    const shopifyFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Shopify")');
+    const payoutFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Payout")');
     // Also search by Shopify contact name for invoices that may not have payout IDs in reference
-    const shopifyContactInvoices = await queryXeroInvoices(token, 'Contact.Name.Contains("Shopify")');
+    const shopifyContactInvoices = await queryXeroInvoicesPaginated(token, 'Contact.Name.Contains("Shopify")');
 
     const allInvoices = [...newFormatInvoices, ...oldFormatInvoices, ...amznFormatInvoices, ...lmbFormatInvoices, ...shopifyFormatInvoices, ...payoutFormatInvoices, ...shopifyContactInvoices];
     // Deduplicate by InvoiceID
@@ -224,21 +229,30 @@ serve(async (req) => {
       if (!invoiceMap.has(inv.InvoiceID)) invoiceMap.set(inv.InvoiceID, inv);
     }
     const dedupedInvoices = Array.from(invoiceMap.values());
+    
+    console.log(`[sync-xero-status] Found ${dedupedInvoices.length} unique Xero invoices (LMB: ${lmbFormatInvoices.length}, Shopify ref: ${shopifyFormatInvoices.length}, Shopify contact: ${shopifyContactInvoices.length})`);
+    
     const seen = new Map<string, any>();
 
     for (const inv of dedupedInvoices) {
       const sid = extractSettlementId(inv.Reference || '');
       if (!sid) continue;
-      if (!seen.has(sid) || inv.Reference.startsWith('Xettle-')) {
+      if (!seen.has(sid) || (inv.Reference || '').startsWith('Xettle-')) {
         seen.set(sid, inv);
       }
     }
+
+    console.log(`[sync-xero-status] Extracted ${seen.size} settlement IDs from references`);
 
     // Update settlements + cache matches for exact reference hits
     let updated = 0;
     for (const [settlementId, inv] of seen.entries()) {
       const ref = inv.Reference || '';
       const isXettleFormat = ref.startsWith('Xettle-');
+
+      // Detect marketplace from contact name for accurate cache entry
+      const contactName = inv.Contact?.Name || '';
+      const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
 
       // Xettle-pushed: use granular lifecycle status
       // Legacy (AMZN-/LMB-/old Settlement): always synced_external
@@ -281,7 +295,7 @@ serve(async (req) => {
         await supabase.from('xero_accounting_matches').upsert({
           user_id: userId,
           settlement_id: settlementId,
-          marketplace_code: 'amazon_au', // Will be overridden by actual marketplace below
+          marketplace_code: detectedMarketplace,
           xero_invoice_id: inv.InvoiceID,
           xero_invoice_number: inv.InvoiceNumber || null,
           xero_status: inv.Status || null,
@@ -290,11 +304,13 @@ serve(async (req) => {
           confidence: 1.0,
           matched_amount: inv.Total || null,
           matched_date: parseXeroDate(inv.Date),
-          matched_contact: inv.Contact?.Name || null,
+          matched_contact: contactName,
           matched_reference: inv.Reference || null,
         }, { onConflict: 'user_id,settlement_id' });
       }
     }
+
+    console.log(`[sync-xero-status] Reference matching: ${updated} settlements updated`);
 
     // ─── METHOD 2: Fuzzy amount+date matching for unmatched settlements ───
     // Get all settlements that don't have a Xero match yet
@@ -303,21 +319,24 @@ serve(async (req) => {
       .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint')
       .eq('user_id', userId)
       .is('xero_journal_id', null)
-      .not('status', 'in', '("synced","synced_external","already_recorded")');
+      .not('status', 'in', '("synced","synced_external","already_recorded","draft_in_xero","authorised_in_xero","reconciled_in_xero")');
 
     let fuzzyMatched = 0;
 
     if (unmatchedSettlements && unmatchedSettlements.length > 0) {
-      // Fetch recent marketplace-related invoices for fuzzy matching
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      const fromDate = sixMonthsAgo.toISOString().split('T')[0];
+      console.log(`[sync-xero-status] ${unmatchedSettlements.length} settlements still unmatched, running fuzzy scan`);
+      
+      // Extend lookback to 12 months to cover all historical settlements
+      const twelveMonthsAgo = new Date();
+      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+      const fromDate = twelveMonthsAgo.toISOString().split('T')[0];
       const [y, m, d] = fromDate.split('-');
       const whereDate = `Date>=DateTime(${y},${m},${d})`;
 
       let recentInvoices: any[] = [];
       try {
-        recentInvoices = await queryXeroInvoices(token, whereDate);
+        recentInvoices = await queryXeroInvoicesPaginated(token, whereDate);
+        console.log(`[sync-xero-status] Fuzzy scan: ${recentInvoices.length} Xero invoices fetched for last 12 months`);
       } catch (e) {
         console.error('Fuzzy scan error:', e);
       }
@@ -394,8 +413,7 @@ serve(async (req) => {
           let confidence = 0;
           let matchMethod = 'fuzzy_amount_date';
 
-          // Fingerprint match: generate candidate fingerprint from Xero invoice
-          // Try matching with detected marketplace + invoice date as both period bounds
+          // Fingerprint match
           if (settlement.settlement_fingerprint && marketplaceMatch) {
             const candidateFp = await generateSettlementStyleFingerprint(
               marketplace,
@@ -404,7 +422,7 @@ serve(async (req) => {
               invAmount
             );
             if (candidateFp === settlement.settlement_fingerprint) {
-              confidence = 0.95; // Near-certain: same marketplace, dates, and exact amount
+              confidence = 0.95;
               matchMethod = 'fingerprint';
             }
           }
@@ -500,6 +518,8 @@ serve(async (req) => {
         }
       }
     }
+
+    console.log(`[sync-xero-status] Fuzzy matching: ${fuzzyMatched} additional settlements matched`);
 
     // ─── Update marketplace_validation for all matched settlements ───
     for (const [settlementId, inv] of seen.entries()) {
