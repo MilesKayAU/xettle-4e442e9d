@@ -214,6 +214,17 @@ Deno.serve(async (req) => {
       preSeededSet.add(m.settlement_id);
     }
 
+    // ─── Read Amazon rate-limit cooldown (for UI messaging) ───
+    const { data: amazonRateLimitSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'amazon_rate_limit_until')
+      .maybeSingle();
+
+    const amazonRateLimitUntil = amazonRateLimitSetting?.value || null;
+    const amazonRateLimited = !!amazonRateLimitUntil && new Date(amazonRateLimitUntil) > new Date();
+
     // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -379,6 +390,7 @@ Deno.serve(async (req) => {
     let matchedWithSettlement = 0;
     let bankDepositFound = 0;
     let readyToReconcile = 0;
+    let awaitingSyncCount = 0;
 
     for (const inv of invoices) {
       const reference = inv.Reference || '';
@@ -554,6 +566,7 @@ Deno.serve(async (req) => {
       } else if (!hasSettlement && settlementId && preSeededSet.has(settlementId)) {
         // Pre-seeded by sync-xero-status — settlement data is expected from API sync
         matchStatus = 'awaiting_sync';
+        awaitingSyncCount++;
       } else {
         matchStatus = 'no_settlement';
       }
@@ -620,6 +633,12 @@ Deno.serve(async (req) => {
       bank_deposit_found: bankDepositFound,
       ready_to_reconcile: readyToReconcile,
       rows,
+      sync_info: {
+        unmatched_count: Math.max(0, invoices.length - matchedWithSettlement),
+        awaiting_sync_count: awaitingSyncCount,
+        amazon_rate_limited: amazonRateLimited,
+        amazon_rate_limit_until: amazonRateLimitUntil,
+      },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
