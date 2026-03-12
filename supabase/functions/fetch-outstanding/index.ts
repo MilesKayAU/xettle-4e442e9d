@@ -251,17 +251,8 @@ Deno.serve(async (req) => {
       console.log(`[fetch-outstanding] Using cached fallback for ${allInvoices.length} invoices`);
     }
 
-    // ─── Filter to known marketplace contacts only ───
-    const MARKETPLACE_CONTACT_PATTERNS = [
-      'amazon', 'shopify', 'ebay', 'catch', 'kogan', 'bigw', 'big w',
-      'everyday market', 'mydeal', 'bunnings', 'woolworths', 'mirakl',
-      'tradesquare', 'temu', 'walmart',
-    ];
-
-    const invoices = allInvoices.filter((inv: any) => {
-      const contact = (inv.Contact?.Name || '').toLowerCase();
-      return MARKETPLACE_CONTACT_PATTERNS.some(p => contact.includes(p));
-    });
+    // ─── Pass ALL outstanding ACCREC invoices through — UI toggle controls marketplace vs all ───
+    const invoices = allInvoices;
 
     // ─── Get user's settlements for matching (including bank match fields) ───
     const { data: settlements } = await supabase
