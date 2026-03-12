@@ -351,47 +351,10 @@ Deno.serve(async (req) => {
   }
 })
 
-async function applyMatch(
-  adminSupabase: any, userId: string, settlement: any,
-  txn: any, txnAmount: number, txnDate: string | null, txnRef: string,
-) {
-  const marketplace = settlement.marketplace || 'unknown'
-
-  // Update settlements table
-  await adminSupabase.from('settlements').update({
-    bank_verified: true,
-    bank_verified_amount: txnAmount,
-    bank_verified_at: txnDate ? new Date(txnDate).toISOString() : new Date().toISOString(),
-    bank_reference: txnRef || txn.BankTransactionID,
-  }).eq('settlement_id', settlement.settlement_id).eq('user_id', userId)
-
-  // Update marketplace_validation
-  const periodLabel = `${settlement.period_start} → ${settlement.period_end}`
-  await adminSupabase.from('marketplace_validation').upsert({
-    user_id: userId,
-    marketplace_code: marketplace,
-    period_label: periodLabel,
-    period_start: settlement.period_start,
-    period_end: settlement.period_end,
-    bank_matched: true,
-    bank_amount: txnAmount,
-    bank_reference: txnRef || txn.BankTransactionID,
-    bank_matched_at: new Date().toISOString(),
-  }, { onConflict: 'user_id,marketplace_code,period_label' })
-
-  // Log event
-  await adminSupabase.from('system_events').insert({
-    user_id: userId,
-    event_type: 'bank_match_confirmed',
-    marketplace_code: marketplace,
-    settlement_id: settlement.settlement_id,
-    period_label: periodLabel,
-    details: {
-      amount: txnAmount,
-      date: txnDate,
-      reference: txnRef,
-      deposit_expected: Math.abs(settlement.bank_deposit || 0),
-    },
-    severity: 'success',
-  })
-}
+// ══════════════════════════════════════════════════════════════
+// GOLDEN RULE: The applyMatch function has been REMOVED.
+// Nothing is marked as matched until user explicitly confirms.
+// Auto-detection is always a SUGGESTION, never a fact.
+// All bank match confirmations happen via the OutstandingTab UI
+// where the user reviews and clicks "Confirm match".
+// ══════════════════════════════════════════════════════════════
