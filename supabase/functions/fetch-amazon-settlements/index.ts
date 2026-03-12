@@ -1001,7 +1001,14 @@ serve(async (req) => {
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-      const result = await handleSync(supabaseAdmin);
+      // Accept optional sync_from from request body (Xero-first smart sync window)
+      let syncFromParam: string | undefined;
+      try {
+        const body = await req.json();
+        syncFromParam = body?.sync_from;
+      } catch { /* no body */ }
+
+      const result = await handleSync(supabaseAdmin, syncFromParam);
       console.log(`[Sync Complete]`, result);
 
       return new Response(JSON.stringify(result), {
