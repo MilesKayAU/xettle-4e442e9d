@@ -196,6 +196,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
   const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
   const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
+  const [depositCoverage, setDepositCoverage] = useState<Record<string, {
+    siblings: Array<{ settlement_id: string; match_amount: number; confidence_score: number; period_start?: string; period_end?: string; marketplace?: string }>;
+    depositAmount: number;
+    depositDate: string | null;
+    confidence: number;
+    matchMethod: string;
+  }>>({});
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
