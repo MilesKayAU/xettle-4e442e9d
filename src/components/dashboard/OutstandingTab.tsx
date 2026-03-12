@@ -260,7 +260,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <Clock3 className="h-4 w-4 text-muted-foreground" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs">
-              Amazon deposits funds on a regular schedule — this will match automatically once your bank feed updates.
+              Amazon batches multiple settlements into one deposit — automatic matching coming soon
             </TooltipContent>
           </Tooltip>
         );
@@ -278,7 +278,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       return `Gap: $${gap}`;
     }
     if (row.match_status === 'no_bank_deposit') {
-      return isAmazon(row) ? 'Awaiting bank deposit' : 'No bank deposit';
+      return isAmazon(row) ? 'Awaiting deposit' : 'No bank deposit';
     }
     return 'No settlement';
   };
@@ -388,8 +388,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Bank deposit found</p>
-              <p className="text-xl font-bold text-foreground">{data.bank_deposit_found}</p>
-              <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
+              <p className={`text-xl font-bold ${
+                data.bank_deposit_found === 0 && filteredRows.every(r => r.has_bank_deposit || isAmazon(r))
+                  ? 'text-muted-foreground'
+                  : 'text-foreground'
+              }`}>{data.bank_deposit_found}</p>
+              <p className="text-xs text-muted-foreground">
+                {data.bank_deposit_found === 0 && filteredRows.every(r => r.has_bank_deposit || isAmazon(r))
+                  ? 'Amazon uses batched deposits'
+                  : `of ${data.invoice_count}`}
+              </p>
             </CardContent>
           </Card>
           <Card>

@@ -328,3 +328,21 @@ Shopify payouts aggregate all transactions (direct + marketplace) into a single 
 3. Generate sub-settlement records per marketplace within a single payout
 4. Update `marketplace_validation` to track split payouts
 5. UI: Show split payout breakdown in Shopify Payments dashboard
+
+---
+
+## Session 10+ — Amazon Aggregate Bank Deposit Matching
+
+### Problem
+Amazon batches multiple settlements into a single bank deposit. The current matching engine compares individual invoice amounts against individual bank transactions, which will never match for Amazon.
+
+### Approach
+1. **Group Amazon invoices by settlement period**: Cluster by `deposit_date` or `period_end` within 3-day windows
+2. **Sum net deposit amounts across settlements**: Calculate the expected aggregate deposit total
+3. **Match sum against single bank transaction**: $1.00 tolerance and ±5-day date window
+4. **Amazon deposit narration**: Typically contains "AMAZON" or seller account reference number — use for fuzzy matching
+
+### UI Changes
+- Outstanding tab: Show "Matched (aggregated)" badge for Amazon invoices matched via aggregate
+- Bank deposit card: Show aggregate match count separately
+- Drill-down: Show which settlements were grouped into the aggregate match
