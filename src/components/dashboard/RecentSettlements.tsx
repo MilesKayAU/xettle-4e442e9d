@@ -93,8 +93,11 @@ type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'other';
 
 function categorize(row: SettlementRow): StatusCategory {
   if (row.status === 'hidden') return 'hidden';
-  if (row.xero_status === 'posted' || row.xero_status === 'AUTHORISED') return 'posted';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
+  // Any settlement linked to Xero (via sync or push) is "posted"
+  const xeroLinkedStatuses = ['synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'pushed_to_xero'];
+  if (xeroLinkedStatuses.includes(row.status)) return 'posted';
+  if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID' || row.xero_status === 'posted') return 'posted';
   if (row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') return 'ready';
   return 'other';
 }
