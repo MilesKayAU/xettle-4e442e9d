@@ -94,3 +94,27 @@ Never use raw colors like `text-white`, `bg-black`, etc.
 
 Never store private API keys in source code. Use Lovable Cloud secrets.
 Publishable/anon keys are OK.
+
+## Rule 11: Three-Layer Accounting Source Model (Hardcoded, Never Configurable)
+
+Orders     → NEVER create accounting entries
+Payments   → NEVER create accounting entries
+Settlements → ONLY source of accounting entries
+
+Payment matching is VERIFICATION ONLY — no invoice, no journal, no Xero push.
+This rule is enforced by `src/constants/accounting-rules.ts` and referenced
+at the entry point of every payment and sync function.
+
+Canonical constant file: `src/constants/accounting-rules.ts`
+
+### Payment Verification Layer
+
+The payment verification system (PayPal, Shopify Payments, other gateways)
+follows the same hybrid matching model as Amazon bank deposit matching:
+
+- Detects gateway bank accounts in Xero (Type=BANK)
+- Fetches transactions from those accounts
+- Groups and scores candidates against Shopify orders
+- Presents suggestions requiring explicit user confirmation
+- Stores audit trail in `payment_verifications` table (never in `settlements`)
+- **NEVER** creates invoices, journals, or Xero pushes
