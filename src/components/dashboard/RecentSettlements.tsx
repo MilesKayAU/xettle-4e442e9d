@@ -93,8 +93,11 @@ type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'other';
 
 function categorize(row: SettlementRow): StatusCategory {
   if (row.status === 'hidden') return 'hidden';
-  if (row.xero_status === 'posted' || row.xero_status === 'AUTHORISED') return 'posted';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
+  // Any settlement linked to Xero (via sync or push) is "posted"
+  const xeroLinkedStatuses = ['synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'pushed_to_xero'];
+  if (xeroLinkedStatuses.includes(row.status)) return 'posted';
+  if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID' || row.xero_status === 'posted') return 'posted';
   if (row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') return 'ready';
   return 'other';
 }
@@ -108,11 +111,39 @@ function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: strin
       </Badge>
     );
   }
-  if (xeroStatus === 'posted' || xeroStatus === 'AUTHORISED') {
+  // Fully reconciled (PAID in Xero)
+  if (status === 'reconciled_in_xero' || xeroStatus === 'PAID') {
     return (
       <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
         <CheckCircle2 className="h-3 w-3 mr-1" />
-        Posted
+        Reconciled ✓
+      </Badge>
+    );
+  }
+  // Authorised in Xero (awaiting payment)
+  if (status === 'authorised_in_xero' || xeroStatus === 'AUTHORISED') {
+    return (
+      <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-900/30 dark:border-blue-800 text-xs">
+        <CheckCircle2 className="h-3 w-3 mr-1" />
+        In Xero — Awaiting Payment
+      </Badge>
+    );
+  }
+  // Draft in Xero
+  if (status === 'draft_in_xero' || xeroStatus === 'DRAFT') {
+    return (
+      <Badge variant="outline" className="text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-900/30 dark:border-orange-800 text-xs">
+        <FileText className="h-3 w-3 mr-1" />
+        In Xero — Draft
+      </Badge>
+    );
+  }
+  // Synced externally (legacy / LinkMyBooks)
+  if (status === 'synced_external' || status === 'pushed_to_xero' || xeroStatus === 'posted') {
+    return (
+      <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
+        <CheckCircle2 className="h-3 w-3 mr-1" />
+        Already in Xero
       </Badge>
     );
   }
@@ -135,7 +166,7 @@ function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: strin
   return (
     <Badge variant="outline" className="text-muted-foreground text-xs">
       <Clock className="h-3 w-3 mr-1" />
-      {status === 'already_recorded' ? 'Recorded' : 'Pending'}
+      Pending
     </Badge>
   );
 }
