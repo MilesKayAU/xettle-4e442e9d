@@ -285,7 +285,7 @@ serve(async (req) => {
     // Get all settlements that don't have a Xero match yet
     const { data: unmatchedSettlements } = await supabase
       .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint')
       .eq('user_id', userId)
       .is('xero_journal_id', null)
       .not('status', 'in', '("synced","synced_external","already_recorded")');
