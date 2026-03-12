@@ -433,9 +433,73 @@ export default function SetupStepConnectStores({
           )}
 
           {showCustomInput ? (
-            <div className="flex gap-2">
-              <Input placeholder="e.g. Woolworths MarketPlus" value={customName} onChange={(e) => setCustomName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()} className="text-sm" autoFocus />
-              <Button size="sm" onClick={handleAddCustom} disabled={!customName.trim()}>Add</Button>
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Type a marketplace name..."
+                  value={customName}
+                  onChange={(e) => handleCustomNameChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && registryResults.length === 0 && !nearMatch) handleAddCustom();
+                    if (e.key === 'Escape') { setShowCustomInput(false); setCustomName(''); setRegistryResults([]); setNearMatch(null); }
+                  }}
+                  className="text-sm pl-9 pr-9"
+                  autoFocus
+                />
+                {customName && (
+                  <button onClick={() => { setCustomName(''); setRegistryResults([]); setNearMatch(null); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Search results dropdown */}
+              {(registryResults.length > 0 || searchLoading) && (
+                <div className="border border-border rounded-lg bg-card shadow-sm overflow-hidden">
+                  {searchLoading && (
+                    <div className="p-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Searching...
+                    </div>
+                  )}
+                  {registryResults.map((r) => (
+                    <button
+                      key={r.marketplace_code}
+                      onClick={() => handleSelectRegistryMatch(r)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-accent/50 transition-colors flex items-center gap-2 border-b border-border last:border-b-0"
+                    >
+                      <Store className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-medium text-foreground">{r.marketplace_name}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">Select</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Near-match suggestion */}
+              {nearMatch && !searchLoading && registryResults.length === 0 && (
+                <div className="border border-primary/30 rounded-lg bg-primary/5 p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    Did you mean <span className="font-semibold text-foreground">{nearMatch.marketplace_name}</span>?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleSelectRegistryMatch(nearMatch)}>
+                      Yes, use {nearMatch.marketplace_name}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-xs h-7" onClick={handleAddCustom}>
+                      No, save "{customName.trim()}" as new
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Save as new option when no results */}
+              {customName.trim().length >= 2 && !searchLoading && registryResults.length === 0 && !nearMatch && (
+                <Button size="sm" variant="outline" onClick={handleAddCustom} className="w-full text-xs flex items-center gap-1.5">
+                  <Plus className="h-3 w-3" /> Save "{customName.trim()}" as a new marketplace
+                </Button>
+              )}
             </div>
           ) : (
             <button onClick={() => setShowCustomInput(true)} className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1 mx-auto">
