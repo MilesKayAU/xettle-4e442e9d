@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronRight, MessageSquarePlus, X, Send, Clock } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronRight, MessageSquarePlus, X, Send, Clock, History } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow, differenceInDays, subMonths, subDays } from 'date-fns';
 import { toast } from 'sonner';
+
+const HistoricalAudit = lazy(() => import('./HistoricalAudit'));
 
 // ─── Types ──────────────────────────────────────────────────────────
 type UrgencyTier = 'critical' | 'action' | 'info';
@@ -350,7 +353,7 @@ export default function ReconciliationHub() {
     );
   }
 
-  // Empty state — all caught up!
+  // Empty state — all caught up! Still show tabs for audit access
   if (items.length === 0) {
     return (
       <div className="space-y-6">
@@ -358,16 +361,38 @@ export default function ReconciliationHub() {
           <h2 className="text-2xl font-bold text-foreground">Reconciliation Hub</h2>
           <p className="text-muted-foreground mt-1">Your bookkeeping command centre.</p>
         </div>
-        <Card className="border-2 border-primary/20">
-          <CardContent className="py-12 text-center">
-            <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-foreground mb-2">All caught up!</h3>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              No reconciliation items need attention for the last {lookbackMonths} months.
-              Your books are up to date. 🎉
-            </p>
-          </CardContent>
-        </Card>
+
+        <Tabs defaultValue="open" className="w-full">
+          <TabsList>
+            <TabsTrigger value="open" className="flex items-center gap-1.5">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Open Items
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="flex items-center gap-1.5">
+              <History className="h-3.5 w-3.5" />
+              Historical Audit
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="open" className="mt-4">
+            <Card className="border-2 border-primary/20">
+              <CardContent className="py-12 text-center">
+                <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground mb-2">All caught up!</h3>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  No reconciliation items need attention for the last {lookbackMonths} months.
+                  Your books are up to date. 🎉
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="audit" className="mt-4">
+            <Suspense fallback={<div className="h-32 bg-muted animate-pulse rounded" />}>
+              <HistoricalAudit />
+            </Suspense>
+          </TabsContent>
+        </Tabs>
       </div>
     );
   }
@@ -376,12 +401,30 @@ export default function ReconciliationHub() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Reconciliation Hub</h2>
-        <p className="text-muted-foreground mt-1">
-          {summary.total} item{summary.total !== 1 ? 's' : ''} need attention
-          {summary.critical > 0 && <span className="text-destructive font-medium"> · {summary.critical} critical</span>}
-          {summary.action > 0 && <span className="text-amber-600 font-medium"> · {summary.action} action needed</span>}
-        </p>
+        <p className="text-muted-foreground mt-1">Your bookkeeping command centre.</p>
       </div>
+
+      <Tabs defaultValue="open" className="w-full">
+        <TabsList>
+          <TabsTrigger value="open" className="flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Open Items
+            {summary.total > 0 && (
+              <Badge variant="secondary" className="text-[10px] ml-1">{summary.total}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="audit" className="flex items-center gap-1.5">
+            <History className="h-3.5 w-3.5" />
+            Historical Audit
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="open" className="mt-4">
+      <p className="text-muted-foreground mb-4">
+        {summary.total} item{summary.total !== 1 ? 's' : ''} need attention
+        {summary.critical > 0 && <span className="text-destructive font-medium"> · {summary.critical} critical</span>}
+        {summary.action > 0 && <span className="text-amber-600 font-medium"> · {summary.action} action needed</span>}
+      </p>
 
       {/* ─── Open items ──────────────────────────────────────────── */}
       <div className="space-y-3">
@@ -517,6 +560,15 @@ export default function ReconciliationHub() {
           </CollapsibleContent>
         </Collapsible>
       )}
+
+        </TabsContent>
+
+        <TabsContent value="audit" className="mt-4">
+          <Suspense fallback={<div className="h-32 bg-muted animate-pulse rounded" />}>
+            <HistoricalAudit />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
