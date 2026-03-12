@@ -891,6 +891,7 @@ export type Database = {
         Row: {
           confidence_score: number | null
           created_at: string | null
+          deposit_group_id: string | null
           gateway_code: string
           id: string
           match_amount: number | null
@@ -909,6 +910,7 @@ export type Database = {
         Insert: {
           confidence_score?: number | null
           created_at?: string | null
+          deposit_group_id?: string | null
           gateway_code: string
           id?: string
           match_amount?: number | null
@@ -927,6 +929,7 @@ export type Database = {
         Update: {
           confidence_score?: number | null
           created_at?: string | null
+          deposit_group_id?: string | null
           gateway_code?: string
           id?: string
           match_amount?: number | null
