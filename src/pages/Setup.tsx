@@ -15,14 +15,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   CheckCircle2, AlertTriangle, SkipForward, RefreshCw, ArrowRight,
   Loader2, Plus, LayoutDashboard, X, Upload, ExternalLink, ArrowLeft, Copy, Check,
-  Square
+  Square, HelpCircle
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 
 // ─── Types ──────────────────────────────────────────────────────────
-type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped';
+type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'pending';
 
 interface StepState {
   status: StepStatus;
@@ -65,7 +65,8 @@ interface DetectedMarketplace {
   name: string;
   code: string;
   orderCount?: number;
-  source: string; // 'shopify_orders' | 'shopify_tags' | 'xero_contact' | 'settlement' | 'file_fingerprint' | 'api_connection'
+  source: string;
+  isConfirmed?: boolean; // true if matched to marketplace_registry
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -442,10 +443,10 @@ export default function Setup() {
       const isCooldown = errorType === 'cooldown' || result.error?.includes('cooldown');
 
       if (isRateLimit || isMutex || isCooldown) {
-        // Silently mark as complete — background sync will handle the retry
-        console.info('[setup] Amazon rate-limited/mutex/cooldown — marking complete silently');
-        setAmazonStep({ status: 'success', message: '✅ Amazon connected — syncing in the background' });
-        setAmazonProgress(100);
+        // Show as pending/warning — not complete, but not blocking
+        console.info('[setup] Amazon rate-limited/mutex/cooldown — showing pending state');
+        setAmazonStep({ status: 'pending', message: 'Amazon settlement sync will run automatically once the rate limit clears — you can continue setting up in the meantime.' });
+        setAmazonProgress(80);
         setPhase1Amazon(true);
         await upsertSetting(userId, 'setup_phase1_amazon', 'true');
       } else {
@@ -547,15 +548,17 @@ export default function Setup() {
     try {
       await provisionAllMarketplaceConnections(caps.userId);
 
-      // Query all 5 sources in parallel
-      const [subChannelsRes, alertsRes, connectionsRes, settlementsRes, fingerprintsRes] = await Promise.all([
+      // Query all 5 sources + registry in parallel
+      const [subChannelsRes, alertsRes, connectionsRes, settlementsRes, fingerprintsRes, registryRes] = await Promise.all([
         supabase.from('shopify_sub_channels').select('source_name, marketplace_label, marketplace_code, order_count, total_revenue'),
         supabase.from('channel_alerts').select('source_name, order_count, detected_label, detection_method, total_revenue'),
         supabase.from('marketplace_connections').select('marketplace_name, marketplace_code, connection_type, settings'),
         supabase.from('settlements').select('marketplace').neq('marketplace', null),
         supabase.from('marketplace_file_fingerprints').select('marketplace_code'),
+        supabase.from('marketplace_registry').select('marketplace_code'),
       ]);
 
+      const knownCodes = new Set((registryRes.data || []).map(r => r.marketplace_code.toLowerCase()));
       const marketplaces: DetectedMarketplace[] = [];
       const seen = new Set<string>();
 
@@ -569,6 +572,7 @@ export default function Setup() {
             code,
             orderCount: ch.order_count ?? undefined,
             source: 'Shopify orders (source_name)',
+            isConfirmed: knownCodes.has(code.toLowerCase()),
           });
         }
       }
@@ -586,6 +590,7 @@ export default function Setup() {
             code,
             orderCount: alert.order_count ?? undefined,
             source: method,
+            isConfirmed: knownCodes.has(code.toLowerCase()),
           });
         }
       }
@@ -604,6 +609,7 @@ export default function Setup() {
             name: conn.marketplace_name,
             code: conn.marketplace_code,
             source,
+            isConfirmed: knownCodes.has(conn.marketplace_code.toLowerCase()),
           });
         }
       }
@@ -617,6 +623,7 @@ export default function Setup() {
             name: displayName(code),
             code,
             source: 'Existing settlement data',
+            isConfirmed: knownCodes.has(code.toLowerCase()),
           });
         }
       }
@@ -629,6 +636,7 @@ export default function Setup() {
             name: displayName(fp.marketplace_code),
             code: fp.marketplace_code,
             source: 'Previous CSV upload',
+            isConfirmed: knownCodes.has(fp.marketplace_code.toLowerCase()),
           });
         }
       }
@@ -707,6 +715,7 @@ export default function Setup() {
   function StatusIcon({ status }: { status: StepStatus }) {
     switch (status) {
       case 'success': return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+      case 'pending': return <Loader2 className="h-4 w-4 text-amber-500" />;
       case 'error': return <AlertTriangle className="h-4 w-4 text-destructive" />;
       case 'skipped': return <SkipForward className="h-4 w-4 text-muted-foreground" />;
       case 'running': return <Loader2 className="h-4 w-4 text-primary animate-spin" />;
@@ -759,7 +768,7 @@ export default function Setup() {
       case 'settlement_needed':
       case 'missing': return <X className="h-3.5 w-3.5 text-destructive" />;
       case 'gap_detected': return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
-      case 'already_recorded': return <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />;
+      case 'already_recorded': return <SkipForward className="h-3.5 w-3.5 text-muted-foreground" />;
       default: return <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />;
     }
   }
@@ -778,7 +787,7 @@ export default function Setup() {
       case 'gap_detected':
         return 'Settlement gap detected — possible missing period';
       case 'already_recorded':
-        return 'Pre-boundary historical record';
+        return 'Already recorded in Xero';
       default:
         return p.status;
     }
@@ -820,7 +829,8 @@ export default function Setup() {
   const gateReason = phase2GateReason();
 
   // Progress bar status text
-  function progressStatus(progress: number, done: boolean, apiName: string): string {
+  function progressStatus(progress: number, done: boolean, apiName: string, stepStatus?: StepStatus): string {
+    if (stepStatus === 'pending') return 'Pending...';
     if (done) return 'Complete';
     if (progress >= 95) return 'Still working...';
     return 'Scanning...';
@@ -869,7 +879,7 @@ export default function Setup() {
                       </Button>
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {progressStatus(xeroProgress, phase1Xero, 'Xero')}
+                      {progressStatus(xeroProgress, phase1Xero, 'Xero', xeroStep.status)}
                     </span>
                   </div>
                 </div>
@@ -891,7 +901,7 @@ export default function Setup() {
                       </Button>
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {progressStatus(shopifyProgress, phase1Shopify, 'Shopify')}
+                      {progressStatus(shopifyProgress, phase1Shopify, 'Shopify', shopifyPayoutsStep.status)}
                     </span>
                   </div>
                 </div>
@@ -919,7 +929,7 @@ export default function Setup() {
                       </Button>
                     )}
                     <span className="text-xs text-muted-foreground">
-                      {progressStatus(amazonProgress, phase1Amazon, 'Amazon')}
+                      {progressStatus(amazonProgress, phase1Amazon, 'Amazon', amazonStep.status)}
                     </span>
                   </div>
                 </div>
@@ -966,11 +976,19 @@ export default function Setup() {
                         {items.map(m => (
                           <span
                             key={m.code}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-secondary text-secondary-foreground"
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${
+                              m.isConfirmed === false
+                                ? 'bg-muted text-muted-foreground border border-border'
+                                : 'bg-secondary text-secondary-foreground'
+                            }`}
                           >
+                            {m.isConfirmed === false && <HelpCircle className="h-3 w-3 text-muted-foreground" />}
                             {m.name}
                             {m.orderCount != null && m.orderCount > 0 && (
                               <span className="text-muted-foreground">({m.orderCount} orders)</span>
+                            )}
+                            {m.isConfirmed === false && (
+                              <span className="text-[10px] text-muted-foreground">· needs classification</span>
                             )}
                           </span>
                         ))}
@@ -1031,6 +1049,9 @@ export default function Setup() {
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
               Phase 3 — Settlement status by marketplace
             </h2>
+            <p className="text-xs text-muted-foreground">
+              Upload settlement files for each marketplace to reconcile with your Xero account. Amazon syncs automatically once connected.
+            </p>
 
             {phase3Complete && phase3Breakdown.length > 0 ? (
               <div className="space-y-6">
@@ -1039,11 +1060,23 @@ export default function Setup() {
                     <h3 className="text-sm font-semibold text-foreground">{mp.name}</h3>
                     <div className="space-y-1.5 pl-2">
                       {mp.periods.map((p, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm">
-                          {periodStatusIcon(p.status)}
-                          <span className="text-muted-foreground font-medium min-w-[80px]">{p.period_label}</span>
-                          <span className="text-foreground flex-1">{periodStatusText(p)}</span>
-                          {periodAction(p, mp.code)}
+                        <div key={i}>
+                          <div className="flex items-center gap-2 text-sm">
+                            {periodStatusIcon(p.status)}
+                            <span className="text-muted-foreground font-medium min-w-[80px]">{p.period_label}</span>
+                            <span className="text-foreground flex-1">{periodStatusText(p)}</span>
+                            {periodAction(p, mp.code)}
+                          </div>
+                          {p.status === 'already_recorded' && (
+                            <p className="text-[11px] text-muted-foreground ml-6 mt-0.5">
+                              This settlement exists in Xero before you connected Xettle — we won't touch it.
+                            </p>
+                          )}
+                          {(p.status === 'settlement_needed' || p.status === 'missing') && (
+                            <p className="text-[11px] text-muted-foreground ml-6 mt-0.5">
+                              Download your {mp.name} settlement report from your seller account and upload it here.
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
