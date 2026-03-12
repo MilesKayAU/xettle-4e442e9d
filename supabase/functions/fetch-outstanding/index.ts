@@ -129,6 +129,15 @@ Deno.serve(async (req) => {
     let token = tokens[0] as XeroToken;
     token = await refreshToken(supabase, token);
 
+    // ─── Get accounting boundary date ───
+    const { data: boundaryRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'accounting_boundary_date')
+      .maybeSingle();
+    const accountingBoundary = boundaryRow?.value || null;
+
     // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
     // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
     const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
