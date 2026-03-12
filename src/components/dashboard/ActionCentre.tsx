@@ -99,7 +99,7 @@ export default function ActionCentre({
   onSwitchToSettlements,
   userName,
   userId,
-  userCreatedAt,
+  userCreatedAt: authUserCreatedAt,
 }: ActionCentreProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);
