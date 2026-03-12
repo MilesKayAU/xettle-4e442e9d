@@ -480,7 +480,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <div className="flex gap-2">
             <Button
               size="sm"
-              onClick={() => confirmBankMatch(row, best.transaction_id, 'suggested', best.confidence)}
+              onClick={() => confirmBankMatch(row, best.transaction_id, best.amount, 'suggested', best.confidence)}
               disabled={isConfirmingRow}
               className="gap-1.5 text-xs h-7"
             >
