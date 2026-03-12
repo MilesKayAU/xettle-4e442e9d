@@ -670,7 +670,64 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ─── 8. Mark scan as completed ──────────────────────────────────
+    // ─── 8. Detect payment gateway bank accounts (Rule #11 — verification only) ─
+    const GATEWAY_ACCOUNT_DETECTION: Record<string, string[]> = {
+      paypal: ['paypal', 'pypl'],
+      shopify_payments: ['shopify', 'stripe'],
+    }
+
+    try {
+      const accountsData = await xeroGet(
+        'https://api.xero.com/api.xro/2.0/Accounts?where=Type=="BANK"',
+        accessToken, tenantId
+      )
+
+      for (const account of (accountsData.Accounts || [])) {
+        const accountName = (account.Name || '').toLowerCase()
+        const accountId = account.AccountID || ''
+
+        for (const [gatewayCode, patterns] of Object.entries(GATEWAY_ACCOUNT_DETECTION)) {
+          const matched = patterns.some(p => accountName.includes(p))
+          if (!matched) continue
+
+          const accountIdKey = `${gatewayCode}_xero_account_id`
+          const enabledKey = `${gatewayCode}_verification_enabled`
+
+          const { data: existingAccountSetting } = await supabase
+            .from('app_settings')
+            .select('id')
+            .eq('key', accountIdKey)
+            .maybeSingle()
+
+          if (existingAccountSetting) {
+            await supabase.from('app_settings')
+              .update({ value: accountId })
+              .eq('id', existingAccountSetting.id)
+          } else {
+            await supabase.from('app_settings')
+              .insert({ user_id: userId, key: accountIdKey, value: accountId })
+          }
+
+          // Auto-enable verification for detected accounts
+          const { data: existingEnabledSetting } = await supabase
+            .from('app_settings')
+            .select('id')
+            .eq('key', enabledKey)
+            .maybeSingle()
+
+          if (!existingEnabledSetting) {
+            await supabase.from('app_settings')
+              .insert({ user_id: userId, key: enabledKey, value: 'true' })
+          }
+
+          console.log(`[scan-xero-history] Detected ${gatewayCode} bank account: ${account.Name} (${accountId})`)
+        }
+      }
+    } catch (e) {
+      console.error('[scan-xero-history] Payment account detection error:', e)
+    }
+
+    // ─── 9. Mark scan as completed ──────────────────────────────────
     const { data: existingScanFlag } = await supabase
       .from('app_settings')
       .select('id')
