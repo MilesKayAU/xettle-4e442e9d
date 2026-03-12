@@ -1125,7 +1125,20 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* No data */}
-      {data && filteredRows.length === 0 && (
+      {data && filteredRows.length === 0 && xeroSyncMessage && (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Clock3 className="h-12 w-12 text-amber-500 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-foreground">Sync paused</h3>
+            <p className="text-sm text-muted-foreground mt-1">We’re waiting for Xero API capacity to return.</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Your data is not cleared — it will appear automatically once the API window reopens.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {data && filteredRows.length === 0 && !xeroSyncMessage && (
         <Card>
           <CardContent className="p-8 text-center">
             <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-3" />
