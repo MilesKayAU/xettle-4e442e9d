@@ -109,6 +109,21 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
   const [classifyingAlert, setClassifyingAlert] = useState<ChannelAlert | null>(null);
 
+  /** Count only genuinely actionable alerts for badge display */
+  const getActionableCount = (alertList: ChannelAlert[], excludeId?: string) => {
+    return alertList.filter(a => {
+      if (excludeId && a.id === excludeId) return false;
+      // Exclude unclassified Xero contacts (info-only)
+      const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
+      if (isXeroContactOnly) return false;
+      // Exclude payment gateway deposits
+      if (a.alert_type === 'payment_gateway_deposit') return false;
+      // Exclude micro-deposits under $5 (gateway noise)
+      if (a.alert_type === 'unmatched_deposit' && a.deposit_amount != null && Math.abs(a.deposit_amount) < 5) return false;
+      return true;
+    }).length;
+  };
+
   const loadAlerts = async () => {
     try {
       // Load payment processor registry to auto-exclude gateways
@@ -157,12 +172,8 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       }
 
       setAlerts(alertsData);
-      // Badge count: only genuinely actionable items (new channels needing setup, unlinked, deposits)
-      const actionableCount = alertsData.filter(a => {
-        const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-        return !isXeroContactOnly; // Exclude unclassified contacts from badge count
-      }).length;
-      onAlertCountChange?.(actionableCount);
+      // Badge count: only genuinely actionable items
+      onAlertCountChange?.(getActionableCount(alertsData));
 
       if (alertsData.length === 0) {
         const { data: tokens } = await supabase
@@ -303,7 +314,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     }
 
     setAlerts(prev => prev.filter(a => a.id !== alert.id));
-    onAlertCountChange?.(alerts.length - 1);
+    onAlertCountChange?.(getActionableCount(alerts, alert.id));
     toast.info(`"${getDisplayName(alert)}" ignored — you can re-enable in Settings.`);
   };
 
@@ -318,7 +329,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       .eq('id', alert.id);
 
     setAlerts(prev => prev.filter(a => a.id !== alert.id));
-    onAlertCountChange?.(alerts.length - 1);
+    onAlertCountChange?.(getActionableCount(alerts, alert.id));
     toast.success(`${getDisplayName(alert)} deposit confirmed as included in your Shopify Payments payout.`);
   };
 
@@ -373,7 +384,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         .eq('id', alert.id);
 
       setAlerts(prev => prev.filter(a => a.id !== alert.id));
-      onAlertCountChange?.(alerts.length - 1);
+      onAlertCountChange?.(getActionableCount(alerts, alert.id));
       toast.success(`${displayName} orders are now linked to your ${displayName} settlements. Cross-reference reconciliation is enabled.`);
     } catch (err: any) {
       toast.error(`Failed to link: ${err.message || 'Unknown error'}`);
@@ -405,7 +416,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         .eq('source_name', setupChannel.source_name);
 
       setAlerts(prev => prev.filter(a => a.source_name !== setupChannel.source_name));
-      onAlertCountChange?.(alerts.length - 1);
+      onAlertCountChange?.(getActionableCount(alerts.filter(a => a.source_name !== setupChannel.source_name)));
     }
     setSetupChannel(null);
   };
@@ -894,13 +905,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
               .update({ status: 'classified', actioned_at: new Date().toISOString() } as any)
               .eq('id', alertId);
             setAlerts(prev => prev.filter(a => a.id !== alertId));
-            const remaining = alerts.length - 1;
-            const actionableCount = alerts.filter(a => {
-              if (a.id === alertId) return false;
-              const isXC = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-              return !isXC;
-            }).length;
-            onAlertCountChange?.(actionableCount);
+            onAlertCountChange?.(getActionableCount(alerts, alertId));
             setClassifyingAlert(null);
           }}
         />
