@@ -105,7 +105,7 @@ export async function callEdgeFunctionSafe(
       console.warn(`[sync] ${name} returned ${res.status}:`, text);
       return {
         ok: false,
-        error: isRateLimited ? 'Temporarily unavailable — will retry automatically' : 'Temporarily unavailable',
+        error: isRateLimited ? `Rate limited (${res.status})` : text || 'Temporarily unavailable',
         statusCode: res.status,
         rateLimited: isRateLimited,
       };

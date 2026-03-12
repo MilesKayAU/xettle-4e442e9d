@@ -22,7 +22,7 @@ import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 
 // ─── Types ──────────────────────────────────────────────────────────
-type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'pending';
+type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'pending' | 'rate_limited';
 
 interface StepState {
   status: StepStatus;
