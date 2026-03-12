@@ -764,7 +764,25 @@ export default function Dashboard() {
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
         {activeView === 'dashboard' && <SetupInProgressBanner />}
-
+        {activeView === 'dashboard' && showDiscoveryBanner && (
+          <div className="mb-4">
+            <DiscoveryBanner
+              onDiscoveryComplete={() => {
+                setShowDiscoveryBanner(false);
+                setShowChannelsPrompt(true);
+                loadMarketplaces();
+              }}
+            />
+          </div>
+        )}
+        {activeView === 'dashboard' && showChannelsPrompt && !showDiscoveryBanner && (
+          <div className="mb-4">
+            <ConnectChannelsPrompt
+              onDismiss={() => setShowChannelsPrompt(false)}
+              onSwitchToUpload={() => switchView('smart_upload')}
+            />
+          </div>
+        )}
         {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
         {/* ─── Dashboard (always useful — strip, actions, validation) ──── */}
         {activeView === 'dashboard' && (
