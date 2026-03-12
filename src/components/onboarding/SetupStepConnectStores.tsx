@@ -588,8 +588,8 @@ export default function SetupStepConnectStores({
           </p>
 
           <div className="flex flex-col items-center gap-2">
-            <Button onClick={onNext} className="w-full">
-              Continue
+            <Button onClick={handleContinueFromMarketplaceStep} className="w-full" disabled={persistingSelections}>
+              {persistingSelections ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving selections...</> : 'Continue'}
             </Button>
             <div className="flex items-center justify-between w-full">
               <button onClick={() => setStep(2)} className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
