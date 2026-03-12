@@ -78,11 +78,34 @@ function SetupInProgressBanner() {
   const [show, setShow] = useState(false);
   useEffect(() => {
     (async () => {
-      const [dismissed, phase3] = await Promise.all([
-        supabase.from('app_settings').select('value').eq('key', 'setup_hub_dismissed').maybeSingle(),
-        supabase.from('app_settings').select('value').eq('key', 'setup_phase3_complete').maybeSingle(),
-      ]);
-      if (dismissed.data?.value !== 'true' && phase3.data?.value !== 'true') setShow(true);
+      const { data: flags } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', [
+          'setup_hub_dismissed',
+          'setup_phase3_complete',
+          'xero_scan_completed',
+          'amazon_scan_completed',
+          'shopify_scan_completed',
+        ]);
+
+      const flagMap = new Map(flags?.map(f => [f.key, f.value]) || []);
+
+      // Hide if explicitly dismissed or phase3 complete
+      if (flagMap.get('setup_hub_dismissed') === 'true') return;
+      if (flagMap.get('setup_phase3_complete') === 'true') return;
+
+      // Also hide if all connected scans completed
+      const allScansComplete =
+        (flagMap.get('xero_scan_completed') === 'true' || !flagMap.has('xero_scan_completed')) &&
+        (flagMap.get('amazon_scan_completed') === 'true' || !flagMap.has('amazon_scan_completed')) &&
+        (flagMap.get('shopify_scan_completed') === 'true' || !flagMap.has('shopify_scan_completed'));
+
+      // Show banner only if at least one scan exists but not all are complete
+      const hasAnyScan = flagMap.has('xero_scan_completed') || flagMap.has('amazon_scan_completed') || flagMap.has('shopify_scan_completed');
+      if (hasAnyScan && allScansComplete) return;
+
+      setShow(true);
     })();
   }, []);
   if (!show) return null;
