@@ -1003,7 +1003,7 @@ export default function Setup() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-              Phase 2 — Identify your marketplaces
+              Step 2 — Detect your sales channels
             </h2>
 
             {phase2Complete ? (
