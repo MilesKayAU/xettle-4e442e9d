@@ -127,7 +127,7 @@ function isLikelyMarketplaceInvoice(reference: string, contactName: string): boo
   return ref.startsWith('xettle-') || ref.startsWith('amzn-') || ref.startsWith('lmb-') || ref.includes('settlement') || ref.includes('payout');
 }
 
-async function loadOutstandingCache(supabase: any, userId: string) {
+async function loadOutstandingCache(supabase: any, userId: string): Promise<{ payload: any; cached_at: string | null } | null> {
   try {
     const { data } = await supabase
       .from('app_settings')
@@ -137,8 +137,22 @@ async function loadOutstandingCache(supabase: any, userId: string) {
       .maybeSingle();
 
     if (!data?.value) return null;
+
     const parsed = JSON.parse(data.value);
-    return parsed?.payload || null;
+
+    // Current cache shape
+    if (parsed?.payload) {
+      return {
+        payload: parsed.payload,
+        cached_at: parsed.cached_at || null,
+      };
+    }
+
+    // Backward-compatible fallback (legacy payload-only cache)
+    return {
+      payload: parsed,
+      cached_at: null,
+    };
   } catch {
     return null;
   }
