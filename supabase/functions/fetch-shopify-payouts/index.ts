@@ -293,8 +293,8 @@ async function syncPayoutsForUser(
       const isBeforeBoundary = dateMin && payoutDate < dateMin;
       const settlementStatus = isBeforeBoundary ? "already_recorded" : "saved";
 
-      // ─── Insert settlement ───────────────────────────────────
-      const { error: insertError } = await supabase.from("settlements").insert({
+      // ─── Insert settlement (ON CONFLICT DO NOTHING) ─────────
+      const { error: insertError } = await supabase.from("settlements").upsert({
         user_id: userId,
         settlement_id: String(payout.id),
         marketplace: "shopify_payments",
@@ -318,7 +318,7 @@ async function syncPayoutsForUser(
         net_ex_gst: netExGst,
         bank_deposit: netPayout,
         raw_payload: { payout, transactions },
-      } as any);
+      } as any, { onConflict: "marketplace,settlement_id,user_id", ignoreDuplicates: true });
 
       // Register aliases after successful insert
       if (!insertError) {
