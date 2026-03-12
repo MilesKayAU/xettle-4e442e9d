@@ -185,6 +185,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
         // Check if any step ended in rate_limited — don't mark as fully complete
         let hasRateLimited = false;
         setStepStatuses(prev => { hasRateLimited = prev.some(s => s === 'rate_limited'); return prev; });
+        if (caps.hasAmazon && !hasRateLimited) {
           await writeFlag('amazon_scan_completed');
         }
 
