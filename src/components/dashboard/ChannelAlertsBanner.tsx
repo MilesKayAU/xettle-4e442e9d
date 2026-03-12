@@ -384,7 +384,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         .eq('id', alert.id);
 
       setAlerts(prev => prev.filter(a => a.id !== alert.id));
-      onAlertCountChange?.(alerts.length - 1);
+      onAlertCountChange?.(getActionableCount(alerts, alert.id));
       toast.success(`${displayName} orders are now linked to your ${displayName} settlements. Cross-reference reconciliation is enabled.`);
     } catch (err: any) {
       toast.error(`Failed to link: ${err.message || 'Unknown error'}`);
