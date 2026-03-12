@@ -944,22 +944,32 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </Button>
       </div>
 
-      {/* Sync-in-progress banner — shown when most invoices have no settlement match */}
-      {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (
-        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
-          <Loader2 className="h-5 w-5 text-amber-600 dark:text-amber-400 animate-spin shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-              Settlement sync in progress
-            </p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-              Xettle is fetching your Amazon and Shopify settlement data in the background. This can take a few minutes
-              on first setup — settlements will automatically match to these invoices as they arrive.
-              Refresh this page shortly to see updated matches.
-            </p>
+      {/* Settlement sync banner */}
+      {data && data.invoice_count > 0 && (() => {
+        const unmatchedCount = data.sync_info?.unmatched_count ?? Math.max(0, data.invoice_count - data.matched_with_settlement);
+        if (unmatchedCount <= 0) return null;
+
+        const rateLimited = !!data.sync_info?.amazon_rate_limited;
+        const retryAt = data.sync_info?.amazon_rate_limit_until
+          ? new Date(data.sync_info.amazon_rate_limit_until).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })
+          : null;
+
+        return (
+          <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+            <Loader2 className="h-5 w-5 text-amber-600 dark:text-amber-400 animate-spin shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                {rateLimited ? 'Amazon sync is temporarily rate limited' : 'Settlement sync in progress'}
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                We&apos;ve matched {data.matched_with_settlement} of {data.invoice_count} invoices. {rateLimited && retryAt
+                  ? `Amazon will retry automatically after ${retryAt}.`
+                  : 'Remaining settlements will attach automatically as they import in the background.'}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Filter toggle */}
       {data && nonMarketplaceCount > 0 && (
