@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
-import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload, ArrowRight, ArrowLeft, Search, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
@@ -134,15 +134,103 @@ export default function SetupStepConnectStores({
     onMarketplacesChange(updated);
   };
 
-  const handleAddCustom = () => {
+  // ─── Smart marketplace search ───
+  const [registryResults, setRegistryResults] = useState<Array<{ marketplace_code: string; marketplace_name: string }>>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [nearMatch, setNearMatch] = useState<{ marketplace_code: string; marketplace_name: string } | null>(null);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+
+  const searchRegistry = useCallback(async (query: string) => {
+    if (query.trim().length < 2) {
+      setRegistryResults([]);
+      setNearMatch(null);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const { data } = await supabase
+        .from('marketplace_registry')
+        .select('marketplace_code, marketplace_name')
+        .eq('is_active', true)
+        .ilike('marketplace_name', `%${query.trim()}%`)
+        .limit(6);
+
+      const results = (data || []).filter(
+        r => !CSV_MARKETPLACES.some(m => m.id === r.marketplace_code) &&
+             !selectedMarketplaces.includes(r.marketplace_code)
+      );
+      setRegistryResults(results);
+
+      // Check for near-match (fuzzy): if no exact results but query is 3+ chars
+      if (results.length === 0 && query.trim().length >= 3) {
+        // Broader search — check if any marketplace contains part of the query
+        const { data: broader } = await supabase
+          .from('marketplace_registry')
+          .select('marketplace_code, marketplace_name')
+          .eq('is_active', true)
+          .limit(50);
+        const q = query.trim().toLowerCase();
+        const fuzzy = (broader || []).find(r => {
+          const name = r.marketplace_name.toLowerCase();
+          // Check if first 3+ chars match
+          return name.includes(q.slice(0, 3)) || q.includes(name.slice(0, 3));
+        });
+        setNearMatch(fuzzy && !selectedMarketplaces.includes(fuzzy.marketplace_code) ? fuzzy : null);
+      } else {
+        setNearMatch(null);
+      }
+    } catch {
+      setRegistryResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [selectedMarketplaces]);
+
+  const handleCustomNameChange = (value: string) => {
+    setCustomName(value);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => searchRegistry(value), 250);
+  };
+
+  const handleSelectRegistryMatch = (match: { marketplace_code: string; marketplace_name: string }) => {
+    if (!selectedMarketplaces.includes(match.marketplace_code)) {
+      onMarketplacesChange([...selectedMarketplaces, match.marketplace_code]);
+    }
+    setCustomName('');
+    setRegistryResults([]);
+    setNearMatch(null);
+    setShowCustomInput(false);
+    toast.success(`${match.marketplace_name} added`);
+  };
+
+  const handleAddCustom = async () => {
     if (!customName.trim()) return;
-    const id = customName.trim().toLowerCase().replace(/\s+/g, '_');
+    const name = customName.trim();
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+    // Save to marketplace_registry so all users benefit
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('marketplace_registry').upsert({
+        marketplace_code: id,
+        marketplace_name: name,
+        country: 'AU',
+        type: 'marketplace',
+        added_by: user?.id ? 'user' : 'system',
+        is_active: true,
+      }, { onConflict: 'marketplace_code' });
+    } catch {
+      // Non-fatal — still add locally
+    }
+
     if (!selectedMarketplaces.includes(id)) {
       onMarketplacesChange([...selectedMarketplaces, id]);
     }
     setCustomName('');
+    setRegistryResults([]);
+    setNearMatch(null);
     setShowCustomInput(false);
-    toast.success(`${customName.trim()} added — you can upload its files in the next step.`);
+    toast.success(`${name} added — you can upload its files in the next step.`);
   };
 
   // Back within sub-steps goes to previous sub-step, or to wizard back
@@ -345,9 +433,73 @@ export default function SetupStepConnectStores({
           )}
 
           {showCustomInput ? (
-            <div className="flex gap-2">
-              <Input placeholder="e.g. Woolworths MarketPlus" value={customName} onChange={(e) => setCustomName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()} className="text-sm" autoFocus />
-              <Button size="sm" onClick={handleAddCustom} disabled={!customName.trim()}>Add</Button>
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Type a marketplace name..."
+                  value={customName}
+                  onChange={(e) => handleCustomNameChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && registryResults.length === 0 && !nearMatch) handleAddCustom();
+                    if (e.key === 'Escape') { setShowCustomInput(false); setCustomName(''); setRegistryResults([]); setNearMatch(null); }
+                  }}
+                  className="text-sm pl-9 pr-9"
+                  autoFocus
+                />
+                {customName && (
+                  <button onClick={() => { setCustomName(''); setRegistryResults([]); setNearMatch(null); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Search results dropdown */}
+              {(registryResults.length > 0 || searchLoading) && (
+                <div className="border border-border rounded-lg bg-card shadow-sm overflow-hidden">
+                  {searchLoading && (
+                    <div className="p-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Searching...
+                    </div>
+                  )}
+                  {registryResults.map((r) => (
+                    <button
+                      key={r.marketplace_code}
+                      onClick={() => handleSelectRegistryMatch(r)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-accent/50 transition-colors flex items-center gap-2 border-b border-border last:border-b-0"
+                    >
+                      <Store className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-medium text-foreground">{r.marketplace_name}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">Select</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Near-match suggestion */}
+              {nearMatch && !searchLoading && registryResults.length === 0 && (
+                <div className="border border-primary/30 rounded-lg bg-primary/5 p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    Did you mean <span className="font-semibold text-foreground">{nearMatch.marketplace_name}</span>?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleSelectRegistryMatch(nearMatch)}>
+                      Yes, use {nearMatch.marketplace_name}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-xs h-7" onClick={handleAddCustom}>
+                      No, save "{customName.trim()}" as new
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Save as new option when no results */}
+              {customName.trim().length >= 2 && !searchLoading && registryResults.length === 0 && !nearMatch && (
+                <Button size="sm" variant="outline" onClick={handleAddCustom} className="w-full text-xs flex items-center gap-1.5">
+                  <Plus className="h-3 w-3" /> Save "{customName.trim()}" as a new marketplace
+                </Button>
+              )}
             </div>
           ) : (
             <button onClick={() => setShowCustomInput(true)} className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1 mx-auto">
