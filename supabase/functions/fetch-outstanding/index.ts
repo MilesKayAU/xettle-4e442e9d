@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
       const retryAfter = xeroResp.headers.get('Retry-After') || '60';
       const isRateLimited = xeroResp.status === 429;
       const isAuthError = xeroResp.status === 401 || xeroResp.status === 403;
-      const cached = await loadOutstandingCache(supabase, userId);
+      const cached = cachedPayload;
 
       const syncInfo = {
         xero_rate_limited: isRateLimited,
