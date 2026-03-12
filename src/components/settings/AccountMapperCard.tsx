@@ -336,6 +336,44 @@ export default function AccountMapperCard() {
     return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">❌ Low</Badge>;
   };
 
+  const REVENUE_CATEGORIES_SET = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
+  const REVENUE_ACCOUNT_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS']);
+  const EXPENSE_ACCOUNT_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
+
+  /** Validate a single account code against the cached CoA */
+  const validateCode = (code: string | undefined, category: string): CoaValidation => {
+    if (!code || coaMap.size === 0) return 'valid'; // No CoA data — skip validation
+    const entry = coaMap.get(code);
+    if (!entry) return 'missing';
+    if (!entry.active) return 'inactive';
+    const isRevenue = REVENUE_CATEGORIES_SET.has(category);
+    const validTypes = isRevenue ? REVENUE_ACCOUNT_TYPES : EXPENSE_ACCOUNT_TYPES;
+    if (!validTypes.has(entry.type)) return 'wrong_type';
+    return 'valid';
+  };
+
+  /** Render a validation badge next to a mapping */
+  const renderValidationBadge = (code: string | undefined, category: string) => {
+    if (!code || coaMap.size === 0) return null;
+    const status = validateCode(code, category);
+    if (status === 'valid') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
+    if (status === 'missing') return (
+      <span className="flex items-center gap-1 text-[10px] text-red-600">
+        <XCircle className="h-3.5 w-3.5 shrink-0" /> Missing
+      </span>
+    );
+    if (status === 'inactive') return (
+      <span className="flex items-center gap-1 text-[10px] text-red-600">
+        <XCircle className="h-3.5 w-3.5 shrink-0" /> Inactive
+      </span>
+    );
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-amber-600">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Wrong type
+      </span>
+    );
+  };
+
   /** Render an account code selector (dropdown or text input) */
   const renderAccountSelector = (key: string, placeholder?: string) => {
     if (accounts.length > 0) {
