@@ -1042,11 +1042,23 @@ export default function Setup() {
                     <h3 className="text-sm font-semibold text-foreground">{mp.name}</h3>
                     <div className="space-y-1.5 pl-2">
                       {mp.periods.map((p, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm">
-                          {periodStatusIcon(p.status)}
-                          <span className="text-muted-foreground font-medium min-w-[80px]">{p.period_label}</span>
-                          <span className="text-foreground flex-1">{periodStatusText(p)}</span>
-                          {periodAction(p, mp.code)}
+                        <div key={i}>
+                          <div className="flex items-center gap-2 text-sm">
+                            {periodStatusIcon(p.status)}
+                            <span className="text-muted-foreground font-medium min-w-[80px]">{p.period_label}</span>
+                            <span className="text-foreground flex-1">{periodStatusText(p)}</span>
+                            {periodAction(p, mp.code)}
+                          </div>
+                          {p.status === 'already_recorded' && (
+                            <p className="text-[11px] text-muted-foreground ml-6 mt-0.5">
+                              This settlement exists in Xero before you connected Xettle — we won't touch it.
+                            </p>
+                          )}
+                          {(p.status === 'settlement_needed' || p.status === 'missing') && (
+                            <p className="text-[11px] text-muted-foreground ml-6 mt-0.5">
+                              Download your {mp.name} settlement report from your seller account and upload it here.
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
