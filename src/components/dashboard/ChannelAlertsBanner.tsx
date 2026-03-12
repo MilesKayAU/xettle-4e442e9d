@@ -140,8 +140,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     return alertList.filter(a => {
       if (excludeId && a.id === excludeId) return false;
       // Exclude unclassified Xero contacts (info-only)
-      const isXeroContactOnly = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-      if (isXeroContactOnly) return false;
+      if (isXeroContactOnlyAlert(a)) return false;
       // Exclude payment gateway deposits
       if (a.alert_type === 'payment_gateway_deposit') return false;
       // Exclude micro-deposits under $5 (gateway noise)
