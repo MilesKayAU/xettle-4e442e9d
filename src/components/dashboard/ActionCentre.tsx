@@ -220,16 +220,20 @@ export default function ActionCentre({
   }, [loadData]);
 
   useEffect(() => {
+    if (!userId) return;
+
+    const userFilter = `user_id=eq.${userId}`;
     const channel = supabase
-      .channel('action-centre-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation' }, () => debouncedLoadData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_events' }, () => debouncedLoadData())
+      .channel(`action-centre-live-${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation', filter: userFilter }, () => debouncedLoadData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_events', filter: userFilter }, () => debouncedLoadData())
       .subscribe();
+
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
-  }, [debouncedLoadData]);
+  }, [debouncedLoadData, userId]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
