@@ -1082,7 +1082,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map(row => {
+              {paginatedRows.map(row => {
                 const isExpanded = expandedRow === row.xero_invoice_id;
                 const isApplying = applying.has(row.xero_invoice_id);
                 const isBalanced = row.match_status === 'balanced' || row.match_status === 'confirmed';
