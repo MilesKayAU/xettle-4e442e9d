@@ -388,8 +388,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Bank deposit found</p>
-              <p className="text-xl font-bold text-foreground">{data.bank_deposit_found}</p>
-              <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
+              <p className={`text-xl font-bold ${
+                data.bank_deposit_found === 0 && filteredRows.every(r => r.has_bank_deposit || isAmazon(r))
+                  ? 'text-muted-foreground'
+                  : 'text-foreground'
+              }`}>{data.bank_deposit_found}</p>
+              <p className="text-xs text-muted-foreground">
+                {data.bank_deposit_found === 0 && filteredRows.every(r => r.has_bank_deposit || isAmazon(r))
+                  ? 'Amazon uses batched deposits'
+                  : `of ${data.invoice_count}`}
+              </p>
             </CardContent>
           </Card>
           <Card>
