@@ -582,6 +582,13 @@ export default function ValidationSweep({
           </CardContent>
         </Card>
       )}
+
+      <PushSafetyPreview
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        onConfirm={executePush}
+        settlements={previewSettlements}
+      />
     </div>
   );
 }
