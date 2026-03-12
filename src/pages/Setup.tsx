@@ -548,15 +548,17 @@ export default function Setup() {
     try {
       await provisionAllMarketplaceConnections(caps.userId);
 
-      // Query all 5 sources in parallel
-      const [subChannelsRes, alertsRes, connectionsRes, settlementsRes, fingerprintsRes] = await Promise.all([
+      // Query all 5 sources + registry in parallel
+      const [subChannelsRes, alertsRes, connectionsRes, settlementsRes, fingerprintsRes, registryRes] = await Promise.all([
         supabase.from('shopify_sub_channels').select('source_name, marketplace_label, marketplace_code, order_count, total_revenue'),
         supabase.from('channel_alerts').select('source_name, order_count, detected_label, detection_method, total_revenue'),
         supabase.from('marketplace_connections').select('marketplace_name, marketplace_code, connection_type, settings'),
         supabase.from('settlements').select('marketplace').neq('marketplace', null),
         supabase.from('marketplace_file_fingerprints').select('marketplace_code'),
+        supabase.from('marketplace_registry').select('marketplace_code'),
       ]);
 
+      const knownCodes = new Set((registryRes.data || []).map(r => r.marketplace_code.toLowerCase()));
       const marketplaces: DetectedMarketplace[] = [];
       const seen = new Set<string>();
 
