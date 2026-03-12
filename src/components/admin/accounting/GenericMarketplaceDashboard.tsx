@@ -435,11 +435,14 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             {/* Audit table header */}
             <Card>
               <CardContent className="p-0">
-                <div className="hidden sm:grid sm:grid-cols-[auto_1fr_80px_80px_120px_auto] gap-2 px-3 py-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
+                <div className="hidden sm:grid sm:grid-cols-[auto_1fr_80px_80px_80px_80px_50px_120px_auto] gap-2 px-3 py-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                   <div className="w-5" />
                   <div>Settlement</div>
                   <div className="text-center">Xero</div>
                   <div className="text-center">Bank</div>
+                  <div className="text-right">Expected</div>
+                  <div className="text-right">Actual</div>
+                  <div className="text-right">Diff</div>
                   <div className="text-center">Status</div>
                   <div className="text-right">Actions</div>
                 </div>
