@@ -564,8 +564,10 @@ Deno.serve(async (req) => {
       const isConfirmed = settlement?.bank_tx_id && settlement?.bank_match_confirmed_at;
 
       // Try to find matching bank deposit (exact 1:1 for non-Amazon)
-      const marketplace = detectMarketplace(reference, contactName);
-      const isMarketplace = marketplace !== 'unknown';
+      const detectedMarketplace = detectMarketplace(reference, contactName);
+      const settlementMarketplace = normaliseMarketplaceCode(settlement?.marketplace);
+      const marketplace = detectedMarketplace !== 'unknown' ? detectedMarketplace : settlementMarketplace;
+      const isMarketplace = marketplace !== 'unknown' || isLikelyMarketplaceInvoice(reference, contactName);
       let bankMatch: any = null;
       let bankDifference: number | null = null;
 
