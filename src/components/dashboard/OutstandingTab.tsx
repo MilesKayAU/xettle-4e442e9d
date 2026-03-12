@@ -279,6 +279,74 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, [hasLoaded, data, fetchPaymentVerifications]);
 
+  // ─── Lazy-load deposit coverage when a row is expanded ───
+  // Only fetches deposit_group_id data when rowExpanded === true (never preloads)
+  useEffect(() => {
+    if (!expandedRow || !data) return;
+    const row = data.rows.find(r => r.xero_invoice_id === expandedRow);
+    if (!row?.settlement_id || depositCoverage[row.settlement_id]) return;
+
+    const fetchCoverage = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+
+        // Step 1: Get this settlement's payment verification to find deposit_group_id
+        const { data: pv } = await supabase
+          .from('payment_verifications')
+          .select('deposit_group_id, match_amount, confidence_score, match_method, transaction_date')
+          .eq('settlement_id', row.settlement_id!)
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (!pv?.deposit_group_id) return;
+
+        // Step 2: Fetch all siblings sharing this deposit_group_id
+        const { data: siblings } = await supabase
+          .from('payment_verifications')
+          .select('settlement_id, match_amount, confidence_score')
+          .eq('deposit_group_id', pv.deposit_group_id)
+          .eq('user_id', session.user.id);
+
+        if (!siblings || siblings.length === 0) return;
+
+        // Step 3: Get settlement details for each sibling
+        const siblingIds = siblings.map(s => s.settlement_id);
+        const { data: settlementDetails } = await supabase
+          .from('settlements')
+          .select('settlement_id, period_start, period_end, marketplace, bank_deposit')
+          .in('settlement_id', siblingIds)
+          .eq('user_id', session.user.id);
+
+        const enriched = siblings.map(s => {
+          const detail = settlementDetails?.find(d => d.settlement_id === s.settlement_id);
+          return {
+            ...s,
+            period_start: detail?.period_start || undefined,
+            period_end: detail?.period_end || undefined,
+            marketplace: detail?.marketplace || undefined,
+            bank_deposit: detail?.bank_deposit || 0,
+          };
+        });
+
+        setDepositCoverage(prev => ({
+          ...prev,
+          [row.settlement_id!]: {
+            siblings: enriched,
+            depositAmount: pv.match_amount || 0,
+            depositDate: pv.transaction_date || null,
+            confidence: pv.confidence_score || 0,
+            matchMethod: pv.match_method || 'unknown',
+          },
+        }));
+      } catch {
+        // Non-blocking
+      }
+    };
+
+    fetchCoverage();
+  }, [expandedRow, data, depositCoverage]);
+
   // ─── Confirm payment verification (writes to payment_verifications table) ───
   // Nothing is marked as matched until user explicitly confirms.
   // Auto-detection is always a SUGGESTION.
