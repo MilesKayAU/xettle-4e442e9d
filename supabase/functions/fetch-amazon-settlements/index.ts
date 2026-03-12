@@ -540,6 +540,34 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             continue;
           }
 
+          // ─── Auto-link to pre-cached Xero invoice (from Outstanding) ───
+          const { data: preMatch } = await supabaseAdmin
+            .from('xero_accounting_matches')
+            .select('xero_invoice_id, xero_invoice_number, xero_status, xero_type, matched_reference')
+            .eq('settlement_id', header.settlementId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (preMatch?.xero_invoice_id) {
+            const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
+            let derivedSt = 'synced_external';
+            if (isXettleFormat) {
+              switch (preMatch.xero_status) {
+                case 'DRAFT': derivedSt = 'draft_in_xero'; break;
+                case 'AUTHORISED': derivedSt = 'authorised_in_xero'; break;
+                case 'PAID': derivedSt = 'reconciled_in_xero'; break;
+                default: derivedSt = 'pushed_to_xero'; break;
+              }
+            }
+            await supabaseAdmin.from('settlements').update({
+              xero_journal_id: preMatch.xero_invoice_id,
+              xero_invoice_number: preMatch.xero_invoice_number,
+              xero_status: preMatch.xero_status,
+              status: derivedSt,
+            } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
+            console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
+          }
+
           if (lines.length > 0) {
             const lineRows = lines.map((l: any) => ({
               user_id: userId,
