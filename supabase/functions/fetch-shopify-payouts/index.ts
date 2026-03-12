@@ -460,6 +460,13 @@ Deno.serve(async (req) => {
 
       const results: Array<{ user_id: string; synced: number; skipped: number; errors: string[] }> = [];
 
+      // Parse optional sync_from from request body
+      let syncFromParam: string | undefined;
+      try {
+        const body = await req.json();
+        syncFromParam = body?.sync_from;
+      } catch { /* no body */ }
+
       for (const token of allTokens) {
         try {
           const result = await syncPayoutsForUser(
@@ -467,7 +474,8 @@ Deno.serve(async (req) => {
             token.user_id,
             token.access_token,
             token.shop_domain,
-            true // skip cooldown for cron
+            true, // skip cooldown for cron
+            syncFromParam,
           );
           results.push({ user_id: token.user_id, ...result });
         } catch (err) {
