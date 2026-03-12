@@ -99,7 +99,7 @@ const STATUS_CONFIG: Record<AuditStatus, { label: string; color: string; icon: R
   bank_only: { label: 'Bank matched', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200', icon: <Banknote className="h-3 w-3" /> },
   review: { label: 'Review', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800', icon: <AlertTriangle className="h-3 w-3" /> },
   ready_to_push: { label: 'Ready to push', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200', icon: <Zap className="h-3 w-3" /> },
-  pre_boundary: { label: 'Pre-boundary', color: 'bg-muted text-muted-foreground border-muted', icon: <ShieldCheck className="h-3 w-3" /> },
+  pre_boundary: { label: 'Already in Xero', color: 'bg-muted text-muted-foreground border-muted', icon: <ShieldCheck className="h-3 w-3" /> },
   unknown: { label: 'Needs investigation', color: 'bg-muted text-muted-foreground border-muted', icon: <HelpCircle className="h-3 w-3" /> },
 };
 

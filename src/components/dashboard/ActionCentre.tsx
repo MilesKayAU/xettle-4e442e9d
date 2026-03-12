@@ -73,6 +73,7 @@ const STATUS_ICONS: Record<string, { icon: string; label: string }> = {
   settlement_needed: { icon: '❌', label: 'Settlement needed' },
   missing: { icon: '❌', label: 'Missing/needed' },
   gap_detected: { icon: '⚠️', label: 'Gap detected' },
+  already_in_xero: { icon: '📋', label: 'Already recorded in Xero — managed outside Xettle' },
   not_tracked: { icon: '·', label: 'Before accounting boundary — not tracked by Xettle' },
 };
 
@@ -278,10 +279,19 @@ export default function ActionCentre({
   }, [normalisedRows, connectedMarketplaces]);
 
   const getStatusForCell = (marketplace: string, monthKey: string): { status: string; tooltip: string } => {
-    // Before accounting boundary — don't assume, just mark as not tracked
+    // Before accounting boundary — check if there's actual already_recorded data
     if (accountingBoundary) {
       const boundaryMonth = accountingBoundary.substring(0, 7); // YYYY-MM
       if (monthKey < boundaryMonth) {
+        // Check if this marketplace has already_recorded rows for this month
+        const hasRecordedData = normalisedRows.some(r =>
+          r.marketplace_code === marketplace &&
+          r.period_start?.substring(0, 7) === monthKey &&
+          r.overall_status === 'already_recorded'
+        );
+        if (hasRecordedData) {
+          return { status: 'already_in_xero', tooltip: 'Already recorded in Xero before you connected Xettle' };
+        }
         return { status: 'not_tracked', tooltip: 'Before accounting boundary' };
       }
     }
@@ -563,6 +573,39 @@ export default function ActionCentre({
             </Card>
             );
           })()}
+
+          {/* Already in Xero (pre-boundary) */}
+          {preBoundary.length > 0 && (() => {
+            // Group pre-boundary by marketplace
+            const mpSet = new Set(preBoundary.map(r => r.marketplace_code));
+            const mpList = [...mpSet].map(code => ({
+              code,
+              label: MARKETPLACE_LABELS[code] || code,
+              count: preBoundary.filter(r => r.marketplace_code === code).length,
+            }));
+            return (
+            <Card className="border-border bg-muted/30">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">📋</span>
+                  <h3 className="font-semibold text-sm">Already in Xero</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  These settlements exist in Xero before you connected Xettle — we won't touch them.
+                </p>
+                <ul className="space-y-1">
+                  {mpList.map(m => (
+                    <li key={m.code} className="text-xs flex items-center gap-1.5">
+                      <span className="text-muted-foreground">•</span>
+                      <span>{m.label}</span>
+                      <span className="text-muted-foreground">· {m.count} settlement{m.count > 1 ? 's' : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+            );
+          })()}
         </div>
       )}
 
@@ -615,6 +658,7 @@ export default function ActionCentre({
               <span>🟡 Ready to push</span>
               <span>⚠️ Gap detected</span>
               <span>❌ Missing/needed</span>
+              <span>📋 Already in Xero</span>
               <span>· Not tracked (pre-boundary)</span>
             </div>
           </CardContent>

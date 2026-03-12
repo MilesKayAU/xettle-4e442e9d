@@ -684,6 +684,43 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
             );
           }
 
+          // ─── XERO CONTACT with 0 orders — needs classification, not a channel ───
+          const isXeroContactOnly = (alert.detection_method === 'xero_contact_standalone' || alert.detection_method === 'xero_contact') && (alert.order_count === 0 || alert.order_count === null);
+          if (isXeroContactOnly) {
+            return (
+              <Card key={alert.id} className="border-border bg-muted/30">
+                <CardContent className="flex items-center gap-3 p-4">
+                  <Search className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 text-sm">
+                    <p className="font-medium text-foreground">
+                      ❓ Xero contact needs classification:{' '}
+                      <span className="font-semibold">{displayName}</span>
+                    </p>
+                    <p className="text-muted-foreground mt-0.5">
+                      Found in your Xero contacts but no matching orders. This may be a business expense, personal contact, or inactive marketplace.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => handleIgnore(alert)} className="gap-1 text-xs">
+                      <X className="h-3.5 w-3.5" /> Not a marketplace
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setSetupChannel({
+                        source_name: alert.source_name,
+                        order_count: alert.order_count || 0,
+                        total_revenue: alert.total_revenue || 0,
+                        sample_order_names: [],
+                        is_new: true,
+                      });
+                    }} className="gap-1 text-xs">
+                      Set up as marketplace
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          }
+
           // ─── NEW ALERT — brand new channel, needs full setup ───
           return (
             <Card key={alert.id} className="border-amber-500/30 bg-amber-500/5">
