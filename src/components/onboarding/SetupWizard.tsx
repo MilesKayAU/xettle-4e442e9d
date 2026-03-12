@@ -29,10 +29,19 @@ export default function SetupWizard({
   initialStep = 1,
   hasXero = false,
 }: SetupWizardProps) {
-  const [step, setStep] = useState(() => Math.min(initialStep, TOTAL_STEPS));
+  // If Xero is already connected, skip straight to step 2 (marketplace selection)
+  const [step, setStep] = useState(() => {
+    if (hasXero && initialStep <= 1) return 2;
+    return Math.min(initialStep, TOTAL_STEPS);
+  });
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [selectedMarketplaces, setSelectedMarketplaces] = useState<string[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   const nav = useNavigate();
+
+  useEffect(() => {
+    if (hasXero && step === 1) setStep(2);
+  }, [hasXero]);
 
   useEffect(() => {
     if (initialStep > 1) setStep(Math.min(initialStep, TOTAL_STEPS));
