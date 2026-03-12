@@ -37,7 +37,7 @@ export default function PostSetupBanner({
   const [scanPhase, setScanPhase] = useState<'idle' | 'detecting' | 'scanning' | 'done'>('idle');
   const [xeroStatus, setXeroStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
   const [amazonStatus, setAmazonStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error' | 'rate_limited'>('idle');
-  const [shopifyStatus, setShopifyStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error'>('idle');
+  const [shopifyStatus, setShopifyStatus] = useState<'idle' | 'scanning' | 'done' | 'skipped' | 'error' | 'rate_limited'>('idle');
 
   const [xeroMessage, setXeroMessage] = useState('');
   const [amazonMessage, setAmazonMessage] = useState('');
