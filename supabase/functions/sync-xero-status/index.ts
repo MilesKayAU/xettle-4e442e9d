@@ -424,12 +424,12 @@ serve(async (req) => {
         matched: updated,
         fuzzy_matched: fuzzyMatched,
         unmatched: unmatchedCount,
-        total_scanned: allInvoices.length,
+        total_scanned: dedupedInvoices.length,
         unmatched_settlements_checked: unmatchedSettlements?.length || 0,
       },
     });
 
-    console.log(`[sync-xero-status] User ${userId}: ${updated} reference matches, ${fuzzyMatched} fuzzy matches, ${allInvoices.length} Xero invoices scanned, ${unmatchedCount} still unmatched`);
+    console.log(`[sync-xero-status] User ${userId}: ${updated} reference matches, ${fuzzyMatched} fuzzy matches, ${dedupedInvoices.length} Xero invoices scanned, ${unmatchedCount} still unmatched`);
 
     return new Response(JSON.stringify({
       success: true,
