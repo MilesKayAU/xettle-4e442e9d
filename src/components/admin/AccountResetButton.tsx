@@ -38,18 +38,23 @@ export default function AccountResetButton() {
       const errors = Object.entries(data.results as Record<string, string>).filter(([, v]) => v.startsWith('error'));
 
       // Clear wizard session state so it restarts from step 1
-      sessionStorage.removeItem('xettle_setup_step');
-      sessionStorage.removeItem('xettle_setup_marketplaces');
-      sessionStorage.removeItem('xettle_wizard_dismiss_count');
+      sessionStorage.clear();
+      localStorage.removeItem('xettle_wizard_dismissed');
+
+      // Nuke ALL React Query caches so dashboard/home show fresh state
+      queryClient.clear();
 
       toast({
         title: '🔄 Account Reset Complete',
-        description: `${cleared} tables cleared.${errors.length > 0 ? ` ${errors.length} errors — check console.` : ''} Refresh to see changes.`,
+        description: `${cleared} tables cleared.${errors.length > 0 ? ` ${errors.length} errors — check console.` : ''} Reloading…`,
       });
 
       if (errors.length > 0) {
         console.warn('Reset errors:', Object.fromEntries(errors));
       }
+
+      // Hard reload after brief delay so user sees the toast
+      setTimeout(() => window.location.replace('/dashboard'), 1500);
     } catch (err: any) {
       toast({
         title: 'Reset failed',
