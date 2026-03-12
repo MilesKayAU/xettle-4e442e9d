@@ -65,7 +65,8 @@ interface DetectedMarketplace {
   name: string;
   code: string;
   orderCount?: number;
-  source: string; // 'shopify_orders' | 'shopify_tags' | 'xero_contact' | 'settlement' | 'file_fingerprint' | 'api_connection'
+  source: string;
+  isConfirmed?: boolean; // true if matched to marketplace_registry
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
