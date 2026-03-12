@@ -158,11 +158,13 @@ async function loadUserAccountCodes(): Promise<(category: string, marketplace?: 
  */
 export async function buildSimpleInvoiceLines(settlement: StandardSettlement): Promise<XeroLineItem[]> {
   const getCode = await loadUserAccountCodes();
+  // Derive marketplace label for per-channel account resolution
+  const mpLabel = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
 
   const lines: XeroLineItem[] = [
     {
       Description: 'Marketplace Sales',
-      AccountCode: getCode('Sales'),
+      AccountCode: getCode('Sales', mpLabel),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round(settlement.sales_ex_gst * 100) / 100,
       Quantity: 1,
