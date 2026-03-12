@@ -84,6 +84,23 @@ export default function AccountMapperCard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Load cached Chart of Accounts for validation badges
+      const { data: coaAccounts } = await supabase
+        .from('xero_chart_of_accounts')
+        .select('account_code, account_name, account_type, is_active')
+        .eq('user_id', user.id);
+      const newCoaMap = new Map<string, CoaEntry>();
+      for (const acc of (coaAccounts || [])) {
+        if (acc.account_code) {
+          newCoaMap.set(acc.account_code, {
+            name: acc.account_name,
+            type: (acc.account_type || '').toUpperCase(),
+            active: acc.is_active !== false,
+          });
+        }
+      }
+      setCoaMap(newCoaMap);
+
       // Load split toggle state
       const { data: splitSetting } = await supabase
         .from('app_settings')
