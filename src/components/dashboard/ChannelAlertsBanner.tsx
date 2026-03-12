@@ -900,11 +900,13 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
               .update({ status: 'classified', actioned_at: new Date().toISOString() } as any)
               .eq('id', alertId);
             setAlerts(prev => prev.filter(a => a.id !== alertId));
-            const remaining = alerts.length - 1;
             const actionableCount = alerts.filter(a => {
               if (a.id === alertId) return false;
               const isXC = (a.detection_method === 'xero_contact_standalone' || a.detection_method === 'xero_contact') && (a.order_count === 0 || a.order_count === null);
-              return !isXC;
+              if (isXC) return false;
+              if (a.alert_type === 'payment_gateway_deposit') return false;
+              if (a.alert_type === 'unmatched_deposit' && a.deposit_amount != null && Math.abs(a.deposit_amount) < 5) return false;
+              return true;
             }).length;
             onAlertCountChange?.(actionableCount);
             setClassifyingAlert(null);
