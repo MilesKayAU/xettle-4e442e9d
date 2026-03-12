@@ -53,7 +53,7 @@ export function buildAmazonInvoiceLineItems(
   parsedLines: ParsedSettlement['lines'],
   periodLabel: string,
   settlementId: string,
-  getAccountCode: (category: string) => string,
+  getAccountCode: (category: string, marketplace?: string) => string,
   ratio?: number,
   bankDeposit?: number,
 ): XeroLineItem[] {
@@ -88,9 +88,9 @@ export function buildAmazonInvoiceLineItems(
   }
 
   const getAccountCodeForSplit = (cat: string): string => {
-    if (cat === 'Sales - Principal') return getAccountCode('Sales');
-    if (cat === 'Sales - Shipping') return getAccountCode('Shipping');
-    return getAccountCode(cat);
+    if (cat === 'Sales - Principal') return getAccountCode('Sales', 'Amazon AU');
+    if (cat === 'Sales - Shipping') return getAccountCode('Shipping', 'Amazon AU');
+    return getAccountCode(cat, 'Amazon AU');
   };
 
   const lineItems: XeroLineItem[] = [];

@@ -3,7 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Sparkles, CheckCircle2, RefreshCw, AlertTriangle, Info } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -27,6 +29,9 @@ const CATEGORIES = [
   'Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees',
 ] as const;
 
+/** Categories that support per-marketplace overrides */
+const SPLITTABLE_CATEGORIES = ['Sales', 'Shipping'] as const;
+
 const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   'Sales': 'Gross product sales revenue',
   'Shipping': 'Shipping revenue charged to customers',
@@ -39,6 +44,12 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   'Other Fees': 'Miscellaneous marketplace charges',
 };
 
+/** Known marketplace labels that match MARKETPLACE_LABELS in settlement-engine */
+const KNOWN_MARKETPLACES = [
+  'Amazon AU', 'Shopify', 'Bunnings', 'eBay AU', 'Catch',
+  'MyDeal', 'Kogan', 'Everyday Market', 'The Iconic', 'Etsy',
+];
+
 export default function AccountMapperCard() {
   const [state, setState] = useState<MapperState>('unmapped');
   const [mapping, setMapping] = useState<Record<string, MappingEntry>>({});
@@ -47,6 +58,10 @@ export default function AccountMapperCard() {
   const [notes, setNotes] = useState<string>('');
   const [accounts, setAccounts] = useState<XeroAccount[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Marketplace split state
+  const [splitByMarketplace, setSplitByMarketplace] = useState(false);
+  const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
 
   // Load current state on mount
   useEffect(() => {
@@ -58,6 +73,48 @@ export default function AccountMapperCard() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      // Load split toggle state
+      const { data: splitSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'accounting_split_by_marketplace')
+        .maybeSingle();
+      const isSplit = splitSetting?.value === 'true';
+      setSplitByMarketplace(isSplit);
+
+      // Load active marketplace connections to know which channels to show
+      const { data: connections } = await supabase
+        .from('marketplace_connections')
+        .select('marketplace_name')
+        .eq('user_id', user.id)
+        .eq('connection_status', 'connected');
+
+      if (connections && connections.length > 0) {
+        setActiveMarketplaces(connections.map(c => c.marketplace_name));
+      } else {
+        // Fallback: detect from settlements
+        const { data: settlements } = await supabase
+          .from('settlements')
+          .select('marketplace')
+          .eq('user_id', user.id)
+          .not('status', 'in', '("duplicate_suppressed","already_recorded")');
+        if (settlements) {
+          const unique = [...new Set(settlements.map(s => s.marketplace).filter(Boolean))];
+          // Map codes to labels
+          const labels = unique.map(code => {
+            const labelMap: Record<string, string> = {
+              amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
+              shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
+              kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
+              etsy: 'Etsy', theiconic: 'The Iconic',
+            };
+            return labelMap[code || ''] || code || '';
+          }).filter(Boolean);
+          setActiveMarketplaces([...new Set(labels)]);
+        }
+      }
 
       // Check if confirmed mapping exists
       const { data: confirmedSetting } = await supabase
@@ -76,7 +133,21 @@ export default function AccountMapperCard() {
               restored[cat] = { code: codes[cat], name: `Account ${codes[cat]}` };
             }
           }
+          // Restore marketplace overrides
+          for (const key of Object.keys(codes)) {
+            if (key.includes(':')) {
+              restored[key] = { code: codes[key], name: `Account ${codes[key]}` };
+            }
+          }
           setMapping(restored);
+
+          // Restore editable mapping
+          const editable: Record<string, string> = {};
+          for (const [k, v] of Object.entries(codes)) {
+            editable[k] = v as string;
+          }
+          setEditableMapping(editable);
+
           setState('confirmed');
         } catch { /* fall through */ }
         setLoading(false);
@@ -139,6 +210,30 @@ export default function AccountMapperCard() {
     }
   }, []);
 
+  const handleSplitToggle = async (enabled: boolean) => {
+    setSplitByMarketplace(enabled);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'accounting_split_by_marketplace',
+        value: enabled ? 'true' : 'false',
+      } as any, { onConflict: 'user_id,key' });
+
+      // If disabling, strip marketplace-specific keys from editable mapping
+      if (!enabled) {
+        const cleaned = { ...editableMapping };
+        for (const key of Object.keys(cleaned)) {
+          if (key.includes(':')) delete cleaned[key];
+        }
+        setEditableMapping(cleaned);
+      }
+    } catch (e) {
+      console.error('Failed to save split toggle:', e);
+    }
+  };
+
   const handleConfirm = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -148,6 +243,18 @@ export default function AccountMapperCard() {
       const finalCodes: Record<string, string> = {};
       for (const cat of CATEGORIES) {
         finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
+      }
+
+      // Include marketplace-specific overrides if split is enabled
+      if (splitByMarketplace) {
+        for (const mp of getEffectiveMarketplaces()) {
+          for (const cat of SPLITTABLE_CATEGORIES) {
+            const key = `${cat}:${mp}`;
+            if (editableMapping[key]) {
+              finalCodes[key] = editableMapping[key];
+            }
+          }
+        }
       }
 
       // Save to accounting_xero_account_codes
@@ -176,6 +283,12 @@ export default function AccountMapperCard() {
           name: account?.name || mapping[cat]?.name || `Account ${code}`,
         };
       }
+      // Include marketplace overrides in display mapping
+      for (const key of Object.keys(finalCodes)) {
+        if (key.includes(':')) {
+          updatedMapping[key] = { code: finalCodes[key], name: `Account ${finalCodes[key]}` };
+        }
+      }
       setMapping(updatedMapping);
       setState('confirmed');
       toast.success('Account mapping saved — all Xero pushes will use these codes');
@@ -184,10 +297,74 @@ export default function AccountMapperCard() {
     }
   };
 
+  /** Get marketplaces to display — active connections or detected from settlements */
+  const getEffectiveMarketplaces = (): string[] => {
+    if (activeMarketplaces.length > 0) return activeMarketplaces;
+    return KNOWN_MARKETPLACES.slice(0, 3); // Safe default
+  };
+
   const confidenceBadge = (level: string) => {
     if (level === 'high') return <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50">✅ High</Badge>;
     if (level === 'medium') return <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">⚠️ Medium</Badge>;
     return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">❌ Low</Badge>;
+  };
+
+  /** Render an account code selector (dropdown or text input) */
+  const renderAccountSelector = (key: string, placeholder?: string) => {
+    if (accounts.length > 0) {
+      return (
+        <Select
+          value={editableMapping[key] || mapping[key]?.code || ''}
+          onValueChange={(v) => setEditableMapping(prev => ({ ...prev, [key]: v }))}
+        >
+          <SelectTrigger className="h-7 text-xs w-24">
+            <SelectValue placeholder={placeholder || 'Select'} />
+          </SelectTrigger>
+          <SelectContent>
+            {accounts.map((a) => (
+              <SelectItem key={a.code} value={a.code} className="text-xs">
+                {a.code} — {a.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
+    return (
+      <input
+        className="h-7 w-20 text-xs border rounded px-1.5 font-mono bg-background"
+        placeholder={placeholder}
+        value={editableMapping[key] || mapping[key]?.code || ''}
+        onChange={(e) => setEditableMapping(prev => ({ ...prev, [key]: e.target.value }))}
+      />
+    );
+  };
+
+  /** Render marketplace override rows for a splittable category */
+  const renderMarketplaceOverrides = (baseCat: string) => {
+    if (!splitByMarketplace) return null;
+    const marketplaces = getEffectiveMarketplaces();
+    if (marketplaces.length === 0) return null;
+
+    return marketplaces.map(mp => {
+      const key = `${baseCat}:${mp}`;
+      const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
+      return (
+        <tr key={key} className="border-b last:border-b-0 bg-muted/20">
+          <td className="p-2 pl-6">
+            <div className="text-xs text-muted-foreground">↳ {mp} {baseCat}</div>
+          </td>
+          <td className="p-2">
+            <span className="text-xs text-muted-foreground">
+              Fallback: <span className="font-mono">{baseCode}</span>
+            </span>
+          </td>
+          <td className="p-2">
+            {renderAccountSelector(key, baseCode)}
+          </td>
+        </tr>
+      );
+    });
   };
 
   if (loading) {
@@ -268,47 +445,43 @@ export default function AccountMapperCard() {
               <tbody>
                 {CATEGORIES.map((cat) => {
                   const entry = mapping[cat];
+                  const isSplittable = (SPLITTABLE_CATEGORIES as readonly string[]).includes(cat);
                   return (
-                    <tr key={cat} className="border-b last:border-b-0">
-                      <td className="p-2">
-                        <div className="font-medium">{cat}</div>
-                        <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
-                      </td>
-                      <td className="p-2">
-                        <span className="font-mono text-xs">{entry?.code}</span>
-                        <span className="text-muted-foreground ml-1 text-xs">— {entry?.name}</span>
-                      </td>
-                      <td className="p-2">
-                        {accounts.length > 0 ? (
-                          <Select
-                            value={editableMapping[cat] || entry?.code || ''}
-                            onValueChange={(v) => setEditableMapping(prev => ({ ...prev, [cat]: v }))}
-                          >
-                            <SelectTrigger className="h-7 text-xs w-24">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {accounts.map((a) => (
-                                <SelectItem key={a.code} value={a.code} className="text-xs">
-                                  {a.code} — {a.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <input
-                            className="h-7 w-20 text-xs border rounded px-1.5 font-mono bg-background"
-                            value={editableMapping[cat] || entry?.code || ''}
-                            onChange={(e) => setEditableMapping(prev => ({ ...prev, [cat]: e.target.value }))}
-                          />
-                        )}
-                      </td>
-                    </tr>
+                    <React.Fragment key={cat}>
+                      <tr className="border-b last:border-b-0">
+                        <td className="p-2">
+                          <div className="font-medium">{cat}</div>
+                          <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
+                        </td>
+                        <td className="p-2">
+                          <span className="font-mono text-xs">{entry?.code}</span>
+                          <span className="text-muted-foreground ml-1 text-xs">— {entry?.name}</span>
+                        </td>
+                        <td className="p-2">
+                          {renderAccountSelector(cat)}
+                        </td>
+                      </tr>
+                      {isSplittable && renderMarketplaceOverrides(cat)}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
+
+          {/* Split by marketplace toggle */}
+          {getEffectiveMarketplaces().length > 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
+              <Switch
+                id="split-marketplace"
+                checked={splitByMarketplace}
+                onCheckedChange={handleSplitToggle}
+              />
+              <Label htmlFor="split-marketplace" className="text-xs text-muted-foreground cursor-pointer">
+                Split revenue by marketplace — map Sales & Shipping accounts per channel
+              </Label>
+            </div>
+          )}
 
           {notes && (
             <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground flex gap-2">
@@ -333,6 +506,8 @@ export default function AccountMapperCard() {
   }
 
   // ─── CONFIRMED STATE ─────────────────────────────────────────────
+  const marketplaceOverrideKeys = Object.keys(mapping).filter(k => k.includes(':'));
+
   return (
     <Card>
       <CardHeader>
@@ -356,6 +531,25 @@ export default function AccountMapperCard() {
             );
           })}
         </div>
+
+        {/* Show marketplace overrides if any */}
+        {marketplaceOverrideKeys.length > 0 && (
+          <div className="mt-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Marketplace overrides</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              {marketplaceOverrideKeys.map(key => {
+                const [cat, mp] = key.split(':');
+                return (
+                  <div key={key} className="flex justify-between py-1 border-b border-border/50">
+                    <span className="text-muted-foreground">{mp} {cat}</span>
+                    <span className="font-mono">{mapping[key]?.code || '—'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <TrackingCategoryPrompt />
         <Button variant="outline" size="sm" onClick={runMapper} className="gap-2">
           <RefreshCw className="h-3 w-3" />

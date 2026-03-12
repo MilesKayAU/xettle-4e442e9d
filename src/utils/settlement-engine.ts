@@ -114,9 +114,13 @@ const DEFAULT_ACCOUNT_CODES: Record<string, string> = {
 
 /**
  * Fetch the user's custom account code overrides from app_settings.
- * Returns a getCode(category) helper that falls back to defaults.
+ * Returns a getCode(category, marketplace?) helper that resolves:
+ *   1. userCodes["category:marketplace"] (if marketplace provided)
+ *   2. userCodes["category"]
+ *   3. DEFAULT_ACCOUNT_CODES["category"]
+ *   4. '400' (catch-all)
  */
-async function loadUserAccountCodes(): Promise<(category: string) => string> {
+async function loadUserAccountCodes(): Promise<(category: string, marketplace?: string) => string> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return (cat) => DEFAULT_ACCOUNT_CODES[cat] || '400';
@@ -130,7 +134,13 @@ async function loadUserAccountCodes(): Promise<(category: string) => string> {
 
     if (acSetting?.value) {
       const userCodes = JSON.parse(acSetting.value);
-      return (cat: string) => userCodes[cat] || DEFAULT_ACCOUNT_CODES[cat] || '400';
+      return (cat: string, marketplace?: string) => {
+        if (marketplace) {
+          const mpKey = `${cat}:${marketplace}`;
+          if (userCodes[mpKey]) return userCodes[mpKey];
+        }
+        return userCodes[cat] || DEFAULT_ACCOUNT_CODES[cat] || '400';
+      };
     }
   } catch (e) {
     console.error('Failed to load user account codes, using defaults:', e);
@@ -148,18 +158,20 @@ async function loadUserAccountCodes(): Promise<(category: string) => string> {
  */
 export async function buildSimpleInvoiceLines(settlement: StandardSettlement): Promise<XeroLineItem[]> {
   const getCode = await loadUserAccountCodes();
+  // Derive marketplace label for per-channel account resolution
+  const mpLabel = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
 
   const lines: XeroLineItem[] = [
     {
       Description: 'Marketplace Sales',
-      AccountCode: getCode('Sales'),
+      AccountCode: getCode('Sales', mpLabel),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round(settlement.sales_ex_gst * 100) / 100,
       Quantity: 1,
     },
     {
       Description: 'Marketplace Commission',
-      AccountCode: getCode('Seller Fees'),
+      AccountCode: getCode('Seller Fees', mpLabel),
       TaxType: 'INPUT',
       UnitAmount: -Math.abs(Math.round(settlement.fees_ex_gst * 100) / 100),
       Quantity: 1,
@@ -172,7 +184,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
   if (meta.refundsExGst && meta.refundsExGst !== 0) {
     lines.push({
       Description: 'Customer Refunds',
-      AccountCode: getCode('Refunds'),
+      AccountCode: getCode('Refunds', mpLabel),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round((meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) * 100) / 100,
       Quantity: 1,
@@ -183,7 +195,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
   if (meta.refundCommissionExGst && meta.refundCommissionExGst !== 0) {
     lines.push({
       Description: 'Commission Refund (on refunded orders)',
-      AccountCode: getCode('Seller Fees'),
+      AccountCode: getCode('Seller Fees', mpLabel),
       TaxType: 'INPUT',
       UnitAmount: Math.round(Math.abs(meta.refundCommissionExGst) * 100) / 100,
       Quantity: 1,
@@ -194,7 +206,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
   if (meta.shippingExGst && meta.shippingExGst !== 0) {
     lines.push({
       Description: 'Shipping Revenue',
-      AccountCode: getCode('Shipping'),
+      AccountCode: getCode('Shipping', mpLabel),
       TaxType: 'OUTPUT',
       UnitAmount: Math.round(meta.shippingExGst * 100) / 100,
       Quantity: 1,
@@ -205,7 +217,7 @@ export async function buildSimpleInvoiceLines(settlement: StandardSettlement): P
   if (meta.subscriptionAmount && meta.subscriptionAmount !== 0) {
     lines.push({
       Description: 'Marketplace Subscription',
-      AccountCode: getCode('Seller Fees'),
+      AccountCode: getCode('Seller Fees', mpLabel),
       TaxType: 'INPUT',
       UnitAmount: Math.round(meta.subscriptionAmount * 100) / 100,
       Quantity: 1,
