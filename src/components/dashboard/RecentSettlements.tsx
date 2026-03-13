@@ -276,12 +276,22 @@ const PAGE_SIZE = 10;
 function getPrimaryAction(row: SettlementRow): { label: string } {
   if (row.status === 'hidden') return { label: 'Unhide' };
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return { label: 'Retry' };
-  if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return { label: 'View match' };
-  if (row.status === 'pushed_to_xero' && row.bank_verified) return { label: 'View match' };
-  if (row.status === 'pushed_to_xero') return { label: 'Sync bank' };
-  if (row.status === 'ready_to_push' || row.status === 'parsed' || row.status === 'saved') return { label: 'Post to Xero' };
+  if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return { label: 'View evidence' };
+  if (row.status === 'pushed_to_xero' && row.bank_verified) return { label: 'View evidence' };
+  if (row.status === 'pushed_to_xero') return { label: 'Sync feed' };
+  if (row.status === 'ready_to_push' || row.status === 'parsed' || row.status === 'saved') return { label: 'Send to Xero' };
   if (row.status === 'ingested') return { label: 'View' };
   return { label: 'View' };
+}
+
+function getActionSort(row: SettlementRow): number {
+  if (row.status === 'ready_to_push' || row.status === 'parsed' || row.status === 'saved') return 0;
+  if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 1;
+  if (row.status === 'pushed_to_xero' && !row.bank_verified) return 2;
+  if (row.status === 'pushed_to_xero' && row.bank_verified) return 3;
+  if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return 4;
+  if (row.status === 'hidden') return 5;
+  return 3;
 }
 
 interface RecentSettlementsProps {
