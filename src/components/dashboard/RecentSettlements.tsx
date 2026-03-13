@@ -417,8 +417,8 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
       label: 'Posted',
       count: counts.posted,
       total: counts.postedTotal,
-      color: 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-900/20',
-      icon: <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+      color: 'border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-900/20',
+      icon: <CheckCircle2 className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
     },
     // Only show Needs Attention when there are items
     ...(counts.attention > 0 ? [{
@@ -477,9 +477,13 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                 {card.icon}
                 <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
               </div>
-              <p className="text-xl font-bold text-foreground">{card.count}</p>
-              {card.total !== undefined && card.count > 0 && (
-                <p className="text-xs text-muted-foreground mt-0.5">{formatAUD(card.total)}</p>
+              {card.total !== undefined && card.count > 0 ? (
+                <>
+                  <p className="text-xl font-bold text-foreground">{formatAUD(card.total)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{card.count} settlement{card.count > 1 ? 's' : ''}</p>
+                </>
+              ) : (
+                <p className="text-xl font-bold text-foreground">{card.count}</p>
               )}
             </button>
           ))}

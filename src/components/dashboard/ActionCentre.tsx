@@ -446,9 +446,10 @@ export default function ActionCentre({
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
                   <h3 className="font-semibold text-sm">Posted — Awaiting Deposit</h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero — waiting for bank deposit to appear
-                </p>
+                <div>
+                  <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting deposit</span></p>
+                  <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
+                </div>
                 <ul className="space-y-1">
                   {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
                     <li key={g.key} className="text-xs flex items-center gap-1.5">
