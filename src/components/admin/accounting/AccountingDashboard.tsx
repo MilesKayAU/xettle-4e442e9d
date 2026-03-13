@@ -999,6 +999,9 @@ export default function AccountingDashboard() {
               <TabsTrigger value="insights" className="gap-1.5">
                 <BarChart3 className="h-3.5 w-3.5" /> Insights
               </TabsTrigger>
+              <TabsTrigger value="gst-audit" className="gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5" /> GST Audit
+              </TabsTrigger>
             </TabsList>
 
             {/* UPLOAD TAB */}

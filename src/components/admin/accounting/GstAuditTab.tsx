@@ -100,7 +100,7 @@ export default function GstAuditTab() {
 
   const loadCachedSummaries = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('gst_audit_summary')
         .select('*')
         .order('period_start', { ascending: false });
@@ -108,7 +108,7 @@ export default function GstAuditTab() {
       if (error) throw error;
 
       const map: Record<string, GstSummaryRow> = {};
-      for (const row of (data || [])) {
+      for (const row of (data || []) as any[]) {
         const key = `${row.period_start}_${row.period_end}`;
         map[key] = {
           ...row,
