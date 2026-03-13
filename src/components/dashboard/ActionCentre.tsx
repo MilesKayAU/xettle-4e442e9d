@@ -633,16 +633,19 @@ export default function ActionCentre({
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-2">
-              {events.map(e => {
-                const cfg = EVENT_ICONS[e.event_type] || { icon: <Clock className="h-3.5 w-3.5" />, color: 'text-muted-foreground' };
+              {groupActivityEvents(events).map((item, idx) => {
+                const cfg = EVENT_ICONS[item.event_type] || { icon: <Clock className="h-3.5 w-3.5" />, color: 'text-muted-foreground' };
                 return (
-                  <div key={e.id} className="flex items-center gap-2.5 text-xs">
+                  <div key={idx} className="flex items-center gap-2.5 text-xs">
                     <span className={cfg.color}>{cfg.icon}</span>
                     <span className="text-foreground flex-1">
-                      {formatEventLabel(e)}
+                      {item.label}
+                      {item.count > 1 && (
+                        <span className="text-muted-foreground ml-1">({item.count} periods)</span>
+                      )}
                     </span>
                     <span className="text-muted-foreground flex-shrink-0">
-                      {formatTimeAgo(new Date(e.created_at))}
+                      {formatTimeAgo(new Date(item.created_at))}
                     </span>
                   </div>
                 );
