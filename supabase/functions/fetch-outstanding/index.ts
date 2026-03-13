@@ -853,11 +853,20 @@ Deno.serve(async (req) => {
           ? 'suggestion_high' : 'suggestion_multiple';
       } else if (hasSettlement && !hasBankDeposit) {
         matchStatus = 'no_bank_deposit';
+      } else if (!hasSettlement && marketplace === 'amazon_us') {
+        // Amazon US invoices — marketplace not connected/supported
+        matchStatus = 'unsupported_marketplace';
       } else if (!hasSettlement && hasBankDeposit) {
         matchStatus = 'no_settlement';
       } else if (!hasSettlement && settlementId && preSeededSet.has(settlementId)) {
         // Pre-seeded by sync-xero-status — settlement data is expected from API sync
         matchStatus = 'awaiting_sync';
+      } else if (!hasSettlement && settlementId) {
+        // Settlement ID extracted from reference but not found in DB — needs backfill
+        matchStatus = 'settlement_not_ingested';
+        if (!missingSettlementIds.includes(settlementId)) {
+          missingSettlementIds.push(settlementId);
+        }
       } else {
         matchStatus = 'no_settlement';
       }
