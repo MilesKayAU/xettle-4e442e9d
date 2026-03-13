@@ -360,10 +360,10 @@ export default function DestinationAccountMapper() {
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Banknote className="h-4 w-4" />
-              Settlement Rail → Destination Account
+              Destination accounts
             </CardTitle>
             <CardDescription>
-              Select which bank or clearing account each settlement rail pays into. This controls which deposits are matched during reconciliation.
+              Select which bank or clearing account each settlement rail pays into.
             </CardDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={refreshAccounts} disabled={fetchingAccounts}>
