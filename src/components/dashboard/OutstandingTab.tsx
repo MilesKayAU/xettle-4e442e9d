@@ -1177,6 +1177,49 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </div>
       </div>
 
+      {/* ─── Bank feed diagnostic banners ─── */}
+      {data?.sync_info?.bank_feed_empty && (
+        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Bank feed is empty</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              No cached bank transactions found. Sync your bank feed to enable deposit matching.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
+            <Banknote className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+            {syncingBankFeed ? 'Syncing…' : 'Sync now'}
+          </Button>
+        </div>
+      )}
+      {data?.sync_info?.bank_cache_stale && !data?.sync_info?.bank_feed_empty && (
+        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <Clock3 className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Bank feed is stale</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              Last refreshed: {data.sync_info.bank_cache_last_refreshed_at
+                ? new Date(data.sync_info.bank_cache_last_refreshed_at).toLocaleString('en-AU')
+                : 'unknown'}. Refresh to get the latest deposits.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
+            <RefreshCw className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+            {syncingBankFeed ? 'Syncing…' : 'Refresh'}
+          </Button>
+        </div>
+      )}
+      {data?.sync_info?.mapping_status?.missing_marketplaces && data.sync_info.mapping_status.missing_marketplaces.length > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+          <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            Missing payout bank mappings for: <strong>{data.sync_info.mapping_status.missing_marketplaces.map(m => MARKETPLACE_LABELS[m] || m).join(', ')}</strong>. 
+            Deposit matching is disabled for these channels until mapped.
+          </p>
+        </div>
+      )}
+
       {/* Smart marketplace connection prompt */}
       {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (() => {
         // Detect which marketplaces are in outstanding invoices but missing settlements
