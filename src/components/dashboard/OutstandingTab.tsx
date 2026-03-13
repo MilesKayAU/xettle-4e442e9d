@@ -171,6 +171,10 @@ interface OutstandingSummary {
     lookback_days_effective?: number;
     force_recompute_used?: boolean;
     missing_settlement_ids?: string[];
+    invoice_cache_age_minutes?: number | null;
+    from_cache?: boolean;
+    xero_rate_limited?: boolean;
+    no_xero_connection?: boolean;
     mapping_status?: {
       has_any_mapping?: boolean;
       missing_marketplaces?: string[];
@@ -304,6 +308,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
+        body: { force_refresh: true },
       });
 
       // Check for structured no_xero_connection signal from fetch-outstanding
@@ -1220,7 +1225,39 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </div>
       )}
 
-      {/* Smart marketplace connection prompt */}
+      {/* ─── Invoice cache / rate-limit banners ─── */}
+      {data?.sync_info?.xero_rate_limited && (
+        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <Clock3 className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Xero rate limited — showing cached data
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              Invoice data is {data.sync_info.invoice_cache_age_minutes != null
+                ? `${data.sync_info.invoice_cache_age_minutes} minute${data.sync_info.invoice_cache_age_minutes !== 1 ? 's' : ''} old`
+                : 'from cache'}. Will refresh automatically when the rate limit clears.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fetchOutstanding({ runSync: true })}
+            disabled={loading}
+            className="gap-1.5 shrink-0"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Retry
+          </Button>
+        </div>
+      )}
+      {data?.sync_info?.from_cache && !data?.sync_info?.xero_rate_limited && data?.sync_info?.invoice_cache_age_minutes != null && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+          <Clock3 className="h-3.5 w-3.5" />
+          <span>Invoice data refreshed {data.sync_info.invoice_cache_age_minutes} min ago</span>
+        </div>
+      )}
+
       {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (() => {
         // Detect which marketplaces are in outstanding invoices but missing settlements
         const unmatchedMarketplaces = new Map<string, number>();

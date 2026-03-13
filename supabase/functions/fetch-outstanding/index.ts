@@ -153,11 +153,13 @@ Deno.serve(async (req) => {
 
     // ─── Parse optional request body params ───
     let forceRecompute = false;
+    let forceRefresh = false;
     let lookbackDays = 90;
     try {
       if (req.method === 'POST') {
         const body = await req.json();
         if (body.force_recompute === true) forceRecompute = true;
+        if (body.force_refresh === true) forceRefresh = true;
         if (typeof body.lookback_days === 'number') {
           lookbackDays = Math.max(30, Math.min(180, Math.round(body.lookback_days)));
         }
@@ -207,74 +209,185 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const accountingBoundary = boundaryRow?.value || null;
 
-    // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
-    // No boundary filter — outstanding invoices must always be visible regardless of accounting boundary
-    const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC&summaryOnly=true`;
-
+    // ─── CACHE-FIRST: Check outstanding_invoices_cache before hitting Xero ───
+    const CACHE_TTL_MINUTES = 30;
     let allInvoices: any[] = [];
     let usingCacheFallback = false;
+    let invoiceCacheAgeMinutes: number | null = null;
 
-    const xeroResult = await fetchXeroWithRetry(url, {
-      'Authorization': `Bearer ${token.access_token}`,
-      'Accept': 'application/json',
-      'Xero-tenant-id': token.tenant_id,
-    });
+    // Check cache freshness
+    const { data: cacheAgeRow } = await supabase
+      .from('outstanding_invoices_cache')
+      .select('fetched_at')
+      .eq('user_id', userId)
+      .order('fetched_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (xeroResult.ok) {
-      allInvoices = xeroResult.data.Invoices || [];
-    } else {
-      console.error('Xero invoice fetch failed:', xeroResult.status, xeroResult.body);
+    const cacheIsFresh = cacheAgeRow?.fetched_at
+      ? (Date.now() - new Date(cacheAgeRow.fetched_at).getTime()) < CACHE_TTL_MINUTES * 60 * 1000
+      : false;
 
-      // Fallback: serve cached outstanding invoices from xero_accounting_matches
-      // so the Outstanding tab still has actionable data during temporary rate limits.
-      const { data: cachedOutstanding } = await supabase
-        .from('xero_accounting_matches')
-        .select('settlement_id, marketplace_code, xero_invoice_id, xero_invoice_number, xero_status, matched_amount, matched_date, matched_contact, matched_reference')
-        .eq('user_id', userId)
-        .in('xero_status', ['DRAFT', 'SUBMITTED', 'AUTHORISED'])
-        .not('xero_invoice_id', 'is', null);
+    if (cacheAgeRow?.fetched_at) {
+      invoiceCacheAgeMinutes = Math.round((Date.now() - new Date(cacheAgeRow.fetched_at).getTime()) / 60000);
+    }
 
-      if (!cachedOutstanding || cachedOutstanding.length === 0) {
-        const retryAfter = xeroResult.status === 429 ? 60 : 0;
-        return new Response(JSON.stringify({
-          invoices: [],
-          rows: [],
-          total_outstanding: 0,
-          invoice_count: 0,
-          matched_with_settlement: 0,
-          bank_deposit_found: 0,
-          ready_to_reconcile: 0,
-          sync_info: {
-            xero_rate_limited: xeroResult.status === 429,
-            xero_auth_error: xeroResult.status === 401 || xeroResult.status === 403,
-            xero_error: xeroResult.status !== 429,
-            xero_status: xeroResult.status,
-            retry_after_seconds: retryAfter,
-            from_cache: false,
-            message: xeroResult.status === 429
-              ? 'Xero rate limited — retrying automatically'
-              : `Xero returned ${xeroResult.status}`,
-            status: xeroResult.status === 429 ? 'rate_limited_no_cache' : 'xero_error',
-          },
-        }), {
-          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+    const shouldHitXero = forceRefresh || !cacheIsFresh;
+
+    if (shouldHitXero) {
+      // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
+      const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
+      const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC&summaryOnly=true`;
+
+      const xeroResult = await fetchXeroWithRetry(url, {
+        'Authorization': `Bearer ${token.access_token}`,
+        'Accept': 'application/json',
+        'Xero-tenant-id': token.tenant_id,
+      });
+
+      if (xeroResult.ok) {
+        allInvoices = xeroResult.data.Invoices || [];
+
+        // Upsert into outstanding_invoices_cache
+        const now = new Date().toISOString();
+        const cacheRows = allInvoices.map((inv: any) => ({
+          user_id: userId,
+          xero_invoice_id: inv.InvoiceID,
+          xero_tenant_id: token.tenant_id,
+          invoice_number: inv.InvoiceNumber || null,
+          reference: inv.Reference || null,
+          contact_name: inv.Contact?.Name || null,
+          date: parseXeroDate(inv.Date) || null,
+          due_date: parseXeroDate(inv.DueDate) || null,
+          amount_due: inv.AmountDue || 0,
+          total: inv.Total || 0,
+          currency_code: inv.CurrencyCode || 'AUD',
+          status: inv.Status || null,
+          fetched_at: now,
+        }));
+
+        if (cacheRows.length > 0) {
+          // Delete stale entries then insert fresh (atomic refresh)
+          await supabase.from('outstanding_invoices_cache').delete().eq('user_id', userId);
+          // Batch insert in chunks of 500
+          for (let i = 0; i < cacheRows.length; i += 500) {
+            await supabase.from('outstanding_invoices_cache').insert(cacheRows.slice(i, i + 500));
+          }
+          invoiceCacheAgeMinutes = 0;
+        }
+        console.log(`[fetch-outstanding] Xero live: ${allInvoices.length} invoices, cache updated`);
+      } else {
+        console.error('Xero invoice fetch failed:', xeroResult.status, xeroResult.body);
+
+        // Set cooldown on 429
+        if (xeroResult.status === 429) {
+          const cooldownUntil = new Date(Date.now() + 90 * 1000).toISOString();
+          await supabase.from('app_settings').upsert({
+            user_id: userId,
+            key: 'xero_api_cooldown_until',
+            value: cooldownUntil,
+          }, { onConflict: 'user_id,key' });
+        }
+
+        // Fall back to outstanding_invoices_cache
+        const { data: cachedInvoices } = await supabase
+          .from('outstanding_invoices_cache')
+          .select('*')
+          .eq('user_id', userId);
+
+        if (cachedInvoices && cachedInvoices.length > 0) {
+          usingCacheFallback = true;
+          allInvoices = cachedInvoices.map((c: any) => ({
+            InvoiceID: c.xero_invoice_id,
+            InvoiceNumber: c.invoice_number,
+            Reference: c.reference || '',
+            Contact: { Name: c.contact_name || 'Marketplace' },
+            Date: c.date || null,
+            DueDate: c.due_date || null,
+            AmountDue: Number(c.amount_due || 0),
+            Total: Number(c.total || 0),
+            CurrencyCode: c.currency_code || 'AUD',
+            Status: c.status,
+          }));
+          if (cachedInvoices[0]?.fetched_at) {
+            invoiceCacheAgeMinutes = Math.round((Date.now() - new Date(cachedInvoices[0].fetched_at).getTime()) / 60000);
+          }
+          console.log(`[fetch-outstanding] 429 fallback: serving ${allInvoices.length} cached invoices (${invoiceCacheAgeMinutes}m old)`);
+        } else {
+          // No cache at all — also check xero_accounting_matches as last resort
+          const { data: cachedOutstanding } = await supabase
+            .from('xero_accounting_matches')
+            .select('settlement_id, marketplace_code, xero_invoice_id, xero_invoice_number, xero_status, matched_amount, matched_date, matched_contact, matched_reference')
+            .eq('user_id', userId)
+            .in('xero_status', ['DRAFT', 'SUBMITTED', 'AUTHORISED'])
+            .not('xero_invoice_id', 'is', null);
+
+          if (!cachedOutstanding || cachedOutstanding.length === 0) {
+            const retryAfter = xeroResult.status === 429 ? 60 : 0;
+            return new Response(JSON.stringify({
+              invoices: [],
+              rows: [],
+              total_outstanding: 0,
+              invoice_count: 0,
+              matched_with_settlement: 0,
+              bank_deposit_found: 0,
+              ready_to_reconcile: 0,
+              sync_info: {
+                xero_rate_limited: xeroResult.status === 429,
+                xero_auth_error: xeroResult.status === 401 || xeroResult.status === 403,
+                xero_error: xeroResult.status !== 429,
+                xero_status: xeroResult.status,
+                retry_after_seconds: retryAfter,
+                from_cache: false,
+                invoice_cache_age_minutes: null,
+                message: xeroResult.status === 429
+                  ? 'Xero rate limited — retrying automatically'
+                  : `Xero returned ${xeroResult.status}`,
+                status: xeroResult.status === 429 ? 'rate_limited_no_cache' : 'xero_error',
+              },
+            }), {
+              status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          usingCacheFallback = true;
+          allInvoices = cachedOutstanding.map((m: any) => ({
+            InvoiceID: m.xero_invoice_id,
+            InvoiceNumber: m.xero_invoice_number || null,
+            Reference: m.matched_reference || (m.settlement_id ? `AMZN-${m.settlement_id}` : ''),
+            Contact: { Name: m.matched_contact || m.marketplace_code || 'Marketplace' },
+            Date: m.matched_date || null,
+            DueDate: null,
+            AmountDue: Math.abs(Number(m.matched_amount || 0)),
+            Total: Math.abs(Number(m.matched_amount || 0)),
+            CurrencyCode: 'AUD',
+          }));
+          console.log(`[fetch-outstanding] Last-resort fallback from xero_accounting_matches: ${allInvoices.length} invoices`);
+        }
       }
+    } else {
+      // ─── Serve from cache (fresh, no Xero API call) ───
+      const { data: cachedInvoices } = await supabase
+        .from('outstanding_invoices_cache')
+        .select('*')
+        .eq('user_id', userId);
 
-      usingCacheFallback = true;
-      allInvoices = cachedOutstanding.map((m: any) => ({
-        InvoiceID: m.xero_invoice_id,
-        InvoiceNumber: m.xero_invoice_number || null,
-        Reference: m.matched_reference || (m.settlement_id ? `AMZN-${m.settlement_id}` : ''),
-        Contact: { Name: m.matched_contact || m.marketplace_code || 'Marketplace' },
-        Date: m.matched_date || null,
-        DueDate: null,
-        AmountDue: Math.abs(Number(m.matched_amount || 0)),
-        Total: Math.abs(Number(m.matched_amount || 0)),
-        CurrencyCode: 'AUD',
-      }));
-      console.log(`[fetch-outstanding] Using cached fallback for ${allInvoices.length} invoices`);
+      if (cachedInvoices && cachedInvoices.length > 0) {
+        allInvoices = cachedInvoices.map((c: any) => ({
+          InvoiceID: c.xero_invoice_id,
+          InvoiceNumber: c.invoice_number,
+          Reference: c.reference || '',
+          Contact: { Name: c.contact_name || 'Marketplace' },
+          Date: c.date || null,
+          DueDate: c.due_date || null,
+          AmountDue: Number(c.amount_due || 0),
+          Total: Number(c.total || 0),
+          CurrencyCode: c.currency_code || 'AUD',
+          Status: c.status,
+        }));
+        usingCacheFallback = true;
+        console.log(`[fetch-outstanding] Serving ${allInvoices.length} invoices from fresh cache (${invoiceCacheAgeMinutes}m old)`);
+      }
     }
 
     // ─── Pass ALL outstanding ACCREC invoices through — UI toggle controls marketplace vs all ───
@@ -953,6 +1066,10 @@ Deno.serve(async (req) => {
       force_recompute_used: forceRecompute,
       mapping_status: mappingStatus,
       missing_settlement_ids: missingSettlementIds,
+      // Invoice cache diagnostics
+      invoice_cache_age_minutes: invoiceCacheAgeMinutes,
+      from_cache: usingCacheFallback,
+      xero_rate_limited: usingCacheFallback && !cacheIsFresh,
     };
 
     console.log(JSON.stringify({

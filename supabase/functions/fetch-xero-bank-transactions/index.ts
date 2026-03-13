@@ -17,7 +17,8 @@ const corsHeaders = {
 const GUARD_KEY = 'bank_txn_last_fetched_at';
 const GUARD_MINUTES_BATCH = 30;
 const GUARD_MINUTES_SELF = 2; // Allow more frequent manual syncs
-const LOOKBACK_DAYS = 60;
+const LOOKBACK_DAYS_BATCH = 60;
+const LOOKBACK_DAYS_SELF = 30;
 
 function formatXeroDateTime(d: Date): string {
   const y = d.getFullYear();
@@ -74,6 +75,7 @@ async function fetchBankTxnsForUser(
   clientId: string,
   clientSecret: string,
   guardMinutes: number,
+  lookbackDays: number,
 ) {
   // ── Guard: skip if fetched within guardMinutes ──
   const { data: guardRow } = await adminSupabase
@@ -98,9 +100,9 @@ async function fetchBankTxnsForUser(
     return { user_id: userId, error: 'Token refresh failed' };
   }
 
-  // Build where clause: RECEIVE transactions from last 60 days
+  // Build where clause: RECEIVE transactions from lookback period
   const fromDate = new Date();
-  fromDate.setDate(fromDate.getDate() - LOOKBACK_DAYS);
+  fromDate.setDate(fromDate.getDate() - lookbackDays);
 
   // Load payout account mappings to filter by mapped accounts
   const { data: payoutSettings } = await adminSupabase
@@ -209,7 +211,7 @@ async function fetchBankTxnsForUser(
     user_id: userId,
     event_type: 'bank_txn_fetch',
     severity: 'info',
-    details: { transactions_upserted: totalUpserted, pages_fetched: page, lookback_days: LOOKBACK_DAYS, filtered_accounts: mappedAccountIds.size },
+    details: { transactions_upserted: totalUpserted, pages_fetched: page, lookback_days: lookbackDays, filtered_accounts: mappedAccountIds.size },
   });
 
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
@@ -263,7 +265,7 @@ Deno.serve(async (req) => {
       const userId = userData.user.id;
       console.log(`[fetch-bank-txns] Self-mode for user ${userId}`);
 
-      const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF);
+      const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF, LOOKBACK_DAYS_SELF);
 
       return new Response(JSON.stringify({
         success: true,
@@ -305,7 +307,7 @@ Deno.serve(async (req) => {
 
     for (const userId of userIds) {
       try {
-        const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH);
+        const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
         results.push(result);
       } catch (err: any) {
         console.error(`[fetch-bank-txns] Error for ${userId}:`, err.message);
