@@ -44,21 +44,15 @@ async function syncPayoutsForUser(
 ): Promise<{ synced: number; skipped: number; errors: string[] }> {
   const errors: string[] = [];
 
-  // ─── Check cooldown (1 hour minimum between syncs) ────────────────
+  // ─── Check cooldown atomically via RPC (1 hour minimum between syncs) ──
   if (!skipCooldown) {
-    const { data: cooldownSetting } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "shopify_payout_last_sync")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (cooldownSetting?.value) {
-      const lastSync = new Date(cooldownSetting.value);
-      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      if (lastSync > hourAgo) {
-        return { synced: 0, skipped: 0, errors: ["Cooldown active"] };
-      }
+    const { data: cooldownResult } = await supabase.rpc('check_sync_cooldown', {
+      p_user_id: userId,
+      p_key: 'shopify_payout_last_sync',
+      p_window_seconds: 3600,
+    });
+    if (cooldownResult && !cooldownResult.ok) {
+      return { synced: 0, skipped: 0, errors: ["Cooldown active"] };
     }
   }
 
