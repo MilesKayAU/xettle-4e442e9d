@@ -1357,6 +1357,7 @@ export type Database = {
           storage_fees: number | null
           updated_at: string
           user_id: string
+          xero_entries: Json | null
           xero_invoice_id: string | null
           xero_invoice_number: string | null
           xero_journal_id: string | null
@@ -1411,6 +1412,7 @@ export type Database = {
           storage_fees?: number | null
           updated_at?: string
           user_id: string
+          xero_entries?: Json | null
           xero_invoice_id?: string | null
           xero_invoice_number?: string | null
           xero_journal_id?: string | null
@@ -1465,6 +1467,7 @@ export type Database = {
           storage_fees?: number | null
           updated_at?: string
           user_id?: string
+          xero_entries?: Json | null
           xero_invoice_id?: string | null
           xero_invoice_number?: string | null
           xero_journal_id?: string | null
