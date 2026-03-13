@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon, BarChart3 } from "lucide-react";
+import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon, BarChart3, ShieldAlert } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseSettlementTSV, formatDisplayDate, formatAUD, XERO_ACCOUNT_MAP, round2, PARSER_VERSION, type ParsedSettlement, type DebugBreakdownRow, type ParserOptions, type SplitMonthData } from '@/utils/settlement-parser';
@@ -38,6 +38,7 @@ import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplica
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 import InsightsTab from '@/components/admin/accounting/InsightsTab';
+import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
@@ -998,6 +999,9 @@ export default function AccountingDashboard() {
               <TabsTrigger value="insights" className="gap-1.5">
                 <BarChart3 className="h-3.5 w-3.5" /> Insights
               </TabsTrigger>
+              <TabsTrigger value="gst-audit" className="gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5" /> GST Audit
+              </TabsTrigger>
             </TabsList>
 
             {/* UPLOAD TAB */}
@@ -1271,6 +1275,11 @@ export default function AccountingDashboard() {
             {/* INSIGHTS TAB */}
             <TabsContent value="insights">
               <InsightsTab />
+            </TabsContent>
+
+            {/* GST AUDIT TAB */}
+            <TabsContent value="gst-audit">
+              <GstAuditTab />
             </TabsContent>
 
             {/* Upgrade nudge dialog */}
