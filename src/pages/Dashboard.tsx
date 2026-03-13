@@ -676,6 +676,13 @@ export default function Dashboard() {
                 }}
                 onMapBankAccounts={() => setShowBankMapper(!showBankMapper)}
                 onConnect={() => switchView('smart_upload')}
+                onRefreshStatus={() => {
+                  // Trigger the validation sweep via ActionCentre's existing mechanism
+                  import('@/utils/settlement-engine').then(({ triggerValidationSweep }) => {
+                    triggerValidationSweep();
+                    toast.success('Status refresh started');
+                  });
+                }}
               />
               {showBankMapper && (
                 <DestinationAccountMapper />
