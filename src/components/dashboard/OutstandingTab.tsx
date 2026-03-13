@@ -198,6 +198,25 @@ interface OutstandingSummary {
   };
 }
 
+interface BankSyncDiagnostics {
+  mapped_account_ids?: string[];
+  mapped_account_ids_count?: number;
+  synced_row_count?: number;
+  synced_account_count?: number;
+  lookback_days?: number;
+  cooldown_until?: string;
+  retry_after_seconds?: number;
+  xero_rate_limited?: boolean;
+  has_any_mapping?: boolean;
+  skip_reason?: string;
+  skipped?: boolean;
+  refreshed_at?: string;
+  bank_rows_cached_total?: number;
+  error?: string;
+  minutes_ago?: number;
+  upserted?: number;
+}
+
 interface Props {
   onSwitchToUpload: () => void;
 }
@@ -244,7 +263,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
   const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
   const [backfilling, setBackfilling] = useState(false);
-  const [lastBankSyncResult, setLastBankSyncResult] = useState<any>(null);
+  const [lastBankSyncResult, setLastBankSyncResult] = useState<BankSyncDiagnostics | null>(null);
   const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
   const [depositCoverage, setDepositCoverage] = useState<Record<string, {
     siblings: Array<{ settlement_id: string; match_amount: number; confidence_score: number; period_start?: string; period_end?: string; marketplace?: string }>;
@@ -1359,11 +1378,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           <CollapsibleContent>
             <div className="mt-1 p-3 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground space-y-1">
               <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                <span className="font-medium">Outcome</span>
+                <span>{
+                  lastBankSyncResult.error ? `Error: ${lastBankSyncResult.error}`
+                  : lastBankSyncResult.skipped ? `Skipped (${lastBankSyncResult.skip_reason || 'unknown'})`
+                  : lastBankSyncResult.xero_rate_limited ? 'Rate limited'
+                  : `Synced ${lastBankSyncResult.synced_row_count ?? lastBankSyncResult.upserted ?? 0} rows`
+                }</span>
                 {lastBankSyncResult.mapped_account_ids_count != null && (
                   <><span className="font-medium">Mapped accounts</span><span>{lastBankSyncResult.mapped_account_ids_count}</span></>
                 )}
-                {lastBankSyncResult.mapped_account_ids && (
-                  <><span className="font-medium">Account IDs</span><span className="truncate">{(lastBankSyncResult.mapped_account_ids as string[]).join(', ') || '—'}</span></>
+                {lastBankSyncResult.mapped_account_ids && lastBankSyncResult.mapped_account_ids.length > 0 && (
+                  <><span className="font-medium">Account IDs</span><span className="truncate">{lastBankSyncResult.mapped_account_ids.join(', ')}</span></>
                 )}
                 {lastBankSyncResult.synced_row_count != null && (
                   <><span className="font-medium">Synced rows</span><span>{lastBankSyncResult.synced_row_count}</span></>
@@ -1374,8 +1400,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 {lastBankSyncResult.cooldown_until && (
                   <><span className="font-medium">Cooldown until</span><span>{new Date(lastBankSyncResult.cooldown_until).toLocaleTimeString('en-AU')}</span></>
                 )}
-                <><span className="font-medium">Rate limited</span><span>{lastBankSyncResult.xero_rate_limited ? 'Yes' : 'No'}</span></>
-                <><span className="font-medium">Has mapping</span><span>{lastBankSyncResult.has_any_mapping === true ? 'Yes' : lastBankSyncResult.has_any_mapping === false ? 'No' : '—'}</span></>
+                {lastBankSyncResult.retry_after_seconds != null && (
+                  <><span className="font-medium">Retry in</span><span>~{lastBankSyncResult.retry_after_seconds}s</span></>
+                )}
+                <span className="font-medium">Rate limited</span><span>{lastBankSyncResult.xero_rate_limited ? 'Yes' : 'No'}</span>
+                <span className="font-medium">Has mapping</span><span>{lastBankSyncResult.has_any_mapping === true ? 'Yes' : lastBankSyncResult.has_any_mapping === false ? 'No' : '—'}</span>
                 {lastBankSyncResult.skip_reason && (
                   <><span className="font-medium">Skip reason</span><span>{lastBankSyncResult.skip_reason}</span></>
                 )}
