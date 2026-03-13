@@ -1494,7 +1494,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                   <><span className="font-medium">Synced rows</span><span>{lastBankSyncResult.synced_row_count}</span></>
                 )}
                 {lastBankSyncResult.lookback_days != null && (
-                  <><span className="font-medium">Lookback days</span><span>{lastBankSyncResult.lookback_days}</span></>
+                  <><span className="font-medium">Date range span</span><span>{lastBankSyncResult.lookback_days} days</span></>
+                )}
+                {lastBankSyncResult.date_range_source && (
+                  <><span className="font-medium">Range source</span><span>{lastBankSyncResult.date_range_source}</span></>
                 )}
                 {lastBankSyncResult.cooldown_until && (
                   <><span className="font-medium">Cooldown until</span><span>{new Date(lastBankSyncResult.cooldown_until).toLocaleTimeString('en-AU')}</span></>
