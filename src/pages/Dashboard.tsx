@@ -30,6 +30,9 @@ import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, Layout
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
 import PayoutBankAccountMapper from '@/components/settings/PayoutBankAccountMapper';
+import AccountMapperCard from '@/components/settings/AccountMapperCard';
+import PaymentVerificationSettings from '@/components/settings/PaymentVerificationSettings';
+import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
