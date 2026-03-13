@@ -300,6 +300,7 @@ async function syncPayoutsForUser(
         source: "api",
         source_reference: (payout as any).bank_reference || null,
         status: settlementStatus,
+        is_pre_boundary: !!isBeforeBoundary,
         period_start: payoutDate,
         period_end: payoutDate,
         deposit_date: payoutDate,

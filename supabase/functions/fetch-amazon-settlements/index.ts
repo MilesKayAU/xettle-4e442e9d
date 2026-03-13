@@ -867,6 +867,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         bank_deposit: summary.bankDeposit,
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: settlementStatus,
+        is_pre_boundary: isPreBoundary,
         source: 'api',
         is_split_month: splitMonth.isSplitMonth,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
