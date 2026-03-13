@@ -834,11 +834,11 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         continue;
       }
 
-      // Determine status based on accounting boundary
-      // All ingestion paths start at 'saved'; sync-xero-status promotes to 'ready_to_push'
+      // Determine status and metadata based on accounting boundary
       // See: src/constants/settlement-status.ts for canonical state machine
       const isBeforeBoundary = accountingBoundary && parsed.header.periodEnd && parsed.header.periodEnd <= accountingBoundary;
-      const settlementStatus = isBeforeBoundary ? 'already_recorded' : 'saved';
+      const settlementStatus = 'ingested';
+      const isPreBoundary = !!isBeforeBoundary;
 
       const { header, summary, lines, unmapped, splitMonth } = parsed;
 
