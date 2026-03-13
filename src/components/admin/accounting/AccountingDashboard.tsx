@@ -694,7 +694,7 @@ export default function AccountingDashboard() {
         const date2 = m2.start;
 
         const { data: data1, error: err1 } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, reference: reference1, date: date1, dueDate: date1, lineItems: lines1, country: selectedMarketplace },
+          body: { userId: user.id, settlementId: header.settlementId, splitPart: 1, date: date1, dueDate: date1, lineItems: lines1, country: selectedMarketplace },
         });
         if (err1) throw err1;
         if (!data1?.success) throw new Error(data1?.error || 'Invoice 1 failed');
