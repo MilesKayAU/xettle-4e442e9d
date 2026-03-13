@@ -731,7 +731,61 @@ function groupByMarketplaceMonth(rows: ValidationRow[]): GroupedRow[] {
         count: 1,
         total: r.settlement_net || 0,
       });
+}
+
+interface GroupedEvent {
+  event_type: string;
+  label: string;
+  count: number;
+  created_at: string;
+}
+
+function groupActivityEvents(events: SystemEvent[]): GroupedEvent[] {
+  const result: GroupedEvent[] = [];
+  const groupable = new Map<string, { events: SystemEvent[]; latestAt: string }>();
+
+  for (const e of events) {
+    // Group repeated same-type events by event_type + marketplace
+    const groupKey = `${e.event_type}:${e.marketplace_code || ''}`;
+    const existing = groupable.get(groupKey);
+    if (existing) {
+      existing.events.push(e);
+      if (e.created_at > existing.latestAt) existing.latestAt = e.created_at;
+    } else {
+      groupable.set(groupKey, { events: [e], latestAt: e.created_at });
     }
+  }
+
+  for (const [, group] of groupable) {
+    const first = group.events[0];
+    if (group.events.length === 1) {
+      result.push({
+        event_type: first.event_type,
+        label: formatEventLabel(first),
+        count: 1,
+        created_at: group.latestAt,
+      });
+    } else {
+      // Use a summary label for the group
+      const mp = first.marketplace_code ? (MARKETPLACE_LABELS[first.marketplace_code] || first.marketplace_code) : '';
+      const baseLabel = first.event_type === 'bank_match_failed'
+        ? `Bank feed not synced yet: ${mp}`
+        : first.event_type === 'bank_match_confirmed'
+        ? `Bank deposit matched: ${mp}`
+        : formatEventLabel(first);
+      result.push({
+        event_type: first.event_type,
+        label: baseLabel,
+        count: group.events.length,
+        created_at: group.latestAt,
+      });
+    }
+  }
+
+  // Sort by most recent first
+  result.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return result;
+}
   }
   return Array.from(map.values());
 }
