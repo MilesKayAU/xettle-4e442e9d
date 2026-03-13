@@ -261,6 +261,37 @@ export default function GstAuditTab() {
     setDetailModalOpen(true);
   }, []);
 
+  const exportReconciliationPack = useCallback(async () => {
+    if (!selectedPeriod) return;
+    setExporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-gst-audit-pack', {
+        body: {
+          period_start: selectedPeriod.period_start,
+          period_end: selectedPeriod.period_end,
+          include_line_evidence: false,
+        },
+      });
+      if (error) throw error;
+
+      // data comes back as a Blob or raw response
+      const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gst-reconciliation-pack_${selectedPeriod.period_start}_to_${selectedPeriod.period_end}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Reconciliation pack downloaded');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to export reconciliation pack');
+    } finally {
+      setExporting(false);
+    }
+  }, [selectedPeriod]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
