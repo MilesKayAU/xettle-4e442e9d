@@ -170,6 +170,64 @@ References are generated **server-side only** — the client never controls invo
 
 Legacy formats (`AMZN-{id}`, `LMB-*-{id}-*`) are read-only for backwards compatibility.
 
+### 3.5 End-to-End Reconciliation Flow
+
+This is the complete journey from initial setup to fully reconciled accounts:
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  1. CONNECT                                                          │
+│     User connects Xero + marketplace APIs (Amazon, Shopify, etc.)    │
+│     Setup Wizard or Dashboard handles OAuth flows                    │
+└──────────────────────┬───────────────────────────────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  2. MAP BANK ACCOUNTS                                                │
+│     PayoutBankAccountMapper: link each marketplace to a Xero         │
+│     bank account (e.g., Amazon AU → "Miles Kay Australia")           │
+│     Stored in app_settings as payout_account:{marketplace_code}      │
+│     Without this, deposit matching is paused.                        │
+└──────────────────────┬───────────────────────────────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  3. INGEST SETTLEMENTS                                               │
+│     API: fetch-amazon-settlements, fetch-shopify-payouts             │
+│     CSV: Smart Upload Flow (AI-detected marketplace + column map)    │
+│     Result: settlement rows in 13-category financial model           │
+└──────────────────────┬───────────────────────────────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  4. PUSH TO XERO                                                     │
+│     Push Safety Preview validates: sum match, account codes, GST,    │
+│     contact mapping, bank verification                               │
+│     Creates DRAFT invoice (ACCREC) or bill (ACCPAY for negatives)    │
+│     Attaches 16-column audit CSV automatically                       │
+└──────────────────────┬───────────────────────────────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  5. OUTSTANDING TAB — TRACK & ACT                                    │
+│     Fetches all Xero ACCREC invoices (DRAFT/SUBMITTED/AUTHORISED)    │
+│     Shows: which settlements are pushed, awaiting deposit, or        │
+│     missing data. Users can upload missing CSVs or trigger fetches.  │
+│     Pre-seeds xero_accounting_matches for instant auto-linking.      │
+└──────────────────────┬───────────────────────────────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  6. BANK DEPOSIT MATCHING                                            │
+│     match-bank-deposits: uses payout_account mapping to filter       │
+│     bank transactions per marketplace                                │
+│     Two-pass: Individual (±$0.50) then Batch (±$1.00)                │
+│     Score ≥ 90 = auto-applied. UI shows Verified/Mismatch badge.     │
+└──────────────────────┬───────────────────────────────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  7. RECONCILED                                                       │
+│     Settlement status: bank_verified                                 │
+│     Xero invoice marked PAID once payment is applied                 │
+│     Full audit trail in system_events                                │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 4. Marketplace Support
