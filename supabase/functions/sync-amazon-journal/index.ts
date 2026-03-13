@@ -319,7 +319,7 @@ serve(async (req) => {
       const updatePayload: Record<string, any> = {};
 
       if (rollbackScope === 'all') {
-        updatePayload.status = 'saved';
+        updatePayload.status = 'ready_to_push';
         updatePayload.xero_journal_id = null;
         updatePayload.xero_invoice_id = null;
         updatePayload.xero_journal_id_1 = null;
