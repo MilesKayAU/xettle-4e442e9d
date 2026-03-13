@@ -347,7 +347,7 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
   };
 
   const handleUnhide = async (row: SettlementRow) => {
-    await supabase.from('settlements').update({ status: 'parsed' }).eq('id', row.id);
+    await supabase.from('settlements').update({ status: 'saved' }).eq('id', row.id);
     toast.success(`Restored: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
     fetchAll();
   };
