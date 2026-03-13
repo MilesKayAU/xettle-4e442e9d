@@ -748,6 +748,7 @@ async function fetchBankTxnsForUser(
     transactions_seen: totalTransactionsSeen,
     transactions_in_range: totalTransactionsInRange,
     bank_account_ids_used: bankAccountIdsUsed,
+    bank_account_names_used: bankAccountNamesUsed,
     per_account_stats: perAccountStats,
     mapped_account_ids_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,
