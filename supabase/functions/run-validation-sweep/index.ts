@@ -441,24 +441,25 @@ async function sweepUser(adminSupabase: any, userId: string) {
     } catch (e) { console.error('Xero invoice scan error:', e) }
   }
 
+  // ── Read bank transactions from LOCAL CACHE only (never call Xero BankTransactions API) ──
+  // The sole caller for Xero BankTransactions is fetch-xero-bank-transactions.
   const xeroBankTxns: any[] = []
-  if (xeroToken) {
-    try {
-      const bankData = await xeroGet(
-        `https://api.xero.com/api.xro/2.0/BankTransactions?order=Date DESC&pageSize=100`,
-        xeroToken.access_token, xeroToken.tenant_id
-      )
-      for (const txn of (bankData?.BankTransactions || [])) {
-        if (txn.Type === 'RECEIVE') {
-          xeroBankTxns.push({
-            amount: txn.Total || 0,
-            date: parseXeroDate(txn.Date),
-            reference: txn.Reference || txn.Contact?.Name || '',
-          })
-        }
-      }
-    } catch (e) { console.error('Xero bank scan error:', e) }
-  }
+  try {
+    const { data: cachedTxns } = await adminSupabase
+      .from('bank_transactions')
+      .select('amount, date, reference, contact_name')
+      .eq('user_id', userId)
+      .order('date', { ascending: false })
+      .limit(500)
+    for (const txn of (cachedTxns || [])) {
+      xeroBankTxns.push({
+        amount: txn.amount || 0,
+        date: txn.date,
+        reference: txn.reference || txn.contact_name || '',
+      })
+    }
+    console.log(`[validation-sweep] Loaded ${xeroBankTxns.length} bank txns from cache (invoker=validation-sweep)`)
+  } catch (e) { console.error('[validation-sweep] Bank cache read error:', e) }
 
   // Process each marketplace
   for (const conn of connections) {
