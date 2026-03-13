@@ -33,7 +33,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
   FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
-  MinusCircle, Clock3, Search, ArrowRight, Shield,
+  MinusCircle, Clock3, Search, ArrowRight, Shield, Link2, ShoppingBag,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
@@ -230,6 +230,22 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   useEffect(() => { setOutPage(1); }, [showNonMarketplace]);
 
   const [noXeroConnection, setNoXeroConnection] = useState(false);
+  const [connectedMarketplaces, setConnectedMarketplaces] = useState<{ amazon: boolean; shopify: boolean }>({ amazon: false, shopify: false });
+
+  // Check which marketplace APIs are connected
+  useEffect(() => {
+    const checkConnections = async () => {
+      const [amazonRes, shopifyRes] = await Promise.all([
+        supabase.from('amazon_tokens').select('id', { count: 'exact', head: true }),
+        supabase.from('shopify_tokens').select('id', { count: 'exact', head: true }),
+      ]);
+      setConnectedMarketplaces({
+        amazon: (amazonRes.count || 0) > 0,
+        shopify: (shopifyRes.count || 0) > 0,
+      });
+    };
+    checkConnections();
+  }, []);
 
   const fetchOutstanding = useCallback(async (options?: { runSync?: boolean }) => {
     setLoading(true);
@@ -970,22 +986,111 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </Button>
       </div>
 
-      {/* Sync-in-progress banner — shown when most invoices have no settlement match */}
-      {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (
-        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
-          <Loader2 className="h-5 w-5 text-amber-600 dark:text-amber-400 animate-spin shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-              Settlement sync in progress
-            </p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-              Xettle is fetching your Amazon and Shopify settlement data in the background. This can take a few minutes
-              on first setup — settlements will automatically match to these invoices as they arrive.
-              Refresh this page shortly to see updated matches.
-            </p>
+      {/* Smart marketplace connection prompt */}
+      {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (() => {
+        // Detect which marketplaces are in outstanding invoices but missing settlements
+        const unmatchedMarketplaces = new Map<string, number>();
+        for (const row of data.rows) {
+          if (!row.has_settlement && row.is_marketplace) {
+            const mkt = row.marketplace || 'unknown';
+            unmatchedMarketplaces.set(mkt, (unmatchedMarketplaces.get(mkt) || 0) + 1);
+          }
+        }
+
+        const hasAmazonUnmatched = unmatchedMarketplaces.has('amazon_au');
+        const hasShopifyUnmatched = unmatchedMarketplaces.has('shopify_payments');
+        const amazonCount = unmatchedMarketplaces.get('amazon_au') || 0;
+        const shopifyCount = unmatchedMarketplaces.get('shopify_payments') || 0;
+        const amazonConnected = connectedMarketplaces.amazon;
+        const shopifyConnected = connectedMarketplaces.shopify;
+        const otherUnmatched = [...unmatchedMarketplaces.entries()].filter(([k]) => k !== 'amazon_au' && k !== 'shopify_payments');
+
+        if (unmatchedMarketplaces.size === 0) return null;
+
+        // If all unmatched marketplaces are already connected, show "syncing" state
+        const allConnected = (!hasAmazonUnmatched || amazonConnected) && (!hasShopifyUnmatched || shopifyConnected) && otherUnmatched.length === 0;
+
+        if (allConnected) {
+          return (
+            <div className="flex items-start gap-3 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+              <Loader2 className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-spin shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                  Fetching settlement data from connected marketplaces
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                  {hasAmazonUnmatched && amazonConnected ? `Amazon (${amazonCount} invoices) ` : ''}
+                  {hasShopifyUnmatched && shopifyConnected ? `Shopify (${shopifyCount} invoices) ` : ''}
+                  — settlements will automatically match as they arrive. Refresh shortly.
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        // Otherwise, prompt to connect missing marketplaces
+        return (
+          <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
+            <div className="flex items-start gap-3">
+              <Link2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">
+                  Xero sync complete — {data.invoice_count} outstanding invoices found
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Connect your marketplace accounts to automatically match settlement data against these invoices.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 ml-8">
+              {hasAmazonUnmatched && !amazonConnected && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                  onClick={() => { window.location.href = '/setup?connect=amazon'; }}
+                >
+                  <ShoppingBag className="h-3.5 w-3.5 text-amber-600" />
+                  Connect Amazon ({amazonCount} invoice{amazonCount > 1 ? 's' : ''} waiting)
+                </Button>
+              )}
+              {hasAmazonUnmatched && amazonConnected && (
+                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 dark:text-emerald-400 gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Amazon connected — syncing {amazonCount} invoice{amazonCount > 1 ? 's' : ''}
+                </Badge>
+              )}
+              {hasShopifyUnmatched && !shopifyConnected && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                  onClick={() => { window.location.href = '/setup?connect=shopify'; }}
+                >
+                  <ShoppingBag className="h-3.5 w-3.5 text-emerald-600" />
+                  Connect Shopify ({shopifyCount} invoice{shopifyCount > 1 ? 's' : ''} waiting)
+                </Button>
+              )}
+              {hasShopifyUnmatched && shopifyConnected && (
+                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 dark:text-emerald-400 gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Shopify connected — syncing {shopifyCount} invoice{shopifyCount > 1 ? 's' : ''}
+                </Badge>
+              )}
+              {otherUnmatched.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs"
+                  onClick={onSwitchToUpload}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Upload settlements for {otherUnmatched.map(([k, v]) => `${MARKETPLACE_LABELS[k] || k} (${v})`).join(', ')}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Filter toggle */}
       {data && nonMarketplaceCount > 0 && (
