@@ -653,23 +653,24 @@ Deno.serve(async (req) => {
       }
 
       // Fuzzy match for non-confirmed, non-Amazon
+      const marketplacePatterns: Record<string, string[]> = {
+        amazon_au: ['amazon', 'amzn'],
+        shopify_payments: ['shopify'],
+        kogan: ['kogan'],
+        bigw: ['big w', 'bigw'],
+        bunnings: ['bunnings'],
+        mydeal: ['mydeal'],
+        catch: ['catch'],
+        ebay_au: ['ebay'],
+        everyday_market: ['woolworths', 'everyday', 'edm'],
+      };
+
       if (!bankMatch && !isConfirmed) {
         for (const txn of bankTxns) {
           const txnAmount = Math.abs(txn.Total || 0);
           const txnDate = parseXeroDate(txn.Date);
           const amountDiff = Math.abs(txnAmount - amount);
           const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''}`.toLowerCase();
-
-          const marketplacePatterns: Record<string, string[]> = {
-            amazon_au: ['amazon', 'amzn'],
-            shopify_payments: ['shopify'],
-            kogan: ['kogan'],
-            bigw: ['big w', 'bigw'],
-            bunnings: ['bunnings'],
-            mydeal: ['mydeal'],
-            catch: ['catch'],
-            ebay_au: ['ebay'],
-          };
 
           const patterns = marketplacePatterns[marketplace] || [];
           const narrationMatch = patterns.some(p => narration.includes(p));
