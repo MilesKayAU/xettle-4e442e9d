@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
 
             const alreadyRecorded = reports.length - missingReports.length;
             const reconciledCount = amazonExisting.filter(s =>
-              ['reconciled_in_xero', 'synced_external', 'already_recorded'].includes(s.status)
+              ['reconciled_in_xero', 'bank_verified', 'pushed_to_xero'].includes(s.status)
             ).length;
 
             results.push({
