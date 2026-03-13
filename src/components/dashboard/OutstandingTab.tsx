@@ -36,7 +36,9 @@ import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
   FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
   MinusCircle, Clock3, Search, ArrowRight, Shield, Link2, ShoppingBag,
+  Info,
 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -242,6 +244,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
   const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
   const [backfilling, setBackfilling] = useState(false);
+  const [lastBankSyncResult, setLastBankSyncResult] = useState<any>(null);
   const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
   const [depositCoverage, setDepositCoverage] = useState<Record<string, {
     siblings: Array<{ settlement_id: string; match_amount: number; confidence_score: number; period_start?: string; period_end?: string; marketplace?: string }>;
@@ -471,6 +474,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         await fetchOutstanding({ runSync: false });
         return;
       }
+      // Store diagnostics for every response path
+      setLastBankSyncResult(resp.data);
+
       if (resp.data?.xero_rate_limited) {
         const retryAfter = Number(resp.data?.retry_after_seconds) || 60;
         const cached = Number(resp.data?.bank_rows_cached_total) || 0;
@@ -487,12 +493,17 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             { id: 'bank-feed-sync', duration: 10000 }
           );
         }
-        // Still refetch Outstanding so it can use whatever cache exists
         await fetchOutstanding({ runSync: false });
         return;
       }
       if (resp.data?.error) {
         toast.error(`Bank feed sync failed: ${resp.data.error}`, { id: 'bank-feed-sync' });
+        await fetchOutstanding({ runSync: false });
+        return;
+      }
+      // Handle no-mapping early exit BEFORE generic skipped handler
+      if (resp.data?.skipped && resp.data?.skip_reason === 'no_mapping') {
+        toast.warning('No destination account mapped. Go to Settings → Payout Mapping to configure.', { id: 'bank-feed-sync', duration: 10000 });
         await fetchOutstanding({ runSync: false });
         return;
       }
@@ -515,6 +526,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       await fetchOutstanding({ runSync: false });
     } catch (err: any) {
       toast.error(`Bank feed sync failed: ${err.message}`, { id: 'bank-feed-sync' });
+      setLastBankSyncResult({ error: err.message });
       try { await fetchOutstanding({ runSync: false }); } catch {} // always refetch
     } finally {
       setSyncingBankFeed(false);
@@ -1337,7 +1349,46 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </div>
       )}
 
-      {/* ─── Invoice cache / rate-limit banners ─── */}
+      {/* ─── Bank sync diagnostics (collapsible) ─── */}
+      {lastBankSyncResult && (
+        <Collapsible>
+          <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1 py-0.5">
+            <Info className="h-3.5 w-3.5" />
+            <span>Show sync details</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-1 p-3 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground space-y-1">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                {lastBankSyncResult.mapped_account_ids_count != null && (
+                  <><span className="font-medium">Mapped accounts</span><span>{lastBankSyncResult.mapped_account_ids_count}</span></>
+                )}
+                {lastBankSyncResult.mapped_account_ids && (
+                  <><span className="font-medium">Account IDs</span><span className="truncate">{(lastBankSyncResult.mapped_account_ids as string[]).join(', ') || '—'}</span></>
+                )}
+                {lastBankSyncResult.synced_row_count != null && (
+                  <><span className="font-medium">Synced rows</span><span>{lastBankSyncResult.synced_row_count}</span></>
+                )}
+                {lastBankSyncResult.lookback_days != null && (
+                  <><span className="font-medium">Lookback days</span><span>{lastBankSyncResult.lookback_days}</span></>
+                )}
+                {lastBankSyncResult.cooldown_until && (
+                  <><span className="font-medium">Cooldown until</span><span>{new Date(lastBankSyncResult.cooldown_until).toLocaleTimeString('en-AU')}</span></>
+                )}
+                <><span className="font-medium">Rate limited</span><span>{lastBankSyncResult.xero_rate_limited ? 'Yes' : 'No'}</span></>
+                <><span className="font-medium">Has mapping</span><span>{lastBankSyncResult.has_any_mapping === true ? 'Yes' : lastBankSyncResult.has_any_mapping === false ? 'No' : '—'}</span></>
+                {lastBankSyncResult.skip_reason && (
+                  <><span className="font-medium">Skip reason</span><span>{lastBankSyncResult.skip_reason}</span></>
+                )}
+                {lastBankSyncResult.refreshed_at && (
+                  <><span className="font-medium">Refreshed at</span><span>{new Date(lastBankSyncResult.refreshed_at).toLocaleTimeString('en-AU')}</span></>
+                )}
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+
       {data?.sync_info?.xero_rate_limited && (
         <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
           <Clock3 className="h-5 w-5 text-amber-600 shrink-0" />
