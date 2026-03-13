@@ -211,7 +211,7 @@ async function fetchBankTxnsForUser(
     user_id: userId,
     event_type: 'bank_txn_fetch',
     severity: 'info',
-    details: { transactions_upserted: totalUpserted, pages_fetched: page, lookback_days: LOOKBACK_DAYS, filtered_accounts: mappedAccountIds.size },
+    details: { transactions_upserted: totalUpserted, pages_fetched: page, lookback_days: lookbackDays, filtered_accounts: mappedAccountIds.size },
   });
 
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
