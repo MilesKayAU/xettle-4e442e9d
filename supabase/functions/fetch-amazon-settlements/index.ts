@@ -690,7 +690,7 @@ async function handleSmartSync(supabase: any, userId: string, syncFrom?: string)
   }
 
   try {
-    return await _executeSmartSync(supabase, userId);
+    return await _executeSmartSync(supabase, userId, syncFrom);
   } finally {
     // ─── Always release lock when done ────────────────────────────
     await supabase.rpc('release_sync_lock', {
