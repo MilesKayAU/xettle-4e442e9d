@@ -471,9 +471,87 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, [data?.sync_info?.missing_settlement_ids, hasLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // On mount, fetch cached data only — sync only when user clicks "Sync with Xero"
-  // This prevents Xero API rate-limit death spirals (see RCA: ~43 calls per mount)
-  useEffect(() => { fetchOutstanding({ runSync: false }); }, [fetchOutstanding]);
+  // ─── Cache-first load: instant render from outstanding_invoices_cache ───
+  const loadCachedSnapshot = useCallback(async (): Promise<number> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return 0;
+
+      const { data: cached, error } = await supabase
+        .from('outstanding_invoices_cache')
+        .select('*')
+        .eq('user_id', session.user.id);
+
+      if (error || !cached || cached.length === 0) return 0;
+
+      const rows: OutstandingRow[] = cached.map(row => {
+        const dueDateMs = row.due_date ? new Date(row.due_date).getTime() : null;
+        const overdueDays = dueDateMs ? Math.max(0, Math.floor((Date.now() - dueDateMs) / 86400000)) : null;
+        const contactLower = (row.contact_name || '').toLowerCase();
+        const isMarketplace = ['amazon', 'shopify', 'kogan', 'ebay', 'catch', 'mydeal', 'bigw', 'bunnings', 'woolworths'].some(m => contactLower.includes(m));
+        const marketplace = contactLower.includes('amazon') ? 'amazon_au'
+          : contactLower.includes('shopify') ? 'shopify_payments'
+          : contactLower.includes('kogan') ? 'kogan'
+          : contactLower.includes('ebay') ? 'ebay_au'
+          : contactLower.includes('catch') ? 'catch'
+          : contactLower.includes('mydeal') ? 'mydeal'
+          : contactLower.includes('bigw') ? 'bigw'
+          : contactLower.includes('bunnings') ? 'bunnings'
+          : 'unknown';
+
+        return {
+          xero_invoice_id: row.xero_invoice_id,
+          xero_invoice_number: row.invoice_number || '—',
+          xero_reference: row.reference || '',
+          contact_name: row.contact_name || '',
+          marketplace,
+          is_marketplace: isMarketplace,
+          invoice_date: row.date || null,
+          due_date: row.due_date || null,
+          amount: Number(row.amount_due) || 0,
+          currency_code: row.currency_code || 'AUD',
+          overdue_days: overdueDays,
+          has_settlement: undefined as unknown as boolean,
+          settlement_id: null,
+          settlement_status: null,
+          settlement_evidence: null,
+          has_bank_deposit: undefined as unknown as boolean,
+          bank_match: null,
+          bank_difference: null,
+          match_status: 'pending_enrichment',
+        };
+      });
+
+      const summary: OutstandingSummary = {
+        total_outstanding: rows.reduce((sum, r) => sum + r.amount, 0),
+        invoice_count: rows.length,
+        matched_with_settlement: 0,
+        bank_deposit_found: 0,
+        ready_to_reconcile: 0,
+        rows,
+      };
+
+      setData(summary);
+      setHasLoaded(true);
+      return rows.length;
+    } catch (err) {
+      console.warn('[OutstandingTab] cache snapshot failed:', err);
+      return 0;
+    }
+  }, []);
+
+  // On mount: load cache first, then enrich in background (or foreground if cache empty)
+  useEffect(() => {
+    const init = async () => {
+      const cachedCount = await loadCachedSnapshot();
+      if (cachedCount > 0) {
+        fetchOutstanding({ runSync: false, background: true });
+      } else {
+        fetchOutstanding({ runSync: false });
+      }
+    };
+    init();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for refresh events dispatched after bank mapping saves
   useEffect(() => {
