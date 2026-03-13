@@ -427,21 +427,18 @@ async function syncPayoutsForUser(
         .maybeSingle();
 
       if (preSeeded?.xero_invoice_id) {
+        // Map Xero status to canonical settlement states
+        let derivedStatus = 'pushed_to_xero';
+        if (preSeeded.xero_status === 'PAID') derivedStatus = 'reconciled_in_xero';
         const isXettleFormat = (preSeeded.matched_reference || '').startsWith('Xettle-');
-        let derivedStatus = 'synced_external';
-        if (isXettleFormat) {
-          switch (preSeeded.xero_status) {
-            case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
-            case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
-            case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
-            default: derivedStatus = 'pushed_to_xero'; break;
-          }
-        }
+        if (!isXettleFormat) derivedStatus = 'pushed_to_xero';
+
         await supabase.from("settlements").update({
           xero_journal_id: preSeeded.xero_invoice_id,
           xero_invoice_number: preSeeded.xero_invoice_number,
           xero_status: preSeeded.xero_status,
           status: derivedStatus,
+          sync_origin: isXettleFormat ? 'xettle' : 'external',
         }).eq("settlement_id", payoutSettlementId).eq("user_id", userId);
         console.log(`[fetch-shopify-payouts] Auto-linked payout ${payoutSettlementId} to Xero invoice ${preSeeded.xero_invoice_number}`);
       }

@@ -1655,6 +1655,39 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_locks: {
+        Row: {
+          created_at: string | null
+          expires_at: string
+          id: string
+          integration: string
+          lock_key: string
+          owner_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          integration: string
+          lock_key: string
+          owner_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          integration?: string
+          lock_key?: string
+          owner_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       system_events: {
         Row: {
           created_at: string | null
@@ -1939,6 +1972,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acquire_sync_lock: {
+        Args: {
+          p_integration: string
+          p_lock_key: string
+          p_ttl_seconds?: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      check_sync_cooldown: {
+        Args: { p_key: string; p_user_id: string; p_window_seconds?: number }
+        Returns: Json
+      }
       get_channel_comparison: {
         Args: { p_user_id: string }
         Returns: {
@@ -2002,6 +2048,10 @@ export type Database = {
       }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
+        Returns: boolean
+      }
+      release_sync_lock: {
+        Args: { p_integration: string; p_lock_key: string; p_user_id: string }
         Returns: boolean
       }
     }

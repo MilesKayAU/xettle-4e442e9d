@@ -380,29 +380,30 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
   for (const amazonToken of amazonTokens) {
     const userId = amazonToken.user_id;
 
-    // ─── Check mutex: skip if manual sync in progress ────────────
-    const { data: lockSetting } = await supabaseAdmin
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'amazon_sync_lock_expiry')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // ─── Atomic lock check: skip if manual sync holds the lock ────
+    const { data: lockResult } = await supabaseAdmin.rpc('acquire_sync_lock', {
+      p_user_id: userId,
+      p_integration: 'amazon',
+      p_lock_key: 'settlement_sync',
+      p_ttl_seconds: 600,
+    });
 
-    if (lockSetting?.value && new Date(lockSetting.value) > new Date()) {
-      details.push(`User ${userId}: Skipped — manual sync in progress`);
-      console.log(`[Sync] Amazon sync skipped for ${userId} — manual sync in progress`);
+    if (!lockResult?.acquired) {
+      details.push(`User ${userId}: Skipped — sync lock held until ${lockResult?.expires_at}`);
+      console.log(`[Sync] Amazon sync skipped for ${userId} — lock held`);
       continue;
     }
 
-    // ─── Check rate limit cooldown ───────────────────────────────
-    const { data: rateLimitSetting } = await supabaseAdmin
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'amazon_rate_limit_until')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // ─── Check rate limit cooldown (atomic RPC) ─────────────────
+    const { data: cooldownResult } = await supabaseAdmin.rpc('check_sync_cooldown', {
+      p_user_id: userId,
+      p_key: 'amazon_rate_limit_until',
+      p_window_seconds: 0, // Rate limit uses absolute expiry, not relative window
+    });
 
-    if (rateLimitSetting?.value && new Date(rateLimitSetting.value) > new Date()) {
+    if (cooldownResult && !cooldownResult.ok) {
+      // Release lock since we're skipping
+      await supabaseAdmin.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: 'settlement_sync' });
       details.push(`User ${userId}: Skipped — Amazon rate limit cooldown active`);
       console.log(`[Sync] Amazon rate limited for ${userId} — cooldown active`);
       continue;
@@ -550,22 +551,20 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             .maybeSingle();
 
           if (preMatch?.xero_invoice_id) {
+            // Map Xero status to canonical settlement states
+            let derivedSt = 'pushed_to_xero';
+            if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
+            // For non-Xettle invoices, mark as pushed (external sync uses sync_origin='external')
             const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
-            let derivedSt = 'synced_external';
-            if (isXettleFormat) {
-              switch (preMatch.xero_status) {
-                case 'DRAFT': derivedSt = 'draft_in_xero'; break;
-                case 'AUTHORISED': derivedSt = 'authorised_in_xero'; break;
-                case 'PAID': derivedSt = 'reconciled_in_xero'; break;
-                default: derivedSt = 'pushed_to_xero'; break;
+            if (!isXettleFormat) derivedSt = 'pushed_to_xero';
               }
-            }
             await supabaseAdmin.from('settlements').update({
               xero_journal_id: preMatch.xero_invoice_id,
               xero_invoice_id: preMatch.xero_invoice_id,
               xero_invoice_number: preMatch.xero_invoice_number,
               xero_status: preMatch.xero_status,
               status: derivedSt,
+              sync_origin: isXettleFormat ? 'xettle' : 'external',
             } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
             console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
           }
@@ -612,7 +611,11 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
       totalImported += userImported;
       totalSkipped += userSkipped;
       totalErrors += userErrors;
+      // Release lock after processing
+      await supabaseAdmin.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: 'settlement_sync' });
     } catch (userErr: any) {
+      // Release lock on error too
+      await supabaseAdmin.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: 'settlement_sync' });
       details.push(`User ${userId}: FAILED — ${userErr.message}`);
       totalErrors++;
     }
@@ -629,66 +632,56 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
 // - Returns summary with totals for UI
 // ═══════════════════════════════════════════════════════════════
 async function handleSmartSync(supabase: any, userId: string): Promise<Response> {
-  // ─── Check rate limit cooldown (Amazon 429 backoff) ────────────
-  const { data: rateLimitSetting } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'amazon_rate_limit_until')
-    .eq('user_id', userId)
-    .maybeSingle();
+  // ─── Check rate limit cooldown (atomic RPC) ────────────────────
+  const { data: cooldownResult } = await supabase.rpc('check_sync_cooldown', {
+    p_user_id: userId,
+    p_key: 'amazon_rate_limit_until',
+    p_window_seconds: 0,
+  });
 
-  if (rateLimitSetting?.value) {
-    const rateLimitUntil = new Date(rateLimitSetting.value);
-    if (rateLimitUntil > new Date()) {
-      const minutesLeft = Math.ceil((rateLimitUntil.getTime() - Date.now()) / 60000);
-      return new Response(
-        JSON.stringify({
-          error: 'rate_limited',
-          error_type: 'rate_limit',
-          message: `Amazon API rate limited — this is temporary. Will retry automatically in ${minutesLeft} minutes.`,
-          retry_after: rateLimitSetting.value,
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  if (cooldownResult && !cooldownResult.ok) {
+    const retryAfter = cooldownResult.retry_after;
+    const minutesLeft = Math.ceil((new Date(retryAfter).getTime() - Date.now()) / 60000);
+    return new Response(
+      JSON.stringify({
+        error: 'rate_limited',
+        error_type: 'rate_limit',
+        message: `Amazon API rate limited — this is temporary. Will retry automatically in ${minutesLeft} minutes.`,
+        retry_after: retryAfter,
+      }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
-  // ─── Check sync mutex (prevent concurrent Amazon syncs) ────────
-  const { data: lockSetting } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'amazon_sync_lock_expiry')
-    .eq('user_id', userId)
-    .maybeSingle();
+  // ─── Atomic lock acquisition (10 minute TTL) ──────────────────
+  const { data: lockResult } = await supabase.rpc('acquire_sync_lock', {
+    p_user_id: userId,
+    p_integration: 'amazon',
+    p_lock_key: 'settlement_sync',
+    p_ttl_seconds: 600,
+  });
 
-  if (lockSetting?.value) {
-    const lockExpiry = new Date(lockSetting.value);
-    if (lockExpiry > new Date()) {
-      return new Response(
-        JSON.stringify({
-          error: 'sync_in_progress',
-          error_type: 'mutex',
-          message: 'Amazon sync already running. Please wait for it to complete.',
-          retry_after: lockSetting.value,
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  if (!lockResult?.acquired) {
+    return new Response(
+      JSON.stringify({
+        error: 'sync_in_progress',
+        error_type: 'mutex',
+        message: 'Amazon sync already running. Please wait for it to complete.',
+        retry_after: lockResult?.expires_at,
+      }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
-
-  // ─── Acquire sync lock (10 minute expiry) ──────────────────────
-  await upsertSetting(supabase, userId, 'amazon_sync_lock_expiry',
-    new Date(Date.now() + 10 * 60 * 1000).toISOString()
-  );
 
   try {
     return await _executeSmartSync(supabase, userId);
   } finally {
     // ─── Always release lock when done ────────────────────────────
-    await supabase.from('app_settings')
-      .delete()
-      .eq('user_id', userId)
-      .eq('key', 'amazon_sync_lock_expiry');
+    await supabase.rpc('release_sync_lock', {
+      p_user_id: userId,
+      p_integration: 'amazon',
+      p_lock_key: 'settlement_sync',
+    });
   }
 }
 
@@ -890,22 +883,19 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         .maybeSingle();
 
       if (preMatch?.xero_invoice_id) {
+        // Map Xero status to canonical settlement states
+        let derivedSt = 'pushed_to_xero';
+        if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
         const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
-        let derivedSt = 'synced_external';
-        if (isXettleFormat) {
-          switch (preMatch.xero_status) {
-            case 'DRAFT': derivedSt = 'draft_in_xero'; break;
-            case 'AUTHORISED': derivedSt = 'authorised_in_xero'; break;
-            case 'PAID': derivedSt = 'reconciled_in_xero'; break;
-            default: derivedSt = 'pushed_to_xero'; break;
-          }
-        }
+        if (!isXettleFormat) derivedSt = 'pushed_to_xero';
+
         await supabase.from('settlements').update({
           xero_journal_id: preMatch.xero_invoice_id,
           xero_invoice_id: preMatch.xero_invoice_id,
           xero_invoice_number: preMatch.xero_invoice_number,
           xero_status: preMatch.xero_status,
           status: derivedSt,
+          sync_origin: isXettleFormat ? 'xettle' : 'external',
         } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
         console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
       }

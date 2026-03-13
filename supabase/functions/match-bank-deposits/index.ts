@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
       query = query.eq('settlement_id', settlementId)
     } else {
       // Match pushed settlements that don't have a deposit match yet
-      query = query.or('status.eq.synced,status.eq.pushed_to_xero,status.eq.draft_in_xero,status.eq.authorised_in_xero')
+      query = query.or('status.eq.pushed_to_xero,status.eq.reconciled_in_xero')
     }
 
     const { data: settlements, error: settErr } = await query
