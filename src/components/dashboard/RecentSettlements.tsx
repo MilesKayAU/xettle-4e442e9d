@@ -123,9 +123,9 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
     }
     if (xeroStatus === 'AUTHORISED') {
       return (
-        <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-900/30 dark:border-blue-800 text-xs">
-          <CheckCircle2 className="h-3 w-3 mr-1" />
-          In Xero — Awaiting Payment
+        <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
+          <Clock className="h-3 w-3 mr-1" />
+          Posted — Awaiting Deposit
         </Badge>
       );
     }
@@ -154,9 +154,9 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
   }
   if (status === 'ingested') {
     return (
-      <Badge variant="outline" className="text-muted-foreground text-xs">
+      <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
         <Clock className="h-3 w-3 mr-1" />
-        Awaiting Xero Check
+        Posted — Awaiting Deposit
       </Badge>
     );
   }
@@ -420,13 +420,14 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
       color: 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-900/20',
       icon: <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
     },
-    {
-      key: 'attention',
+    // Only show Needs Attention when there are items
+    ...(counts.attention > 0 ? [{
+      key: 'attention' as StatusCategory,
       label: 'Needs Attention',
       count: counts.attention,
       color: 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-900/20',
       icon: <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />,
-    },
+    }] : []),
   ];
 
   return (
@@ -460,7 +461,7 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
         {/* ── Status summary cards (clickable filters) ── */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className={cn("grid gap-3", summaryCards.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
           {summaryCards.map(card => (
             <button
               key={card.key}

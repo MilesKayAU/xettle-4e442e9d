@@ -399,16 +399,19 @@ export default function ActionCentre({
           )}
 
           {/* Card 2 — Ready to Post */}
-          {readyToPush.length > 0 && (
+          {readyToPush.length > 0 && (() => {
+            const totalAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
+            return (
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
                   <h3 className="font-semibold text-sm">Ready to Post</h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''} validated, not yet in Xero
-                </p>
+                <div>
+                  <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to post</span></p>
+                  <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
+                </div>
                 <ul className="space-y-1">
                   {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
@@ -430,16 +433,17 @@ export default function ActionCentre({
                 </Button>
               </CardContent>
             </Card>
-          )}
+            );
+          })()}
 
           {/* Card 3 — Posted — Awaiting Deposit */}
           {awaitingBank.length > 0 && (() => {
             const grouped = groupByMarketplaceMonth(awaitingBank);
             return (
-            <Card className="border-border bg-muted/20">
+            <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
                   <h3 className="font-semibold text-sm">Posted — Awaiting Deposit</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -604,12 +608,14 @@ export default function ActionCentre({
                 ))}
               </tbody>
             </table>
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
-              <span className="font-medium text-foreground/70">Legend:</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Complete</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/20 inline-block" /> Pending</span>
-              <span className="flex items-center gap-1"><span className="text-muted-foreground/50">—</span> Pre-boundary</span>
-              <span className="border-l border-border pl-4 ml-1">Each cell: <span className="font-medium">S</span> Settlement → <span className="font-medium">X</span> Xero → <span className="font-medium">B</span> Bank → <span className="font-medium">R</span> Reconciled</span>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+              <span className="font-medium text-foreground/70">Pipeline stages:</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Settlement uploaded</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Posted to Xero</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Bank detected</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Reconciled</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/20 inline-block" /> Not yet</span>
+              <span className="flex items-center gap-1.5"><span className="text-muted-foreground/50">—</span> Pre-boundary</span>
             </div>
           </CardContent>
         </Card>
@@ -657,13 +663,14 @@ export default function ActionCentre({
         </Card>
       )}
 
-      {/* Floating upload button */}
+      {/* Floating upload button — secondary style, dashboard is read-only feeling */}
       <div className="fixed bottom-6 right-6 z-40">
         <Button
+          variant="outline"
           onClick={() => onSwitchToUpload()}
-          className="h-12 px-5 gap-2 shadow-lg rounded-full"
+          className="h-10 px-4 gap-2 shadow-md rounded-full bg-background/90 backdrop-blur-sm text-xs"
         >
-          <Plus className="h-4 w-4" /> Upload settlement
+          <Plus className="h-3.5 w-3.5" /> Upload settlement
         </Button>
       </div>
     </div>
