@@ -30,6 +30,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
   FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
@@ -308,7 +310,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
-        body: { force_refresh: true },
+        body: { force_refresh: !!options?.runSync },
       });
 
       // Check for structured no_xero_connection signal from fetch-outstanding
@@ -1081,16 +1083,39 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     return null;
   };
 
-  // ─── Loading state ───
+  // ─── Loading state — skeleton table instead of blocking spinner ───
   if (!hasLoaded && loading) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Outstanding</h2>
-          <p className="text-muted-foreground mt-1">Syncing with Xero to find invoices awaiting payment...</p>
+          <p className="text-muted-foreground mt-1">Loading outstanding invoices...</p>
         </div>
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Invoice</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Due</TableHead>
+                <TableHead className="text-right">Amount Due</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </div>
     );
