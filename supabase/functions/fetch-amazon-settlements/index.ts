@@ -557,7 +557,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             // For non-Xettle invoices, mark as pushed (external sync uses sync_origin='external')
             const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
             if (!isXettleFormat) derivedSt = 'pushed_to_xero';
-              }
+
             await supabaseAdmin.from('settlements').update({
               xero_journal_id: preMatch.xero_invoice_id,
               xero_invoice_id: preMatch.xero_invoice_id,
@@ -568,6 +568,16 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
             console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
           }
+
+          // Delete existing lines/unmapped before re-insert (idempotency on retry)
+          await supabaseAdmin.from('settlement_lines')
+            .delete()
+            .eq('user_id', userId)
+            .eq('settlement_id', header.settlementId);
+          await supabaseAdmin.from('settlement_unmapped')
+            .delete()
+            .eq('user_id', userId)
+            .eq('settlement_id', header.settlementId);
 
           if (lines.length > 0) {
             const lineRows = lines.map((l: any) => ({
@@ -899,6 +909,16 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
         console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
       }
+
+      // Delete existing lines/unmapped before re-insert (idempotency on retry)
+      await supabase.from('settlement_lines')
+        .delete()
+        .eq('user_id', userId)
+        .eq('settlement_id', header.settlementId);
+      await supabase.from('settlement_unmapped')
+        .delete()
+        .eq('user_id', userId)
+        .eq('settlement_id', header.settlementId);
 
       // Insert lines in batches
       if (lines.length > 0) {
