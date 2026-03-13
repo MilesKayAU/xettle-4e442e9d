@@ -96,6 +96,7 @@ export default function Dashboard() {
   const [justConnectedXero, setJustConnectedXero] = useState(false);
   const [showAiMapper, setShowAiMapper] = useState(false);
   const [showSetupBanner, setShowSetupBanner] = useState(false);
+  const [showBankMappingNudge, setShowBankMappingNudge] = useState(false);
 
   useEffect(() => {
     if (!user) return;
