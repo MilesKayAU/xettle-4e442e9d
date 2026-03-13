@@ -753,7 +753,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status === 'awaiting_sync') return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
-    if (row.match_status.startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+    if ((row.match_status || '').startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
       if (isAmazon(row)) return <Clock3 className="h-4 w-4 text-muted-foreground" />;
       return <AlertTriangle className="h-4 w-4 text-amber-600" />;
