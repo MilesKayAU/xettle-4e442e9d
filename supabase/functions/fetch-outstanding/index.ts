@@ -827,7 +827,15 @@ Deno.serve(async (req) => {
         : null,
       bank_matches_count: bankDepositFound,
       candidates_generated: readyToReconcile,
+      // Keep top-level source for UI backward compat (refers to invoice source)
       source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
+      // Explicit per-layer source labels (Condition 1)
+      invoice_source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
+      bank_transactions_source: 'cache' as const,
+      // Cache staleness diagnostics (Condition 3)
+      bank_cache_last_refreshed_at: bankCacheNewestFetchedAt,
+      bank_cache_stale: bankCacheStale,
+      bank_cache_query_error: bankCacheQueryError,
     };
 
     console.log(JSON.stringify({
