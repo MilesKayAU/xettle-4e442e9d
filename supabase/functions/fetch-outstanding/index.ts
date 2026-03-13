@@ -107,10 +107,16 @@ async function fetchXeroWithRetry(url: string, headers: Record<string, string>, 
   return { ok: false as const, status: lastStatus, body: lastBody };
 }
 
-function detectMarketplace(reference: string, contactName: string): string {
+function detectMarketplace(reference: string, contactName: string, currencyCode?: string): string {
   const ref = reference.toLowerCase();
   const contact = contactName.toLowerCase();
+  // Amazon US detection: LMB-US refs or USD Amazon invoices
+  if (ref.startsWith('lmb-us-')) return 'amazon_us';
+  if ((ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon')) && currencyCode === 'USD') return 'amazon_us';
+  if (contact.includes('amazon.com') && !contact.includes('amazon.com.au') && currencyCode === 'USD') return 'amazon_us';
+  // Amazon AU
   if (ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon')) return 'amazon_au';
+  if (ref.startsWith('lmb-')) return 'amazon_au';
   if (ref.includes('shopify') || contact.includes('shopify')) return 'shopify_payments';
   if (contact.includes('kogan')) return 'kogan';
   if (contact.includes('big w') || contact.includes('bigw')) return 'bigw';
@@ -118,7 +124,6 @@ function detectMarketplace(reference: string, contactName: string): string {
   if (contact.includes('mydeal') || contact.includes('my deal')) return 'mydeal';
   if (contact.includes('catch')) return 'catch';
   if (contact.includes('ebay')) return 'ebay_au';
-  if (ref.startsWith('lmb-')) return 'amazon_au';
   return 'unknown';
 }
 
@@ -639,6 +644,7 @@ Deno.serve(async (req) => {
     let matchedWithSettlement = 0;
     let bankDepositFound = 0;
     let readyToReconcile = 0;
+    const missingSettlementIds: string[] = []; // Settlement IDs extracted from refs but not in DB
 
     for (const inv of invoices) {
       const reference = inv.Reference || '';
@@ -652,7 +658,8 @@ Deno.serve(async (req) => {
       totalOutstanding += amount;
 
       // Detect marketplace FIRST so fuzzy matching can use it
-      const marketplace = detectMarketplace(reference, contactName);
+      const currencyCode = inv.CurrencyCode || 'AUD';
+      const marketplace = detectMarketplace(reference, contactName, currencyCode);
       const isMarketplace = marketplace !== 'unknown';
 
       // Try to match with our settlement:
@@ -846,11 +853,20 @@ Deno.serve(async (req) => {
           ? 'suggestion_high' : 'suggestion_multiple';
       } else if (hasSettlement && !hasBankDeposit) {
         matchStatus = 'no_bank_deposit';
+      } else if (!hasSettlement && marketplace === 'amazon_us') {
+        // Amazon US invoices — marketplace not connected/supported
+        matchStatus = 'unsupported_marketplace';
       } else if (!hasSettlement && hasBankDeposit) {
         matchStatus = 'no_settlement';
       } else if (!hasSettlement && settlementId && preSeededSet.has(settlementId)) {
         // Pre-seeded by sync-xero-status — settlement data is expected from API sync
         matchStatus = 'awaiting_sync';
+      } else if (!hasSettlement && settlementId) {
+        // Settlement ID extracted from reference but not found in DB — needs backfill
+        matchStatus = 'settlement_not_ingested';
+        if (!missingSettlementIds.includes(settlementId)) {
+          missingSettlementIds.push(settlementId);
+        }
       } else {
         matchStatus = 'no_settlement';
       }
@@ -936,6 +952,7 @@ Deno.serve(async (req) => {
       lookback_days_effective: lookbackDays,
       force_recompute_used: forceRecompute,
       mapping_status: mappingStatus,
+      missing_settlement_ids: missingSettlementIds,
     };
 
     console.log(JSON.stringify({

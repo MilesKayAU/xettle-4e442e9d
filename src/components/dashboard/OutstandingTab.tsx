@@ -170,6 +170,7 @@ interface OutstandingSummary {
     bank_cache_query_error?: boolean;
     lookback_days_effective?: number;
     force_recompute_used?: boolean;
+    missing_settlement_ids?: string[];
     mapping_status?: {
       has_any_mapping?: boolean;
       missing_marketplaces?: string[];
@@ -196,6 +197,7 @@ const formatDate = (d: string | null) =>
 
 const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
+  amazon_us: 'Amazon US',
   shopify_payments: 'Shopify',
   kogan: 'Kogan',
   bigw: 'Big W',
@@ -218,6 +220,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [showNonMarketplace, setShowNonMarketplace] = useState(false);
   const [confirming, setConfirming] = useState<Set<string>>(new Set());
   const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
   const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
   const [depositCoverage, setDepositCoverage] = useState<Record<string, {
     siblings: Array<{ settlement_id: string; match_amount: number; confidence_score: number; period_start?: string; period_end?: string; marketplace?: string }>;
@@ -370,6 +373,40 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       setRescanning(false);
     }
   }, []);
+
+  // ─── Evidence-triggered backfill for missing settlements ───
+  const triggerBackfill = useCallback(async (missingIds: string[]) => {
+    if (missingIds.length === 0 || backfilling) return;
+    setBackfilling(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const resp = await supabase.functions.invoke('fetch-amazon-settlements', {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'x-action': 'backfill' },
+        body: { missing_settlement_ids: missingIds },
+      });
+
+      if (resp.data?.backfilled > 0) {
+        toast.success(`Found ${resp.data.backfilled} missing settlement${resp.data.backfilled > 1 ? 's' : ''} — refreshing…`);
+        await fetchOutstanding({ runSync: false });
+      } else {
+        toast.info('Settlement reports not found in Amazon — they may be older than 270 days.');
+      }
+    } catch (err: any) {
+      console.error('[backfill] error:', err);
+    } finally {
+      setBackfilling(false);
+    }
+  }, [backfilling, fetchOutstanding]);
+
+  // Auto-trigger backfill when missing settlement IDs detected
+  useEffect(() => {
+    const missingIds = data?.sync_info?.missing_settlement_ids;
+    if (missingIds && missingIds.length > 0 && hasLoaded && !backfilling) {
+      triggerBackfill(missingIds);
+    }
+  }, [data?.sync_info?.missing_settlement_ids, hasLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On mount, fetch cached data only — sync only when user clicks "Sync with Xero"
   // This prevents Xero API rate-limit death spirals (see RCA: ~43 calls per mount)
@@ -756,12 +793,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'confirmed_manual') return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+    if (row.match_status === 'unsupported_marketplace') return <AlertTriangle className="h-4 w-4 text-muted-foreground" />;
+    if (row.match_status === 'settlement_not_ingested') return <Clock3 className="h-4 w-4 text-amber-500" />;
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status === 'awaiting_sync') return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
     if ((row.match_status || '').startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      if (isAmazon(row)) return <Clock3 className="h-4 w-4 text-muted-foreground" />;
-      return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+      return <Clock3 className="h-4 w-4 text-muted-foreground" />;
     }
     return <XCircle className="h-4 w-4 text-destructive" />;
   };
@@ -772,6 +810,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
     if (row.match_status === 'suggestion_high') return 'Likely match found';
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
+    if (row.match_status === 'unsupported_marketplace') return `${MARKETPLACE_LABELS[row.marketplace] || row.marketplace} not connected`;
+    if (row.match_status === 'settlement_not_ingested') return 'Settlement not imported';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
     if (row.match_status === 'awaiting_sync') return 'Syncing settlement…';
     if ((row.match_status || '').startsWith('gap_')) {
@@ -779,7 +819,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       return `Gap: $${gap}`;
     }
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      return isAmazon(row) ? 'Awaiting deposit' : 'No deposit found';
+      return 'Awaiting deposit';
     }
     if (row.match_status === 'no_bank_deposit') return 'No deposit found';
     return 'No settlement';
@@ -789,6 +829,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
+    if (row.match_status === 'unsupported_marketplace') return 'bg-muted/30';
+    if (row.match_status === 'settlement_not_ingested') return 'bg-amber-50/30 dark:bg-amber-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status === 'awaiting_sync') return 'bg-blue-50/30 dark:bg-blue-950/10';
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
