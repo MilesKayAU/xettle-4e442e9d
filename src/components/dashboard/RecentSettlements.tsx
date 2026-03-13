@@ -271,7 +271,7 @@ function SettlementDrillDown({ row }: { row: SettlementRow }) {
   );
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 function getPrimaryAction(row: SettlementRow): { label: string } {
   if (row.status === 'hidden') return { label: 'Unhide' };
