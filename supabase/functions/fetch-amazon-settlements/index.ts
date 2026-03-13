@@ -982,7 +982,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
             settlement_uploaded_at: new Date().toISOString(),
             settlement_id: header.settlementId,
             settlement_net: derivedSettlementNet,
-            overall_status: isBeforeBoundary ? 'already_recorded' : 'ready_to_push',
+            overall_status: isBeforeBoundary ? 'pre_boundary' : 'ready_to_push',
           })
           .eq('id', existingVal.id);
       } else {
