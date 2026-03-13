@@ -163,6 +163,11 @@ interface OutstandingSummary {
     settlement_count_total?: number;
     candidates_generated?: number;
     source?: string;
+    invoice_source?: string;
+    bank_transactions_source?: string;
+    bank_cache_last_refreshed_at?: string | null;
+    bank_cache_stale?: boolean;
+    bank_cache_query_error?: boolean;
   };
 }
 
