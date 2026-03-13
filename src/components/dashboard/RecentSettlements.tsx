@@ -476,10 +476,11 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                 card.count === 0 && 'opacity-50'
               )}
             >
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-0.5">
                 {card.icon}
                 <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
               </div>
+              <p className="text-[10px] text-muted-foreground/70 mb-1 ml-6">{card.sublabel}</p>
               {card.total !== undefined && card.count > 0 ? (
                 <>
                   <p className="text-xl font-bold text-foreground">{formatAUD(card.total)}</p>
