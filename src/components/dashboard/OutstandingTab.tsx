@@ -1038,6 +1038,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   };
 
    const getStatusLabel = (row: OutstandingRow) => {
+    if (row.match_status === 'pending_enrichment') return 'Loading matches…';
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
