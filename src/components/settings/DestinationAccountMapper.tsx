@@ -442,12 +442,16 @@ export default function DestinationAccountMapper() {
                           <SelectValue placeholder="Select destination account…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {accounts.map(acc => (
-                            <SelectItem key={acc.account_id} value={acc.account_id}>
-                              {acc.name}
-                              <Badge variant="outline" className="ml-2 text-xs">{acc.currency_code}</Badge>
-                            </SelectItem>
-                          ))}
+                          {accounts.map(acc => {
+                            const typeBadge = getAccountTypeBadge(acc);
+                            return (
+                              <SelectItem key={acc.account_id} value={acc.account_id}>
+                                {acc.name}
+                                <Badge variant="outline" className="ml-2 text-xs">{acc.currency_code}</Badge>
+                                <Badge className={`ml-1 text-xs ${typeBadge.className}`}>{typeBadge.label}</Badge>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       {isInvalid && (
