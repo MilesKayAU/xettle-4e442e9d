@@ -1,6 +1,6 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { JSZip } from 'https://esm.sh/jszip@3.10.1';
+import JSZip from 'https://esm.sh/jszip@3.10.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -83,18 +83,38 @@ Deno.serve(async (req: Request) => {
     const allSettlements = settlements || [];
     const settlementIds = allSettlements.map((s: any) => s.settlement_id);
 
-    // ─── Fetch lines + xero matches in parallel ──────────────────
-    const [linesResult, matchesResult] = await Promise.all([
-      settlementIds.length > 0
-        ? supabase.from('settlement_lines').select('settlement_id, accounting_category, amount, description, transaction_type').eq('user_id', userId).in('settlement_id', settlementIds)
-        : Promise.resolve({ data: [], error: null }),
+    // ─── Fetch lines (paginated) + xero matches in parallel ─────
+    async function fetchAllLines(sIds: string[]): Promise<any[]> {
+      if (sIds.length === 0) return [];
+      const allLines: any[] = [];
+      const PAGE_SIZE = 1000;
+      let offset = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('settlement_lines')
+          .select('settlement_id, accounting_category, amount, description, transaction_type')
+          .eq('user_id', userId)
+          .in('settlement_id', sIds)
+          .range(offset, offset + PAGE_SIZE - 1);
+        if (error) throw error;
+        const rows = data || [];
+        allLines.push(...rows);
+        hasMore = rows.length === PAGE_SIZE;
+        offset += PAGE_SIZE;
+      }
+      return allLines;
+    }
+
+    const [allLines, matchesResult] = await Promise.all([
+      fetchAllLines(settlementIds),
       settlementIds.length > 0
         ? supabase.from('xero_accounting_matches').select('settlement_id, xero_invoice_id, xero_invoice_number').eq('user_id', userId).in('settlement_id', settlementIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
 
     const linesBySettlement: Record<string, any[]> = {};
-    for (const line of (linesResult.data || [])) {
+    for (const line of allLines) {
       if (!linesBySettlement[line.settlement_id]) linesBySettlement[line.settlement_id] = [];
       linesBySettlement[line.settlement_id].push(line);
     }
