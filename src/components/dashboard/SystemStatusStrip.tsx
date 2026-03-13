@@ -8,7 +8,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, AlertOctagon, Settings, Sparkles, Clock3 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, AlertOctagon, Settings, Sparkles, Clock3, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ConnectionStatus {
@@ -97,6 +98,9 @@ export default function SystemStatusStrip({
   onConnect,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem('xettle_mapper_banner_dismissed') === 'true'; } catch { return false; }
+  });
 
   const { data: connections = [] } = useQuery({
     queryKey: ['system-status-strip'],
@@ -124,7 +128,7 @@ export default function SystemStatusStrip({
     });
   }
 
-  if (showAiMapper && onReviewMapping) {
+  if (showAiMapper && onReviewMapping && !dismissed) {
     // If bank mapping is also missing, elevate to amber (mapping blocks payout verification)
     const mapperSeverity: 'amber' | 'info' = showBankMappingNudge ? 'amber' : 'info';
     actions.push({
@@ -221,6 +225,21 @@ export default function SystemStatusStrip({
           </span>
           {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground ml-1 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground ml-1 flex-shrink-0" />}
         </button>
+
+        {/* Dismiss info-only banners */}
+        {!hasRedAction && !hasAmberAction && hasActions && !dismissed && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground ml-1 flex-shrink-0"
+            onClick={() => {
+              setDismissed(true);
+              try { localStorage.setItem('xettle_mapper_banner_dismissed', 'true'); } catch {}
+            }}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
 
         {/* Primary CTA button */}
         {primaryAction?.onAction && (

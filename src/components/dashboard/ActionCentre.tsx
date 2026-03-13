@@ -547,9 +547,9 @@ export default function ActionCentre({
                      <TooltipProvider>
                        <Tooltip>
                          <TooltipTrigger asChild>
-                           <span className="cursor-help border-b border-dotted border-muted-foreground/40">Channel</span>
+                           <span className="cursor-help border-b border-dotted border-muted-foreground/40">Rail</span>
                          </TooltipTrigger>
-                         <TooltipContent className="text-xs max-w-[200px]">Payout source — e.g. Amazon AU, Shopify Payments, PayPal</TooltipContent>
+                         <TooltipContent className="text-xs max-w-[220px]">Payout rail — the source that generates settlement payouts (Amazon AU, Shopify Payments, PayPal, etc.)</TooltipContent>
                        </Tooltip>
                      </TooltipProvider>
                    </th>
@@ -636,10 +636,10 @@ export default function ActionCentre({
               </tbody>
             </table>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
-              <span className="font-medium text-foreground/70">Pipeline stages:</span>
+              <span className="font-medium text-foreground/70">Rail stages:</span>
               <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Settlement</span>
               <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Xero</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Bank</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Destination feed</span>
               <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Reconciled</span>
               <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/20 inline-block" /> Not yet</span>
               <span className="flex items-center gap-1.5"><span className="text-muted-foreground/50">—</span> Pre-boundary</span>

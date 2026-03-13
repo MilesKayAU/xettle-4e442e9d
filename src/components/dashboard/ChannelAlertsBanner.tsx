@@ -536,10 +536,17 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
   if (alerts.length === 0) {
     return (
       <div className="flex items-center justify-end">
-        <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1.5 text-xs text-muted-foreground">
-          {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-          {syncing ? 'Refreshing...' : 'Refresh feeds'}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1.5 text-xs text-muted-foreground">
+                {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                {syncing ? 'Refreshing...' : 'Refresh feeds'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">Checks Shopify/Amazon/Xero connections and updates statuses</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     );
   }
@@ -572,10 +579,10 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
               <TooltipTrigger asChild>
                 <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1 text-xs text-muted-foreground">
                   {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  {syncing ? 'Rescanning...' : 'Rescan'}
+                   {syncing ? 'Refreshing...' : 'Refresh feeds'}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Re-scan your Xero and Shopify accounts for new marketplaces and deposits</TooltipContent>
+              <TooltipContent className="text-xs">Checks Shopify/Amazon/Xero connections and updates statuses</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
