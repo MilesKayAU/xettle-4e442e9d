@@ -320,57 +320,56 @@ Deno.serve(async (req) => {
       console.error('Invoice scan error:', e)
     }
 
-    // ─── 2. Scan Bank Transactions (with IsReconciled + BankAccount) ─
+    // ─── 2. Read Bank Transactions from LOCAL CACHE (never call Xero BankTransactions API) ─
+    // The sole Xero BankTransactions caller is fetch-xero-bank-transactions.
     let bankScanError: string | null = null
     try {
-      const bankData = await xeroGet(
-        `https://api.xero.com/api.xro/2.0/BankTransactions?order=Date DESC&pageSize=100`,
-        accessToken, tenantId
-      )
+      const { data: cachedTxns, error: cacheErr } = await supabaseAdmin
+        .from('bank_transactions')
+        .select('amount, date, reference, contact_name, bank_account_id, bank_account_name, xero_transaction_id')
+        .eq('user_id', userId)
+        .order('date', { ascending: false })
+        .limit(500)
 
-      for (const txn of (bankData.BankTransactions || [])) {
-        if (txn.Type !== 'RECEIVE') continue
+      if (cacheErr) {
+        bankScanError = `Bank cache read error: ${cacheErr.message}`
+      } else {
+        for (const txn of (cachedTxns || [])) {
+          const contactName = txn.contact_name || ''
+          const reference = txn.reference || ''
+          const amount = txn.amount || 0
+          const bankAccountName = txn.bank_account_name || null
 
-        const contactName = txn.Contact?.Name || ''
-        const reference = txn.Reference || ''
-        const narration = txn.LineItems?.[0]?.Description || ''
-        const txnId = txn.BankTransactionID || ''
-        const amount = txn.Total || 0
-        const isReconciled = txn.IsReconciled === true
-        const bankAccountName = txn.BankAccount?.Name || null
+          const marketplace = matchesMarketplace(contactName) || matchesMarketplace(reference)
 
-        const marketplace = matchesMarketplace(contactName) || matchesMarketplace(narration) || matchesMarketplace(reference)
+          if (marketplace) {
+            hasBankPatterns = true
+            const dateStr = txn.date
 
-        if (marketplace) {
-          hasBankPatterns = true
-          const dateStr = parseXeroDate(txn.Date)
-
-          if (dateStr) {
-            const existing = detectedMap.get(marketplace)
-            if (!existing || dateStr > existing.last_recorded_date) {
-              detectedMap.set(marketplace, {
-                marketplace,
-                last_recorded_date: dateStr,
-                last_amount: amount,
-                source: existing?.source === 'invoice' && existing.last_recorded_date >= dateStr
-                  ? 'invoice' : 'bank_transaction',
-                reference: reference || narration || contactName,
-                xero_id: txnId,
-                is_reconciled: isReconciled,
-                bank_account_name: bankAccountName,
-              })
+            if (dateStr) {
+              const existing = detectedMap.get(marketplace)
+              if (!existing || dateStr > existing.last_recorded_date) {
+                detectedMap.set(marketplace, {
+                  marketplace,
+                  last_recorded_date: dateStr,
+                  last_amount: amount,
+                  source: existing?.source === 'invoice' && existing.last_recorded_date >= dateStr
+                    ? 'invoice' : 'bank_transaction',
+                  reference: reference || contactName,
+                  xero_id: txn.xero_transaction_id || '',
+                  is_reconciled: undefined,
+                  bank_account_name: bankAccountName,
+                })
+              }
             }
           }
         }
+        console.log(`[scan-xero-history] Read ${(cachedTxns || []).length} bank txns from local cache (invoker=scan-xero-history)`)
       }
     } catch (e) {
       const errMsg = String(e)
-      console.error('Bank transaction scan error:', e)
-      if (errMsg.includes('401')) {
-        bankScanError = 'Xero bank feed access denied — your connection may need to be re-authorised with bank transaction scopes.'
-      } else {
-        bankScanError = `Bank scan failed: ${errMsg}`
-      }
+      console.error('[scan-xero-history] Bank cache read error:', e)
+      bankScanError = `Bank cache read failed: ${errMsg}`
     }
 
     // ─── 3. Scan ALL Contacts (standalone detection) ────────────────
