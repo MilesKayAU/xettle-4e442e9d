@@ -772,9 +772,9 @@ function groupActivityEvents(events: SystemEvent[]): GroupedEvent[] {
       // Use a summary label for the group
       const mp = first.marketplace_code ? (MARKETPLACE_LABELS[first.marketplace_code] || first.marketplace_code) : '';
       const baseLabel = first.event_type === 'bank_match_failed'
-        ? `Bank feed not synced yet: ${mp}`
+        ? `Destination feed not synced yet: ${mp}`
         : first.event_type === 'bank_match_confirmed'
-        ? `Bank deposit matched: ${mp}`
+        ? `Destination deposit matched: ${mp}`
         : formatEventLabel(first);
       result.push({
         event_type: first.event_type,
