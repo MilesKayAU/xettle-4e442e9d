@@ -769,7 +769,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
     if (row.match_status === 'awaiting_sync') return 'Syncing settlement…';
-    if (row.match_status.startsWith('gap_')) {
+    if ((row.match_status || '').startsWith('gap_')) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
     }
