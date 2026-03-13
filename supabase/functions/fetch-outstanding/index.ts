@@ -612,67 +612,6 @@ Deno.serve(async (req) => {
       used_default_for: usedDefaultFor,
     };
 
-    // ─── Build destination account name lookup ───
-    const allMappedAccountIds = new Set<string>();
-    if (defaultDestinationAccount) allMappedAccountIds.add(defaultDestinationAccount);
-    for (const v of Object.values(destinationMappings)) {
-      if (v) allMappedAccountIds.add(v);
-    }
-    const destinationAccountNames: Record<string, string> = {};
-    if (allMappedAccountIds.size > 0) {
-      const { data: coaRows } = await supabase
-        .from('xero_chart_of_accounts')
-        .select('xero_account_id, account_name')
-        .eq('user_id', userId)
-        .in('xero_account_id', [...allMappedAccountIds]);
-      for (const row of (coaRows || [])) {
-        if (row.xero_account_id) destinationAccountNames[row.xero_account_id] = row.account_name;
-      }
-      // Fallback: use bank_account_name from cached txns
-      for (const id of allMappedAccountIds) {
-        if (!destinationAccountNames[id]) {
-          const txn = (cachedBankTxns || []).find((t: any) => t.bank_account_id === id);
-          if (txn?.bank_account_name) destinationAccountNames[id] = txn.bank_account_name;
-        }
-      }
-    }
-
-    // ─── Per-destination bank feed diagnostics ───
-    // Build a map: account_id → { has_txns, newest_fetched_at }
-    const destinationBankDiag: Record<string, { has_txns: boolean; newest_fetched_at: string | null }> = {};
-    for (const accountId of allMappedAccountIds) {
-      const txnsForAccount = (cachedBankTxns || []).filter((t: any) => t.bank_account_id === accountId);
-      const fetchedAts = txnsForAccount.map((t: any) => t.fetched_at).filter(Boolean).sort();
-      destinationBankDiag[accountId] = {
-        has_txns: txnsForAccount.length > 0,
-        newest_fetched_at: fetchedAts.length > 0 ? fetchedAts[fetchedAts.length - 1] : null,
-      };
-    }
-    // ─── Bank sync timestamp + cooldown diagnostics ───
-    const { data: bankSyncRow } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', userId)
-      .eq('key', 'bank_txn_last_fetched_at')
-      .maybeSingle();
-    const bankSyncLastSuccessAt = bankSyncRow?.value || null;
-
-    const { data: cooldownRow } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', userId)
-      .eq('key', 'xero_api_cooldown_until')
-      .maybeSingle();
-    let bankSyncCooldownUntil: string | null = null;
-    let bankSyncCooldownSecondsRemaining: number | null = null;
-    if (cooldownRow?.value) {
-      const cdMs = new Date(cooldownRow.value).getTime();
-      if (cdMs > Date.now()) {
-        bankSyncCooldownUntil = cooldownRow.value;
-        bankSyncCooldownSecondsRemaining = Math.max(1, Math.ceil((cdMs - Date.now()) / 1000));
-      }
-    }
-
     // ─── Get bank matches from cached bank_transactions table (populated by fetch-xero-bank-transactions every 30 min) ───
     // Use lookbackDays for bank txn window too (matches settlement scope)
     const bankLookbackDate = new Date();
@@ -708,6 +647,66 @@ Deno.serve(async (req) => {
     const bankCacheStale = bankCacheNewestFetchedAt
       ? (Date.now() - new Date(bankCacheNewestFetchedAt).getTime()) > 24 * 60 * 60 * 1000
       : !bankFeedEmpty; // if empty, not "stale" — it's missing
+
+    // ─── Build destination account name lookup ───
+    const allMappedAccountIds = new Set<string>();
+    if (defaultDestinationAccount) allMappedAccountIds.add(defaultDestinationAccount);
+    for (const v of Object.values(destinationMappings)) {
+      if (v) allMappedAccountIds.add(v);
+    }
+    const destinationAccountNames: Record<string, string> = {};
+    if (allMappedAccountIds.size > 0) {
+      const { data: coaRows } = await supabase
+        .from('xero_chart_of_accounts')
+        .select('xero_account_id, account_name')
+        .eq('user_id', userId)
+        .in('xero_account_id', [...allMappedAccountIds]);
+      for (const row of (coaRows || [])) {
+        if (row.xero_account_id) destinationAccountNames[row.xero_account_id] = row.account_name;
+      }
+      // Fallback: use bank_account_name from cached txns
+      for (const id of allMappedAccountIds) {
+        if (!destinationAccountNames[id]) {
+          const txn = (cachedBankTxns || []).find((t: any) => t.bank_account_id === id);
+          if (txn?.bank_account_name) destinationAccountNames[id] = txn.bank_account_name;
+        }
+      }
+    }
+
+    // ─── Per-destination bank feed diagnostics ───
+    const destinationBankDiag: Record<string, { has_txns: boolean; newest_fetched_at: string | null }> = {};
+    for (const accountId of allMappedAccountIds) {
+      const txnsForAccount = (cachedBankTxns || []).filter((t: any) => t.bank_account_id === accountId);
+      const fetchedAts = txnsForAccount.map((t: any) => t.fetched_at).filter(Boolean).sort();
+      destinationBankDiag[accountId] = {
+        has_txns: txnsForAccount.length > 0,
+        newest_fetched_at: fetchedAts.length > 0 ? fetchedAts[fetchedAts.length - 1] : null,
+      };
+    }
+    // ─── Bank sync timestamp + cooldown diagnostics ───
+    const { data: bankSyncRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'bank_txn_last_fetched_at')
+      .maybeSingle();
+    const bankSyncLastSuccessAt = bankSyncRow?.value || null;
+
+    const { data: cooldownRow } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'xero_api_cooldown_until')
+      .maybeSingle();
+    let bankSyncCooldownUntil: string | null = null;
+    let bankSyncCooldownSecondsRemaining: number | null = null;
+    if (cooldownRow?.value) {
+      const cdMs = new Date(cooldownRow.value).getTime();
+      if (cdMs > Date.now()) {
+        bankSyncCooldownUntil = cooldownRow.value;
+        bankSyncCooldownSecondsRemaining = Math.max(1, Math.ceil((cdMs - Date.now()) / 1000));
+      }
+    }
 
     // Map cached rows to the shape downstream code expects (Xero BankTransaction format)
     const bankTxns = (cachedBankTxns || []).map((t: any) => ({
