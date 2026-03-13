@@ -825,7 +825,7 @@ export async function syncSettlementToXero(
       body: {
         userId: user.id,
         action: 'create',
-        reference,
+        settlementId: s.settlement_id,
         description,
         date: s.period_end,
         dueDate: s.period_end,
