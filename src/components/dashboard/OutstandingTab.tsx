@@ -155,6 +155,15 @@ interface OutstandingSummary {
   bank_deposit_found: number;
   ready_to_reconcile: number;
   rows: OutstandingRow[];
+  sync_info?: {
+    bank_feed_empty?: boolean;
+    bank_txn_count_cached?: number;
+    bank_cache_range?: { min: string; max: string } | null;
+    matched_settlement_count?: number;
+    settlement_count_total?: number;
+    candidates_generated?: number;
+    source?: string;
+  };
 }
 
 interface Props {
