@@ -192,8 +192,14 @@ async function fetchBankTxnsForUser(
         user_id: userId,
         skipped: true,
         skip_reason: 'cooldown',
+        stopped_reason: 'cooldown',
+        xero_rate_limited: false,
         cooldown_applied: true,
         retry_after_seconds: clampedRetry,
+        pages_fetched: 0,
+        transactions_seen_total: 0,
+        transactions_seen: 0,
+        transactions_in_range: 0,
         ...baseDiag,
       };
     }
