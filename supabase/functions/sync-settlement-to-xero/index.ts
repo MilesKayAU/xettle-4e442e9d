@@ -473,7 +473,7 @@ serve(async (req) => {
           .eq('user_id', userId)
           .single();
         if (!settData?.xero_journal_id_2) {
-          updatePayload.status = 'saved';
+          updatePayload.status = 'ready_to_push';
           updatePayload.xero_journal_id = null;
           updatePayload.xero_invoice_id = null;
         }
