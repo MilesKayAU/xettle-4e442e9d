@@ -372,11 +372,20 @@ Deno.serve(async (req) => {
       .eq('transaction_type', 'RECEIVE')
       .gte('date', ninetyDaysAgoStr);
 
+    const bankCacheQueryError = !!bankCacheError;
     if (bankCacheError) {
       console.error('Bank cache query error:', bankCacheError);
     }
 
     const bankFeedEmpty = !cachedBankTxns || cachedBankTxns.length === 0;
+
+    // Compute cache staleness from fetched_at timestamps
+    const bankCacheNewestFetchedAt = cachedBankTxns && cachedBankTxns.length > 0
+      ? new Date(Math.max(...cachedBankTxns.map((t: any) => new Date(t.fetched_at || t.created_at).getTime()))).toISOString()
+      : null;
+    const bankCacheStale = bankCacheNewestFetchedAt
+      ? (Date.now() - new Date(bankCacheNewestFetchedAt).getTime()) > 24 * 60 * 60 * 1000
+      : !bankFeedEmpty; // if empty, not "stale" — it's missing
 
     // Map cached rows to the shape downstream code expects (Xero BankTransaction format)
     const bankTxns = (cachedBankTxns || []).map((t: any) => ({
