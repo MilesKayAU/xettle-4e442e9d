@@ -794,6 +794,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
   const { data: existingData } = await supabase
     .from('settlements')
     .select('settlement_id, period_start, period_end, bank_deposit')
+    .eq('user_id', userId)
     .eq('marketplace', 'amazon_au');
 
   const existingIds = new Set((existingData || []).map((s: any) => s.settlement_id));
