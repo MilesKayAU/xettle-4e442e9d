@@ -377,7 +377,7 @@ async function fetchBankTxnsForUser(
         console.log(`[fetch-bank-txns] 429 for ${userId}: raw Retry-After="${rawRetryAfter}", parsed=${retryAfterSec}s, cooldown_until=${cooldownUntil}`);
         await adminSupabase.from('app_settings').upsert({
           user_id: userId,
-          key: 'xero_api_cooldown_until',
+          key: COOLDOWN_KEY,
           value: cooldownUntil,
         }, { onConflict: 'user_id,key' });
         const { count } = await adminSupabase
