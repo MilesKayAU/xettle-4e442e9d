@@ -409,7 +409,14 @@ async function fetchBankTxnsForUser(
           date_range_source: dateRangeSource,
         };
       }
-      return { user_id: userId, error: `Xero API ${res.status}` };
+      return {
+        user_id: userId,
+        error: `Xero API ${res.status}`,
+        cached_bank_rows: cachedBankRowsCount,
+        last_sync_time: lastSyncTime,
+        cooldown_until: cooldownUntil,
+        cooldown_applied: false,
+      };
     }
 
     const data = await res.json();
