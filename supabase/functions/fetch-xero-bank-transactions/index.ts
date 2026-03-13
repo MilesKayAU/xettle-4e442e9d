@@ -170,7 +170,8 @@ async function fetchBankTxnsForUser(
           bank_rows_cached_total: count || 0,
           partial: page > 1,
           mapped_account_ids_count: mappedAccountIds.size,
-          has_any_mapping: mappedAccountIds.size > 0,
+          has_any_mapping: hasAnyMapping,
+          filtered_to_mapped_accounts: mappedAccountIds.size > 0,
           lookback_days: lookbackDays,
         };
       }
