@@ -240,25 +240,33 @@ export default function Dashboard() {
     if (!user) return;
     (async () => {
       try {
-        const { data: flags } = await supabase
-          .from('app_settings')
-          .select('key, value')
-          .in('key', [
-            'ai_mapper_status',
-            'setup_hub_dismissed',
-            'setup_phase3_complete',
-            'xero_scan_completed',
-            'amazon_scan_completed',
-            'shopify_scan_completed',
-            'payout_account:_default',
-          ]);
-        const flagMap = new Map(flags?.map(f => [f.key, f.value]) || []);
+        // Fetch fixed keys + any payout_account:% mappings in parallel
+        const [flagsResp, payoutResp] = await Promise.all([
+          supabase
+            .from('app_settings')
+            .select('key, value')
+            .in('key', [
+              'ai_mapper_status',
+              'setup_hub_dismissed',
+              'setup_phase3_complete',
+              'xero_scan_completed',
+              'amazon_scan_completed',
+              'shopify_scan_completed',
+            ]),
+          supabase
+            .from('app_settings')
+            .select('key')
+            .like('key', 'payout_account:%')
+            .limit(1),
+        ]);
+        const flagMap = new Map(flagsResp.data?.map(f => [f.key, f.value]) || []);
 
         // AI Mapper banner
         setShowAiMapper(flagMap.get('ai_mapper_status') === 'suggested');
 
-        // Bank mapping nudge — show if no default payout account mapped
-        setShowBankMappingNudge(!flagMap.has('payout_account:_default'));
+        // Bank mapping nudge — show if NO payout_account:% mapping exists (any key counts)
+        const hasAnyPayoutMapping = (payoutResp.data?.length || 0) > 0;
+        setShowBankMappingNudge(!hasAnyPayoutMapping);
 
         // Setup in progress banner
         const dismissed = flagMap.get('setup_hub_dismissed') === 'true';

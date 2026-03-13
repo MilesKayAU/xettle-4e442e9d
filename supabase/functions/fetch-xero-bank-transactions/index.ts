@@ -1,18 +1,22 @@
 // ══════════════════════════════════════════════════════════════
 // fetch-xero-bank-transactions
 // Ingests RECEIVE bank transactions from Xero into local cache.
-// Runs via scheduled-sync. Never creates accounting entries.
+// Two modes:
+//   1. "self" — user-scoped, called from frontend with user JWT
+//   2. "batch" — service-role only, called by scheduled-sync
+// Never creates accounting entries.
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action',
 }
 
 const GUARD_KEY = 'bank_txn_last_fetched_at';
-const GUARD_MINUTES = 30;
+const GUARD_MINUTES_BATCH = 30;
+const GUARD_MINUTES_SELF = 2; // Allow more frequent manual syncs
 const LOOKBACK_DAYS = 60;
 
 function formatXeroDateTime(d: Date): string {
@@ -64,6 +68,154 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
   return { ...tokenRow, access_token: tokens.access_token };
 }
 
+async function fetchBankTxnsForUser(
+  adminSupabase: any,
+  userId: string,
+  clientId: string,
+  clientSecret: string,
+  guardMinutes: number,
+) {
+  // ── Guard: skip if fetched within guardMinutes ──
+  const { data: guardRow } = await adminSupabase
+    .from('app_settings')
+    .select('value')
+    .eq('user_id', userId)
+    .eq('key', GUARD_KEY)
+    .maybeSingle();
+
+  if (guardRow?.value) {
+    const lastFetched = new Date(guardRow.value);
+    const minutesAgo = (Date.now() - lastFetched.getTime()) / 60000;
+    if (minutesAgo < guardMinutes) {
+      console.log(`[fetch-bank-txns] Skipping ${userId} — fetched ${Math.round(minutesAgo)}m ago`);
+      return { user_id: userId, skipped: true, reason: 'guard', minutes_ago: Math.round(minutesAgo) };
+    }
+  }
+
+  // Refresh Xero token
+  const token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
+  if (!token) {
+    return { user_id: userId, error: 'Token refresh failed' };
+  }
+
+  // Build where clause: RECEIVE transactions from last 60 days
+  const fromDate = new Date();
+  fromDate.setDate(fromDate.getDate() - LOOKBACK_DAYS);
+
+  // Load payout account mappings to filter by mapped accounts
+  const { data: payoutSettings } = await adminSupabase
+    .from('app_settings')
+    .select('key, value')
+    .eq('user_id', userId)
+    .like('key', 'payout_account:%');
+
+  const mappedAccountIds = new Set<string>();
+  for (const row of (payoutSettings || [])) {
+    if (row.value && row.key.startsWith('payout_account:')) {
+      mappedAccountIds.add(row.value);
+    }
+  }
+
+  let whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
+
+  // If mappings exist, filter to only those bank accounts
+  if (mappedAccountIds.size > 0) {
+    const accountFilters = [...mappedAccountIds].map(id => `BankAccount.AccountID==Guid("${id}")`);
+    if (accountFilters.length === 1) {
+      whereClause += ` AND ${accountFilters[0]}`;
+    } else {
+      whereClause += ` AND (${accountFilters.join(' OR ')})`;
+    }
+    console.log(`[fetch-bank-txns] Filtering to ${mappedAccountIds.size} mapped account(s)`);
+  }
+
+  let page = 1;
+  let totalUpserted = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const url = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(whereClause)}&page=${page}&pageSize=100`;
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token.access_token}`,
+        'Xero-Tenant-Id': token.tenant_id,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[fetch-bank-txns] Xero API error [${res.status}]:`, errText.substring(0, 300));
+      return { user_id: userId, error: `Xero API ${res.status}` };
+    }
+
+    const data = await res.json();
+    const txns = data?.BankTransactions || [];
+
+    if (txns.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    // Parse and upsert
+    const rows = txns.map((txn: any) => {
+      const rawDate = txn.Date?.replace('/Date(', '').replace(')/', '').split('+')[0];
+      const ts = parseInt(rawDate);
+      const parsedDate = !isNaN(ts) ? new Date(ts).toISOString().split('T')[0] : null;
+
+      return {
+        user_id: userId,
+        xero_transaction_id: txn.BankTransactionID,
+        bank_account_id: txn.BankAccount?.AccountID || null,
+        bank_account_name: txn.BankAccount?.Name || null,
+        date: parsedDate,
+        amount: Math.abs(txn.Total || 0),
+        currency: txn.CurrencyCode || 'AUD',
+        description: txn.LineItems?.[0]?.Description || null,
+        reference: txn.Reference || null,
+        contact_name: txn.Contact?.Name || null,
+        transaction_type: txn.Type || 'RECEIVE',
+        fetched_at: new Date().toISOString(),
+      };
+    });
+
+    const { error: upsertErr } = await adminSupabase
+      .from('bank_transactions')
+      .upsert(rows, { onConflict: 'user_id,xero_transaction_id' });
+
+    if (upsertErr) {
+      console.error(`[fetch-bank-txns] Upsert error for ${userId}:`, upsertErr.message);
+    } else {
+      totalUpserted += rows.length;
+    }
+
+    // Xero returns max 100 per page
+    if (txns.length < 100) {
+      hasMore = false;
+    } else {
+      page++;
+    }
+  }
+
+  // Update guard timestamp
+  await adminSupabase.from('app_settings').upsert({
+    user_id: userId,
+    key: GUARD_KEY,
+    value: new Date().toISOString(),
+  }, { onConflict: 'user_id,key' });
+
+  // Log to system_events
+  await adminSupabase.from('system_events').insert({
+    user_id: userId,
+    event_type: 'bank_txn_fetch',
+    severity: 'info',
+    details: { transactions_upserted: totalUpserted, pages_fetched: page, lookback_days: LOOKBACK_DAYS, filtered_accounts: mappedAccountIds.size },
+  });
+
+  console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
+  return { user_id: userId, upserted: totalUpserted, pages: page, filtered_accounts: mappedAccountIds.size };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -72,6 +224,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const clientId = Deno.env.get('XERO_CLIENT_ID');
     const clientSecret = Deno.env.get('XERO_CLIENT_SECRET');
 
@@ -83,6 +236,57 @@ Deno.serve(async (req) => {
 
     const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
     const body = await req.json().catch(() => ({}));
+
+    // ── Determine mode: "self" (user-scoped) or "batch" (service-role) ──
+    const action = body.action || req.headers.get('x-action') || 'batch';
+
+    if (action === 'self') {
+      // ── USER-SCOPED MODE ──
+      // Requires valid user JWT. Only syncs for the authenticated user.
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(JSON.stringify({ error: 'Unauthorized — missing token' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const anonClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData, error: authError } = await anonClient.auth.getUser();
+      if (authError || !userData?.user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized — invalid token' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const userId = userData.user.id;
+      console.log(`[fetch-bank-txns] Self-mode for user ${userId}`);
+
+      const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF);
+
+      return new Response(JSON.stringify({
+        success: true,
+        mode: 'self',
+        user_id: userId,
+        ...result,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ── BATCH MODE ──
+    // Only allow service-role callers (scheduled-sync, admin)
+    const authHeader = req.headers.get('Authorization') || '';
+    const callerToken = authHeader.replace('Bearer ', '');
+    if (callerToken !== serviceRoleKey) {
+      // Also check if it's an internal call by verifying the user has admin role
+      // For safety, just check if the token IS the service role key
+      return new Response(JSON.stringify({ error: 'Unauthorized — batch mode requires service role' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const targetUserId = body.userId as string | undefined;
 
     // Get all users with Xero tokens (or specific user)
@@ -101,149 +305,8 @@ Deno.serve(async (req) => {
 
     for (const userId of userIds) {
       try {
-        // ── Guard: skip if fetched within GUARD_MINUTES ──
-        const { data: guardRow } = await adminSupabase
-          .from('app_settings')
-          .select('value')
-          .eq('user_id', userId)
-          .eq('key', GUARD_KEY)
-          .maybeSingle();
-
-        if (guardRow?.value) {
-          const lastFetched = new Date(guardRow.value);
-          const minutesAgo = (Date.now() - lastFetched.getTime()) / 60000;
-          if (minutesAgo < GUARD_MINUTES) {
-            console.log(`[fetch-bank-txns] Skipping ${userId} — fetched ${Math.round(minutesAgo)}m ago`);
-            results.push({ user_id: userId, skipped: true, reason: 'guard', minutes_ago: Math.round(minutesAgo) });
-            continue;
-          }
-        }
-
-        // Refresh Xero token
-        const token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
-        if (!token) {
-          results.push({ user_id: userId, error: 'Token refresh failed' });
-          continue;
-        }
-
-        // Build where clause: RECEIVE transactions from last 60 days
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - LOOKBACK_DAYS);
-        
-        // Load payout account mappings to filter by mapped accounts
-        const { data: payoutSettings } = await adminSupabase
-          .from('app_settings')
-          .select('key, value')
-          .eq('user_id', userId)
-          .like('key', 'payout_account:%');
-        
-        const mappedAccountIds = new Set<string>();
-        for (const row of (payoutSettings || [])) {
-          if (row.value && row.key.startsWith('payout_account:')) {
-            mappedAccountIds.add(row.value);
-          }
-        }
-
-        let whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
-        
-        // If mappings exist, filter to only those bank accounts
-        if (mappedAccountIds.size > 0) {
-          const accountFilters = [...mappedAccountIds].map(id => `BankAccount.AccountID==Guid("${id}")`);
-          if (accountFilters.length === 1) {
-            whereClause += ` AND ${accountFilters[0]}`;
-          } else {
-            whereClause += ` AND (${accountFilters.join(' OR ')})`;
-          }
-          console.log(`[fetch-bank-txns] Filtering to ${mappedAccountIds.size} mapped account(s)`);
-        }
-
-        let page = 1;
-        let totalUpserted = 0;
-        let hasMore = true;
-
-        while (hasMore) {
-          const url = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(whereClause)}&page=${page}&pageSize=100`;
-          const res = await fetch(url, {
-            headers: {
-              'Authorization': `Bearer ${token.access_token}`,
-              'Xero-Tenant-Id': token.tenant_id,
-              'Accept': 'application/json',
-            },
-          });
-
-          if (!res.ok) {
-            const errText = await res.text();
-            console.error(`[fetch-bank-txns] Xero API error [${res.status}]:`, errText.substring(0, 300));
-            results.push({ user_id: userId, error: `Xero API ${res.status}` });
-            break;
-          }
-
-          const data = await res.json();
-          const txns = data?.BankTransactions || [];
-
-          if (txns.length === 0) {
-            hasMore = false;
-            break;
-          }
-
-          // Parse and upsert
-          const rows = txns.map((txn: any) => {
-            const rawDate = txn.Date?.replace('/Date(', '').replace(')/', '').split('+')[0];
-            const ts = parseInt(rawDate);
-            const parsedDate = !isNaN(ts) ? new Date(ts).toISOString().split('T')[0] : null;
-
-            return {
-              user_id: userId,
-              xero_transaction_id: txn.BankTransactionID,
-              bank_account_id: txn.BankAccount?.AccountID || null,
-              bank_account_name: txn.BankAccount?.Name || null,
-              date: parsedDate,
-              amount: Math.abs(txn.Total || 0),
-              currency: txn.CurrencyCode || 'AUD',
-              description: txn.LineItems?.[0]?.Description || null,
-              reference: txn.Reference || null,
-              contact_name: txn.Contact?.Name || null,
-              transaction_type: txn.Type || 'RECEIVE',
-              fetched_at: new Date().toISOString(),
-            };
-          });
-
-          const { error: upsertErr } = await adminSupabase
-            .from('bank_transactions')
-            .upsert(rows, { onConflict: 'user_id,xero_transaction_id' });
-
-          if (upsertErr) {
-            console.error(`[fetch-bank-txns] Upsert error for ${userId}:`, upsertErr.message);
-          } else {
-            totalUpserted += rows.length;
-          }
-
-          // Xero returns max 100 per page
-          if (txns.length < 100) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        }
-
-        // Update guard timestamp
-        await adminSupabase.from('app_settings').upsert({
-          user_id: userId,
-          key: GUARD_KEY,
-          value: new Date().toISOString(),
-        }, { onConflict: 'user_id,key' });
-
-        // Log to system_events
-        await adminSupabase.from('system_events').insert({
-          user_id: userId,
-          event_type: 'bank_txn_fetch',
-          severity: 'info',
-          details: { transactions_upserted: totalUpserted, pages_fetched: page, lookback_days: LOOKBACK_DAYS },
-        });
-
-        console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
-        results.push({ user_id: userId, upserted: totalUpserted, pages: page });
-
+        const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH);
+        results.push(result);
       } catch (err: any) {
         console.error(`[fetch-bank-txns] Error for ${userId}:`, err.message);
         results.push({ user_id: userId, error: err.message });

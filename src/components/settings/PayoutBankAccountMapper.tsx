@@ -223,6 +223,33 @@ export default function PayoutBankAccountMapper() {
       }
 
       toast.success('Payout account mappings saved');
+
+      // Trigger bank feed sync in the background
+      try {
+        toast.info('Syncing bank feed…', { id: 'bank-sync' });
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const syncResp = await supabase.functions.invoke('fetch-xero-bank-transactions', {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+              'x-action': 'self',
+            },
+            body: { action: 'self' },
+          });
+          if (syncResp.error) {
+            toast.error(`Bank feed sync failed: ${syncResp.error.message}`, { id: 'bank-sync' });
+          } else if (syncResp.data?.skipped) {
+            toast.info('Bank feed already up to date', { id: 'bank-sync' });
+            window.dispatchEvent(new Event('xettle:refresh-outstanding'));
+          } else {
+            const count = syncResp.data?.upserted || 0;
+            toast.success(`Bank feed synced — ${count} transaction${count !== 1 ? 's' : ''} cached`, { id: 'bank-sync' });
+            window.dispatchEvent(new Event('xettle:refresh-outstanding'));
+          }
+        }
+      } catch (syncErr: any) {
+        toast.error(`Bank feed sync failed: ${syncErr.message}`, { id: 'bank-sync' });
+      }
     } catch (err: any) {
       toast.error(`Failed to save: ${err.message}`);
     } finally {

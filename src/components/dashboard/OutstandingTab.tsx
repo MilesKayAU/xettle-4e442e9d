@@ -418,6 +418,49 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   // This prevents Xero API rate-limit death spirals (see RCA: ~43 calls per mount)
   useEffect(() => { fetchOutstanding({ runSync: false }); }, [fetchOutstanding]);
 
+  // Listen for refresh events dispatched after bank mapping saves
+  useEffect(() => {
+    const handler = () => { fetchOutstanding({ runSync: false }); };
+    window.addEventListener('xettle:refresh-outstanding', handler);
+    return () => window.removeEventListener('xettle:refresh-outstanding', handler);
+  }, [fetchOutstanding]);
+
+  // ─── Sync bank feed (user-scoped) ───
+  const [syncingBankFeed, setSyncingBankFeed] = useState(false);
+  const syncBankFeedAndRefresh = useCallback(async () => {
+    setSyncingBankFeed(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Session expired — please sign in again.');
+        return;
+      }
+      toast.info('Syncing bank feed…', { id: 'bank-feed-sync' });
+      const resp = await supabase.functions.invoke('fetch-xero-bank-transactions', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'x-action': 'self',
+        },
+        body: { action: 'self' },
+      });
+      if (resp.error) {
+        toast.error(`Bank feed sync failed: ${resp.error.message}`, { id: 'bank-feed-sync' });
+        return;
+      }
+      if (resp.data?.error) {
+        toast.error(`Bank feed sync failed: ${resp.data.error}`, { id: 'bank-feed-sync' });
+        return;
+      }
+      const count = resp.data?.upserted || 0;
+      toast.success(`Bank feed synced — ${count} transaction${count !== 1 ? 's' : ''} cached`, { id: 'bank-feed-sync' });
+      await fetchOutstanding({ runSync: false });
+    } catch (err: any) {
+      toast.error(`Bank feed sync failed: ${err.message}`, { id: 'bank-feed-sync' });
+    } finally {
+      setSyncingBankFeed(false);
+    }
+  }, [fetchOutstanding]);
+
   // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
   // PAYMENT VERIFICATION LAYER ONLY
   // This never creates accounting entries. No invoice. No journal. No Xero push.
@@ -1092,6 +1135,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={syncBankFeedAndRefresh}
+                disabled={syncingBankFeed || loading}
+                className="gap-1.5"
+              >
+                <Banknote className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+                {syncingBankFeed ? 'Syncing…' : 'Sync bank feed'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Refresh cached bank transactions from Xero</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={rescanMatches}
                 disabled={rescanning || loading}
                 className="gap-1.5"
@@ -1116,6 +1176,49 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           </Button>
         </div>
       </div>
+
+      {/* ─── Bank feed diagnostic banners ─── */}
+      {data?.sync_info?.bank_feed_empty && (
+        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Bank feed is empty</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              No cached bank transactions found. Sync your bank feed to enable deposit matching.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
+            <Banknote className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+            {syncingBankFeed ? 'Syncing…' : 'Sync now'}
+          </Button>
+        </div>
+      )}
+      {data?.sync_info?.bank_cache_stale && !data?.sync_info?.bank_feed_empty && (
+        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <Clock3 className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Bank feed is stale</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              Last refreshed: {data.sync_info.bank_cache_last_refreshed_at
+                ? new Date(data.sync_info.bank_cache_last_refreshed_at).toLocaleString('en-AU')
+                : 'unknown'}. Refresh to get the latest deposits.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
+            <RefreshCw className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+            {syncingBankFeed ? 'Syncing…' : 'Refresh'}
+          </Button>
+        </div>
+      )}
+      {data?.sync_info?.mapping_status?.missing_marketplaces && data.sync_info.mapping_status.missing_marketplaces.length > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+          <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            Missing payout bank mappings for: <strong>{data.sync_info.mapping_status.missing_marketplaces.map(m => MARKETPLACE_LABELS[m] || m).join(', ')}</strong>. 
+            Deposit matching is disabled for these channels until mapped.
+          </p>
+        </div>
+      )}
 
       {/* Smart marketplace connection prompt */}
       {data && data.invoice_count > 0 && data.matched_with_settlement < data.invoice_count * 0.5 && (() => {
