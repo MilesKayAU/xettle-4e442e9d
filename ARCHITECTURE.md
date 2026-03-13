@@ -243,14 +243,65 @@ Gateway payment verification (PayPal, Shopify Payments) is **suggestion-only** �
 - AI account mapper for Xero Chart of Accounts suggestions
 - AI bug triage for automated issue classification
 
-### 5.6 Onboarding
+### 5.6 Payout Bank Account Mapping
+
+Each marketplace must be explicitly linked to a specific Xero bank account to enable deposit matching. Without this mapping, the reconciliation engine cannot verify that a settlement's payout arrived in the correct bank account.
+
+**How it works:**
+
+1. **Xero bank accounts are fetched** via `fetch-xero-bank-accounts` — returns all active bank accounts from the user's Xero organisation
+2. **User maps each marketplace** to a bank account (e.g., Amazon AU → "Miles Kay Australia", Shopify → "WISE AUD")
+3. **Mappings are stored** in `app_settings` as key-value pairs:
+   - `payout_account:_default` → fallback for unmapped marketplaces
+   - `payout_account:amazon_au` → marketplace-specific override
+   - Value = Xero bank account GUID
+4. **Deposit matching engine** (`match-bank-deposits`) reads these mappings to filter bank transactions per marketplace, preventing cross-account false positives and reducing Xero API rate-limit pressure
+
+**UI placement (3 locations for maximum discoverability):**
+
+| Location | When shown | Purpose |
+|----------|------------|---------|
+| **Dashboard banner** (amber nudge) | When `payout_account:_default` is missing AND Xero is connected | Guides existing users to configure mapping |
+| **Settings tab** (first item) | Always visible in Settlements → Settings | Primary configuration interface |
+| **Setup Hub** (`/setup`) | When Xero is connected during onboarding | New user onboarding — configure before first reconciliation |
+
+Component: `src/components/settings/PayoutBankAccountMapper.tsx`
+
+### 5.7 Outstanding Tab — Source of Truth for Reconciliation
+
+The Outstanding tab is the system's **primary action centre** for reconciliation. It fetches all Xero `ACCREC` invoices with `DRAFT`, `SUBMITTED`, or `AUTHORISED` status, providing comprehensive visibility of what needs attention.
+
+**Workflow:**
+
+```
+Xero Outstanding Invoices
+    │
+    ├─ Marketplace invoice found → Link to settlement
+    │   ├─ Settlement exists → Show "Awaiting deposit" (grey clock) or "Deposit matched ✓"
+    │   └─ Settlement missing → Show "Syncing settlement..." (blue spinner)
+    │       └─ User can: Upload CSV or trigger API fetch
+    │
+    ├─ Non-marketplace invoice → Tagged separately, still visible
+    │
+    └─ Rate limited (429) → Show "Rate limited — retrying automatically" banner
+        └─ Returns 200 OK with empty data + sync_info to prevent UI crashes
+```
+
+**Key behaviours:**
+- **Pre-seeds `xero_accounting_matches` cache** — newly imported settlements auto-link to Xero records instantly
+- **Context-aware connection prompts** — identifies unmatched invoices per marketplace and shows "Connect" (for API-capable) or "Upload" (for CSV-only) buttons
+- **Deposit coverage view** — links multiple settlements to a single bank deposit via `deposit_group_id` (UUID), verifying aggregate deposits (e.g., Amazon batched payouts) within $0.05 tolerance
+- **Resilient data fetching** — Xero 429 responses return structured empty data, not errors
+
+### 5.8 Onboarding
 
 - 5-step setup wizard (Connect Stores → Connect Xero → Upload CSVs → Scanning → Results)
 - Accounting boundary date configuration (temporal gate for all accounting entries)
+- **Bank account mapping** embedded in Setup Hub between channel detection and settlement validation
 - Post-setup banner with live sync status per integration
 - Welcome guide with contextual next-action suggestions
 
-### 5.7 Admin & Platform
+### 5.9 Admin & Platform
 
 - Role-based access: `admin`, `pro`, `starter`, `trial`, `user`
 - Trial system with configurable duration and tier-gated features
