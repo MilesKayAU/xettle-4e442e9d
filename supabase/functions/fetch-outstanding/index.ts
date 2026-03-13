@@ -932,6 +932,7 @@ Deno.serve(async (req) => {
       // Re-scan diagnostics
       lookback_days_effective: lookbackDays,
       force_recompute_used: forceRecompute,
+      mapping_status: mappingStatus,
     };
 
     console.log(JSON.stringify({
