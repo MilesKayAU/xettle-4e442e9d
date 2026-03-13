@@ -869,6 +869,31 @@ export default function Dashboard() {
             </div>
           </ErrorBoundary>
         )}
+
+        {/* ─── Settings ──────────────────────────────────────────────── */}
+        {activeView === 'settings' && (
+          <ErrorBoundary>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Settings</h2>
+                <p className="text-muted-foreground mt-1">
+                  Configure bank account mappings, Xero account codes, and reconciliation preferences.
+                </p>
+              </div>
+              <PayoutBankAccountMapper />
+              <AccountMapperCard />
+              <AccountingBoundarySettings
+                xeroConnected={xeroConnected}
+                onConnectXero={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onGoToUpload={() => switchView('smart_upload')}
+              />
+              <PaymentVerificationSettings />
+            </div>
+          </ErrorBoundary>
+        )
       </div>
 
       {/* AI Assistant floating button */}
