@@ -1125,11 +1125,17 @@ Deno.serve(async (req) => {
         routing: (() => {
           const rail = toRailCode(marketplace);
           const dest = getDestinationAccount(rail);
+          const diag = dest.account_id ? destinationBankDiag[dest.account_id] : null;
+          const newestFetch = diag?.newest_fetched_at || null;
+          const staleThreshold = 24 * 60 * 60 * 1000; // 24h
           return {
             rail_code: rail,
             destination_account_id: dest.account_id,
             destination_account_name: dest.account_id ? (destinationAccountNames[dest.account_id] || null) : null,
             mapping_source: dest.source,
+            bank_feed_empty: diag ? !diag.has_txns : true,
+            bank_cache_stale: newestFetch ? (Date.now() - new Date(newestFetch).getTime() > staleThreshold) : true,
+            last_bank_refresh_at: newestFetch,
           };
         })(),
         // Recent bank transactions for manual picker — serve for ALL marketplaces, not just Amazon
