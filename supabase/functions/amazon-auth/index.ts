@@ -19,6 +19,7 @@ function getCorsHeaders(req: Request) {
 const AMAZON_AUTH_URL = 'https://sellercentral.amazon.com.au/apps/authorize/consent'
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }

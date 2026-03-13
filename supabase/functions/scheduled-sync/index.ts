@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const STEP_TIMEOUT_MS = 45_000; // 45 seconds per step
+const STEP_TIMEOUT_MS = 90_000; // 90 seconds per step (increased from 45s to match Xero cooldown)
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
