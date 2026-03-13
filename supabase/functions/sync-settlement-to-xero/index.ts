@@ -874,7 +874,7 @@ serve(async (req) => {
         matched_reference: reference,
         reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
       }, { onConflict: 'user_id,settlement_id' });
-      console.log(`[cache-write] Indexed ${settlementIdFromRef} → ${invoiceId}`);
+      console.log(`[cache-write] Indexed ${settlementId} → ${invoiceId}`);
     }
 
     // ─── Balance check: settlement vs Xero invoice total ──────────
