@@ -558,13 +558,13 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
             if (!isXettleFormat) derivedSt = 'pushed_to_xero';
               }
-            }
             await supabaseAdmin.from('settlements').update({
               xero_journal_id: preMatch.xero_invoice_id,
               xero_invoice_id: preMatch.xero_invoice_id,
               xero_invoice_number: preMatch.xero_invoice_number,
               xero_status: preMatch.xero_status,
               status: derivedSt,
+              sync_origin: isXettleFormat ? 'xettle' : 'external',
             } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
             console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
           }
