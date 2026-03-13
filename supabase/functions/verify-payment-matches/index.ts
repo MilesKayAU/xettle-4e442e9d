@@ -14,6 +14,10 @@
 //
 // Nothing is marked as matched until user explicitly confirms.
 // Auto-detection is always a SUGGESTION.
+//
+// ARCHITECTURE: This function reads ONLY from the local
+// bank_transactions cache. It NEVER calls Xero BankTransactions
+// directly. The cache is seeded by fetch-xero-bank-transactions.
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -28,77 +32,10 @@ const GATEWAY_DETECTION: Record<string, string[]> = {
   shopify_payments: ['shopify', 'stripe'],
 }
 
-function parseXeroDate(dateField: string | null | undefined): string | null {
-  if (!dateField) return null
-  const raw = dateField.replace('/Date(', '').replace(')/', '').split('+')[0]
-  const ts = parseInt(raw)
-  if (!isNaN(ts)) return new Date(ts).toISOString().split('T')[0]
-  return raw.split('T')[0]
-}
-
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + 'T00:00:00Z')
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().split('T')[0]
-}
-
-async function refreshXeroToken(supabase: any, userId: string, clientId: string, clientSecret: string) {
-  // Re-read token from DB immediately before refresh to prevent race conditions
-  const { data: tokenRow, error } = await supabase
-    .from('xero_tokens')
-    .select('*')
-    .eq('user_id', userId)
-    .single()
-
-  if (error || !tokenRow) return null
-
-  const expiresAt = new Date(tokenRow.expires_at)
-  if (expiresAt > new Date(Date.now() + 60000)) {
-    return tokenRow
-  }
-
-  const res = await fetch('https://identity.xero.com/connect/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: tokenRow.refresh_token,
-    }),
-  })
-
-  if (!res.ok) return null
-
-  const tokens = await res.json()
-  const newExpiry = new Date(Date.now() + (tokens.expires_in || 1800) * 1000).toISOString()
-
-  await supabase
-    .from('xero_tokens')
-    .update({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token || tokenRow.refresh_token,
-      expires_at: newExpiry,
-    })
-    .eq('user_id', userId)
-
-  return { ...tokenRow, access_token: tokens.access_token, tenant_id: tokenRow.tenant_id }
-}
-
-async function xeroGet(url: string, accessToken: string, tenantId: string) {
-  const res = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Xero-Tenant-Id': tenantId,
-      'Accept': 'application/json',
-    },
-  })
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Xero API ${res.status}: ${body}`)
-  }
-  return res.json()
 }
 
 interface PaymentCandidate {
@@ -132,11 +69,13 @@ Deno.serve(async (req) => {
       })
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    )
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+    const supabase = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    })
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -146,17 +85,7 @@ Deno.serve(async (req) => {
     }
 
     const userId = user.id
-    const clientId = Deno.env.get('XERO_CLIENT_ID')!
-    const clientSecret = Deno.env.get('XERO_CLIENT_SECRET')!
-
-    const tokenRow = await refreshXeroToken(supabase, userId, clientId, clientSecret)
-    if (!tokenRow) {
-      return new Response(JSON.stringify({ error: 'No Xero connection' }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    const { access_token: accessToken, tenant_id: tenantId } = tokenRow
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey)
 
     // ─── 1. Read user's verification settings ───────────────────
     const { data: settings } = await supabase
@@ -188,37 +117,89 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         candidates: [],
         message: 'No payment gateways enabled for verification',
+        diagnostics: { gateways_enabled: 0, bank_cache_used: false },
       }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // ─── 2. Fetch bank transactions for each gateway ────────────
+    // ─── 2. Read from local bank_transactions cache (NEVER call Xero directly) ──
+    // The cache is seeded by fetch-xero-bank-transactions.
+    const thirtyDaysAgo = addDays(new Date().toISOString().split('T')[0], -30)
+
+    // Check if cache has ANY rows for this user
+    const { count: bankCacheCount } = await adminSupabase
+      .from('bank_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+
+    if (!bankCacheCount || bankCacheCount === 0) {
+      // ── EARLY EXIT: Cache empty — do NOT attempt verification ──
+      console.log(`[verify-payment-matches] Bank cache empty for ${userId} — exiting early. Run fetch-xero-bank-transactions first.`)
+      return new Response(JSON.stringify({
+        candidates: {},
+        gateways_checked: enabledGateways.map(g => g.code),
+        bank_feed_empty: true,
+        message: 'Bank feed not seeded yet. Sync bank feed before running payment verification.',
+        diagnostics: {
+          bank_cache_rows: 0,
+          gateways_enabled: enabledGateways.length,
+          xero_api_calls_made: 0,
+          verification_attempted: false,
+          action_required: 'Run "Sync bank feed" to populate the bank_transactions cache first.',
+        },
+      }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     // Nothing is marked as matched until user explicitly confirms.
     // Auto-detection is always a SUGGESTION.
     const allCandidates: Record<string, PaymentCandidate[]> = {}
-    const thirtyDaysAgo = addDays(new Date().toISOString().split('T')[0], -30)
+    const diagnostics = {
+      bank_cache_rows: bankCacheCount,
+      gateways_enabled: enabledGateways.length,
+      xero_api_calls_made: 0,
+      verification_attempted: true,
+      accounts_checked: 0,
+      transactions_checked: 0,
+    }
 
     for (const gateway of enabledGateways) {
       try {
-        const bankData = await xeroGet(
-          `https://api.xero.com/api.xro/2.0/BankTransactions?where=BankAccount.AccountID=guid("${gateway.accountId}")&order=Date DESC&pageSize=100`,
-          accessToken, tenantId
-        )
+        // Query local cache for this gateway's bank account
+        const { data: cachedTxns, error: cacheErr } = await adminSupabase
+          .from('bank_transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('bank_account_id', gateway.accountId)
+          .eq('transaction_type', 'RECEIVE')
+          .gte('date', thirtyDaysAgo)
+          .order('date', { ascending: false })
+          .limit(100)
 
-        const transactions = (bankData.BankTransactions || []).filter((txn: any) => {
-          if (txn.Type !== 'RECEIVE') return false
-          const dateStr = parseXeroDate(txn.Date)
-          return dateStr && dateStr >= thirtyDaysAgo
-        })
+        if (cacheErr) {
+          console.error(`[verify-payment-matches] Cache query error for ${gateway.code}:`, cacheErr.message)
+          continue
+        }
 
-        // ─── 3. For each transaction, find matching Shopify orders ──
+        const transactions = cachedTxns || []
+        diagnostics.accounts_checked++
+        diagnostics.transactions_checked += transactions.length
+
+        console.log(`[verify-payment-matches] ${gateway.code}: ${transactions.length} cached RECEIVE txns from account ${gateway.accountId}`)
+
+        if (transactions.length === 0) continue
+
+        // ─── 3. For each cached transaction, find matching Shopify orders ──
         for (const txn of transactions) {
-          const txnDate = parseXeroDate(txn.Date)!
-          const txnAmount = txn.Total || 0
-          const txnId = txn.BankTransactionID || ''
-          const narration = txn.LineItems?.[0]?.Description || txn.Reference || ''
-          const bankAccountName = txn.BankAccount?.Name || ''
+          const txnDate = txn.date
+          const txnAmount = Math.abs(txn.amount || 0)
+          const txnId = txn.xero_transaction_id || ''
+          const narration = txn.description || txn.reference || ''
+          const bankAccountName = txn.bank_account_name || ''
+
+          if (!txnDate) continue
 
           // Find Shopify orders within ±5 day window with matching gateway
           const windowStart = addDays(txnDate, -5)
@@ -226,9 +207,10 @@ Deno.serve(async (req) => {
 
           const gatewayFilter = gateway.code === 'paypal' ? 'paypal' : 'shopify_payments'
 
-          const { data: orders } = await supabase
+          const { data: orders } = await adminSupabase
             .from('shopify_orders')
             .select('total_price, gateway, processed_at')
+            .eq('user_id', userId)
             .ilike('gateway', `%${gatewayFilter}%`)
             .gte('processed_at', windowStart)
             .lte('processed_at', windowEnd)
@@ -288,7 +270,7 @@ Deno.serve(async (req) => {
           allCandidates[gateway.code].sort((a, b) => b.score - a.score)
         }
       } catch (err) {
-        console.error(`[verify-payment-matches] Error fetching ${gateway.code} transactions:`, err)
+        console.error(`[verify-payment-matches] Error processing ${gateway.code}:`, err)
       }
     }
 
@@ -299,6 +281,8 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       candidates: allCandidates,
       gateways_checked: enabledGateways.map(g => g.code),
+      bank_feed_empty: false,
+      diagnostics,
     }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
