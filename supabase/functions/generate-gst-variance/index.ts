@@ -13,6 +13,9 @@ const ADJUSTMENT_CATEGORY = 'adjustment';
 const PUSHED_STATUSES = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'];
 const KNOWN_CATEGORIES = ['revenue', 'marketplace_fee', 'payment_fee', 'shipping_income', 'shipping_cost', 'fba_fee', 'storage_fee', 'advertising', 'promotion', 'gst_income', 'gst_expense', 'refund', 'adjustment'];
 
+// Variance codes that are line-driven
+const LINE_DRIVEN_CODES = ['UNCLASSIFIED_GST', 'ROUNDING', 'ADJUSTMENT_GST'];
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -84,7 +87,7 @@ Deno.serve(async (req: Request) => {
     // ─── Step 2: Get settlement_lines ────────────────────────────
     const { data: lines } = await supabase
       .from('settlement_lines')
-      .select('settlement_id, accounting_category, amount')
+      .select('settlement_id, accounting_category, amount, description')
       .eq('user_id', userId)
       .in('settlement_id', settlementIds);
 
@@ -115,7 +118,6 @@ Deno.serve(async (req: Request) => {
     let totalLineCount = 0;
     let unclassifiedLineCount = 0;
 
-    // Per-settlement computed data for evidence samples
     interface SettEvidence {
       settlement_id: string;
       marketplace: string;
@@ -245,6 +247,28 @@ Deno.serve(async (req: Request) => {
       return samples.sort((a, b) => Math.abs(b.gst_contribution) - Math.abs(a.gst_contribution));
     }
 
+    // ─── Helper: build line samples for line-driven variances ────
+    function buildLineSamples(ids: string[], filterFn: (line: any) => boolean, amountFn: (line: any) => number) {
+      const samples: any[] = [];
+      for (const id of ids) {
+        const settLines = linesBySettlement[id] || [];
+        for (const line of settLines) {
+          if (filterFn(line)) {
+            samples.push({
+              settlement_id: id,
+              line_type: line.accounting_category || 'unknown',
+              description: line.description || undefined,
+              amount: round2(Number(line.amount) || 0),
+              gst_amount: round2(amountFn(line)),
+              note: undefined,
+            });
+          }
+        }
+        if (samples.length >= 50) break; // cap line samples
+      }
+      return samples.sort((a, b) => Math.abs(b.gst_amount || 0) - Math.abs(a.gst_amount || 0)).slice(0, 30);
+    }
+
     // ─── Step 6: Build variance lines with evidence ──────────────
     const varianceLines: any[] = [];
 
@@ -255,6 +279,7 @@ Deno.serve(async (req: Request) => {
         label: 'Settlements not yet pushed to Xero',
         amount: round2(unpushedGst),
         confidence: unpushedSettlementIds.length <= 3 ? 'high' : 'medium',
+        evidence_level: 'settlement',
         evidence: {
           settlement_ids: unpushedSettlementIds,
           settlement_count: unpushedSettlementIds.length,
@@ -272,10 +297,16 @@ Deno.serve(async (req: Request) => {
         label: 'Unclassified / unknown GST components',
         amount: round2(totalUnknownGst),
         confidence: 'low',
+        evidence_level: 'line',
         evidence: {
           settlement_ids: unclassifiedSettlementIds,
           settlement_count: unclassifiedSettlementIds.length,
           sample: buildSample(unclassifiedSettlementIds, 'unknown_gst'),
+          line_samples: buildLineSamples(
+            unclassifiedSettlementIds,
+            (line) => !KNOWN_CATEGORIES.includes(line.accounting_category || ''),
+            (line) => Math.abs(Number(line.amount) || 0) / 11,
+          ),
           notes: [`${unclassifiedLineCount} line item(s) could not be classified into known GST buckets`],
         },
       });
@@ -288,6 +319,7 @@ Deno.serve(async (req: Request) => {
         label: 'Refund GST adjustments',
         amount: round2(-totalRefundGst),
         confidence: 'high',
+        evidence_level: 'settlement',
         evidence: {
           settlement_ids: refundSettlementIds,
           settlement_count: refundSettlementIds.length,
@@ -304,10 +336,16 @@ Deno.serve(async (req: Request) => {
         label: 'Settlement adjustments',
         amount: round2(totalAdjustmentGst),
         confidence: 'medium',
+        evidence_level: 'line',
         evidence: {
           settlement_ids: adjustmentSettlementIds,
           settlement_count: adjustmentSettlementIds.length,
           sample: buildSample(adjustmentSettlementIds, 'adjustment_gst'),
+          line_samples: buildLineSamples(
+            adjustmentSettlementIds,
+            (line) => (line.accounting_category || '') === ADJUSTMENT_CATEGORY,
+            (line) => Math.abs(Number(line.amount) || 0) / 11,
+          ),
           notes: ['GST component of adjustments/corrections estimated at 1/11'],
         },
       });
@@ -341,9 +379,15 @@ Deno.serve(async (req: Request) => {
         label: 'Rounding differences',
         amount: round2(roundingDrift),
         confidence: 'high',
+        evidence_level: 'line',
         evidence: {
           settlement_ids: roundingSettlementIds,
           settlement_count: roundingSettlementIds.length,
+          line_samples: buildLineSamples(
+            roundingSettlementIds,
+            (line) => GST_INCOME_CATEGORIES.includes(line.accounting_category || ''),
+            (line) => Number(line.amount) || 0,
+          ),
           notes: ['Cumulative rounding drift between line-level and header-level GST totals'],
         },
       });

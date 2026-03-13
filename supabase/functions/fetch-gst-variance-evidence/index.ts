@@ -43,13 +43,20 @@ Deno.serve(async (req: Request) => {
     const userId = user.id;
 
     const body = await req.json();
-    const { period_start, period_end, variance_code, settlement_ids: requestedIds } = body;
+    const {
+      period_start, period_end, variance_code,
+      settlement_ids: requestedIds,
+      cursor, limit: rawLimit,
+      filters,
+    } = body;
 
     if (!period_start || !period_end || !variance_code) {
       return new Response(JSON.stringify({ error: 'period_start, period_end, and variance_code required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const pageLimit = Math.min(Math.max(Number(rawLimit) || 25, 1), 100);
 
     // ─── Fetch settlements in period ─────────────────────────────
     let query = supabase
@@ -60,7 +67,6 @@ Deno.serve(async (req: Request) => {
       .lte('period_start', period_end)
       .order('period_start', { ascending: true });
 
-    // If specific settlement_ids requested, filter further
     if (requestedIds && requestedIds.length > 0) {
       query = query.in('settlement_id', requestedIds);
     }
@@ -71,7 +77,9 @@ Deno.serve(async (req: Request) => {
     if (!settlements || settlements.length === 0) {
       return new Response(JSON.stringify({
         success: true, variance_code,
-        rows: [], totals: { gst_contribution_total: 0, settlement_count: 0 },
+        rows: [], next_cursor: null,
+        totals: { gst_contribution_total: 0, settlement_count_total: 0 },
+        line_samples: [],
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -79,7 +87,7 @@ Deno.serve(async (req: Request) => {
 
     // ─── Fetch lines + xero matches ──────────────────────────────
     const [linesResult, matchesResult] = await Promise.all([
-      supabase.from('settlement_lines').select('settlement_id, accounting_category, amount').eq('user_id', userId).in('settlement_id', settlementIds),
+      supabase.from('settlement_lines').select('settlement_id, accounting_category, amount, description').eq('user_id', userId).in('settlement_id', settlementIds),
       supabase.from('xero_accounting_matches').select('settlement_id, xero_invoice_id, xero_invoice_number').eq('user_id', userId).in('settlement_id', settlementIds),
     ]);
 
@@ -95,8 +103,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ─── Compute per-settlement evidence rows ────────────────────
-    const rows: any[] = [];
+    const allRows: any[] = [];
     let gstContributionTotal = 0;
+    const allLineSamples: any[] = [];
 
     for (const sett of settlements) {
       const settLines = linesBySettlement[sett.settlement_id] || [];
@@ -158,7 +167,7 @@ Deno.serve(async (req: Request) => {
 
       gstContributionTotal += gstContribution;
 
-      rows.push({
+      allRows.push({
         settlement_id: sett.settlement_id,
         marketplace: sett.marketplace,
         period_start: sett.period_start,
@@ -171,19 +180,91 @@ Deno.serve(async (req: Request) => {
         gst_contribution: gstContribution,
         issues,
       });
+
+      // Build line samples for line-driven variance types
+      const LINE_DRIVEN_CODES = ['UNCLASSIFIED_GST', 'ROUNDING', 'ADJUSTMENT_GST'];
+      if (LINE_DRIVEN_CODES.includes(variance_code) && allLineSamples.length < 50) {
+        for (const line of settLines) {
+          const cat = line.accounting_category || '';
+          const amt = Number(line.amount) || 0;
+          let include = false;
+          let gstAmt = 0;
+
+          if (variance_code === 'UNCLASSIFIED_GST' && !KNOWN_CATEGORIES.includes(cat)) {
+            include = true;
+            gstAmt = round2(Math.abs(amt) / 11);
+          } else if (variance_code === 'ADJUSTMENT_GST' && cat === ADJUSTMENT_CATEGORY) {
+            include = true;
+            gstAmt = round2(Math.abs(amt) / 11);
+          } else if (variance_code === 'ROUNDING' && GST_INCOME_CATEGORIES.includes(cat)) {
+            include = true;
+            gstAmt = round2(amt);
+          }
+
+          if (include && allLineSamples.length < 50) {
+            allLineSamples.push({
+              settlement_id: sett.settlement_id,
+              line_type: cat || 'unknown',
+              description: line.description || undefined,
+              amount: round2(amt),
+              gst_amount: gstAmt,
+            });
+          }
+        }
+      }
     }
 
-    // Sort by absolute GST contribution desc
-    rows.sort((a, b) => Math.abs(b.gst_contribution) - Math.abs(a.gst_contribution));
+    // Sort by absolute GST contribution desc, then settlement_id asc
+    allRows.sort((a, b) => {
+      const diff = Math.abs(b.gst_contribution) - Math.abs(a.gst_contribution);
+      if (diff !== 0) return diff;
+      return a.settlement_id.localeCompare(b.settlement_id);
+    });
+
+    // ─── Apply server-side filters ───────────────────────────────
+    let filteredRows = allRows;
+    if (filters) {
+      if (filters.only_not_pushed) {
+        filteredRows = filteredRows.filter(r => r.issues.includes('NOT_PUSHED'));
+      }
+      if (filters.only_unclassified) {
+        filteredRows = filteredRows.filter(r => r.issues.includes('UNCLASSIFIED_LINES'));
+      }
+      if (filters.top_contributors) {
+        // Top 20% or abs >= median contribution
+        const sorted = [...filteredRows].sort((a, b) => Math.abs(b.gst_contribution) - Math.abs(a.gst_contribution));
+        const topN = Math.max(5, Math.ceil(sorted.length * 0.2));
+        const topIds = new Set(sorted.slice(0, topN).map(r => r.settlement_id));
+        filteredRows = filteredRows.filter(r => topIds.has(r.settlement_id));
+      }
+    }
+
+    // ─── Cursor-based pagination ─────────────────────────────────
+    let startIndex = 0;
+    if (cursor) {
+      try {
+        startIndex = Number(atob(cursor));
+        if (isNaN(startIndex) || startIndex < 0) startIndex = 0;
+      } catch { startIndex = 0; }
+    }
+
+    const pageRows = filteredRows.slice(startIndex, startIndex + pageLimit);
+    const hasMore = startIndex + pageLimit < filteredRows.length;
+    const nextCursor = hasMore ? btoa(String(startIndex + pageLimit)) : null;
+
+    // Sort line samples by abs gst_amount desc
+    allLineSamples.sort((a, b) => Math.abs(b.gst_amount || 0) - Math.abs(a.gst_amount || 0));
 
     return new Response(JSON.stringify({
       success: true,
       variance_code,
-      rows,
+      rows: pageRows,
+      next_cursor: nextCursor,
       totals: {
         gst_contribution_total: round2(gstContributionTotal),
-        settlement_count: rows.length,
+        settlement_count_total: allRows.length,
       },
+      line_samples: allLineSamples.slice(0, 30),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (err: any) {
