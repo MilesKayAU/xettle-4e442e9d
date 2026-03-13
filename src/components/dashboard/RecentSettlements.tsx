@@ -343,8 +343,9 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
   const filtered = useMemo(() => {
     if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
     const visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
-    if (!activeFilter) return visible;
-    return visible.filter(r => categorize(r) === activeFilter);
+    const base = !activeFilter ? visible : visible.filter(r => categorize(r) === activeFilter);
+    // Sort by actionability: most actionable first
+    return [...base].sort((a, b) => getActionSort(a) - getActionSort(b));
   }, [allRows, activeFilter, showHidden]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
