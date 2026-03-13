@@ -441,24 +441,25 @@ async function sweepUser(adminSupabase: any, userId: string) {
     } catch (e) { console.error('Xero invoice scan error:', e) }
   }
 
+  // ── Read bank transactions from LOCAL CACHE only (never call Xero BankTransactions API) ──
+  // The sole caller for Xero BankTransactions is fetch-xero-bank-transactions.
   const xeroBankTxns: any[] = []
-  if (xeroToken) {
-    try {
-      const bankData = await xeroGet(
-        `https://api.xero.com/api.xro/2.0/BankTransactions?order=Date DESC&pageSize=100`,
-        xeroToken.access_token, xeroToken.tenant_id
-      )
-      for (const txn of (bankData?.BankTransactions || [])) {
-        if (txn.Type === 'RECEIVE') {
-          xeroBankTxns.push({
-            amount: txn.Total || 0,
-            date: parseXeroDate(txn.Date),
-            reference: txn.Reference || txn.Contact?.Name || '',
-          })
-        }
-      }
-    } catch (e) { console.error('Xero bank scan error:', e) }
-  }
+  try {
+    const { data: cachedTxns } = await adminSupabase
+      .from('bank_transactions')
+      .select('amount, date, reference, contact_name')
+      .eq('user_id', userId)
+      .order('date', { ascending: false })
+      .limit(500)
+    for (const txn of (cachedTxns || [])) {
+      xeroBankTxns.push({
+        amount: txn.amount || 0,
+        date: txn.date,
+        reference: txn.reference || txn.contact_name || '',
+      })
+    }
+    console.log(`[validation-sweep] Loaded ${xeroBankTxns.length} bank txns from cache (invoker=validation-sweep)`)
+  } catch (e) { console.error('[validation-sweep] Bank cache read error:', e) }
 
   // Process each marketplace
   for (const conn of connections) {
@@ -635,46 +636,59 @@ async function sweepUser(adminSupabase: any, userId: string) {
     }
   }
 
-  // Bank matching for pushed but unmatched settlements (>3 days old)
-  try {
-    const { data: unmatchedPushed } = await adminSupabase
-      .from('marketplace_validation')
-      .select('settlement_id, marketplace_code, xero_pushed_at')
-      .eq('user_id', userId)
-      .eq('xero_pushed', true)
-      .eq('bank_matched', false)
-      .not('settlement_id', 'is', null)
+  // Bank matching for pushed but unmatched settlements — uses LOCAL CACHE only.
+  // No per-settlement match-bank-deposits calls (eliminates burst traffic).
+  // If cache is empty, skip entirely.
+  if (xeroBankTxns.length === 0) {
+    console.log(`[validation-sweep] Bank cache empty — skipping bank matching step (invoker=validation-sweep)`)
+  } else {
+    try {
+      const { data: unmatchedPushed } = await adminSupabase
+        .from('marketplace_validation')
+        .select('settlement_id, marketplace_code, xero_pushed_at')
+        .eq('user_id', userId)
+        .eq('xero_pushed', true)
+        .eq('bank_matched', false)
+        .not('settlement_id', 'is', null)
 
-    if (unmatchedPushed && unmatchedPushed.length > 0) {
-      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-      const eligible = unmatchedPushed.filter((r: any) => {
-        if (!r.xero_pushed_at) return true
-        return new Date(r.xero_pushed_at) < threeDaysAgo
-      })
+      if (unmatchedPushed && unmatchedPushed.length > 0) {
+        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+        const eligible = unmatchedPushed.filter((r: any) => {
+          if (!r.xero_pushed_at) return true
+          return new Date(r.xero_pushed_at) < threeDaysAgo
+        })
 
-      if (eligible.length > 0) {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-        const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        // Match locally from cache instead of calling match-bank-deposits per settlement
+        const { data: eligibleSettlements } = await adminSupabase
+          .from('settlements')
+          .select('settlement_id, bank_deposit, period_end')
+          .eq('user_id', userId)
+          .in('settlement_id', eligible.map((r: any) => r.settlement_id))
 
-        for (const row of eligible) {
-          try {
-            await fetch(`${supabaseUrl}/functions/v1/match-bank-deposits`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${serviceRoleKey}`,
-              },
-              body: JSON.stringify({ userId, settlementId: row.settlement_id }),
-            })
-          } catch (e) {
-            console.error(`Bank match call failed for ${row.settlement_id}:`, e)
+        let localMatches = 0
+        for (const s of (eligibleSettlements || [])) {
+          const depositAmount = Math.abs(s.bank_deposit || 0)
+          const periodEnd = new Date(s.period_end)
+          for (const txn of xeroBankTxns) {
+            if (!txn.date) continue
+            const txnDate = new Date(txn.date)
+            const daysDiff = Math.abs((txnDate.getTime() - periodEnd.getTime()) / (1000 * 60 * 60 * 24))
+            const amountDiff = Math.abs(txn.amount - depositAmount)
+            if (amountDiff <= 0.50 && daysDiff <= 14) {
+              await adminSupabase.from('marketplace_validation')
+                .update({ bank_matched: true, bank_amount: txn.amount, bank_matched_at: new Date().toISOString(), bank_reference: txn.reference })
+                .eq('user_id', userId)
+                .eq('settlement_id', s.settlement_id)
+              localMatches++
+              break
+            }
           }
         }
+        console.log(`[validation-sweep] Local bank matching: ${localMatches}/${eligible.length} matched from cache (invoker=validation-sweep)`)
       }
+    } catch (e) {
+      console.error('[validation-sweep] Bank matching step error:', e)
     }
-  } catch (e) {
-    console.error('Bank matching step error:', e)
   }
 
   // P2: Run duplicate detection pass after main sweep

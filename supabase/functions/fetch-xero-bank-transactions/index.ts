@@ -856,13 +856,45 @@ Deno.serve(async (req) => {
       }
 
       const userId = userData.user.id;
-      console.log(`[fetch-bank-txns] Self-mode for user ${userId}`);
+      const invoker = body.invoker || 'self';
+      console.log(`[fetch-bank-txns] Self-mode for user ${userId} (invoker=${invoker})`);
 
-      const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF, CACHE_FRESH_MINUTES_SELF, LOOKBACK_DAYS_SELF);
+      // Acquire sync lock — prevents overlap with batch/cron/sweep
+      const { data: lockResult } = await adminSupabase.rpc('acquire_sync_lock', {
+        p_user_id: userId,
+        p_integration: 'xero',
+        p_lock_key: 'bank_feed_sync',
+        p_ttl_seconds: 120,
+      });
+      if (lockResult && !lockResult.acquired) {
+        console.log(`[fetch-bank-txns] Lock held for ${userId} — skipping (invoker=${invoker})`);
+        return new Response(JSON.stringify({
+          success: false,
+          mode: 'self',
+          invoker,
+          user_id: userId,
+          skipped: true,
+          skip_reason: 'lock_held',
+          lock_expires_at: lockResult.expires_at,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      let result: any;
+      try {
+        result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF, CACHE_FRESH_MINUTES_SELF, LOOKBACK_DAYS_SELF);
+      } finally {
+        await adminSupabase.rpc('release_sync_lock', {
+          p_user_id: userId,
+          p_integration: 'xero',
+          p_lock_key: 'bank_feed_sync',
+        });
+      }
 
       return new Response(JSON.stringify({
         success: true,
         mode: 'self',
+        invoker,
+        lock_acquired: true,
         user_id: userId,
         ...result,
       }), {
@@ -900,11 +932,31 @@ Deno.serve(async (req) => {
 
     for (const userId of userIds) {
       try {
-        const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, CACHE_FRESH_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
-        results.push(result);
+        // Acquire sync lock per user in batch mode
+        const { data: lockResult } = await adminSupabase.rpc('acquire_sync_lock', {
+          p_user_id: userId,
+          p_integration: 'xero',
+          p_lock_key: 'bank_feed_sync',
+          p_ttl_seconds: 120,
+        });
+        if (lockResult && !lockResult.acquired) {
+          console.log(`[fetch-bank-txns] Lock held for ${userId} — skipping in batch (invoker=batch)`);
+          results.push({ user_id: userId, skipped: true, skip_reason: 'lock_held', invoker: 'batch' });
+          continue;
+        }
+        try {
+          const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, CACHE_FRESH_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
+          results.push({ ...result, invoker: 'batch', lock_acquired: true });
+        } finally {
+          await adminSupabase.rpc('release_sync_lock', {
+            p_user_id: userId,
+            p_integration: 'xero',
+            p_lock_key: 'bank_feed_sync',
+          });
+        }
       } catch (err: any) {
         console.error(`[fetch-bank-txns] Error for ${userId}:`, err.message);
-        results.push({ user_id: userId, error: err.message });
+        results.push({ user_id: userId, error: err.message, invoker: 'batch' });
       }
     }
 
