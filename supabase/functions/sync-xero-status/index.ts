@@ -880,7 +880,7 @@ serve(async (req) => {
     // Count remaining unmatched (only ready_to_push, not saved — saved means still being checked)
     const { data: stillUnmatched } = await supabase
       .from('settlements').select('settlement_id').eq('user_id', userId)
-      .is('xero_journal_id', null).in('status', ['parsed', 'ready_to_push']);
+      .is('xero_journal_id', null).in('status', ['ingested', 'ready_to_push']);
     const unmatchedCount = stillUnmatched?.length || 0;
 
     // Log
