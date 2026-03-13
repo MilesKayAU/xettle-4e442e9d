@@ -148,7 +148,7 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
     return (
       <Badge variant="outline" className="text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-900/30 dark:border-sky-800 text-xs">
         <Send className="h-3 w-3 mr-1" />
-        Ready to Post
+        Send to Xero
       </Badge>
     );
   }

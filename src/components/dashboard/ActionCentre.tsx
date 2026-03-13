@@ -569,9 +569,9 @@ export default function ActionCentre({
                       const pipeline = getPipelineForCell(cellRows);
                       const stageEntries: { key: string; label: string; done: boolean }[] = [
                         { key: 'S', label: 'Settlement uploaded', done: pipeline.settlement },
-                        { key: 'X', label: 'Posted to Xero', done: pipeline.xero },
-                        { key: 'B', label: 'Bank deposit matched', done: pipeline.bank },
-                        { key: 'R', label: 'Fully reconciled', done: pipeline.reconciled },
+                         { key: 'X', label: 'Sent to Xero', done: pipeline.xero },
+                         { key: 'B', label: 'Destination deposit matched', done: pipeline.bank },
+                         { key: 'R', label: 'Fully reconciled', done: pipeline.reconciled },
                       ];
                       return (
                         <td key={m} className="text-center py-2.5 px-3">
