@@ -538,7 +538,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
       <div className="flex items-center justify-end">
         <Button size="sm" variant="ghost" onClick={handleRescan} disabled={syncing} className="gap-1.5 text-xs text-muted-foreground">
           {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-          {syncing ? 'Rescanning...' : 'Rescan channels'}
+          {syncing ? 'Refreshing...' : 'Refresh feeds'}
         </Button>
       </div>
     );
