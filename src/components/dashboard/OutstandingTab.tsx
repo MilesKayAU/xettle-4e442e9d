@@ -482,7 +482,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         return;
       }
       if (resp.data?.skipped) {
-        toast.info(`Bank feed recently synced — using cache (${resp.data.minutes_ago}m ago)`, { id: 'bank-feed-sync' });
+        const retryInfo = resp.data.retry_after_seconds
+          ? ` Try again in ~${resp.data.retry_after_seconds}s.`
+          : ` (${resp.data.minutes_ago}m ago)`;
+        const reason = resp.data.skip_reason === 'cooldown'
+          ? `Xero cooldown active —${retryInfo}`
+          : `Bank feed recently synced — using cache${retryInfo}`;
+        toast.info(reason, { id: 'bank-feed-sync' });
         await fetchOutstanding({ runSync: false });
         return;
       }
