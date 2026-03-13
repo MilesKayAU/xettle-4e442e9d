@@ -424,6 +424,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       setData(result);
       setHasLoaded(true);
       setSelected(new Set());
+      persistToCache(result.rows);
 
       const matched = result.sync_info?.matched_settlement_count || 0;
       const candidates = result.sync_info?.candidates_generated || 0;
