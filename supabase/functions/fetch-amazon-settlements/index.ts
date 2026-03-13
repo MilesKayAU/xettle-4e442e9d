@@ -427,9 +427,14 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
       const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
       const accountingBoundary = settingsMap['accounting_boundary_date'] || null;
 
-      // Smart sync window: use sync_from if provided, otherwise default to 90 days
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 90);
+      // Smart sync window: use sync_from for createdSince if provided, otherwise default to 90 days
+      const startDate = syncFromParam
+        ? new Date(syncFromParam)
+        : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      // Clamp: never go further back than 90 days (Amazon API limit)
+      const maxLookback = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      if (startDate < maxLookback) startDate.setTime(maxLookback.getTime());
+      console.log(`[Sync] Report listing window: ${startDate.toISOString()} (sync_from: ${syncFromParam || 'none'})`);
       const params = new URLSearchParams({
         reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
         processingStatuses: 'DONE',
