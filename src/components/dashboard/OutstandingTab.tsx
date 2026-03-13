@@ -197,6 +197,7 @@ const formatDate = (d: string | null) =>
 
 const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
+  amazon_us: 'Amazon US',
   shopify_payments: 'Shopify',
   kogan: 'Kogan',
   bigw: 'Big W',
