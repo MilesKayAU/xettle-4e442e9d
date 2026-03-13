@@ -731,6 +731,9 @@ function groupByMarketplaceMonth(rows: ValidationRow[]): GroupedRow[] {
         count: 1,
         total: r.settlement_net || 0,
       });
+    }
+  }
+  return Array.from(map.values());
 }
 
 interface GroupedEvent {
