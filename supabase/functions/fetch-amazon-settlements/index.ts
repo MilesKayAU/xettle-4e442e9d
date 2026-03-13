@@ -883,22 +883,19 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         .maybeSingle();
 
       if (preMatch?.xero_invoice_id) {
+        // Map Xero status to canonical settlement states
+        let derivedSt = 'pushed_to_xero';
+        if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
         const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
-        let derivedSt = 'synced_external';
-        if (isXettleFormat) {
-          switch (preMatch.xero_status) {
-            case 'DRAFT': derivedSt = 'draft_in_xero'; break;
-            case 'AUTHORISED': derivedSt = 'authorised_in_xero'; break;
-            case 'PAID': derivedSt = 'reconciled_in_xero'; break;
-            default: derivedSt = 'pushed_to_xero'; break;
-          }
-        }
+        if (!isXettleFormat) derivedSt = 'pushed_to_xero';
+
         await supabase.from('settlements').update({
           xero_journal_id: preMatch.xero_invoice_id,
           xero_invoice_id: preMatch.xero_invoice_id,
           xero_invoice_number: preMatch.xero_invoice_number,
           xero_status: preMatch.xero_status,
           status: derivedSt,
+          sync_origin: isXettleFormat ? 'xettle' : 'external',
         } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
         console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
       }

@@ -586,8 +586,8 @@ async function sweepUser(adminSupabase: any, userId: string) {
         } else if (settlement?.xero_journal_id) {
           record.xero_pushed = true
           record.xero_invoice_id = settlement.xero_journal_id
-        } else if (settlement?.status === 'synced_external' || settlement?.status === 'synced' || settlement?.status === 'pushed_to_xero') {
-          // Treat synced_external / synced / pushed_to_xero as already in Xero
+        } else if (settlement?.status === 'pushed_to_xero') {
+          // Treat pushed_to_xero as already in Xero
           record.xero_pushed = true
           record.xero_pushed_at = settlement.created_at || new Date().toISOString()
         }
