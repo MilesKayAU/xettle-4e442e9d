@@ -822,7 +822,7 @@ function formatEventLabel(event: SystemEvent): string {
     case 'bank_match_failed': return `Destination feed not synced yet: ${mp} ${period}`;
     case 'bank_match_query': {
       const count = event.details?.txns_returned;
-      return `Bank feed queried: ${mp} — ${count ?? 0} transactions found`;
+      return `Destination feed queried: ${mp} — ${count ?? 0} transactions found`;
     }
     case 'reconciliation_mismatch': {
       const diff = event.details?.difference;
