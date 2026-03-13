@@ -1170,6 +1170,232 @@ serve(async (req) => {
       return await handleSmartSync(supabase, userId, syncFrom);
     }
 
+    // ─── BACKFILL: Evidence-triggered bounded backfill ─────────────
+    // Accepts missing_settlement_ids from fetch-outstanding.
+    // Widens the SP-API window in 90-day chunks (max 3 chunks = 270 days)
+    // to find specific settlement reports that are outside the normal window.
+    if (action === 'backfill') {
+      let missingIds: string[] = [];
+      try {
+        const body = await req.json();
+        missingIds = (body?.missing_settlement_ids || []).slice(0, 20); // Cap at 20
+      } catch { /* no body */ }
+
+      if (missingIds.length === 0) {
+        return new Response(JSON.stringify({ success: true, message: 'No missing IDs provided', backfilled: 0 }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Check if we already have these settlements
+      const { data: existing } = await supabase
+        .from('settlements')
+        .select('settlement_id')
+        .eq('user_id', userId)
+        .in('settlement_id', missingIds);
+      const existingSet = new Set((existing || []).map((s: any) => s.settlement_id));
+      const stillMissing = missingIds.filter(id => !existingSet.has(id));
+
+      if (stillMissing.length === 0) {
+        return new Response(JSON.stringify({ success: true, message: 'All requested settlements already exist', backfilled: 0 }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      console.log(`[backfill] Looking for ${stillMissing.length} missing settlement IDs: ${stillMissing.join(', ')}`);
+
+      // Use the smart-sync infrastructure but with wider window chunks
+      // Each chunk goes back 90 days further. Max 3 chunks = 270 days total.
+      const MAX_CHUNKS = 3;
+      let backfilled = 0;
+      const foundIds: string[] = [];
+
+      for (let chunk = 0; chunk < MAX_CHUNKS; chunk++) {
+        const chunkEnd = new Date(Date.now() - chunk * 90 * 24 * 60 * 60 * 1000);
+        const chunkStart = new Date(chunkEnd.getTime() - 90 * 24 * 60 * 60 * 1000);
+        
+        // Check if all missing IDs found
+        const remainingMissing = stillMissing.filter(id => !foundIds.includes(id));
+        if (remainingMissing.length === 0) break;
+
+        console.log(`[backfill] Chunk ${chunk + 1}/${MAX_CHUNKS}: ${chunkStart.toISOString()} to ${chunkEnd.toISOString()}`);
+
+        try {
+          // Get fresh token
+          const { data: authData } = await supabase.functions.invoke('amazon-auth', {
+            headers: { 'x-action': 'refresh' },
+          });
+          if (!authData?.access_token) {
+            console.error('[backfill] Failed to get access token');
+            break;
+          }
+
+          const region = authData.region || 'fe';
+          const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe;
+          const params = new URLSearchParams({
+            reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
+            processingStatuses: 'DONE',
+            pageSize: '50',
+            createdSince: chunkStart.toISOString(),
+            createdUntil: chunkEnd.toISOString(),
+          });
+
+          const reportsUrl = `${baseUrl}/reports/2021-06-30/reports?${params.toString()}`;
+          const reportsResponse = await fetch(reportsUrl, {
+            headers: { 'x-amz-access-token': authData.access_token, 'Content-Type': 'application/json' },
+          });
+
+          if (!reportsResponse.ok) {
+            console.error(`[backfill] SP-API error: ${reportsResponse.status}`);
+            if (reportsResponse.status === 429) break; // Stop on rate limit
+            continue;
+          }
+
+          const reportsData = await reportsResponse.json();
+          const reports = reportsData.reports || [];
+          console.log(`[backfill] Chunk ${chunk + 1}: ${reports.length} reports found`);
+
+          // Get settings for parsing
+          const { data: settingsData } = await supabase
+            .from('app_settings')
+            .select('key, value')
+            .eq('user_id', userId)
+            .in('key', ['accounting_gst_rate', 'accounting_boundary_date']);
+          const settingsMap: Record<string, string> = {};
+          (settingsData || []).forEach((s: any) => { settingsMap[s.key] = s.value; });
+          const gstRate = parseFloat(settingsMap['accounting_gst_rate'] || '10');
+          const accountingBoundary = settingsMap['accounting_boundary_date'] || null;
+
+          for (let i = 0; i < reports.length; i++) {
+            const report = reports[i];
+            if (!report.reportDocumentId) continue;
+
+            // Rate limit delay between downloads
+            if (i > 0) await new Promise(r => setTimeout(r, 3000));
+
+            try {
+              const content = await downloadReport(baseUrl, authData.access_token, report.reportDocumentId, supabase, userId);
+              const parsed = parseSettlementTSV(content, gstRate);
+
+              // Only process if this is one of our missing IDs
+              if (!remainingMissing.includes(parsed.header.settlementId)) continue;
+
+              // Check not already ingested
+              if (existingSet.has(parsed.header.settlementId)) continue;
+
+              const isBeforeBoundary = accountingBoundary && parsed.header.periodEnd && parsed.header.periodEnd <= accountingBoundary;
+              const { header, summary, lines, unmapped, splitMonth } = parsed;
+
+              const { error: settError } = await supabase.from('settlements').upsert({
+                user_id: userId,
+                settlement_id: header.settlementId,
+                marketplace: 'amazon_au',
+                period_start: header.periodStart,
+                period_end: header.periodEnd,
+                deposit_date: header.depositDate,
+                sales_principal: summary.salesPrincipal,
+                sales_shipping: summary.salesShipping,
+                promotional_discounts: summary.promotionalDiscounts,
+                seller_fees: summary.sellerFees,
+                fba_fees: summary.fbaFees,
+                storage_fees: summary.storageFees,
+                refunds: summary.refunds,
+                reimbursements: summary.reimbursements,
+                advertising_costs: summary.advertisingCosts,
+                other_fees: summary.otherFees,
+                net_ex_gst: summary.netExGst,
+                gst_on_income: summary.gstOnIncome,
+                gst_on_expenses: summary.gstOnExpenses,
+                bank_deposit: summary.bankDeposit,
+                reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
+                status: 'ingested',
+                is_pre_boundary: !!isBeforeBoundary,
+                source: 'api',
+                is_split_month: splitMonth.isSplitMonth,
+                split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
+                split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
+                parser_version: PARSER_VERSION,
+              } as any, { onConflict: 'marketplace,settlement_id,user_id', ignoreDuplicates: true });
+
+              if (!settError) {
+                foundIds.push(header.settlementId);
+                existingSet.add(header.settlementId);
+                backfilled++;
+                console.log(`[backfill] ✓ Found and ingested settlement ${header.settlementId}`);
+
+                // Auto-link to pre-cached Xero invoice
+                const { data: preMatch } = await supabase
+                  .from('xero_accounting_matches')
+                  .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference')
+                  .eq('settlement_id', header.settlementId)
+                  .eq('user_id', userId)
+                  .maybeSingle();
+
+                if (preMatch?.xero_invoice_id) {
+                  let derivedSt = 'pushed_to_xero';
+                  if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
+                  const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
+                  if (!isXettleFormat) derivedSt = 'pushed_to_xero';
+
+                  await supabase.from('settlements').update({
+                    xero_journal_id: preMatch.xero_invoice_id,
+                    xero_invoice_id: preMatch.xero_invoice_id,
+                    xero_invoice_number: preMatch.xero_invoice_number,
+                    xero_status: preMatch.xero_status,
+                    status: derivedSt,
+                    sync_origin: isXettleFormat ? 'xettle' : 'external',
+                  } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
+                }
+
+                // Insert settlement lines
+                if (lines.length > 0) {
+                  await supabase.from('settlement_lines').delete().eq('user_id', userId).eq('settlement_id', header.settlementId);
+                  const lineRows = lines.map((l: any) => ({
+                    user_id: userId, settlement_id: header.settlementId,
+                    transaction_type: l.transactionType, amount_type: l.amountType,
+                    amount_description: l.amountDescription, accounting_category: l.accountingCategory,
+                    amount: l.amount, order_id: l.orderId || null, sku: l.sku || null,
+                    posted_date: l.postedDate || null, marketplace_name: l.marketplaceName || null,
+                  }));
+                  for (let j = 0; j < lineRows.length; j += 500) {
+                    await supabase.from('settlement_lines').insert(lineRows.slice(j, j + 500));
+                  }
+                }
+              }
+            } catch (dlErr: any) {
+              if (dlErr.message?.includes('RATE_LIMITED')) {
+                console.warn('[backfill] Rate limited — stopping');
+                break;
+              }
+              console.error(`[backfill] Download error: ${dlErr.message}`);
+            }
+          }
+        } catch (chunkErr: any) {
+          console.error(`[backfill] Chunk ${chunk + 1} error: ${chunkErr.message}`);
+        }
+
+        // Brief pause between chunks to avoid rate limits
+        if (chunk < MAX_CHUNKS - 1) await new Promise(r => setTimeout(r, 2000));
+      }
+
+      // Log the backfill event
+      await supabase.from('sync_history').insert({
+        user_id: userId,
+        event_type: 'amazon_backfill',
+        status: backfilled > 0 ? 'success' : 'no_match',
+        settlements_affected: backfilled,
+        details: { requested: stillMissing, found: foundIds, chunks_searched: Math.min(MAX_CHUNKS, stillMissing.length > 0 ? MAX_CHUNKS : 1) },
+      } as any);
+
+      return new Response(JSON.stringify({
+        success: true,
+        backfilled,
+        found_ids: foundIds,
+        still_missing: stillMissing.filter(id => !foundIds.includes(id)),
+        message: backfilled > 0
+          ? `Found and imported ${backfilled} missing settlement${backfilled > 1 ? 's' : ''}`
+          : 'Settlement reports not found in Amazon API — they may be older than 270 days',
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // First, get a fresh access token via the amazon-auth function
     const { data: authData, error: tokenError } = await supabase.functions.invoke('amazon-auth', {
       headers: { 'x-action': 'refresh' },
