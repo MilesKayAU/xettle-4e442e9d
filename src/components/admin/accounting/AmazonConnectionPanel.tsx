@@ -112,7 +112,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
     }
   };
 
-  const handleFetchNow = () => {
+  const handleFetchNow = async () => {
     if (!syncCutoffDate) {
       toast.error('Sync cutoff date required', {
         description: 'Set a "Don\'t sync before" date in Settings first.',
@@ -121,14 +121,40 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
       return;
     }
     setFetching(true);
-    setFetchProgress({ current: 0, total: 0, status: 'Syncing all reports server-side...' });
+    setFetchProgress({ current: 0, total: 0, status: 'Running Xero audit first (Xero-First)...' });
     localStorage.setItem('xettle_fetch_started', Date.now().toString());
-    onFetchStateChange?.(true, 'Fetching settlement reports from Amazon...');
+    onFetchStateChange?.(true, 'Running Xero audit before Amazon fetch...');
 
-    // Fire-and-forget: don't block UI
-    supabase.functions.invoke('fetch-amazon-settlements', {
-      headers: { 'x-action': 'sync' },
-    }).then(({ data, error }) => {
+    try {
+      // Step 1: Xero-First — run audit to seed xero_accounting_matches cache
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.functions.invoke('sync-xero-status', { body: { userId: user.id } });
+      }
+
+      // Step 2: Read boundary from app_settings (set by sync-xero-status)
+      let syncFrom: string | undefined;
+      if (user) {
+        const { data: settingsRow } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', user.id)
+          .eq('key', 'xero_oldest_outstanding_date')
+          .maybeSingle();
+        if (settingsRow?.value) {
+          syncFrom = settingsRow.value;
+        }
+      }
+
+      // Step 3: Bounded Amazon fetch
+      setFetchProgress({ current: 0, total: 0, status: 'Fetching settlement reports from Amazon...' });
+      onFetchStateChange?.(true, 'Fetching settlement reports from Amazon...');
+
+      const { data, error } = await supabase.functions.invoke('fetch-amazon-settlements', {
+        headers: { 'x-action': 'sync' },
+        body: syncFrom ? { sync_from: syncFrom } : undefined,
+      });
+
       if (error || data?.error) {
         toast.error(`Sync failed: ${error?.message || data?.error}`);
       } else {
@@ -142,14 +168,14 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         setLastSync(new Date().toISOString());
         if (details.length > 0) console.log('[Sync Details]', details);
       }
-    }).catch((err) => {
+    } catch (err: any) {
       toast.error(`Sync failed: ${err.message}`);
-    }).finally(() => {
+    } finally {
       setFetching(false);
       setFetchProgress(null);
       localStorage.removeItem('xettle_fetch_started');
       onFetchStateChange?.(false, null);
-    });
+    }
   };
 
   const handleSaveManualToken = async () => {
