@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════════════════════
 // fetch-xero-bank-accounts
 // Returns active bank accounts from Xero for payout mapping UI.
+// Falls back to cached Chart of Accounts bank records when Xero is rate-limited.
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -10,10 +11,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const xeroClientId = Deno.env.get('XERO_CLIENT_ID')!;
-const xeroClientSecret = Deno.env.get('XERO_CLIENT_SECRET')!;
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const xeroClientId = Deno.env.get('XERO_CLIENT_ID')!
+const xeroClientSecret = Deno.env.get('XERO_CLIENT_SECRET')!
 
 interface XeroToken {
   id: string;
@@ -22,6 +23,12 @@ interface XeroToken {
   access_token: string;
   refresh_token: string;
   expires_at: string;
+}
+
+interface XeroBankAccount {
+  account_id: string;
+  name: string;
+  currency_code: string;
 }
 
 async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken> {
@@ -51,10 +58,35 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
   return { ...token, access_token: data.access_token, refresh_token: data.refresh_token, expires_at: newExpiresAt };
 }
 
+async function getCachedBankAccounts(supabase: any, userId: string): Promise<XeroBankAccount[]> {
+  const { data, error } = await supabase
+    .from('xero_chart_of_accounts')
+    .select('xero_account_id, account_name')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .eq('account_type', 'BANK')
+    .not('xero_account_id', 'is', null)
+    .order('account_name', { ascending: true });
+
+  if (error) {
+    console.error('[fetch-xero-bank-accounts] Failed to load cached bank accounts:', error.message);
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    account_id: row.xero_account_id,
+    name: row.account_name,
+    currency_code: 'AUD',
+  }));
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  let authenticatedUserId: string | null = null;
+  let adminClient: any = null;
 
   try {
     const authHeader = req.headers.get('Authorization');
@@ -75,10 +107,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    authenticatedUserId = user.id;
+    adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get Xero token
-    const { data: tokens } = await supabase
+    const { data: tokens } = await adminClient
       .from('xero_tokens')
       .select('*')
       .eq('user_id', user.id)
@@ -92,7 +125,7 @@ Deno.serve(async (req) => {
     }
 
     let token = tokens[0] as XeroToken;
-    token = await refreshToken(supabase, token);
+    token = await refreshToken(adminClient, token);
 
     // Fetch active bank accounts from Xero
     const url = `https://api.xero.com/api.xro/2.0/Accounts?where=${encodeURIComponent('Type=="BANK"&&Status=="ACTIVE"')}`;
@@ -106,7 +139,21 @@ Deno.serve(async (req) => {
 
     if (!resp.ok) {
       const errText = await resp.text();
+      const retryAfter = resp.headers.get('retry-after');
       console.error(`[fetch-xero-bank-accounts] Xero API error [${resp.status}]:`, errText.substring(0, 300));
+
+      const cachedAccounts = await getCachedBankAccounts(adminClient, user.id);
+      if (cachedAccounts.length > 0) {
+        return new Response(JSON.stringify({
+          accounts: cachedAccounts,
+          source: 'cache',
+          warning: `Xero API error: ${resp.status}${retryAfter ? ` (retry after ${retryAfter}s)` : ''}`,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       return new Response(JSON.stringify({ error: `Xero API error: ${resp.status}`, accounts: [] }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -121,13 +168,28 @@ Deno.serve(async (req) => {
       bank_account_type: acc.BankAccountType || null,
     }));
 
-    return new Response(JSON.stringify({ accounts }), {
+    return new Response(JSON.stringify({ accounts, source: 'xero' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (err: any) {
     console.error('[fetch-xero-bank-accounts] Error:', err);
-    return new Response(JSON.stringify({ error: 'Internal error', detail: String(err) }), {
+
+    if (authenticatedUserId && adminClient) {
+      const cachedAccounts = await getCachedBankAccounts(adminClient, authenticatedUserId);
+      if (cachedAccounts.length > 0) {
+        return new Response(JSON.stringify({
+          accounts: cachedAccounts,
+          source: 'cache',
+          warning: 'Xero temporarily unavailable. Showing cached bank accounts.',
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({ error: 'Internal error', detail: String(err), accounts: [] }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
