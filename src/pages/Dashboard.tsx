@@ -98,6 +98,7 @@ export default function Dashboard() {
   const [showAiMapper, setShowAiMapper] = useState(false);
   const [showSetupBanner, setShowSetupBanner] = useState(false);
   const [showBankMappingNudge, setShowBankMappingNudge] = useState(false);
+  const [showBankMapper, setShowBankMapper] = useState(false);
 
   useEffect(() => {
     if (!user) return;
