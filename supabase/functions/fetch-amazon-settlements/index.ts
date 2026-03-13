@@ -557,7 +557,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             // For non-Xettle invoices, mark as pushed (external sync uses sync_origin='external')
             const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
             if (!isXettleFormat) derivedSt = 'pushed_to_xero';
-              }
+
             await supabaseAdmin.from('settlements').update({
               xero_journal_id: preMatch.xero_invoice_id,
               xero_invoice_id: preMatch.xero_invoice_id,
