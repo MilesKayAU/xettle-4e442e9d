@@ -160,6 +160,7 @@ ingested → ready_to_push → pushed_to_xero → reconciled_in_xero → bank_ve
 | `handleSync` auto-link block had broken variable scoping (`isXettleFormat` used outside its declaring block) | **FIXED** | Corrected brace placement |
 | `match-bank-deposits` writes `bank_verified` status but not `bank_verified=true` column | **FIXED** | Added `bank_verified`, `bank_verified_at`, `bank_verified_by` |
 | `sync-settlement-to-xero` writes non-canonical `mapping_error` status | **KNOWN** | Should log to system_events only |
+| **Client-controlled Xero invoice reference** — `reference` was passed from client, risking format inconsistency, collisions, and linking failures | **FIXED** | Reference now generated server-side as `Xettle-{settlementId}` (with optional `-P1`/`-P2` suffix for split-month). Both `sync-settlement-to-xero` and `sync-amazon-journal` enforce this. All callers updated to pass `settlementId` + `splitPart` instead of `reference`. |
 
 ---
 

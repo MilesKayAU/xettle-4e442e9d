@@ -647,7 +647,7 @@ export default function AccountingDashboard() {
           UnitAmount: round2(-rolloverAmount),
           Quantity: 1,
         });
-        const reference1 = `Xettle-${header.settlementId}-P1`;
+        // Reference generated server-side; just need splitPart
         const date1 = m1.end;
 
         // Invoice 2: DR 612 (clear rollover) + Month-2 actual lines
@@ -690,11 +690,11 @@ export default function AccountingDashboard() {
           );
         }
 
-        const reference2 = `Xettle-${header.settlementId}-P2`;
+        // Reference generated server-side; just need splitPart
         const date2 = m2.start;
 
         const { data: data1, error: err1 } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, reference: reference1, date: date1, dueDate: date1, lineItems: lines1, country: selectedMarketplace },
+          body: { userId: user.id, settlementId: header.settlementId, splitPart: 1, date: date1, dueDate: date1, lineItems: lines1, country: selectedMarketplace },
         });
         if (err1) throw err1;
         if (!data1?.success) throw new Error(data1?.error || 'Invoice 1 failed');
@@ -710,7 +710,7 @@ export default function AccountingDashboard() {
           .eq('settlement_id', header.settlementId);
 
         const { data: data2, error: err2 } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, reference: reference2, date: date2, dueDate: date2, lineItems: invoiceLines2, country: selectedMarketplace },
+          body: { userId: user.id, settlementId: header.settlementId, splitPart: 2, date: date2, dueDate: date2, lineItems: invoiceLines2, country: selectedMarketplace },
         });
         if (err2 || !data2?.success) {
           // Invoice 2 failed but Invoice 1 exists in Xero — offer targeted rollback
@@ -736,10 +736,9 @@ export default function AccountingDashboard() {
       } else {
         // SINGLE MONTH: Post one invoice with marketplace-aware TaxType
         const lineItems = buildInvoiceLineItems(parsedLines, period, header.settlementId, undefined, parsed.summary.bankDeposit);
-        const reference = `Xettle-${header.settlementId}`;
 
         const { data, error } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, reference, date: header.periodEnd, dueDate: header.periodEnd, lineItems, country: selectedMarketplace },
+          body: { userId: user.id, settlementId: header.settlementId, date: header.periodEnd, dueDate: header.periodEnd, lineItems, country: selectedMarketplace },
         });
         if (error) throw error;
         if (!data?.success) throw new Error(data?.error || 'Unknown error from Xero sync');

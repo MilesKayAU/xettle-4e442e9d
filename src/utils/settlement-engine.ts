@@ -752,7 +752,6 @@ export async function syncSettlementToXero(
   marketplace: string,
   options?: {
     lineItems?: XeroLineItem[];
-    reference?: string;
     contactName?: string;
   }
 ): Promise<SyncResult> {
@@ -774,8 +773,8 @@ export async function syncSettlementToXero(
     const s = settlement as any;
     const contactName = options?.contactName || MARKETPLACE_CONTACTS[marketplace] || `${marketplace} Marketplace`;
     
-    // Build reference — new format: Xettle-{settlement_id}
-    const reference = options?.reference || `Xettle-${s.settlement_id}`;
+    // Reference is now generated server-side from settlementId
+    const reference = `Xettle-${s.settlement_id}`; // For local display/logging only
     const periodLabel = `${formatSettlementDate(s.period_start)} – ${formatSettlementDate(s.period_end)}`;
     const label = MARKETPLACE_LABELS[marketplace] || marketplace;
     const description = `${label} Settlement ${periodLabel}`;
@@ -825,7 +824,7 @@ export async function syncSettlementToXero(
       body: {
         userId: user.id,
         action: 'create',
-        reference,
+        settlementId: s.settlement_id,
         description,
         date: s.period_end,
         dueDate: s.period_end,

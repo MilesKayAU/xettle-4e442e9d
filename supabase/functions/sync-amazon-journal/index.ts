@@ -34,15 +34,17 @@ interface InvoiceLineItem {
 interface InvoiceRequest {
   userId: string;
   action?: 'create' | 'rollback';
-  // Create fields
-  reference?: string;
+  // Create fields — reference is generated server-side from settlementId
+  settlementId?: string;
+  splitPart?: 1 | 2;  // For split-month invoices: P1 or P2
+  reference?: string;  // DEPRECATED: ignored when settlementId is present
   date?: string;
   dueDate?: string;
   lineItems?: InvoiceLineItem[];
   country?: string;
+  contactName?: string;
   // Rollback fields
   invoiceIds?: string[];
-  settlementId?: string;
   rollbackScope?: 'all' | 'journal_1' | 'journal_2';
   // Legacy compat
   journalIds?: string[];
@@ -379,10 +381,17 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { reference, date, dueDate, lineItems, country, contactName } = body;
+    const { date, dueDate, lineItems, country, contactName } = body;
 
-    console.log('Create invoice request:', { userId, reference, date, country, contactName, lineItemCount: lineItems?.length });
-    if (!reference) throw new Error('Missing reference');
+    // ─── SERVER-SIDE REFERENCE GENERATION ─────────────────────────────
+    const settlementId = body.settlementId;
+    if (!settlementId) {
+      throw new Error('Missing settlementId — reference is generated server-side');
+    }
+    const splitSuffix = body.splitPart ? `-P${body.splitPart}` : '';
+    const reference = `Xettle-${settlementId}${splitSuffix}`;
+
+    console.log('Create invoice request:', { userId, settlementId, reference, date, country, contactName, lineItemCount: lineItems?.length });
     if (!date) throw new Error('Missing date');
     if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
 

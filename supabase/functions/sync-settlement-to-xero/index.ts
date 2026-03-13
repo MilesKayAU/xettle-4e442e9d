@@ -47,8 +47,10 @@ interface InvoiceLineItem {
 interface InvoiceRequest {
   userId: string;
   action?: 'create' | 'rollback';
-  // Create fields
-  reference?: string;
+  // Create fields — reference is generated server-side from settlementId
+  settlementId?: string;
+  splitPart?: 1 | 2;  // For split-month invoices: P1 or P2
+  reference?: string;  // DEPRECATED: ignored when settlementId is present (legacy compat only)
   description?: string;
   date?: string;
   dueDate?: string;
@@ -60,7 +62,6 @@ interface InvoiceRequest {
   settlementData?: Record<string, any>;
   // Rollback fields
   invoiceIds?: string[];
-  settlementId?: string;
   rollbackScope?: 'all' | 'journal_1' | 'journal_2';
   // Legacy compat
   journalIds?: string[];
@@ -519,14 +520,23 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { reference, description, date, dueDate, lineItems, country, contactName, netAmount } = body;
+    const { description, date, dueDate, lineItems, country, contactName, netAmount } = body;
+
+    // ─── SERVER-SIDE REFERENCE GENERATION ─────────────────────────────
+    // Rule: Reference MUST be generated server-side from settlementId.
+    // Client-provided reference is ignored when settlementId is present.
+    const settlementId = body.settlementId || body.settlementData?.settlement_id;
+    if (!settlementId) {
+      throw new Error('Missing settlementId — reference is generated server-side and requires a settlement identifier');
+    }
+    const splitSuffix = body.splitPart ? `-P${body.splitPart}` : '';
+    const reference = `Xettle-${settlementId}${splitSuffix}`;
 
     // Determine if this is a negative (fee-only) settlement → create a Bill (ACCPAY)
     const isNegativeSettlement = typeof netAmount === 'number' && netAmount < 0;
     const invoiceType = isNegativeSettlement ? "ACCPAY" : "ACCREC";
 
-    console.log('Create request:', { userId, reference, date, country, contactName, lineItemCount: lineItems?.length, netAmount, invoiceType });
-    if (!reference) throw new Error('Missing reference');
+    console.log('Create request:', { userId, settlementId, reference, date, country, contactName, lineItemCount: lineItems?.length, netAmount, invoiceType });
     if (!date) throw new Error('Missing date');
     if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
 
@@ -738,14 +748,13 @@ serve(async (req) => {
     token = await refreshXeroToken(supabase, token);
 
     // ─── CACHE-FIRST DUPLICATE CHECK ─────────────────────────────────
-    // Check local reference index before hitting the Xero API
-    const settlementIdFromRef = extractSettlementIdFromReference(reference);
-    if (settlementIdFromRef) {
+    // settlementId is already available (server-generated reference), no need to extract
+    {
       const { data: cachedMatch } = await supabase
         .from('xero_accounting_matches')
         .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference')
         .eq('user_id', userId)
-        .eq('settlement_id', settlementIdFromRef)
+        .eq('settlement_id', settlementId)
         .maybeSingle();
 
       if (cachedMatch?.xero_invoice_id) {
@@ -753,7 +762,7 @@ serve(async (req) => {
         const refInfo = cachedRef && cachedRef !== reference
           ? ` (matched reference: "${cachedRef}")`
           : '';
-        console.log(`[duplicate-guard] Cache hit: settlement ${settlementIdFromRef} already in Xero as ${cachedMatch.xero_invoice_id}`);
+        console.log(`[duplicate-guard] Cache hit: settlement ${settlementId} already in Xero as ${cachedMatch.xero_invoice_id}`);
         throw new Error(
           `An invoice for this settlement already exists in Xero${refInfo} (ID: ${cachedMatch.xero_invoice_id}, Status: ${cachedMatch.xero_status}). ` +
           `Void it in Xero first if you need to re-push.`
@@ -847,11 +856,11 @@ serve(async (req) => {
     console.log('Invoice created successfully:', invoiceId, 'Number:', invoiceNumber);
 
     // ─── Write to reference index cache (prevents future duplicates) ──
-    if (invoiceId && settlementIdFromRef) {
+    if (invoiceId && settlementId) {
       const sd = body.settlementData || {};
       await supabase.from('xero_accounting_matches').upsert({
         user_id: userId,
-        settlement_id: settlementIdFromRef,
+        settlement_id: settlementId,
         marketplace_code: sd.marketplace || 'unknown',
         xero_invoice_id: invoiceId,
         xero_invoice_number: invoiceNumber || null,
@@ -865,7 +874,7 @@ serve(async (req) => {
         matched_reference: reference,
         reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
       }, { onConflict: 'user_id,settlement_id' });
-      console.log(`[cache-write] Indexed ${settlementIdFromRef} → ${invoiceId}`);
+      console.log(`[cache-write] Indexed ${settlementId} → ${invoiceId}`);
     }
 
     // ─── Balance check: settlement vs Xero invoice total ──────────
