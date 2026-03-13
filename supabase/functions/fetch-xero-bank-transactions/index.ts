@@ -182,10 +182,27 @@ async function fetchBankTxnsForUser(
 
   const hasAnyMapping = destRows.length > 0 || legacyRows.length > 0;
 
+  // ── CRITICAL: If no mapped accounts, do NOT call Xero at all ──
+  if (mappedAccountIds.size === 0) {
+    console.log(`[fetch-bank-txns] No destination accounts mapped for ${userId} — skipping Xero API call`);
+    return {
+      user_id: userId,
+      skipped: true,
+      skip_reason: 'no_mapping',
+      message: 'No destination account mapped. Configure payout mapping first.',
+      bank_rows_upserted: 0,
+      mapped_account_ids_count: 0,
+      has_any_mapping: false,
+      filtered_to_mapped_accounts: false,
+      lookback_days: lookbackDays,
+      mapped_account_ids: [],
+    };
+  }
+
   let whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
 
-  // If mappings exist, filter to only those bank accounts
-  if (mappedAccountIds.size > 0) {
+  // Filter to only mapped bank accounts (always — we already checked size > 0)
+  {
     const accountFilters = [...mappedAccountIds].map(id => `BankAccount.AccountID==Guid("${id}")`);
     if (accountFilters.length === 1) {
       whereClause += ` AND ${accountFilters[0]}`;
