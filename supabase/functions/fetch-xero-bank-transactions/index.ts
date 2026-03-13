@@ -88,8 +88,10 @@ function parseRetryAfterSeconds(header: string | null): number {
   return DEFAULT;
 }
 
-/** Compute dynamic date range from outstanding invoices cache. Returns {fromDate, toDate} or null. */
-async function computeDateRangeFromCache(adminSupabase: any, userId: string, paddingDays: number = 5): Promise<{ fromDate: Date; toDate: Date; invoiceCount: number } | null> {
+/** Compute dynamic date range from outstanding invoices cache. Returns {fromDate, toDate} or null.
+ *  Uses asymmetric padding: -7 days before earliest, +21 days after latest
+ *  to cover marketplace payout delays (especially Amazon). Capped at 90 days total. */
+async function computeDateRangeFromCache(adminSupabase: any, userId: string, padBeforeDays: number = 7, padAfterDays: number = 21): Promise<{ fromDate: Date; toDate: Date; invoiceCount: number } | null> {
   const { data: invoices, error } = await adminSupabase
     .from('outstanding_invoices_cache')
     .select('date, due_date')
@@ -113,12 +115,18 @@ async function computeDateRangeFromCache(adminSupabase: any, userId: string, pad
 
   if (earliest === Infinity || latest === -Infinity) return null;
 
-  const fromDate = new Date(earliest - paddingDays * 86400000);
-  const toDate = new Date(latest + paddingDays * 86400000);
+  const fromDate = new Date(earliest - padBeforeDays * 86400000);
+  const toDate = new Date(latest + padAfterDays * 86400000);
 
-  // Cap toDate at today + padding (don't query future beyond reason)
-  const maxDate = new Date(Date.now() + paddingDays * 86400000);
+  // Cap toDate at today + padAfterDays (don't query future beyond reason)
+  const maxDate = new Date(Date.now() + padAfterDays * 86400000);
   if (toDate > maxDate) toDate.setTime(maxDate.getTime());
+
+  // Cap total range to 90 days max
+  const MAX_RANGE_MS = 90 * 86400000;
+  if (toDate.getTime() - fromDate.getTime() > MAX_RANGE_MS) {
+    fromDate.setTime(toDate.getTime() - MAX_RANGE_MS);
+  }
 
   return { fromDate, toDate, invoiceCount: invoices.length };
 }
