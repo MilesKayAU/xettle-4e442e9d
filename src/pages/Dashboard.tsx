@@ -244,10 +244,10 @@ export default function Dashboard() {
     (async () => {
       try {
         // Fetch fixed keys + any payout_account:% mappings in parallel
-        const [flagsResp, destResp, legacyResp] = await Promise.all([
+        const [flagsResp, destResp, legacyResp, mappingResp, userRes] = await Promise.all([
           supabase
             .from('app_settings')
-            .select('key, value')
+            .select('key, value, updated_at')
             .in('key', [
               'ai_mapper_status',
               'setup_hub_dismissed',
@@ -266,15 +266,39 @@ export default function Dashboard() {
             .select('key')
             .like('key', 'payout_account:%')
             .limit(1),
+          // Fetch marketplace account mappings to compute blocking count
+          supabase
+            .from('marketplace_account_mapping')
+            .select('marketplace_code, category, updated_at')
+            .order('updated_at', { ascending: false }),
+          supabase.auth.getUser(),
         ]);
         const flagMap = new Map(flagsResp.data?.map(f => [f.key, f.value]) || []);
-
-        // AI Mapper banner
-        setShowAiMapper(flagMap.get('ai_mapper_status') === 'suggested');
 
         // Bank mapping nudge — show if NO destination mapping exists (check both namespaces)
         const hasAnyDestMapping = (destResp.data?.length || 0) > 0 || (legacyResp.data?.length || 0) > 0;
         setShowBankMappingNudge(!hasAnyDestMapping);
+
+        // AI Mapper banner — conditional logic:
+        // Show only when: mapping_blocking (missing dest), user is new (<7d), or mapping recently changed
+        const aiMapperStatus = flagMap.get('ai_mapper_status');
+        const mappingBlockingCount = hasAnyDestMapping ? 0 : 1; // simplified: 0 if any dest mapped
+        const userCreated = userRes.data?.user?.created_at ? new Date(userRes.data.user.created_at) : null;
+        const userIsNew = userCreated ? (Date.now() - userCreated.getTime()) < 7 * 86400000 : false;
+        const mappingLastChanged = (mappingResp.data && mappingResp.data.length > 0)
+          ? new Date(mappingResp.data[0].updated_at)
+          : null;
+        const mappingRecentlyChanged = mappingLastChanged
+          ? (Date.now() - mappingLastChanged.getTime()) < 7 * 86400000
+          : false;
+
+        // Only show AI mapper banner if there's an actual reason
+        const shouldShowMapper = aiMapperStatus === 'suggested' && (
+          mappingBlockingCount > 0 ||
+          userIsNew ||
+          mappingRecentlyChanged
+        );
+        setShowAiMapper(shouldShowMapper);
 
         // Setup in progress banner
         const dismissed = flagMap.get('setup_hub_dismissed') === 'true';

@@ -532,7 +532,16 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/40 border-b border-border/50">
-                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">Channel</th>
+                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help border-b border-dotted border-muted-foreground/40">Rail</span>
+                      </TooltipTrigger>
+                      <TooltipContent className="text-xs max-w-[220px]">Payout rail — the source that generates settlement payouts (Amazon AU, Shopify Payments, PayPal, etc.)</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">Period</th>
                 <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs uppercase tracking-wider">Settlement Total</th>
                 <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs uppercase tracking-wider">Bank</th>
