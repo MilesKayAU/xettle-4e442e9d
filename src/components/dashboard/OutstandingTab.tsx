@@ -171,6 +171,10 @@ interface OutstandingSummary {
     lookback_days_effective?: number;
     force_recompute_used?: boolean;
     missing_settlement_ids?: string[];
+    invoice_cache_age_minutes?: number | null;
+    from_cache?: boolean;
+    xero_rate_limited?: boolean;
+    no_xero_connection?: boolean;
     mapping_status?: {
       has_any_mapping?: boolean;
       missing_marketplaces?: string[];
