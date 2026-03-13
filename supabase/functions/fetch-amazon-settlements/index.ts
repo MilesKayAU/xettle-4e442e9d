@@ -301,9 +301,10 @@ async function refreshAccessToken(amazonToken: any): Promise<string> {
 async function downloadReport(baseUrl: string, accessToken: string, reportDocumentId: string, supabase?: any, userId?: string): Promise<string> {
   const docUrl = `${baseUrl}/reports/2021-06-30/documents/${reportDocumentId}`;
   let docResponse: Response | null = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // Fail-fast: only 2 retries before setting cooldown (was 5)
+  for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) {
-      const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
+      const delay = 5000; // Fixed 5s backoff
       console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
       await new Promise(r => setTimeout(r, delay));
     }
@@ -313,13 +314,13 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
   }
 
   if (docResponse?.status === 429) {
-    // Store rate limit cooldown so other callers don't also hit Amazon
+    // Fail-fast: set 15-minute cooldown immediately so no other caller retries
     if (supabase && userId) {
-      await upsertSetting(supabase, userId, 'amazon_rate_limit_until',
-        new Date(Date.now() + 15 * 60 * 1000).toISOString()
-      );
+      const retryAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await upsertSetting(supabase, userId, 'amazon_rate_limit_until', retryAt);
+      console.warn(`[downloadReport] 429 fail-fast: cooldown set until ${retryAt} for user ${userId}`);
     }
-    throw new Error('RATE_LIMITED: Amazon API rate limited after 5 retries');
+    throw new Error('RATE_LIMITED: Amazon API rate limited — cooldown set');
   }
 
   if (!docResponse || !docResponse.ok) {
