@@ -133,11 +133,12 @@ export default function PayoutBankAccountMapper() {
   const refreshAccounts = useCallback(async () => {
     setFetchingAccounts(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-      const resp = await supabase.functions.invoke('fetch-xero-bank-accounts', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        applyFetchIssue('Session not ready. Please sign in again and retry.');
+        return;
+      }
+      const resp = await supabase.functions.invoke('fetch-xero-bank-accounts');
 
       const payload = (resp.data || {}) as {
         accounts?: XeroBankAccount[];
