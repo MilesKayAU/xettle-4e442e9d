@@ -531,6 +531,8 @@ serve(async (req) => {
     }
     const splitSuffix = body.splitPart ? `-P${body.splitPart}` : '';
     const reference = `Xettle-${settlementId}${splitSuffix}`;
+    // Cache key includes split suffix so P1 and P2 get separate entries
+    const cacheSettlementKey = `${settlementId}${splitSuffix}`;
 
     // Determine if this is a negative (fee-only) settlement → create a Bill (ACCPAY)
     const isNegativeSettlement = typeof netAmount === 'number' && netAmount < 0;
