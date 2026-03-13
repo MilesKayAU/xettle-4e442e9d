@@ -180,6 +180,7 @@ export default function GstAuditTab() {
   const [varianceLoading, setVarianceLoading] = useState(false);
   const [settlementDetail, setSettlementDetail] = useState<EvidenceRow | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const periods = getMonthPeriods(12);
 
