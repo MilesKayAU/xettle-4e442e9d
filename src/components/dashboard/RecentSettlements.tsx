@@ -420,13 +420,14 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
       color: 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-900/20',
       icon: <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
     },
-    {
-      key: 'attention',
+    // Only show Needs Attention when there are items
+    ...(counts.attention > 0 ? [{
+      key: 'attention' as StatusCategory,
       label: 'Needs Attention',
       count: counts.attention,
       color: 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-900/20',
       icon: <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />,
-    },
+    }] : []),
   ];
 
   return (
