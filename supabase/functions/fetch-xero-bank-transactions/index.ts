@@ -893,6 +893,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         mode: 'self',
+        invoker,
+        lock_acquired: true,
         user_id: userId,
         ...result,
       }), {
