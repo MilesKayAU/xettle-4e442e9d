@@ -264,6 +264,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [manualPickerOpen, setManualPickerOpen] = useState<string | null>(null);
   const [backfilling, setBackfilling] = useState(false);
   const [lastBankSyncResult, setLastBankSyncResult] = useState<BankSyncDiagnostics | null>(null);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
   const [depositCoverage, setDepositCoverage] = useState<Record<string, {
     siblings: Array<{ settlement_id: string; match_amount: number; confidence_score: number; period_start?: string; period_end?: string; marketplace?: string }>;
@@ -315,8 +316,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     checkConnections();
   }, []);
 
-  const fetchOutstanding = useCallback(async (options?: { runSync?: boolean }) => {
-    setLoading(true);
+  const fetchOutstanding = useCallback(async (options?: { runSync?: boolean; background?: boolean }) => {
+    const isBackground = options?.background === true;
+    if (isBackground) {
+      setBackgroundRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setNoXeroConnection(false);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -339,7 +345,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           if (typeof syncError === 'string' && (syncError.includes('No Xero connection') || syncError.includes('Unauthorized'))) {
             setNoXeroConnection(true);
             setHasLoaded(true);
-            setLoading(false);
             return;
           }
         }
@@ -365,7 +370,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       }
 
       if (resp.error) throw resp.error;
-      if ((resp.data as { source?: string })?.source === 'cache_fallback') {
+      if (!isBackground && (resp.data as { source?: string })?.source === 'cache_fallback') {
         toast.warning('Xero is temporarily rate limited — showing cached outstanding data while background sync continues.');
       }
 
@@ -373,9 +378,17 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       setHasLoaded(true);
       setSelected(new Set());
     } catch (err: any) {
-      toast.error(`Failed to fetch outstanding: ${err.message}`);
+      if (!isBackground) {
+        toast.error(`Failed to fetch outstanding: ${err.message}`);
+      } else {
+        console.warn('[OutstandingTab] background fetch failed:', err.message);
+      }
     } finally {
-      setLoading(false);
+      if (isBackground) {
+        setBackgroundRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -458,9 +471,87 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, [data?.sync_info?.missing_settlement_ids, hasLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // On mount, fetch cached data only — sync only when user clicks "Sync with Xero"
-  // This prevents Xero API rate-limit death spirals (see RCA: ~43 calls per mount)
-  useEffect(() => { fetchOutstanding({ runSync: false }); }, [fetchOutstanding]);
+  // ─── Cache-first load: instant render from outstanding_invoices_cache ───
+  const loadCachedSnapshot = useCallback(async (): Promise<number> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return 0;
+
+      const { data: cached, error } = await supabase
+        .from('outstanding_invoices_cache')
+        .select('*')
+        .eq('user_id', session.user.id);
+
+      if (error || !cached || cached.length === 0) return 0;
+
+      const rows: OutstandingRow[] = cached.map(row => {
+        const dueDateMs = row.due_date ? new Date(row.due_date).getTime() : null;
+        const overdueDays = dueDateMs ? Math.max(0, Math.floor((Date.now() - dueDateMs) / 86400000)) : null;
+        const contactLower = (row.contact_name || '').toLowerCase();
+        const isMarketplace = ['amazon', 'shopify', 'kogan', 'ebay', 'catch', 'mydeal', 'bigw', 'bunnings', 'woolworths'].some(m => contactLower.includes(m));
+        const marketplace = contactLower.includes('amazon') ? 'amazon_au'
+          : contactLower.includes('shopify') ? 'shopify_payments'
+          : contactLower.includes('kogan') ? 'kogan'
+          : contactLower.includes('ebay') ? 'ebay_au'
+          : contactLower.includes('catch') ? 'catch'
+          : contactLower.includes('mydeal') ? 'mydeal'
+          : contactLower.includes('bigw') ? 'bigw'
+          : contactLower.includes('bunnings') ? 'bunnings'
+          : 'unknown';
+
+        return {
+          xero_invoice_id: row.xero_invoice_id,
+          xero_invoice_number: row.invoice_number || '—',
+          xero_reference: row.reference || '',
+          contact_name: row.contact_name || '',
+          marketplace,
+          is_marketplace: isMarketplace,
+          invoice_date: row.date || null,
+          due_date: row.due_date || null,
+          amount: Number(row.amount_due) || 0,
+          currency_code: row.currency_code || 'AUD',
+          overdue_days: overdueDays,
+          has_settlement: undefined as unknown as boolean,
+          settlement_id: null,
+          settlement_status: null,
+          settlement_evidence: null,
+          has_bank_deposit: undefined as unknown as boolean,
+          bank_match: null,
+          bank_difference: null,
+          match_status: 'pending_enrichment',
+        };
+      });
+
+      const summary: OutstandingSummary = {
+        total_outstanding: rows.reduce((sum, r) => sum + r.amount, 0),
+        invoice_count: rows.length,
+        matched_with_settlement: 0,
+        bank_deposit_found: 0,
+        ready_to_reconcile: 0,
+        rows,
+      };
+
+      setData(summary);
+      setHasLoaded(true);
+      return rows.length;
+    } catch (err) {
+      console.warn('[OutstandingTab] cache snapshot failed:', err);
+      return 0;
+    }
+  }, []);
+
+  // On mount: load cache first, then enrich in background (or foreground if cache empty)
+  useEffect(() => {
+    const init = async () => {
+      const cachedCount = await loadCachedSnapshot();
+      if (cachedCount > 0) {
+        fetchOutstanding({ runSync: false, background: true });
+      } else {
+        fetchOutstanding({ runSync: false });
+      }
+    };
+    init();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for refresh events dispatched after bank mapping saves
   useEffect(() => {
@@ -931,6 +1022,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   // ─── Status rendering helpers ───
   const getStatusIcon = (row: OutstandingRow) => {
+    if (row.match_status === 'pending_enrichment') return <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />;
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'confirmed_manual') return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
@@ -946,6 +1038,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   };
 
    const getStatusLabel = (row: OutstandingRow) => {
+    if (row.match_status === 'pending_enrichment') return 'Loading matches…';
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
@@ -967,6 +1060,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   };
 
   const getRowBgClass = (row: OutstandingRow) => {
+    if (row.match_status === 'pending_enrichment') return '';
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
@@ -1239,7 +1333,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Outstanding</h2>
+          <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            Outstanding
+            {backgroundRefreshing && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </h2>
           <p className="text-muted-foreground mt-1">
             Xero invoices awaiting payment — matched against your settlements and bank deposits.
           </p>
@@ -1771,7 +1868,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         </div>
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {row.has_settlement ? (
+                        {row.match_status === 'pending_enrichment' ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : row.has_settlement ? (
                           <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
                         ) : row.is_pre_boundary ? (
                           <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
@@ -1780,7 +1879,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
+                        {row.match_status === 'pending_enrichment' ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
                           <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
                         ) : row.match_status === 'confirmed_manual' ? (
                           <CheckCircle2 className="h-4 w-4 text-blue-600 inline" />
