@@ -332,7 +332,7 @@ async function fetchBankTxnsForUser(
     value: new Date().toISOString(),
   }, { onConflict: 'user_id,key' });
 
-  console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
+  console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages), accounts: ${[...mappedAccountIds].join(', ')}`);
   return {
     user_id: userId,
     bank_rows_upserted: totalUpserted,
@@ -340,9 +340,10 @@ async function fetchBankTxnsForUser(
     synced_row_count: totalUpserted,
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
+    mapped_account_ids: [...mappedAccountIds],
     synced_account_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,
-    filtered_to_mapped_accounts: mappedAccountIds.size > 0,
+    filtered_to_mapped_accounts: true,
     lookback_days: lookbackDays,
     cooldown_until: null,
     retry_after_seconds: 0,
