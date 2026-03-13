@@ -418,6 +418,49 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   // This prevents Xero API rate-limit death spirals (see RCA: ~43 calls per mount)
   useEffect(() => { fetchOutstanding({ runSync: false }); }, [fetchOutstanding]);
 
+  // Listen for refresh events dispatched after bank mapping saves
+  useEffect(() => {
+    const handler = () => { fetchOutstanding({ runSync: false }); };
+    window.addEventListener('xettle:refresh-outstanding', handler);
+    return () => window.removeEventListener('xettle:refresh-outstanding', handler);
+  }, [fetchOutstanding]);
+
+  // ─── Sync bank feed (user-scoped) ───
+  const [syncingBankFeed, setSyncingBankFeed] = useState(false);
+  const syncBankFeedAndRefresh = useCallback(async () => {
+    setSyncingBankFeed(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Session expired — please sign in again.');
+        return;
+      }
+      toast.info('Syncing bank feed…', { id: 'bank-feed-sync' });
+      const resp = await supabase.functions.invoke('fetch-xero-bank-transactions', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'x-action': 'self',
+        },
+        body: { action: 'self' },
+      });
+      if (resp.error) {
+        toast.error(`Bank feed sync failed: ${resp.error.message}`, { id: 'bank-feed-sync' });
+        return;
+      }
+      if (resp.data?.error) {
+        toast.error(`Bank feed sync failed: ${resp.data.error}`, { id: 'bank-feed-sync' });
+        return;
+      }
+      const count = resp.data?.upserted || 0;
+      toast.success(`Bank feed synced — ${count} transaction${count !== 1 ? 's' : ''} cached`, { id: 'bank-feed-sync' });
+      await fetchOutstanding({ runSync: false });
+    } catch (err: any) {
+      toast.error(`Bank feed sync failed: ${err.message}`, { id: 'bank-feed-sync' });
+    } finally {
+      setSyncingBankFeed(false);
+    }
+  }, [fetchOutstanding]);
+
   // ─── Fetch payment verification candidates (Rule #11 — verification only) ───
   // PAYMENT VERIFICATION LAYER ONLY
   // This never creates accounting entries. No invoice. No journal. No Xero push.
