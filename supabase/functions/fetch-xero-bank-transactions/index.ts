@@ -263,7 +263,14 @@ async function fetchBankTxnsForUser(
   // Refresh Xero token
   const token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
   if (!token) {
-    return { user_id: userId, error: 'Token refresh failed' };
+    return {
+      user_id: userId,
+      error: 'Token refresh failed',
+      cached_bank_rows: cachedBankRowsCount,
+      last_sync_time: lastSyncTime,
+      cooldown_until: cooldownUntil,
+      cooldown_applied: false,
+    };
   }
 
   // ── Dynamic date range from outstanding invoices cache ──
