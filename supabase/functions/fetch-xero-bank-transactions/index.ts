@@ -308,6 +308,13 @@ async function fetchBankTxnsForUser(
     details: { transactions_upserted: totalUpserted, pages_fetched: page, lookback_days: lookbackDays, filtered_accounts: mappedAccountIds.size },
   });
 
+  // Update bank_sync_last_success_at for UI diagnostics
+  await adminSupabase.from('app_settings').upsert({
+    user_id: userId,
+    key: 'bank_sync_last_success_at',
+    value: new Date().toISOString(),
+  }, { onConflict: 'user_id,key' });
+
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
   return {
     user_id: userId,
@@ -318,6 +325,8 @@ async function fetchBankTxnsForUser(
     has_any_mapping: hasAnyMapping,
     filtered_to_mapped_accounts: mappedAccountIds.size > 0,
     lookback_days: lookbackDays,
+    cooldown_until: null,
+    retry_after_seconds: 0,
   };
 }
 
