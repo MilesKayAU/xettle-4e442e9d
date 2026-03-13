@@ -241,6 +241,12 @@ export default function PostSetupBanner({
       // Wait for all Phase 1 to complete
       await Promise.allSettled(phase1Promises);
 
+      // Nothing pending: skip heavy follow-up work on every dashboard mount
+      if (phase1Promises.length === 0) {
+        setScanPhase('done');
+        return;
+      }
+
       // ─── Phase 2: Provision all marketplace connections ───
       if (caps.userId) {
         try {
