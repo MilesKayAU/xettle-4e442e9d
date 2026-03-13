@@ -34,15 +34,17 @@ interface InvoiceLineItem {
 interface InvoiceRequest {
   userId: string;
   action?: 'create' | 'rollback';
-  // Create fields
-  reference?: string;
+  // Create fields — reference is generated server-side from settlementId
+  settlementId?: string;
+  splitPart?: 1 | 2;  // For split-month invoices: P1 or P2
+  reference?: string;  // DEPRECATED: ignored when settlementId is present
   date?: string;
   dueDate?: string;
   lineItems?: InvoiceLineItem[];
   country?: string;
+  contactName?: string;
   // Rollback fields
   invoiceIds?: string[];
-  settlementId?: string;
   rollbackScope?: 'all' | 'journal_1' | 'journal_2';
   // Legacy compat
   journalIds?: string[];
