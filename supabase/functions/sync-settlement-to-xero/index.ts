@@ -750,13 +750,13 @@ serve(async (req) => {
     token = await refreshXeroToken(supabase, token);
 
     // ─── CACHE-FIRST DUPLICATE CHECK ─────────────────────────────────
-    // settlementId is already available (server-generated reference), no need to extract
+    // Uses cacheSettlementKey (includes split suffix) so P1/P2 are checked independently
     {
       const { data: cachedMatch } = await supabase
         .from('xero_accounting_matches')
         .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference')
         .eq('user_id', userId)
-        .eq('settlement_id', settlementId)
+        .eq('settlement_id', cacheSettlementKey)
         .maybeSingle();
 
       if (cachedMatch?.xero_invoice_id) {
