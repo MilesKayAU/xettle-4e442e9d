@@ -1135,6 +1135,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={syncBankFeedAndRefresh}
+                disabled={syncingBankFeed || loading}
+                className="gap-1.5"
+              >
+                <Banknote className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+                {syncingBankFeed ? 'Syncing…' : 'Sync bank feed'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Refresh cached bank transactions from Xero</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={rescanMatches}
                 disabled={rescanning || loading}
                 className="gap-1.5"
