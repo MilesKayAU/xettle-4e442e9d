@@ -765,15 +765,13 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
     );
   }
 
-  // ─── List settlement reports (use sync_from or default 90 days) ────────────────────
-  const syncFromBody = (() => { try { return req.clone(); } catch { return null; } })();
-  let listStartDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-  // Note: standard sync path doesn't receive sync_from; only smart-sync does
+  // ─── List settlement reports (default 90 days for standard path) ────────────────────
+  const listStartDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
   const params = new URLSearchParams({
     reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
     processingStatuses: 'DONE',
     pageSize: '50',
-    createdSince: startDate.toISOString(),
+    createdSince: listStartDate.toISOString(),
   });
 
   const reportsUrl = `${baseUrl}/reports/2021-06-30/reports?${params.toString()}`;
