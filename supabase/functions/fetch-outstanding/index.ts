@@ -752,7 +752,10 @@ Deno.serve(async (req) => {
         everyday_market: ['woolworths', 'everyday', 'edm'],
       };
 
-      if (!bankMatch && !isConfirmed) {
+      if (!bankMatch && !isConfirmed && hasAnyMapping) {
+        // Gate: only attempt bank matching when payout mappings exist
+        const mappedAccount = getMappedPayoutAccount(marketplace);
+        
         let bestCandidate: any = null;
         let bestScore = 0;
         let bestDiff = Infinity;
