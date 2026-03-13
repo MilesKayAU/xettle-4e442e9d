@@ -425,12 +425,23 @@ async function fetchBankTxnsForUser(
     }
   }
 
-  // Update guard timestamp
-  await adminSupabase.from('app_settings').upsert({
-    user_id: userId,
-    key: GUARD_KEY,
-    value: new Date().toISOString(),
-  }, { onConflict: 'user_id,key' });
+  await Promise.all([
+    adminSupabase.from('app_settings').upsert({
+      user_id: userId,
+      key: GUARD_KEY,
+      value: new Date().toISOString(),
+    }, { onConflict: 'user_id,key' }),
+    adminSupabase.from('app_settings').upsert({
+      user_id: userId,
+      key: LAST_SYNC_AT_KEY,
+      value: new Date().toISOString(),
+    }, { onConflict: 'user_id,key' }),
+    adminSupabase.from('app_settings').upsert({
+      user_id: userId,
+      key: LAST_SYNC_ROW_COUNT_KEY,
+      value: String(totalUpserted),
+    }, { onConflict: 'user_id,key' }),
+  ]);
 
   // Log to system_events
   await adminSupabase.from('system_events').insert({
