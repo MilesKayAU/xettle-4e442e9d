@@ -1416,6 +1416,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             </div>
           </CollapsibleContent>
         </Collapsible>
+      ) : (
+        <p className="text-xs text-muted-foreground px-1">No bank sync diagnostics yet.</p>
       )}
 
 
