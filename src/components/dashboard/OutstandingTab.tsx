@@ -1333,7 +1333,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Outstanding</h2>
+          <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            Outstanding
+            {backgroundRefreshing && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </h2>
           <p className="text-muted-foreground mt-1">
             Xero invoices awaiting payment — matched against your settlements and bank deposits.
           </p>
