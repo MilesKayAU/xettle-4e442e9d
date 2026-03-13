@@ -597,7 +597,8 @@ Deno.serve(async (req) => {
 
     const mappingStatus = {
       has_any_mapping: hasAnyMapping,
-      missing_marketplaces: missingMarketplaces,
+      mapping_source: mappingSourceUsed,
+      missing_rails: missingRails,
       used_default_for: usedDefaultFor,
     };
 

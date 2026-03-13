@@ -1,6 +1,9 @@
 /**
- * PayoutBankAccountMapper — Maps marketplace → Xero bank account for deposit matching.
- * Each marketplace can use the default payout account or an explicit override.
+ * PayoutBankAccountMapper — Maps settlement rails → Xero destination accounts for deposit matching.
+ * Each rail can use the default destination account or an explicit override.
+ * 
+ * Reads payout_destination:* first, falls back to legacy payout_account:* on load.
+ * Saves only payout_destination:* keys.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -14,6 +17,14 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { AlertTriangle, Banknote, CheckCircle2, HelpCircle, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import {
+  PHASE_1_RAILS,
+  DESTINATION_KEY_PREFIX,
+  DESTINATION_DEFAULT_KEY,
+  LEGACY_KEY_PREFIX,
+  LEGACY_DEFAULT_KEY,
+  toRailCode,
+} from '@/constants/settlement-rails';
 
 interface XeroBankAccount {
   account_id: string;
@@ -21,17 +32,9 @@ interface XeroBankAccount {
   currency_code: string;
 }
 
-interface MarketplaceConnection {
-  marketplace_code: string;
-  marketplace_name: string;
-}
-
-const PAYOUT_KEY_PREFIX = 'payout_account:';
-const DEFAULT_KEY = 'payout_account:_default';
-
 export default function PayoutBankAccountMapper() {
   const [accounts, setAccounts] = useState<XeroBankAccount[]>([]);
-  const [marketplaces, setMarketplaces] = useState<MarketplaceConnection[]>([]);
+  const [rails, setRails] = useState<Array<{ code: string; label: string }>>([]);
   const [defaultAccountId, setDefaultAccountId] = useState<string>('');
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [useDefault, setUseDefault] = useState<Record<string, boolean>>({});
@@ -59,10 +62,11 @@ export default function PayoutBankAccountMapper() {
         return;
       }
 
-      // Parallel fetch: bank accounts, settings, marketplace connections
-      const [accountsResp, settingsResp, connectionsResp] = await Promise.all([
+      // Parallel fetch: bank accounts, new destination settings, legacy settings, marketplace connections
+      const [accountsResp, destSettingsResp, legacySettingsResp, connectionsResp] = await Promise.all([
         supabase.functions.invoke('fetch-xero-bank-accounts'),
-        supabase.from('app_settings').select('key, value').like('key', 'payout_account:%'),
+        supabase.from('app_settings').select('key, value').like('key', `${DESTINATION_KEY_PREFIX}%`),
+        supabase.from('app_settings').select('key, value').like('key', `${LEGACY_KEY_PREFIX}%`),
         supabase.from('marketplace_connections').select('marketplace_code, marketplace_name').eq('connection_status', 'active'),
       ]);
 
@@ -84,22 +88,51 @@ export default function PayoutBankAccountMapper() {
 
       const validIds = new Set(fetchedAccounts.map(a => a.account_id));
 
-      // Existing mappings
-      const settings = settingsResp.data || [];
-      let defaultVal = '';
+      // Build new-first / legacy-fallback mappings
+      const destSettings = destSettingsResp.data || [];
+      const legacySettings = legacySettingsResp.data || [];
+
+      // Index new keys
+      const newMap = new Map<string, string>();
+      for (const row of destSettings) {
+        newMap.set(row.key, row.value || '');
+      }
+
+      // Index legacy keys (normalised to rail codes)
+      const legacyMap = new Map<string, string>();
+      for (const row of legacySettings) {
+        if (row.key === LEGACY_DEFAULT_KEY) {
+          legacyMap.set('_default', row.value || '');
+        } else if (row.key.startsWith(LEGACY_KEY_PREFIX)) {
+          const rawCode = row.key.slice(LEGACY_KEY_PREFIX.length);
+          legacyMap.set(toRailCode(rawCode), row.value || '');
+        }
+      }
+
+      // Resolve default
+      let defaultVal = newMap.get(DESTINATION_DEFAULT_KEY) || '';
+      if (!defaultVal && legacyMap.has('_default')) {
+        defaultVal = legacyMap.get('_default') || '';
+      }
+
+      // Resolve per-rail overrides
       const overrideMap: Record<string, string> = {};
       const invalid = new Set<string>();
 
-      for (const row of settings) {
-        const val = row.value || '';
-        if (row.key === DEFAULT_KEY) {
-          defaultVal = val;
-          if (val && !validIds.has(val)) invalid.add('_default');
-        } else if (row.key.startsWith(PAYOUT_KEY_PREFIX)) {
-          const mktCode = row.key.slice(PAYOUT_KEY_PREFIX.length);
-          if (mktCode !== '_default') {
-            overrideMap[mktCode] = val;
-            if (val && !validIds.has(val)) invalid.add(mktCode);
+      if (defaultVal && !validIds.has(defaultVal)) invalid.add('_default');
+
+      // Check all rails for overrides (new keys first, legacy fallback)
+      for (const rail of PHASE_1_RAILS) {
+        const newKey = `${DESTINATION_KEY_PREFIX}${rail.code}`;
+        const newVal = newMap.get(newKey);
+        if (newVal) {
+          overrideMap[rail.code] = newVal;
+          if (!validIds.has(newVal)) invalid.add(rail.code);
+        } else if (legacyMap.has(rail.code)) {
+          const legVal = legacyMap.get(rail.code) || '';
+          if (legVal) {
+            overrideMap[rail.code] = legVal;
+            if (!validIds.has(legVal)) invalid.add(rail.code);
           }
         }
       }
@@ -108,21 +141,30 @@ export default function PayoutBankAccountMapper() {
       setOverrides(overrideMap);
       setInvalidAccounts(invalid);
 
-      // Marketplace connections
-      const connections: MarketplaceConnection[] = connectionsResp.data || [];
-      setMarketplaces(connections);
-
-      // Set useDefault for marketplaces without explicit override
-      const finalUseDefault: Record<string, boolean> = {};
+      // Build rail list: canonical rails + any connected marketplaces not already in the list
+      const connections = connectionsResp.data || [];
+      const canonicalCodes = new Set(PHASE_1_RAILS.map(r => r.code));
+      const extraRails: Array<{ code: string; label: string }> = [];
       for (const c of connections) {
-        finalUseDefault[c.marketplace_code] = !(c.marketplace_code in overrideMap);
+        const railCode = toRailCode(c.marketplace_code);
+        if (!canonicalCodes.has(railCode)) {
+          extraRails.push({ code: railCode, label: c.marketplace_name });
+        }
+      }
+      const allRails = [...PHASE_1_RAILS, ...extraRails];
+      setRails(allRails);
+
+      // Set useDefault for rails without explicit override
+      const finalUseDefault: Record<string, boolean> = {};
+      for (const rail of allRails) {
+        finalUseDefault[rail.code] = !(rail.code in overrideMap);
       }
       setUseDefault(finalUseDefault);
 
     } catch (err: any) {
-      const message = err?.message || 'Failed to load bank account settings';
+      const message = err?.message || 'Failed to load destination account settings';
       applyFetchIssue(message);
-      toast.error(`Failed to load bank account settings: ${message}`);
+      toast.error(`Failed to load destination account settings: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -182,30 +224,30 @@ export default function PayoutBankAccountMapper() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Build upsert rows
+      // Build upsert rows — save ONLY payout_destination:* keys
       const rows: Array<{ user_id: string; key: string; value: string }> = [];
 
       // Default
       if (defaultAccountId) {
-        rows.push({ user_id: user.id, key: DEFAULT_KEY, value: defaultAccountId });
+        rows.push({ user_id: user.id, key: DESTINATION_DEFAULT_KEY, value: defaultAccountId });
       }
 
-      // Per-marketplace overrides (only save explicit overrides, not "use default" ones)
-      for (const mkt of marketplaces) {
-        if (!useDefault[mkt.marketplace_code] && overrides[mkt.marketplace_code]) {
+      // Per-rail overrides (only save explicit overrides, not "use default" ones)
+      for (const rail of rails) {
+        if (!useDefault[rail.code] && overrides[rail.code]) {
           rows.push({
             user_id: user.id,
-            key: `${PAYOUT_KEY_PREFIX}${mkt.marketplace_code}`,
-            value: overrides[mkt.marketplace_code],
+            key: `${DESTINATION_KEY_PREFIX}${rail.code}`,
+            value: overrides[rail.code],
           });
         }
       }
 
       // Delete overrides that switched back to "use default"
       const keysToDelete: string[] = [];
-      for (const mkt of marketplaces) {
-        if (useDefault[mkt.marketplace_code]) {
-          keysToDelete.push(`${PAYOUT_KEY_PREFIX}${mkt.marketplace_code}`);
+      for (const rail of rails) {
+        if (useDefault[rail.code]) {
+          keysToDelete.push(`${DESTINATION_KEY_PREFIX}${rail.code}`);
         }
       }
 
@@ -222,7 +264,7 @@ export default function PayoutBankAccountMapper() {
         if (error) throw error;
       }
 
-      toast.success('Payout account mappings saved');
+      toast.success('Destination account mappings saved');
 
       // Trigger bank feed sync in the background
       try {
@@ -242,7 +284,7 @@ export default function PayoutBankAccountMapper() {
             toast.info('Bank feed already up to date', { id: 'bank-sync' });
             window.dispatchEvent(new Event('xettle:refresh-outstanding'));
           } else {
-            const count = syncResp.data?.upserted || 0;
+            const count = syncResp.data?.bank_rows_upserted || syncResp.data?.upserted || 0;
             toast.success(`Bank feed synced — ${count} transaction${count !== 1 ? 's' : ''} cached`, { id: 'bank-sync' });
             window.dispatchEvent(new Event('xettle:refresh-outstanding'));
           }
@@ -255,7 +297,7 @@ export default function PayoutBankAccountMapper() {
     } finally {
       setSaving(false);
     }
-  }, [defaultAccountId, overrides, useDefault, marketplaces]);
+  }, [defaultAccountId, overrides, useDefault, rails]);
 
   const getAccountLabel = (id: string) => {
     const acc = accounts.find(a => a.account_id === id);
@@ -267,7 +309,7 @@ export default function PayoutBankAccountMapper() {
       <Card>
         <CardContent className="flex items-center justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
-          <span className="text-muted-foreground">Loading bank accounts…</span>
+          <span className="text-muted-foreground">Loading destination accounts…</span>
         </CardContent>
       </Card>
     );
@@ -279,7 +321,7 @@ export default function PayoutBankAccountMapper() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Banknote className="h-4 w-4" />
-            Payout Bank Accounts
+            Destination Accounts
           </CardTitle>
           <CardDescription>
             {isRateLimited
@@ -307,10 +349,10 @@ export default function PayoutBankAccountMapper() {
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Banknote className="h-4 w-4" />
-              Payout Bank Accounts
+              Settlement Rail → Destination Account
             </CardTitle>
             <CardDescription>
-              Select which bank account each marketplace pays into. This controls which deposits are matched.
+              Select which bank or clearing account each settlement rail pays into. This controls which deposits are matched during reconciliation.
             </CardDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={refreshAccounts} disabled={fetchingAccounts}>
@@ -319,12 +361,12 @@ export default function PayoutBankAccountMapper() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Default payout account */}
+        {/* Default destination account */}
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Default payout account</Label>
+          <Label className="text-sm font-medium">Default destination account</Label>
           <Select value={defaultAccountId} onValueChange={setDefaultAccountId}>
             <SelectTrigger>
-              <SelectValue placeholder="Select default bank account…" />
+              <SelectValue placeholder="Select default destination account…" />
             </SelectTrigger>
             <SelectContent>
               {accounts.map(acc => (
@@ -338,33 +380,33 @@ export default function PayoutBankAccountMapper() {
           {invalidAccounts.has('_default') && (
             <div className="flex items-center gap-1 text-sm text-destructive">
               <AlertTriangle className="h-3.5 w-3.5" />
-              Selected bank account no longer exists in Xero
+              Selected account no longer exists in Xero
             </div>
           )}
         </div>
 
-        {/* Per-marketplace overrides */}
-        {marketplaces.length > 0 && (
+        {/* Per-rail overrides */}
+        {rails.length > 0 && (
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Marketplace overrides</Label>
-            {marketplaces.map(mkt => {
-              const isUsingDefault = useDefault[mkt.marketplace_code] !== false;
-              const currentOverride = overrides[mkt.marketplace_code] || '';
-              const isInvalid = invalidAccounts.has(mkt.marketplace_code);
+            <Label className="text-sm font-medium">Rail overrides</Label>
+            {rails.map(rail => {
+              const isUsingDefault = useDefault[rail.code] !== false;
+              const currentOverride = overrides[rail.code] || '';
+              const isInvalid = invalidAccounts.has(rail.code);
 
               return (
-                <div key={mkt.marketplace_code} className="rounded-md border p-3 space-y-2">
+                <div key={rail.code} className="rounded-md border p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{mkt.marketplace_name}</span>
+                    <span className="text-sm font-medium">{rail.label}</span>
                     <div className="flex items-center gap-2">
-                      <Label htmlFor={`default-${mkt.marketplace_code}`} className="text-xs text-muted-foreground">
+                      <Label htmlFor={`default-${rail.code}`} className="text-xs text-muted-foreground">
                         Use default
                       </Label>
                       <Switch
-                        id={`default-${mkt.marketplace_code}`}
+                        id={`default-${rail.code}`}
                         checked={isUsingDefault}
                         onCheckedChange={(checked) => {
-                          setUseDefault(prev => ({ ...prev, [mkt.marketplace_code]: checked }));
+                          setUseDefault(prev => ({ ...prev, [rail.code]: checked }));
                         }}
                       />
                     </div>
@@ -379,10 +421,10 @@ export default function PayoutBankAccountMapper() {
                     <>
                       <Select
                         value={currentOverride}
-                        onValueChange={(val) => setOverrides(prev => ({ ...prev, [mkt.marketplace_code]: val }))}
+                        onValueChange={(val) => setOverrides(prev => ({ ...prev, [rail.code]: val }))}
                       >
                         <SelectTrigger className="h-8 text-sm">
-                          <SelectValue placeholder="Select bank account…" />
+                          <SelectValue placeholder="Select destination account…" />
                         </SelectTrigger>
                         <SelectContent>
                           {accounts.map(acc => (
@@ -396,7 +438,7 @@ export default function PayoutBankAccountMapper() {
                       {isInvalid && (
                         <div className="flex items-center gap-1 text-xs text-destructive">
                           <AlertTriangle className="h-3 w-3" />
-                          Selected bank account no longer exists in Xero
+                          Selected account no longer exists in Xero
                         </div>
                       )}
                     </>
@@ -413,14 +455,14 @@ export default function PayoutBankAccountMapper() {
             <AccordionTrigger className="text-sm">
               <span className="flex items-center gap-1">
                 <HelpCircle className="h-3.5 w-3.5" />
-                How do I find this in Xero?
+                What is a settlement rail?
               </span>
             </AccordionTrigger>
             <AccordionContent>
               <div className="text-sm text-muted-foreground space-y-2">
-                <p>In Xero, go to <strong>Accounting → Bank accounts</strong>.</p>
-                <p>The account you reconcile Amazon/Shopify/marketplace deposits in is the one to select here.</p>
-                <p>If Amazon deposits go to your main bank and Shopify goes to PayPal, select different accounts for each marketplace.</p>
+                <p>A <strong>settlement rail</strong> is the payment path a marketplace uses to send you money.</p>
+                <p>The <strong>destination account</strong> is the Xero bank account (or PayPal, Wise, clearing account) where those funds land.</p>
+                <p>For example, Amazon AU might deposit into your main bank account, while Shopify Payments goes to a separate PayPal account. Set each rail to point at the right destination so reconciliation knows where to look.</p>
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -429,7 +471,7 @@ export default function PayoutBankAccountMapper() {
         {/* Save button */}
         <Button onClick={saveMappings} disabled={saving || !defaultAccountId} className="w-full">
           {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-          Save payout account mappings
+          Save destination mappings
         </Button>
       </CardContent>
     </Card>
