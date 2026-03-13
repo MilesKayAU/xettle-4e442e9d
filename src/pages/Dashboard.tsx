@@ -42,21 +42,9 @@ type DashboardView = 'dashboard' | 'outstanding' | 'smart_upload' | 'settlements
 type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
-function AiMapperBanner() {
-  const [show, setShow] = useState(false);
-  const navigate = useNavigate();
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: status } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'ai_mapper_status')
-          .maybeSingle();
-        if (status?.value === 'suggested') setShow(true);
-      } catch {}
-    })();
-  }, []);
+function AiMapperBanner({ show: showProp }: { show?: boolean }) {
+  const [show, setShow] = useState(showProp ?? false);
+  useEffect(() => { if (showProp !== undefined) setShow(showProp); }, [showProp]);
   if (!show) return null;
   return (
     <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 px-5 py-3 shadow-sm">
@@ -68,7 +56,6 @@ function AiMapperBanner() {
       </div>
       <Button size="sm" variant="outline" onClick={() => {
         setShow(false);
-        // Navigate to settlements view which contains settings tab
         window.dispatchEvent(new CustomEvent('open-settings-tab'));
       }}>
         Review mapping
@@ -77,41 +64,8 @@ function AiMapperBanner() {
   );
 }
 
-function SetupInProgressBanner() {
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    (async () => {
-      const { data: flags } = await supabase
-        .from('app_settings')
-        .select('key, value')
-        .in('key', [
-          'setup_hub_dismissed',
-          'setup_phase3_complete',
-          'xero_scan_completed',
-          'amazon_scan_completed',
-          'shopify_scan_completed',
-        ]);
-
-      const flagMap = new Map(flags?.map(f => [f.key, f.value]) || []);
-
-      // Hide if explicitly dismissed or phase3 complete
-      if (flagMap.get('setup_hub_dismissed') === 'true') return;
-      if (flagMap.get('setup_phase3_complete') === 'true') return;
-
-      // Also hide if all connected scans completed
-      const allScansComplete =
-        (flagMap.get('xero_scan_completed') === 'true' || !flagMap.has('xero_scan_completed')) &&
-        (flagMap.get('amazon_scan_completed') === 'true' || !flagMap.has('amazon_scan_completed')) &&
-        (flagMap.get('shopify_scan_completed') === 'true' || !flagMap.has('shopify_scan_completed'));
-
-      // Show banner only if at least one scan exists but not all are complete
-      const hasAnyScan = flagMap.has('xero_scan_completed') || flagMap.has('amazon_scan_completed') || flagMap.has('shopify_scan_completed');
-      if (hasAnyScan && allScansComplete) return;
-
-      setShow(true);
-    })();
-  }, []);
-  if (!show) return null;
+function SetupInProgressBanner({ show: showProp }: { show?: boolean }) {
+  if (!showProp) return null;
   return (
     <div className="mb-4 flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 px-5 py-4 shadow-sm">
       <div className="flex items-center gap-3">
@@ -141,6 +95,8 @@ export default function Dashboard() {
   const [hasAmazon, setHasAmazon] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
   const [justConnectedXero, setJustConnectedXero] = useState(false);
+  const [showAiMapper, setShowAiMapper] = useState(false);
+  const [showSetupBanner, setShowSetupBanner] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -277,6 +233,44 @@ export default function Dashboard() {
     checkAdmin();
   }, [user]);
 
+  // ─── Consolidated app_settings query (banners + flags) ────────────
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const { data: flags } = await supabase
+          .from('app_settings')
+          .select('key, value')
+          .in('key', [
+            'ai_mapper_status',
+            'setup_hub_dismissed',
+            'setup_phase3_complete',
+            'xero_scan_completed',
+            'amazon_scan_completed',
+            'shopify_scan_completed',
+          ]);
+        const flagMap = new Map(flags?.map(f => [f.key, f.value]) || []);
+
+        // AI Mapper banner
+        setShowAiMapper(flagMap.get('ai_mapper_status') === 'suggested');
+
+        // Setup in progress banner
+        const dismissed = flagMap.get('setup_hub_dismissed') === 'true';
+        const phase3Done = flagMap.get('setup_phase3_complete') === 'true';
+        if (!dismissed && !phase3Done) {
+          const allScansComplete =
+            (flagMap.get('xero_scan_completed') === 'true' || !flagMap.has('xero_scan_completed')) &&
+            (flagMap.get('amazon_scan_completed') === 'true' || !flagMap.has('amazon_scan_completed')) &&
+            (flagMap.get('shopify_scan_completed') === 'true' || !flagMap.has('shopify_scan_completed'));
+          const hasAnyScan = flagMap.has('xero_scan_completed') || flagMap.has('amazon_scan_completed') || flagMap.has('shopify_scan_completed');
+          if (!(hasAnyScan && allScansComplete)) {
+            setShowSetupBanner(true);
+          }
+        }
+      } catch {}
+    })();
+  }, [user]);
+
   // Fetch outstanding (Awaiting Payment) count for badge
   useEffect(() => {
     if (!user) return;
@@ -313,19 +307,18 @@ export default function Dashboard() {
           return activeConnections.length > 0 ? activeConnections[0].marketplace_code : '';
         });
 
-        // Fetch settlement counts per marketplace
+        // Fetch settlement counts per marketplace (using count queries, not downloading all rows)
         const codes = activeConnections.map((m: any) => m.marketplace_code);
-        const { data: countData } = await supabase
-          .from('settlements')
-          .select('marketplace')
-          .in('marketplace', codes);
-        if (countData) {
-          const counts: Record<string, number> = {};
-          for (const row of countData) {
-            counts[row.marketplace || ''] = (counts[row.marketplace || ''] || 0) + 1;
-          }
-          setSettlementCounts(counts);
-        }
+        const counts: Record<string, number> = {};
+        const countPromises = codes.map(async (code: string) => {
+          const { count } = await supabase
+            .from('settlements')
+            .select('id', { count: 'exact', head: true })
+            .eq('marketplace', code);
+          counts[code] = count ?? 0;
+        });
+        await Promise.all(countPromises);
+        setSettlementCounts(counts);
       } else {
         setUserMarketplaces([]);
         setSuggestedConnections([]);
@@ -683,7 +676,7 @@ export default function Dashboard() {
 
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
-        {activeView === 'dashboard' && <SetupInProgressBanner />}
+        {activeView === 'dashboard' && <SetupInProgressBanner show={showSetupBanner} />}
 
         {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
         {/* ─── Dashboard (always useful — strip, actions, validation) ──── */}
@@ -717,7 +710,7 @@ export default function Dashboard() {
               />
 
               {/* AI Account Mapper suggestion banner */}
-              <AiMapperBanner />
+              <AiMapperBanner show={showAiMapper} />
 
               {/* CoA-detected channels awaiting confirmation */}
               {suggestedConnections.length > 0 && (
