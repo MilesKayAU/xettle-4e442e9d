@@ -24,12 +24,7 @@ const CACHE_FRESH_MINUTES_SELF = 15;
 const LOOKBACK_DAYS_BATCH = 60;
 const LOOKBACK_DAYS_SELF = 30;
 
-function formatXeroDateTime(d: Date): string {
-  const y = d.getFullYear();
-  const m = d.getMonth() + 1;
-  const dd = d.getDate();
-  return `DateTime(${y}, ${m}, ${dd})`;
-}
+// formatXeroDateTime removed — no longer used after switching to If-Modified-Since header
 
 async function refreshXeroToken(supabase: any, userId: string, clientId: string, clientSecret: string) {
   // Optimistic locking: re-read token immediately before refresh
