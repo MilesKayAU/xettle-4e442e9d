@@ -60,6 +60,9 @@ function extractSettlementId(reference: string): { id: string | null; part: numb
     return { id: reference.slice(7).replace(/-P[12]$/, ''), part: partMatch ? parseInt(partMatch[1]) : null };
   }
   if (reference.startsWith('AMZN-')) return { id: reference.slice(5), part: null };
+  // Handle "Amazon AU Settlement {id} - Part {n}" format (split invoices)
+  const amazonSettlementMatch = reference.match(/Amazon.*Settlement\s+(\d+)\s*-\s*Part\s+(\d+)/i);
+  if (amazonSettlementMatch) return { id: amazonSettlementMatch[1], part: Number(amazonSettlementMatch[2]) };
   const lmbMatch = reference.match(/^LMB-\w+-(\d+)-(\d+)$/);
   if (lmbMatch) return { id: lmbMatch[1], part: parseInt(lmbMatch[2]) };
   const numericMatch = reference.match(/\b(\d{8,})\b/);
