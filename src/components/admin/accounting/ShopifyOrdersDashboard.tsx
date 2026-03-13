@@ -421,7 +421,6 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
       const result = await syncSettlementToXero(s.settlement_id, s.marketplace, {
         lineItems,
         contactName: meta.contactName || meta.displayName || 'Marketplace',
-        reference: meta.reference,
       });
       if (result.success) {
         pushed++;
