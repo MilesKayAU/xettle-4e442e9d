@@ -35,6 +35,7 @@ interface Props {
   onReviewMapping?: () => void;
   onMapBankAccounts?: () => void;
   onConnect?: () => void;
+  onRefreshStatus?: () => void;
 }
 
 async function fetchStatuses(): Promise<ConnectionStatus[]> {
