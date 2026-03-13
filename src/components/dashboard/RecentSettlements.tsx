@@ -302,7 +302,7 @@ interface RecentSettlementsProps {
   onClearPipelineFilter?: () => void;
 }
 
-export default function RecentSettlements({ onViewAll }: RecentSettlementsProps) {
+export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPipelineFilter }: RecentSettlementsProps) {
   const [allRows, setAllRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
