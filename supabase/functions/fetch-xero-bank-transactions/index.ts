@@ -432,23 +432,15 @@ async function fetchBankTxnsForUser(
     }
   }
 
-  await Promise.all([
-    adminSupabase.from('app_settings').upsert({
-      user_id: userId,
-      key: GUARD_KEY,
-      value: new Date().toISOString(),
-    }, { onConflict: 'user_id,key' }),
-    adminSupabase.from('app_settings').upsert({
-      user_id: userId,
-      key: LAST_SYNC_AT_KEY,
-      value: new Date().toISOString(),
-    }, { onConflict: 'user_id,key' }),
-    adminSupabase.from('app_settings').upsert({
-      user_id: userId,
-      key: LAST_SYNC_ROW_COUNT_KEY,
-      value: String(totalUpserted),
-    }, { onConflict: 'user_id,key' }),
-  ]);
+  // ══════════════════════════════════════════════════════════════
+  // STEP 6 — Persist success timestamp (ONLY on real Xero fetch, not on skip/429)
+  // ══════════════════════════════════════════════════════════════
+  const successAt = new Date().toISOString();
+  await adminSupabase.from('app_settings').upsert({
+    user_id: userId,
+    key: LAST_SUCCESS_KEY,
+    value: successAt,
+  }, { onConflict: 'user_id,key' });
 
   // Log to system_events
   await adminSupabase.from('system_events').insert({
@@ -458,14 +450,14 @@ async function fetchBankTxnsForUser(
     details: {
       transactions_upserted: totalUpserted,
       pages_fetched: page,
-      lookback_days: effectiveDays,
+      invoice_range_days: effectiveDays,
       date_range_source: dateRangeSource,
+      used_invoice_range: usedInvoiceRange,
       filtered_accounts: mappedAccountIds.size,
-      from_date: fromDate.toISOString().split('T')[0],
-      to_date: toDate?.toISOString().split('T')[0] || 'open',
+      fetch_from: fromDate.toISOString().split('T')[0],
+      fetch_to: toDate?.toISOString().split('T')[0] || 'open',
     },
   });
-
 
   // Final cache row count for diagnostics
   const { count: finalBankRowsCount } = await adminSupabase
@@ -476,24 +468,24 @@ async function fetchBankTxnsForUser(
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages), range: ${dateRangeSource}, accounts: ${[...mappedAccountIds].join(', ')}`);
   return {
     user_id: userId,
+    skip_reason: null,
+    cooldown_applied: false,
+    retry_after_seconds: 0,
     bank_rows_upserted: totalUpserted,
-    upserted: totalUpserted,
     synced_row_count: totalUpserted,
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
     mapped_account_ids: [...mappedAccountIds],
-    synced_account_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,
-    filtered_to_mapped_accounts: true,
-    lookback_days: effectiveDays,
+    used_invoice_range: usedInvoiceRange,
+    invoice_range_days: effectiveDays,
+    fetch_from: fromDate.toISOString().split('T')[0],
+    fetch_to: toDate?.toISOString().split('T')[0] || null,
     date_range_source: dateRangeSource,
-    cooldown_until: cooldownUntil,
-    cooldown_applied: false,
-    cached_bank_rows: finalBankRowsCount || 0,
-    last_sync_time: new Date().toISOString(),
-    retry_after_seconds: 0,
-    bank_rows_cached_total: finalBankRowsCount || 0,
-    refreshed_at: new Date().toISOString(),
+    cached_bank_rows_total: finalBankRowsCount || 0,
+    last_successful_bank_sync_at: successAt,
+    cooldown_until: null,
+    refreshed_at: successAt,
   };
 }
 
