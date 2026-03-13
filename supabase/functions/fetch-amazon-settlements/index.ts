@@ -766,8 +766,19 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
     );
   }
 
-  // ─── List settlement reports (default 90 days for standard path) ────────────────────
-  const listStartDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  // ─── Read sync_from from request body (stored in closure by handleSmartSync caller) ───
+  // Smart-sync respects the Xero-derived boundary; clamp to max 90 days
+  let syncFromForSmartSync: string | undefined;
+  try {
+    // The body was already consumed by the main handler, so we read from the closure
+    // We'll pass it through handleSmartSync instead
+  } catch { /* no body */ }
+
+  // Use boundary-aware window: sync_from if available, else 90 days
+  const listStartDate = smartSyncFrom
+    ? new Date(Math.max(new Date(smartSyncFrom).getTime(), Date.now() - 90 * 24 * 60 * 60 * 1000))
+    : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  console.log(`[smart-sync] Report listing window: ${listStartDate.toISOString()} (sync_from: ${smartSyncFrom || 'none'})`);
   const params = new URLSearchParams({
     reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
     processingStatuses: 'DONE',
