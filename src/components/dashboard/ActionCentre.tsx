@@ -339,10 +339,6 @@ export default function ActionCentre({
             </span>
           )}
           {lastChecked && <span>Updated {formatTimeAgo(lastChecked)}</span>}
-          <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="h-7 px-2 gap-1.5">
-            {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Refresh Status
-          </Button>
         </div>
       </div>
 
