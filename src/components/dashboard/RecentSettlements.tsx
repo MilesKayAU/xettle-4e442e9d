@@ -346,11 +346,22 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   // Filtered + paginated
   const filtered = useMemo(() => {
     if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
-    const visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
+    let visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
+    
+    // Apply pipeline filter if set
+    if (pipelineFilter) {
+      visible = visible.filter(r => {
+        const matchesMarketplace = r.marketplace === pipelineFilter.marketplace;
+        const rowMonth = r.period_start?.substring(0, 7);
+        const matchesMonth = rowMonth === pipelineFilter.month;
+        return matchesMarketplace && matchesMonth;
+      });
+    }
+    
     const base = !activeFilter ? visible : visible.filter(r => categorize(r) === activeFilter);
     // Sort by actionability: most actionable first
     return [...base].sort((a, b) => getActionSort(a) - getActionSort(b));
-  }, [allRows, activeFilter, showHidden]);
+  }, [allRows, activeFilter, showHidden, pipelineFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = useMemo(() => {
