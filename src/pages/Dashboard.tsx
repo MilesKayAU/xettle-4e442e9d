@@ -244,7 +244,7 @@ export default function Dashboard() {
     (async () => {
       try {
         // Fetch fixed keys + any payout_account:% mappings in parallel
-        const [flagsResp, payoutResp] = await Promise.all([
+        const [flagsResp, destResp, legacyResp] = await Promise.all([
           supabase
             .from('app_settings')
             .select('key, value')
@@ -259,6 +259,11 @@ export default function Dashboard() {
           supabase
             .from('app_settings')
             .select('key')
+            .like('key', 'payout_destination:%')
+            .limit(1),
+          supabase
+            .from('app_settings')
+            .select('key')
             .like('key', 'payout_account:%')
             .limit(1),
         ]);
@@ -267,9 +272,9 @@ export default function Dashboard() {
         // AI Mapper banner
         setShowAiMapper(flagMap.get('ai_mapper_status') === 'suggested');
 
-        // Bank mapping nudge — show if NO payout_account:% mapping exists (any key counts)
-        const hasAnyPayoutMapping = (payoutResp.data?.length || 0) > 0;
-        setShowBankMappingNudge(!hasAnyPayoutMapping);
+        // Bank mapping nudge — show if NO destination mapping exists (check both namespaces)
+        const hasAnyDestMapping = (destResp.data?.length || 0) > 0 || (legacyResp.data?.length || 0) > 0;
+        setShowBankMappingNudge(!hasAnyDestMapping);
 
         // Setup in progress banner
         const dismissed = flagMap.get('setup_hub_dismissed') === 'true';

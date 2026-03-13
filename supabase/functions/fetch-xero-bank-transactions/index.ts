@@ -104,20 +104,32 @@ async function fetchBankTxnsForUser(
   const fromDate = new Date();
   fromDate.setDate(fromDate.getDate() - lookbackDays);
 
-  // Load payout account mappings to filter by mapped accounts
-  const { data: payoutSettings } = await adminSupabase
-    .from('app_settings')
-    .select('key, value')
-    .eq('user_id', userId)
-    .like('key', 'payout_account:%');
+  // Load destination account mappings (new-first, legacy-fallback)
+  const DEST_PREFIX = 'payout_destination:';
+  const LEGACY_PREFIX = 'payout_account:';
+
+  const [destResp, legacyResp] = await Promise.all([
+    adminSupabase.from('app_settings').select('key, value').eq('user_id', userId).like('key', `${DEST_PREFIX}%`),
+    adminSupabase.from('app_settings').select('key, value').eq('user_id', userId).like('key', `${LEGACY_PREFIX}%`),
+  ]);
 
   const mappedAccountIds = new Set<string>();
-  const hasAnyMapping = (payoutSettings || []).length > 0; // includes _default
-  for (const row of (payoutSettings || [])) {
-    if (row.value && row.key.startsWith('payout_account:')) {
-      mappedAccountIds.add(row.value);
+  const destRows = destResp.data || [];
+  const legacyRows = legacyResp.data || [];
+
+  // Prefer new keys
+  if (destRows.length > 0) {
+    for (const row of destRows) {
+      if (row.value) mappedAccountIds.add(row.value);
+    }
+  } else {
+    // Fallback to legacy
+    for (const row of legacyRows) {
+      if (row.value) mappedAccountIds.add(row.value);
     }
   }
+
+  const hasAnyMapping = destRows.length > 0 || legacyRows.length > 0;
 
   let whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
 
