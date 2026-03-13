@@ -252,13 +252,20 @@ export default function PayoutBankAccountMapper() {
             <Banknote className="h-4 w-4" />
             Payout Bank Accounts
           </CardTitle>
-          <CardDescription>Connect Xero to see your bank accounts.</CardDescription>
+          <CardDescription>
+            {isRateLimited
+              ? 'Xero is rate-limiting requests right now. Please wait a minute, then retry.'
+              : loadIssue || 'Connect Xero to see your bank accounts.'}
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <Button variant="outline" size="sm" onClick={refreshAccounts} disabled={fetchingAccounts}>
             {fetchingAccounts ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
             Retry
           </Button>
+          {loadIssue && !isRateLimited && (
+            <p className="text-xs text-muted-foreground">Tip: reconnect Xero in Settings if this keeps happening.</p>
+          )}
         </CardContent>
       </Card>
     );
