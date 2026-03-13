@@ -282,10 +282,15 @@ export default function PostSetupBanner({
         console.warn('[poll] settlement count error:', err);
       }
     };
+
     poll();
-    const interval = setInterval(poll, 10000);
+
+    // Only poll while actively scanning; stop background polling once done.
+    if (scanPhase === 'done') return;
+
+    const interval = setInterval(poll, 30000);
     return () => clearInterval(interval);
-  }, [dismissed]);
+  }, [dismissed, scanPhase]);
 
   const handleDismiss = () => {
     sessionStorage.setItem(DISMISS_KEY, 'true');
