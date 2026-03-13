@@ -405,12 +405,12 @@ export default function ActionCentre({
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
-                  <h3 className="font-semibold text-sm">Ready to Post</h3>
-                </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1">Not yet sent to Xero</p>
-                <div>
-                  <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to post</span></p>
+                   <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
+                   <h3 className="font-semibold text-sm">Send to Xero</h3>
+                 </div>
+                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Not yet posted</p>
+                 <div>
+                   <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to send</span></p>
                   <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
                 </div>
                 <ul className="space-y-1">
@@ -430,8 +430,8 @@ export default function ActionCentre({
                   )}
                 </ul>
                 <Button size="sm" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
-                  <Send className="h-3 w-3" /> Push all to Xero
-                </Button>
+                   <Send className="h-3 w-3" /> Send all to Xero
+                 </Button>
               </CardContent>
             </Card>
             );
@@ -444,13 +444,13 @@ export default function ActionCentre({
             <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/20">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
-                  <h3 className="font-semibold text-sm">Posted — Awaiting Deposit</h3>
-                </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1">In Xero, waiting for bank match</p>
-                <div>
-                  <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting deposit</span></p>
-                  <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
+                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
+                   <h3 className="font-semibold text-sm">Waiting for Payout</h3>
+                 </div>
+                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Posted, awaiting destination match</p>
+                 <div>
+                   <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting payout</span></p>
+                   <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
                 </div>
                 <ul className="space-y-1">
                   {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
@@ -473,8 +473,8 @@ export default function ActionCentre({
                   )}
                 </ul>
                 <p className="text-[10px] text-muted-foreground italic">
-                  This is normal — marketplace deposits typically arrive within 1–3 business days after payout.
-                </p>
+                   This is normal — marketplace payouts typically arrive within 1–3 business days.
+                 </p>
               </CardContent>
             </Card>
             );
@@ -487,10 +487,10 @@ export default function ActionCentre({
             <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  <h3 className="font-semibold text-sm">Fully Reconciled</h3>
-                </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1">Matched + verified</p>
+                   <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                   <h3 className="font-semibold text-sm">All Good</h3>
+                 </div>
+                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Verified payouts</p>
                 <p className="text-xs text-muted-foreground">
                   {complete.length} settlement{complete.length > 1 ? 's' : ''} matched
                 </p>
@@ -569,9 +569,9 @@ export default function ActionCentre({
                       const pipeline = getPipelineForCell(cellRows);
                       const stageEntries: { key: string; label: string; done: boolean }[] = [
                         { key: 'S', label: 'Settlement uploaded', done: pipeline.settlement },
-                        { key: 'X', label: 'Posted to Xero', done: pipeline.xero },
-                        { key: 'B', label: 'Bank deposit matched', done: pipeline.bank },
-                        { key: 'R', label: 'Fully reconciled', done: pipeline.reconciled },
+                         { key: 'X', label: 'Sent to Xero', done: pipeline.xero },
+                         { key: 'B', label: 'Destination deposit matched', done: pipeline.bank },
+                         { key: 'R', label: 'Fully reconciled', done: pipeline.reconciled },
                       ];
                       return (
                         <td key={m} className="text-center py-2.5 px-3">
@@ -629,7 +629,7 @@ export default function ActionCentre({
       {events.length > 0 && (
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Recent activity</CardTitle>
+            <CardTitle className="text-sm font-semibold">Issues & recent actions</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-2">
@@ -772,9 +772,9 @@ function groupActivityEvents(events: SystemEvent[]): GroupedEvent[] {
       // Use a summary label for the group
       const mp = first.marketplace_code ? (MARKETPLACE_LABELS[first.marketplace_code] || first.marketplace_code) : '';
       const baseLabel = first.event_type === 'bank_match_failed'
-        ? `Bank feed not synced yet: ${mp}`
+        ? `Destination feed not synced yet: ${mp}`
         : first.event_type === 'bank_match_confirmed'
-        ? `Bank deposit matched: ${mp}`
+        ? `Destination deposit matched: ${mp}`
         : formatEventLabel(first);
       result.push({
         event_type: first.event_type,
@@ -818,11 +818,11 @@ function formatEventLabel(event: SystemEvent): string {
     case 'xero_push_success': return `Pushed to Xero: ${mp} ${period}`;
     case 'xero_push_failed': return `Xero push failed: ${mp} ${period}`;
     case 'reconciliation_run': return `Reconciliation completed: ${mp} ${period}`;
-    case 'bank_match_confirmed': return `Bank deposit matched: ${mp} ${period}`;
-    case 'bank_match_failed': return `Bank feed not synced yet: ${mp} ${period}`;
+    case 'bank_match_confirmed': return `Destination deposit matched: ${mp} ${period}`;
+    case 'bank_match_failed': return `Destination feed not synced yet: ${mp} ${period}`;
     case 'bank_match_query': {
       const count = event.details?.txns_returned;
-      return `Bank feed queried: ${mp} — ${count ?? 0} transactions found`;
+      return `Destination feed queried: ${mp} — ${count ?? 0} transactions found`;
     }
     case 'reconciliation_mismatch': {
       const diff = event.details?.difference;

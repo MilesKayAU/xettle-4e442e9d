@@ -1,6 +1,6 @@
 /**
  * SystemStatusStrip — A single compact system health summary.
- * Shows "All systems healthy" or actionable issues. Expands on click.
+ * Green/Amber/Red severity with contextual "Fix now" CTA.
  */
 
 import React, { useState } from 'react';
@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Settings, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, AlertOctagon, Settings, Sparkles, Clock3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ConnectionStatus {
@@ -17,6 +17,14 @@ interface ConnectionStatus {
   synced?: boolean;
   detail?: string;
   lastSync?: string;
+}
+
+interface ActionItem {
+  id: string;
+  severity: 'red' | 'amber' | 'info';
+  label: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface Props {
@@ -102,40 +110,94 @@ export default function SystemStatusStrip({
   const allConnected = connections.every(c => c.connected);
   const allSynced = connections.filter(c => c.connected).every(c => c.synced);
   const disconnected = connections.filter(c => !c.connected);
-  const hasActions = showAiMapper || (showBankMappingNudge && xeroConnected) || disconnected.length > 0;
 
-  // Determine headline
+  // Build action items
+  const actions: ActionItem[] = [];
+
+  if (disconnected.length > 0) {
+    actions.push({
+      id: 'disconnected',
+      severity: 'amber',
+      label: `${disconnected.map(c => c.label).join(', ')} not connected`,
+      actionLabel: 'Connect →',
+      onAction: onConnect,
+    });
+  }
+
+  if (showAiMapper && onReviewMapping) {
+    actions.push({
+      id: 'ai-mapper',
+      severity: 'info',
+      label: 'Xero accounts auto-mapped — review and confirm',
+      actionLabel: 'Review mapping',
+      onAction: onReviewMapping,
+    });
+  }
+
+  if (showBankMappingNudge && xeroConnected && onMapBankAccounts) {
+    actions.push({
+      id: 'bank-mapping',
+      severity: 'amber',
+      label: 'Map destination accounts for payout matching',
+      actionLabel: 'Map accounts',
+      onAction: onMapBankAccounts,
+    });
+  }
+
+  const hasActions = actions.length > 0;
+  const hasRedAction = actions.some(a => a.severity === 'red');
+  const hasAmberAction = actions.some(a => a.severity === 'amber');
+
+  // Determine severity-based headline
   let headline: string;
   let headlineColor: string;
   let headlineIcon: React.ReactNode;
+  let stripBorderClass: string;
+  let primaryAction: ActionItem | undefined;
 
-  if (allConnected && allSynced && !hasActions) {
+  if (hasRedAction) {
+    headline = actions.find(a => a.severity === 'red')?.label || `${actions.length} issue${actions.length > 1 ? 's' : ''} need attention`;
+    headlineColor = 'text-destructive';
+    headlineIcon = <AlertOctagon className="h-3.5 w-3.5 text-destructive" />;
+    stripBorderClass = 'border-destructive/30 bg-destructive/5';
+    primaryAction = actions.find(a => a.severity === 'red');
+  } else if (hasAmberAction) {
+    const amberActions = actions.filter(a => a.severity === 'amber');
+    headline = amberActions.length === 1 ? amberActions[0].label : `${actions.length} action${actions.length > 1 ? 's' : ''} needed`;
+    headlineColor = 'text-amber-600 dark:text-amber-400';
+    headlineIcon = <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
+    stripBorderClass = 'border-amber-300/50 dark:border-amber-700/50 bg-amber-50/50 dark:bg-amber-900/10';
+    primaryAction = amberActions[0];
+  } else if (allConnected && allSynced && !hasActions) {
     headline = 'All systems healthy';
     headlineColor = 'text-emerald-600 dark:text-emerald-400';
     headlineIcon = <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+    stripBorderClass = 'border-border';
   } else if (hasActions) {
-    const actionCount = (showAiMapper ? 1 : 0) + (showBankMappingNudge && xeroConnected ? 1 : 0) + disconnected.length;
-    headline = `${actionCount} action${actionCount > 1 ? 's' : ''} needed`;
-    headlineColor = 'text-amber-600 dark:text-amber-400';
-    headlineIcon = <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
+    headline = actions[0].label;
+    headlineColor = 'text-foreground';
+    headlineIcon = <Sparkles className="h-3.5 w-3.5 text-primary" />;
+    stripBorderClass = 'border-primary/20 bg-primary/5';
+    primaryAction = actions[0];
   } else {
     headline = allConnected ? 'All connected — syncing' : 'Connections active';
     headlineColor = 'text-foreground';
     headlineIcon = <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+    stripBorderClass = 'border-border';
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
+    <div className={cn('rounded-lg border bg-card overflow-hidden', stripBorderClass)}>
       {/* Collapsed: single line */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-2.5 flex items-center justify-between text-sm hover:bg-muted/30 transition-colors"
-      >
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-4 py-2.5">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-2 text-sm flex-1 min-w-0"
+        >
           {headlineIcon}
-          <span className={cn('font-medium', headlineColor)}>{headline}</span>
+          <span className={cn('font-medium truncate', headlineColor)}>{headline}</span>
           {/* Mini connection indicators */}
-          <div className="flex items-center gap-1.5 ml-2">
+          <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
             {connections.map(c => (
               <span
                 key={c.label}
@@ -149,9 +211,25 @@ export default function SystemStatusStrip({
               />
             ))}
           </div>
-        </div>
-        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </button>
+          {/* Compact last sync times */}
+          <span className="text-[10px] text-muted-foreground ml-2 hidden sm:inline flex-shrink-0">
+            {connections.filter(c => c.connected && c.lastSync).map(c => `${c.label} ${c.lastSync}`).join(' · ')}
+          </span>
+          {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground ml-1 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground ml-1 flex-shrink-0" />}
+        </button>
+
+        {/* Primary CTA button */}
+        {primaryAction?.onAction && (
+          <Button
+            size="sm"
+            variant={hasRedAction ? 'destructive' : 'outline'}
+            className="h-7 text-xs ml-3 flex-shrink-0"
+            onClick={primaryAction.onAction}
+          >
+            {primaryAction.actionLabel || 'Fix now'}
+          </Button>
+        )}
+      </div>
 
       {/* Expanded: detail rows */}
       {expanded && (
@@ -184,40 +262,32 @@ export default function SystemStatusStrip({
                 )}
               </React.Fragment>
             ))}
-            {disconnected.length > 0 && onConnect && (
-              <>
-                <span className="text-muted-foreground mx-1">—</span>
-                <button onClick={onConnect} className="text-primary hover:underline font-medium text-sm">
-                  Connect →
-                </button>
-              </>
-            )}
           </div>
 
           {/* Action items */}
-          {showAiMapper && onReviewMapping && (
-            <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+          {actions.map(action => (
+            <div
+              key={action.id}
+              className={cn(
+                'flex items-center justify-between rounded-lg border px-3 py-2',
+                action.severity === 'red' ? 'border-destructive/20 bg-destructive/5' :
+                action.severity === 'amber' ? 'border-amber-500/20 bg-amber-500/5' :
+                'border-primary/20 bg-primary/5'
+              )}
+            >
               <div className="flex items-center gap-2 text-sm">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                <span className="text-foreground">Xero accounts auto-mapped — review and confirm</span>
+                {action.severity === 'red' ? <AlertOctagon className="h-3.5 w-3.5 text-destructive" /> :
+                 action.severity === 'amber' ? <Clock3 className="h-3.5 w-3.5 text-amber-600" /> :
+                 <Sparkles className="h-3.5 w-3.5 text-primary" />}
+                <span className="text-foreground">{action.label}</span>
               </div>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onReviewMapping}>
-                Review mapping
-              </Button>
+              {action.onAction && (
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={action.onAction}>
+                  {action.actionLabel || 'Fix now'}
+                </Button>
+              )}
             </div>
-          )}
-
-          {showBankMappingNudge && xeroConnected && onMapBankAccounts && (
-            <div className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-              <div className="flex items-center gap-2 text-sm">
-                <Settings className="h-3.5 w-3.5 text-amber-600" />
-                <span className="text-foreground">Map bank accounts for deposit matching</span>
-              </div>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onMapBankAccounts}>
-                Map accounts
-              </Button>
-            </div>
-          )}
+          ))}
         </div>
       )}
     </div>

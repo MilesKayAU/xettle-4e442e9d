@@ -125,7 +125,7 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
       return (
         <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
           <Clock className="h-3 w-3 mr-1" />
-          Posted — Awaiting Deposit
+          Waiting for Payout
         </Badge>
       );
     }
@@ -148,7 +148,7 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
     return (
       <Badge variant="outline" className="text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-900/30 dark:border-sky-800 text-xs">
         <Send className="h-3 w-3 mr-1" />
-        Ready to Post
+        Send to Xero
       </Badge>
     );
   }
@@ -156,7 +156,7 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
     return (
       <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
         <Clock className="h-3 w-3 mr-1" />
-        Posted — Awaiting Deposit
+        Waiting for Payout
       </Badge>
     );
   }
@@ -271,17 +271,27 @@ function SettlementDrillDown({ row }: { row: SettlementRow }) {
   );
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 function getPrimaryAction(row: SettlementRow): { label: string } {
   if (row.status === 'hidden') return { label: 'Unhide' };
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return { label: 'Retry' };
-  if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return { label: 'View match' };
-  if (row.status === 'pushed_to_xero' && row.bank_verified) return { label: 'View match' };
-  if (row.status === 'pushed_to_xero') return { label: 'Sync bank' };
-  if (row.status === 'ready_to_push' || row.status === 'parsed' || row.status === 'saved') return { label: 'Post to Xero' };
+  if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return { label: 'View evidence' };
+  if (row.status === 'pushed_to_xero' && row.bank_verified) return { label: 'View evidence' };
+  if (row.status === 'pushed_to_xero') return { label: 'Sync feed' };
+  if (row.status === 'ready_to_push' || row.status === 'parsed' || row.status === 'saved') return { label: 'Send to Xero' };
   if (row.status === 'ingested') return { label: 'View' };
   return { label: 'View' };
+}
+
+function getActionSort(row: SettlementRow): number {
+  if (row.status === 'ready_to_push' || row.status === 'parsed' || row.status === 'saved') return 0;
+  if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 1;
+  if (row.status === 'pushed_to_xero' && !row.bank_verified) return 2;
+  if (row.status === 'pushed_to_xero' && row.bank_verified) return 3;
+  if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return 4;
+  if (row.status === 'hidden') return 5;
+  return 3;
 }
 
 interface RecentSettlementsProps {
@@ -333,8 +343,9 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
   const filtered = useMemo(() => {
     if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
     const visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
-    if (!activeFilter) return visible;
-    return visible.filter(r => categorize(r) === activeFilter);
+    const base = !activeFilter ? visible : visible.filter(r => categorize(r) === activeFilter);
+    // Sort by actionability: most actionable first
+    return [...base].sort((a, b) => getActionSort(a) - getActionSort(b));
   }, [allRows, activeFilter, showHidden]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -417,8 +428,8 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
   const summaryCards: { key: StatusCategory; label: string; sublabel: string; count: number; total?: number; color: string; icon: React.ReactNode }[] = [
     {
       key: 'ready',
-      label: 'Ready to Post',
-      sublabel: 'Not yet sent to Xero',
+      label: 'Send to Xero',
+      sublabel: 'Not yet posted',
       count: counts.ready,
       total: counts.readyTotal,
       color: 'border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-900/20',
@@ -426,8 +437,8 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
     },
     {
       key: 'posted',
-      label: 'Posted to Xero',
-      sublabel: 'In Xero, waiting for bank match',
+      label: 'Waiting for Payout',
+      sublabel: 'Posted, awaiting destination match',
       count: counts.posted,
       total: counts.postedTotal,
       color: 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-900/25',
