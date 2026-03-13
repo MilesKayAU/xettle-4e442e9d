@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ChevronDown, ShieldAlert, Search, Eye, ChevronLeft, FileText, Filter } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ChevronDown, ShieldAlert, Search, Eye, ChevronLeft, FileText, Filter, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -180,6 +180,7 @@ export default function GstAuditTab() {
   const [varianceLoading, setVarianceLoading] = useState(false);
   const [settlementDetail, setSettlementDetail] = useState<EvidenceRow | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const periods = getMonthPeriods(12);
 
@@ -259,6 +260,37 @@ export default function GstAuditTab() {
     setSettlementDetail(row);
     setDetailModalOpen(true);
   }, []);
+
+  const exportReconciliationPack = useCallback(async () => {
+    if (!selectedPeriod) return;
+    setExporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-gst-audit-pack', {
+        body: {
+          period_start: selectedPeriod.period_start,
+          period_end: selectedPeriod.period_end,
+          include_line_evidence: false,
+        },
+      });
+      if (error) throw error;
+
+      // data comes back as a Blob or raw response
+      const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gst-reconciliation-pack_${selectedPeriod.period_start}_to_${selectedPeriod.period_end}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Reconciliation pack downloaded');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to export reconciliation pack');
+    } finally {
+      setExporting(false);
+    }
+  }, [selectedPeriod]);
 
   if (loading) {
     return (
@@ -348,8 +380,22 @@ export default function GstAuditTab() {
           {selectedPeriod && (
             <>
               <SheetHeader>
-                <SheetTitle>GST Audit — {selectedPeriod.period_start} to {selectedPeriod.period_end}</SheetTitle>
-                <SheetDescription>Detailed breakdown by marketplace and settlement</SheetDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <SheetTitle>GST Audit — {selectedPeriod.period_start} to {selectedPeriod.period_end}</SheetTitle>
+                    <SheetDescription>Detailed breakdown by marketplace and settlement</SheetDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportReconciliationPack}
+                    disabled={exporting}
+                    className="gap-1.5 shrink-0"
+                  >
+                    {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    Export pack
+                  </Button>
+                </div>
               </SheetHeader>
 
               <div className="mt-6 space-y-6">

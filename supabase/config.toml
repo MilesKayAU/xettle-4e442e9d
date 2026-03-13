@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.ai-account-mapper]
 verify_jwt = false
+
+[functions.generate-gst-audit-pack]
+verify_jwt = false
