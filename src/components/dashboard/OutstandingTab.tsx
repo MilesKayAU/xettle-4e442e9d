@@ -1774,6 +1774,17 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                           <div className="space-y-3">
                             <h4 className="text-sm font-semibold text-foreground">Match Evidence</h4>
 
+                            {/* Routing diagnostics */}
+                            {row.routing && row.is_marketplace && (
+                              <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground p-2 rounded bg-muted/30 border border-border">
+                                <span>Rail: <span className="font-mono font-medium text-foreground">{row.routing.rail_code}</span></span>
+                                <span className="text-border">·</span>
+                                <span>Destination: <span className="font-medium text-foreground">{row.routing.destination_account_name || row.routing.destination_account_id || '—'}</span></span>
+                                <span className="text-border">·</span>
+                                <Badge variant="outline" className="text-[10px]">{row.routing.mapping_source}</Badge>
+                              </div>
+                            )}
+
                             {/* Bank match action panel (5 states) */}
                             {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || (row.match_status === 'no_bank_deposit' && isAmazon(row))) && (
                               <div className="mb-3">
