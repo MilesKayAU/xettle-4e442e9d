@@ -690,7 +690,7 @@ export default function AccountingDashboard() {
           );
         }
 
-        const reference2 = `Xettle-${header.settlementId}-P2`;
+        // Reference generated server-side; just need splitPart
         const date2 = m2.start;
 
         const { data: data1, error: err1 } = await supabase.functions.invoke('sync-amazon-journal', {
