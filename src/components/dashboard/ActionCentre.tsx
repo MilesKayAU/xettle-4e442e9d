@@ -443,14 +443,28 @@ export default function ActionCentre({
             return (
             <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/20">
               <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
-                   <h3 className="font-semibold text-sm">Waiting for Payout</h3>
-                 </div>
-                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Posted, awaiting destination match</p>
-                 <div>
-                   <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting payout</span></p>
-                   <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
+                 <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
+                    <h3 className="font-semibold text-sm">Waiting for Payout</h3>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 -mt-1">Posted, awaiting destination match</p>
+                  <div>
+                    <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting payout</span></p>
+                    <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
+                    {(() => {
+                      const oldestDate = awaitingBank.reduce((oldest, r) => {
+                        const d = new Date(r.period_end);
+                        return !oldest || d < oldest ? d : oldest;
+                      }, null as Date | null);
+                      if (!oldestDate) return null;
+                      const daysWaiting = Math.floor((Date.now() - oldestDate.getTime()) / 86400000);
+                      return (
+                        <p className={cn("text-[10px] mt-0.5", daysWaiting > 7 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground")}>
+                          Oldest waiting: {daysWaiting} day{daysWaiting !== 1 ? 's' : ''}
+                          {daysWaiting > 7 && ' ⚠'}
+                        </p>
+                      );
+                    })()}
                 </div>
                 <ul className="space-y-1">
                   {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
