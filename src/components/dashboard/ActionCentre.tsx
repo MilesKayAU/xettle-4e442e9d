@@ -61,6 +61,7 @@ interface ActionCentreProps {
   onSwitchToSettlements: () => void;
   onSwitchToReconciliation?: () => void;
   userName?: string;
+  onPipelineFilter?: (marketplace: string, month: string) => void;
 }
 
 // Pipeline stage helpers
