@@ -477,9 +477,13 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                 {card.icon}
                 <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
               </div>
-              <p className="text-xl font-bold text-foreground">{card.count}</p>
-              {card.total !== undefined && card.count > 0 && (
-                <p className="text-xs text-muted-foreground mt-0.5">{formatAUD(card.total)}</p>
+              {card.total !== undefined && card.count > 0 ? (
+                <>
+                  <p className="text-xl font-bold text-foreground">{formatAUD(card.total)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{card.count} settlement{card.count > 1 ? 's' : ''}</p>
+                </>
+              ) : (
+                <p className="text-xl font-bold text-foreground">{card.count}</p>
               )}
             </button>
           ))}
