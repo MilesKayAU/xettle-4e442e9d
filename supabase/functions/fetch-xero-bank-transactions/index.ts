@@ -200,6 +200,10 @@ async function fetchBankTxnsForUser(
         transactions_seen_total: 0,
         transactions_seen: 0,
         transactions_in_range: 0,
+        fetch_from: null,
+        fetch_to: null,
+        invoice_range_days: null,
+        mapped_account_ids_count: 0,
         ...baseDiag,
       };
     }
