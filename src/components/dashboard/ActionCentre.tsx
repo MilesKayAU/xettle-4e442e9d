@@ -399,16 +399,19 @@ export default function ActionCentre({
           )}
 
           {/* Card 2 — Ready to Post */}
-          {readyToPush.length > 0 && (
+          {readyToPush.length > 0 && (() => {
+            const totalAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
+            return (
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
                   <h3 className="font-semibold text-sm">Ready to Post</h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''} validated, not yet in Xero
-                </p>
+                <div>
+                  <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to post</span></p>
+                  <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
+                </div>
                 <ul className="space-y-1">
                   {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
@@ -430,7 +433,8 @@ export default function ActionCentre({
                 </Button>
               </CardContent>
             </Card>
-          )}
+            );
+          })()}
 
           {/* Card 3 — Posted — Awaiting Deposit */}
           {awaitingBank.length > 0 && (() => {
