@@ -501,10 +501,7 @@ export default function Dashboard() {
                 Plans
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => {
-              switchView('settlements');
-              setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
-            }}>
+            <Button variant="ghost" size="sm" onClick={() => switchView('settings')}>
               <Settings className="h-4 w-4 mr-1" />
               Settings
             </Button>
