@@ -1,6 +1,6 @@
 # Xettle — Architecture & System Review
 
-**Last updated**: 2026-03-13  
+**Last updated**: 2026-03-13 (v2 — added bank mapping, Outstanding tab, reconciliation flow)
 **Codebase**: React + Vite + TypeScript + Tailwind CSS + Lovable Cloud (Supabase)
 
 ---
