@@ -526,6 +526,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       await fetchOutstanding({ runSync: false });
     } catch (err: any) {
       toast.error(`Bank feed sync failed: ${err.message}`, { id: 'bank-feed-sync' });
+      setLastBankSyncResult({ error: err.message });
       try { await fetchOutstanding({ runSync: false }); } catch {} // always refetch
     } finally {
       setSyncingBankFeed(false);
