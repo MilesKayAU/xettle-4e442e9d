@@ -59,6 +59,7 @@ export interface MissingSettlement {
 interface ActionCentreProps {
   onSwitchToUpload: (missing?: MissingSettlement[]) => void;
   onSwitchToSettlements: () => void;
+  onSwitchToReconciliation?: () => void;
   userName?: string;
 }
 
