@@ -114,7 +114,7 @@ Deno.serve(async (req: Request) => {
     ]);
 
     const linesBySettlement: Record<string, any[]> = {};
-    for (const line of (linesResult.data || [])) {
+    for (const line of allLines) {
       if (!linesBySettlement[line.settlement_id]) linesBySettlement[line.settlement_id] = [];
       linesBySettlement[line.settlement_id].push(line);
     }
