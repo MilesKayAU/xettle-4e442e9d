@@ -233,6 +233,44 @@ export default function Dashboard() {
     checkAdmin();
   }, [user]);
 
+  // ─── Consolidated app_settings query (banners + flags) ────────────
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const { data: flags } = await supabase
+          .from('app_settings')
+          .select('key, value')
+          .in('key', [
+            'ai_mapper_status',
+            'setup_hub_dismissed',
+            'setup_phase3_complete',
+            'xero_scan_completed',
+            'amazon_scan_completed',
+            'shopify_scan_completed',
+          ]);
+        const flagMap = new Map(flags?.map(f => [f.key, f.value]) || []);
+
+        // AI Mapper banner
+        setShowAiMapper(flagMap.get('ai_mapper_status') === 'suggested');
+
+        // Setup in progress banner
+        const dismissed = flagMap.get('setup_hub_dismissed') === 'true';
+        const phase3Done = flagMap.get('setup_phase3_complete') === 'true';
+        if (!dismissed && !phase3Done) {
+          const allScansComplete =
+            (flagMap.get('xero_scan_completed') === 'true' || !flagMap.has('xero_scan_completed')) &&
+            (flagMap.get('amazon_scan_completed') === 'true' || !flagMap.has('amazon_scan_completed')) &&
+            (flagMap.get('shopify_scan_completed') === 'true' || !flagMap.has('shopify_scan_completed'));
+          const hasAnyScan = flagMap.has('xero_scan_completed') || flagMap.has('amazon_scan_completed') || flagMap.has('shopify_scan_completed');
+          if (!(hasAnyScan && allScansComplete)) {
+            setShowSetupBanner(true);
+          }
+        }
+      } catch {}
+    })();
+  }, [user]);
+
   // Fetch outstanding (Awaiting Payment) count for badge
   useEffect(() => {
     if (!user) return;
