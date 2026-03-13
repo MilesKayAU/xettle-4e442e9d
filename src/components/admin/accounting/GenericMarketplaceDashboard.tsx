@@ -897,7 +897,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                     </div>
 
                                     {/* Unpushed settlement review prompt */}
-                                    {isSyncable && !isAlreadyRecorded && (
+                                    {isSyncable && !isPreBoundary && (
                                       <div className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-primary/5 border border-primary/20">
                                         <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
                                         <p className="text-xs text-foreground">
