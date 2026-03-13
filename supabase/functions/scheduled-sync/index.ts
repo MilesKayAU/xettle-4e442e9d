@@ -245,10 +245,15 @@ Deno.serve(async (req) => {
   // 6. Shopify orders fetch (always 90-day window for marketplace discovery — unchanged)
   // This is handled by fetch-shopify-orders which already uses its own 90-day window
 
-  // 7. Run validation sweep
-  console.log("[scheduled-sync] Step 7: Validation sweep...");
-  results.validation = await callFunction("run-validation-sweep");
-  if (results.validation?.error) stepErrors.push('validation');
+  // 7. Run validation sweep (skip if elapsed > 4 minutes)
+  if (Date.now() - startTime < MAX_ELAPSED_MS) {
+    console.log("[scheduled-sync] Step 7: Validation sweep...");
+    results.validation = await callFunction("run-validation-sweep");
+    if (results.validation?.error) stepErrors.push('validation');
+  } else {
+    console.log("[scheduled-sync] Step 7: SKIPPED (elapsed > 4 min)");
+    results.validation = { skipped: true, reason: 'elapsed_timeout' };
+  }
 
   // 8. Auto-push ready settlements to Xero
   console.log("[scheduled-sync] Step 8: Auto-push to Xero (checking live mode)...");
