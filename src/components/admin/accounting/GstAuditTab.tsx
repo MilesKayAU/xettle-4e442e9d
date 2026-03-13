@@ -380,8 +380,22 @@ export default function GstAuditTab() {
           {selectedPeriod && (
             <>
               <SheetHeader>
-                <SheetTitle>GST Audit — {selectedPeriod.period_start} to {selectedPeriod.period_end}</SheetTitle>
-                <SheetDescription>Detailed breakdown by marketplace and settlement</SheetDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <SheetTitle>GST Audit — {selectedPeriod.period_start} to {selectedPeriod.period_end}</SheetTitle>
+                    <SheetDescription>Detailed breakdown by marketplace and settlement</SheetDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportReconciliationPack}
+                    disabled={exporting}
+                    className="gap-1.5 shrink-0"
+                  >
+                    {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    Export pack
+                  </Button>
+                </div>
               </SheetHeader>
 
               <div className="mt-6 space-y-6">
