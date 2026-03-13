@@ -910,6 +910,16 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
       }
 
+      // Delete existing lines/unmapped before re-insert (idempotency on retry)
+      await supabase.from('settlement_lines')
+        .delete()
+        .eq('user_id', userId)
+        .eq('settlement_id', header.settlementId);
+      await supabase.from('settlement_unmapped')
+        .delete()
+        .eq('user_id', userId)
+        .eq('settlement_id', header.settlementId);
+
       // Insert lines in batches
       if (lines.length > 0) {
         const lineRows = lines.map((l: any) => ({
