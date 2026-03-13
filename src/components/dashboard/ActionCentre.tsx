@@ -789,9 +789,6 @@ function groupActivityEvents(events: SystemEvent[]): GroupedEvent[] {
   result.sort((a, b) => b.created_at.localeCompare(a.created_at));
   return result;
 }
-  }
-  return Array.from(map.values());
-}
 
 function formatTimeAgo(date: Date): string {
   const diff = Date.now() - date.getTime();
