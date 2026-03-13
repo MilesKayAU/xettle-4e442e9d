@@ -230,6 +230,22 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   useEffect(() => { setOutPage(1); }, [showNonMarketplace]);
 
   const [noXeroConnection, setNoXeroConnection] = useState(false);
+  const [connectedMarketplaces, setConnectedMarketplaces] = useState<{ amazon: boolean; shopify: boolean }>({ amazon: false, shopify: false });
+
+  // Check which marketplace APIs are connected
+  useEffect(() => {
+    const checkConnections = async () => {
+      const [amazonRes, shopifyRes] = await Promise.all([
+        supabase.from('amazon_tokens').select('id', { count: 'exact', head: true }),
+        supabase.from('shopify_tokens').select('id', { count: 'exact', head: true }),
+      ]);
+      setConnectedMarketplaces({
+        amazon: (amazonRes.count || 0) > 0,
+        shopify: (shopifyRes.count || 0) > 0,
+      });
+    };
+    checkConnections();
+  }, []);
 
   const fetchOutstanding = useCallback(async (options?: { runSync?: boolean }) => {
     setLoading(true);
