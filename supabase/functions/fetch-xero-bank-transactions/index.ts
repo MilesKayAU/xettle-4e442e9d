@@ -14,14 +14,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action',
 }
 
-const GUARD_KEY = 'bank_txn_last_fetched_at';
-const COOLDOWN_KEY = 'xero_api_cooldown_until';
-const LAST_SYNC_AT_KEY = 'bank_sync_last_success_at';
-const LAST_SYNC_ROW_COUNT_KEY = 'bank_txn_last_synced_row_count';
-const BANK_CACHE_TTL_MINUTES = 24 * 60;
-
+// ── Keys ──
+const COOLDOWN_KEY = 'xero_api_cooldown_until';          // Set ONLY on 429
+const LAST_SUCCESS_KEY = 'bank_feed_last_success_at';     // Set ONLY after real Xero fetch completes (no 429)
 const GUARD_MINUTES_BATCH = 30;
-const GUARD_MINUTES_SELF = 2; // Allow more frequent manual syncs
+const GUARD_MINUTES_SELF = 2;
 const LOOKBACK_DAYS_BATCH = 60;
 const LOOKBACK_DAYS_SELF = 30;
 
