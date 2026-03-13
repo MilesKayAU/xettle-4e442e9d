@@ -134,7 +134,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     if (hasLoadedOnce && settlements.length > 0 && !hasAutoExpanded) {
       setHasAutoExpanded(true);
       const unpushed = settlements.filter(s =>
-        s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push'
+        s.status === 'ingested' || s.status === 'ready_to_push'
       );
       // Auto-expand the first unpushed settlement
       if (unpushed.length > 0 && unpushed.length <= 5) {
