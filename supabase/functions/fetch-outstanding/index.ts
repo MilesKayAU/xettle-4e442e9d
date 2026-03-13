@@ -360,29 +360,37 @@ Deno.serve(async (req) => {
       return null;
     }
 
-    // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
+    // ─── Get bank matches from cached bank_transactions table (populated by fetch-xero-bank-transactions every 30 min) ───
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const [y, m, d] = ninetyDaysAgo.toISOString().split('T')[0].split('-');
-    const bankWhere = `Type=="RECEIVE" AND Date>=DateTime(${y}, ${m}, ${d})`;
+    const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
 
-    let bankTxns: any[] = [];
-    try {
-      const bankUrl = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(bankWhere)}`;
-      const bankResp = await fetch(bankUrl, {
-        headers: {
-          'Authorization': `Bearer ${token.access_token}`,
-          'Accept': 'application/json',
-          'Xero-tenant-id': token.tenant_id,
-        },
-      });
-      if (bankResp.ok) {
-        const bankData = await bankResp.json();
-        bankTxns = bankData?.BankTransactions || [];
-      }
-    } catch (e) {
-      console.error('Bank txn fetch error:', e);
+    const { data: cachedBankTxns, error: bankCacheError } = await supabase
+      .from('bank_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('transaction_type', 'RECEIVE')
+      .gte('date', ninetyDaysAgoStr);
+
+    if (bankCacheError) {
+      console.error('Bank cache query error:', bankCacheError);
     }
+
+    const bankFeedEmpty = !cachedBankTxns || cachedBankTxns.length === 0;
+
+    // Map cached rows to the shape downstream code expects (Xero BankTransaction format)
+    const bankTxns = (cachedBankTxns || []).map((t: any) => ({
+      BankTransactionID: t.xero_transaction_id,
+      Total: t.amount,
+      Date: t.date, // Already ISO date string from cache
+      Reference: t.reference || '',
+      Contact: { Name: t.contact_name || '' },
+      LineItems: [{ Description: t.description || '' }],
+      BankAccount: { Name: t.bank_account_name || '' },
+      CurrencyCode: t.currency || 'AUD',
+    }));
+
+    console.log(`[fetch-outstanding] Bank cache: ${bankTxns.length} RECEIVE txns from ${ninetyDaysAgoStr}, empty=${bankFeedEmpty}`);
 
     // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
     // Nothing is marked as matched until user explicitly confirms.
