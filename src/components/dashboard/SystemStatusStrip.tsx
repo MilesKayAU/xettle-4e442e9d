@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
+import { RefreshCw } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, AlertOctagon, Settings, Sparkles, Clock3, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ interface Props {
   onReviewMapping?: () => void;
   onMapBankAccounts?: () => void;
   onConnect?: () => void;
+  onRefreshStatus?: () => void;
 }
 
 async function fetchStatuses(): Promise<ConnectionStatus[]> {
@@ -96,6 +98,7 @@ export default function SystemStatusStrip({
   onReviewMapping,
   onMapBankAccounts,
   onConnect,
+  onRefreshStatus,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
@@ -286,6 +289,16 @@ export default function SystemStatusStrip({
               </React.Fragment>
             ))}
           </div>
+
+          {/* Refresh status button — single source of truth */}
+          {onRefreshStatus && (
+            <div className="flex items-center justify-end">
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground" onClick={onRefreshStatus}>
+                <RefreshCw className="h-3 w-3" />
+                Refresh status
+              </Button>
+            </div>
+          )}
 
           {/* Action items */}
           {actions.map(action => (

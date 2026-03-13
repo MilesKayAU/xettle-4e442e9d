@@ -6,6 +6,7 @@ import AccountingDashboard from '@/components/admin/accounting/AccountingDashboa
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
+import { toast } from 'sonner';
 
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
 import RecentSettlements from '@/components/dashboard/RecentSettlements';
@@ -102,6 +103,7 @@ export default function Dashboard() {
   const [showSetupBanner, setShowSetupBanner] = useState(false);
   const [showBankMappingNudge, setShowBankMappingNudge] = useState(false);
   const [showBankMapper, setShowBankMapper] = useState(false);
+  const [pipelineFilter, setPipelineFilter] = useState<{ marketplace: string; month: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -675,6 +677,13 @@ export default function Dashboard() {
                 }}
                 onMapBankAccounts={() => setShowBankMapper(!showBankMapper)}
                 onConnect={() => switchView('smart_upload')}
+                onRefreshStatus={() => {
+                  // Trigger the validation sweep via ActionCentre's existing mechanism
+                  import('@/utils/settlement-engine').then(({ triggerValidationSweep }) => {
+                    triggerValidationSweep();
+                    toast.success('Status refresh started');
+                  });
+                }}
               />
               {showBankMapper && (
                 <DestinationAccountMapper />
@@ -706,15 +715,26 @@ export default function Dashboard() {
                   switchSettlementsSubTab('reconciliation');
                 }}
                 userName={user?.email?.split('@')[0]}
+                onPipelineFilter={(marketplace, month) => {
+                  setPipelineFilter({ marketplace, month });
+                  // Scroll to settlements table
+                  setTimeout(() => {
+                    document.getElementById('settlements-table-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 100);
+                }}
               />
 
               {/* Recent settlements — real payout/settlement records only */}
-              <RecentSettlements
-                onViewAll={() => {
-                  switchView('settlements');
-                  switchSettlementsSubTab('overview');
-                }}
-              />
+              <div id="settlements-table-section">
+                <RecentSettlements
+                  onViewAll={() => {
+                    switchView('settlements');
+                    switchSettlementsSubTab('overview');
+                  }}
+                  pipelineFilter={pipelineFilter}
+                  onClearPipelineFilter={() => setPipelineFilter(null)}
+                />
+              </div>
             </div>
           </ErrorBoundary>
         )}

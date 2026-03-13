@@ -297,9 +297,12 @@ function getActionSort(row: SettlementRow): number {
 
 interface RecentSettlementsProps {
   onViewAll?: () => void;
+  /** External filter from pipeline click: { marketplace, month (YYYY-MM) } */
+  pipelineFilter?: { marketplace: string; month: string } | null;
+  onClearPipelineFilter?: () => void;
 }
 
-export default function RecentSettlements({ onViewAll }: RecentSettlementsProps) {
+export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPipelineFilter }: RecentSettlementsProps) {
   const [allRows, setAllRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -343,11 +346,22 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
   // Filtered + paginated
   const filtered = useMemo(() => {
     if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
-    const visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
+    let visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
+    
+    // Apply pipeline filter if set
+    if (pipelineFilter) {
+      visible = visible.filter(r => {
+        const matchesMarketplace = r.marketplace === pipelineFilter.marketplace;
+        const rowMonth = r.period_start?.substring(0, 7);
+        const matchesMonth = rowMonth === pipelineFilter.month;
+        return matchesMarketplace && matchesMonth;
+      });
+    }
+    
     const base = !activeFilter ? visible : visible.filter(r => categorize(r) === activeFilter);
     // Sort by actionability: most actionable first
     return [...base].sort((a, b) => getActionSort(a) - getActionSort(b));
-  }, [allRows, activeFilter, showHidden]);
+  }, [allRows, activeFilter, showHidden, pipelineFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = useMemo(() => {
@@ -355,7 +369,7 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  useEffect(() => { setPage(1); }, [activeFilter, showHidden]);
+  useEffect(() => { setPage(1); }, [activeFilter, showHidden, pipelineFilter]);
 
   // ── Actions ──
   const handleHide = async (row: SettlementRow) => {
@@ -517,22 +531,36 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
         </div>
 
         {/* ── Active filter indicator ── */}
-        {activeFilter && (
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              Showing: {activeFilter === 'hidden' ? 'Hidden' : summaryCards.find(c => c.key === activeFilter)?.label}
-            </Badge>
-            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setActiveFilter(null)}>
-              Clear filter
-            </Button>
+        {(activeFilter || pipelineFilter) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {pipelineFilter && (
+              <>
+                <Badge variant="outline" className="text-xs border-primary/30 bg-primary/5">
+                  Pipeline: {getMarketplaceLabel(pipelineFilter.marketplace)} — {pipelineFilter.month}
+                </Badge>
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={onClearPipelineFilter}>
+                  Clear pipeline filter
+                </Button>
+              </>
+            )}
+            {activeFilter && (
+              <>
+                <Badge variant="secondary" className="text-xs">
+                  Showing: {activeFilter === 'hidden' ? 'Hidden' : summaryCards.find(c => c.key === activeFilter)?.label}
+                </Badge>
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setActiveFilter(null)}>
+                  Clear filter
+                </Button>
+              </>
+            )}
           </div>
         )}
 
         {/* ── Settlement table ── */}
-        <div className="overflow-x-auto rounded-lg border border-border/50">
+        <div className="overflow-x-auto rounded-lg border border-border/50 max-h-[600px] overflow-y-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/40 border-b border-border/50">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-muted border-b border-border/50">
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">
                   <TooltipProvider>
                     <Tooltip>

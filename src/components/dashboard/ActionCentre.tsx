@@ -61,6 +61,7 @@ interface ActionCentreProps {
   onSwitchToSettlements: () => void;
   onSwitchToReconciliation?: () => void;
   userName?: string;
+  onPipelineFilter?: (marketplace: string, month: string) => void;
 }
 
 // Pipeline stage helpers
@@ -106,6 +107,7 @@ export default function ActionCentre({
   onSwitchToSettlements,
   onSwitchToReconciliation,
   userName,
+  onPipelineFilter,
 }: ActionCentreProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);
@@ -337,10 +339,6 @@ export default function ActionCentre({
             </span>
           )}
           {lastChecked && <span>Updated {formatTimeAgo(lastChecked)}</span>}
-          <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="h-7 px-2 gap-1.5">
-            {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Refresh Status
-          </Button>
         </div>
       </div>
 
@@ -601,7 +599,10 @@ export default function ActionCentre({
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="inline-flex items-center gap-1 cursor-default">
+                                <button
+                                  className="inline-flex items-center gap-1 cursor-pointer hover:scale-110 transition-transform rounded-md p-1 hover:bg-muted/40"
+                                  onClick={() => onPipelineFilter?.(mp, m)}
+                                >
                                   {stageEntries.map(s => (
                                     <span
                                       key={s.key}
@@ -611,7 +612,7 @@ export default function ActionCentre({
                                       )}
                                     />
                                   ))}
-                                </div>
+                                </button>
                               </TooltipTrigger>
                               <TooltipContent className="text-xs space-y-0.5">
                                 {stageEntries.map(s => (
