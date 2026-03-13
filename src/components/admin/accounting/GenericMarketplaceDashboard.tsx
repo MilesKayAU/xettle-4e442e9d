@@ -636,7 +636,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                             {/* Actions */}
                             <div className="flex items-center gap-1 justify-end">
                               {/* Push to Xero */}
-                              {isSyncable && !isAlreadyRecorded && (
+                              {isSyncable && !isPreBoundary && (
                                 <>
                                   <TooltipProvider>
                                     <Tooltip>
