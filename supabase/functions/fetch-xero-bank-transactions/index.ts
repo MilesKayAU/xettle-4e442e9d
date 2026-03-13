@@ -69,6 +69,25 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
   return { ...tokenRow, access_token: tokens.access_token };
 }
 
+/** Parse Retry-After header: integer seconds or HTTP-date. Clamped to 5..300s. */
+function parseRetryAfterSeconds(header: string | null): number {
+  const DEFAULT = 60;
+  const MIN = 5;
+  const MAX = 300;
+  if (!header) return DEFAULT;
+  const asInt = parseInt(header, 10);
+  if (!isNaN(asInt) && String(asInt) === header.trim()) {
+    return Math.max(MIN, Math.min(MAX, asInt));
+  }
+  // Try HTTP-date
+  const dateMs = Date.parse(header);
+  if (!isNaN(dateMs)) {
+    const secondsUntil = Math.ceil((dateMs - Date.now()) / 1000);
+    return Math.max(MIN, Math.min(MAX, secondsUntil));
+  }
+  return DEFAULT;
+}
+
 async function fetchBankTxnsForUser(
   adminSupabase: any,
   userId: string,
@@ -91,6 +110,38 @@ async function fetchBankTxnsForUser(
     if (minutesAgo < guardMinutes) {
       console.log(`[fetch-bank-txns] Skipping ${userId} — fetched ${Math.round(minutesAgo)}m ago`);
       return { user_id: userId, skipped: true, reason: 'guard', minutes_ago: Math.round(minutesAgo) };
+    }
+  }
+
+  // ── Cooldown guard: check xero_api_cooldown_until ──
+  const { data: cooldownRow } = await adminSupabase
+    .from('app_settings')
+    .select('value')
+    .eq('user_id', userId)
+    .eq('key', 'xero_api_cooldown_until')
+    .maybeSingle();
+
+  if (cooldownRow?.value) {
+    const cooldownUntilMs = new Date(cooldownRow.value).getTime();
+    const nowMs = Date.now();
+    if (cooldownUntilMs > nowMs) {
+      const secondsRemaining = Math.max(1, Math.ceil((cooldownUntilMs - nowMs) / 1000));
+      const clampedRetry = Math.max(5, Math.min(300, secondsRemaining));
+      const { count } = await adminSupabase
+        .from('bank_transactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      console.log(`[fetch-bank-txns] Cooldown skip for ${userId}: ${clampedRetry}s remaining, cooldown_until=${cooldownRow.value}`);
+      return {
+        user_id: userId,
+        skipped: true,
+        skip_reason: 'cooldown',
+        retry_after_seconds: clampedRetry,
+        cooldown_until: cooldownRow.value,
+        bank_rows_cached_total: count || 0,
+        has_any_mapping: true, // will be refined below but we short-circuit here
+        lookback_days: lookbackDays,
+      };
     }
   }
 
@@ -162,12 +213,15 @@ async function fetchBankTxnsForUser(
       const errText = await res.text();
       console.error(`[fetch-bank-txns] Xero API error [${res.status}]:`, errText.substring(0, 300));
       if (res.status === 429) {
-        const retryAfter = parseInt(res.headers.get('Retry-After') || '60', 10);
+        const rawRetryAfter = res.headers.get('Retry-After');
+        const retryAfterSec = parseRetryAfterSeconds(rawRetryAfter);
+        const cooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
+        console.log(`[fetch-bank-txns] 429 for ${userId}: raw Retry-After="${rawRetryAfter}", parsed=${retryAfterSec}s, cooldown_until=${cooldownUntil}`);
         // Update cooldown guard so we don't hammer Xero
         await adminSupabase.from('app_settings').upsert({
           user_id: userId,
           key: 'xero_api_cooldown_until',
-          value: new Date(Date.now() + retryAfter * 1000).toISOString(),
+          value: cooldownUntil,
         }, { onConflict: 'user_id,key' });
         // Count what we already have cached
         const { count } = await adminSupabase
@@ -177,7 +231,8 @@ async function fetchBankTxnsForUser(
         return {
           user_id: userId,
           xero_rate_limited: true,
-          retry_after_seconds: retryAfter,
+          retry_after_seconds: retryAfterSec,
+          cooldown_until: cooldownUntil,
           bank_rows_upserted: totalUpserted,
           bank_rows_cached_total: count || 0,
           partial: page > 1,
