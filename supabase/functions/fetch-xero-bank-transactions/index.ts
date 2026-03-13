@@ -156,8 +156,36 @@ async function fetchBankTxnsForUser(
     const lastFetched = new Date(guardRow.value);
     const minutesAgo = (Date.now() - lastFetched.getTime()) / 60000;
     if (minutesAgo < guardMinutes) {
+      const [{ count: guardCachedBankRows }, { data: guardLastSyncAtRow }, { data: guardCooldownRow }] = await Promise.all([
+        adminSupabase
+          .from('bank_transactions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId),
+        adminSupabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', userId)
+          .eq('key', LAST_SYNC_AT_KEY)
+          .maybeSingle(),
+        adminSupabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', userId)
+          .eq('key', COOLDOWN_KEY)
+          .maybeSingle(),
+      ]);
+
       console.log(`[fetch-bank-txns] Skipping ${userId} — fetched ${Math.round(minutesAgo)}m ago`);
-      return { user_id: userId, skipped: true, reason: 'guard', minutes_ago: Math.round(minutesAgo) };
+      return {
+        user_id: userId,
+        skipped: true,
+        reason: 'guard',
+        minutes_ago: Math.round(minutesAgo),
+        cached_bank_rows: guardCachedBankRows || 0,
+        last_sync_time: guardLastSyncAtRow?.value || null,
+        cooldown_until: guardCooldownRow?.value || null,
+        cooldown_applied: false,
+      };
     }
   }
 
