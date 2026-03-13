@@ -752,7 +752,6 @@ export async function syncSettlementToXero(
   marketplace: string,
   options?: {
     lineItems?: XeroLineItem[];
-    reference?: string;
     contactName?: string;
   }
 ): Promise<SyncResult> {
