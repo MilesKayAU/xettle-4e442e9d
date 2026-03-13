@@ -386,18 +386,79 @@ Deno.serve(async (req) => {
       return null;
     }
 
+    // ─── Load payout account mappings ───
+    const { data: payoutSettings } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .eq('user_id', userId)
+      .like('key', 'payout_account:%');
+
+    const payoutMappings: Record<string, string> = {};
+    let defaultPayoutAccount: string | null = null;
+    for (const row of (payoutSettings || [])) {
+      if (row.key === 'payout_account:_default') {
+        defaultPayoutAccount = row.value;
+      } else if (row.key.startsWith('payout_account:')) {
+        const mktCode = row.key.slice('payout_account:'.length);
+        payoutMappings[mktCode] = row.value || '';
+      }
+    }
+
+    const hasAnyMapping = !!defaultPayoutAccount || Object.keys(payoutMappings).length > 0;
+
+    // Helper: get mapped account for a marketplace
+    function getMappedPayoutAccount(marketplaceCode: string): { account_id: string | null; source: string } {
+      if (payoutMappings[marketplaceCode]) {
+        return { account_id: payoutMappings[marketplaceCode], source: 'explicit' };
+      }
+      if (defaultPayoutAccount) {
+        return { account_id: defaultPayoutAccount, source: 'default' };
+      }
+      return { account_id: null, source: 'missing' };
+    }
+
+    // Build mapping diagnostics
+    const { data: userConnections } = await supabase
+      .from('marketplace_connections')
+      .select('marketplace_code')
+      .eq('user_id', userId)
+      .eq('connection_status', 'active');
+    
+    const connectedCodes = (userConnections || []).map((c: any) => c.marketplace_code);
+    const missingMarketplaces: string[] = [];
+    const usedDefaultFor: string[] = [];
+    for (const code of connectedCodes) {
+      const mapping = getMappedPayoutAccount(code);
+      if (mapping.source === 'missing') missingMarketplaces.push(code);
+      if (mapping.source === 'default') usedDefaultFor.push(code);
+    }
+
+    const mappingStatus = {
+      has_any_mapping: hasAnyMapping,
+      missing_marketplaces: missingMarketplaces,
+      used_default_for: usedDefaultFor,
+    };
+
     // ─── Get bank matches from cached bank_transactions table (populated by fetch-xero-bank-transactions every 30 min) ───
     // Use lookbackDays for bank txn window too (matches settlement scope)
     const bankLookbackDate = new Date();
     bankLookbackDate.setDate(bankLookbackDate.getDate() - lookbackDays);
     const bankLookbackStr = bankLookbackDate.toISOString().split('T')[0];
 
-    const { data: cachedBankTxns, error: bankCacheError } = await supabase
-      .from('bank_transactions')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('transaction_type', 'RECEIVE')
-      .gte('date', bankLookbackStr);
+    // Only fetch bank txns if we have at least one mapping
+    let cachedBankTxns: any[] | null = null;
+    let bankCacheError: any = null;
+    
+    if (hasAnyMapping) {
+      const bankQuery = await supabase
+        .from('bank_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('transaction_type', 'RECEIVE')
+        .gte('date', bankLookbackStr);
+      cachedBankTxns = bankQuery.data;
+      bankCacheError = bankQuery.error;
+    }
 
     const bankCacheQueryError = !!bankCacheError;
     if (bankCacheError) {
