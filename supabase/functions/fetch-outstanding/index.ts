@@ -217,6 +217,8 @@ Deno.serve(async (req) => {
     const CACHE_TTL_MINUTES = 30;
     let allInvoices: any[] = [];
     let usingCacheFallback = false;
+    let xeroWasRateLimited = false;
+    let invoiceCacheFetchedAt: string | null = null;
     let invoiceCacheAgeMinutes: number | null = null;
 
     // Check cache freshness
@@ -234,6 +236,7 @@ Deno.serve(async (req) => {
 
     if (cacheAgeRow?.fetched_at) {
       invoiceCacheAgeMinutes = Math.round((Date.now() - new Date(cacheAgeRow.fetched_at).getTime()) / 60000);
+      invoiceCacheFetchedAt = cacheAgeRow.fetched_at;
     }
 
     const shouldHitXero = forceRefresh || !cacheIsFresh;
@@ -278,10 +281,13 @@ Deno.serve(async (req) => {
             await supabase.from('outstanding_invoices_cache').insert(cacheRows.slice(i, i + 500));
           }
           invoiceCacheAgeMinutes = 0;
+          invoiceCacheFetchedAt = now;
         }
         console.log(`[fetch-outstanding] Xero live: ${allInvoices.length} invoices, cache updated`);
       } else {
         console.error('Xero invoice fetch failed:', xeroResult.status, xeroResult.body);
+
+        xeroWasRateLimited = xeroResult.status === 429;
 
         // Set cooldown on 429
         if (xeroResult.status === 429) {
@@ -1192,8 +1198,9 @@ Deno.serve(async (req) => {
       missing_settlement_ids: missingSettlementIds,
       // Invoice cache diagnostics
       invoice_cache_age_minutes: invoiceCacheAgeMinutes,
+      invoice_cache_fetched_at: invoiceCacheFetchedAt,
       from_cache: usingCacheFallback,
-      xero_rate_limited: usingCacheFallback && !cacheIsFresh,
+      xero_rate_limited: xeroWasRateLimited,
       // Bank sync diagnostics
       bank_sync_last_success_at: bankSyncLastSuccessAt,
       bank_sync_cooldown_until: bankSyncCooldownUntil,
