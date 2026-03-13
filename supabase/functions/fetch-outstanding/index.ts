@@ -669,7 +669,13 @@ Deno.serve(async (req) => {
         let bestScore = 0;
         let bestDiff = Infinity;
 
+        // Derive expected currency from invoice or marketplace
+        const expectedCurrency = (inv as any).CurrencyCode || 'AUD';
+
         for (const txn of bankTxns) {
+          // Currency hard filter — prevent cross-currency false matches
+          if ((txn.CurrencyCode || 'AUD') !== expectedCurrency) continue;
+
           const txnAmount = Math.abs(txn.Total || 0);
           const txnDate = parseXeroDate(txn.Date);
           if (!txnDate || !invoiceDate) continue;
