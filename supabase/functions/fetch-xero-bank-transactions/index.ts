@@ -487,12 +487,6 @@ async function fetchBankTxnsForUser(
     },
   });
 
-  // Update bank_sync_last_success_at for UI diagnostics
-  await adminSupabase.from('app_settings').upsert({
-    user_id: userId,
-    key: 'bank_sync_last_success_at',
-    value: new Date().toISOString(),
-  }, { onConflict: 'user_id,key' });
 
   // Final cache row count for diagnostics
   const { count: finalBankRowsCount } = await adminSupabase
