@@ -317,6 +317,39 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     checkConnections();
   }, []);
 
+  // ─── Persist fetched rows to client-side cache for instant next load ───
+  const persistToCache = useCallback(async (rows: OutstandingRow[]) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user || rows.length === 0) return;
+      const userId = session.user.id;
+
+      // Delete stale cache
+      await supabase.from('outstanding_invoices_cache').delete().eq('user_id', userId);
+
+      // Map rows back to cache schema
+      const cacheRows = rows.map(r => ({
+        user_id: userId,
+        xero_invoice_id: r.xero_invoice_id,
+        invoice_number: r.xero_invoice_number === '—' ? null : r.xero_invoice_number,
+        reference: r.xero_reference || null,
+        contact_name: r.contact_name,
+        date: r.invoice_date,
+        due_date: r.due_date,
+        amount_due: r.amount,
+        currency_code: r.currency_code || 'AUD',
+        status: 'AUTHORISED',
+        fetched_at: new Date().toISOString(),
+      }));
+
+      for (let i = 0; i < cacheRows.length; i += 500) {
+        await supabase.from('outstanding_invoices_cache').insert(cacheRows.slice(i, i + 500));
+      }
+    } catch (err) {
+      console.warn('[OutstandingTab] cache persist failed:', err);
+    }
+  }, []);
+
   const fetchOutstanding = useCallback(async (options?: { runSync?: boolean; background?: boolean }) => {
     const isBackground = options?.background === true;
     if (isBackground) {
@@ -375,9 +408,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         toast.warning('Xero is temporarily rate limited — showing cached outstanding data while background sync continues.');
       }
 
-      setData(resp.data as OutstandingSummary);
+      const summary = resp.data as OutstandingSummary;
+      setData(summary);
       setHasLoaded(true);
       setSelected(new Set());
+      // Persist to client-side cache so next page load is instant
+      persistToCache(summary.rows);
     } catch (err: any) {
       if (!isBackground) {
         toast.error(`Failed to fetch outstanding: ${err.message}`);
@@ -421,6 +457,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       setData(result);
       setHasLoaded(true);
       setSelected(new Set());
+      persistToCache(result.rows);
 
       const matched = result.sync_info?.matched_settlement_count || 0;
       const candidates = result.sync_info?.candidates_generated || 0;
