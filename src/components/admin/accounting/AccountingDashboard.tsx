@@ -1240,22 +1240,12 @@ export default function AccountingDashboard() {
             <TabsContent value="settings">
               <div className="space-y-4">
                 <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={async () => {
+                  // Xero audit already ran inside AmazonConnectionPanel (Xero-First).
+                  // Just reload settlements and run bank matching.
                   loadSettlements();
-                  // Auto-trigger Xero audit after fetch
                   try {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (user) {
-                      toast.info('Running accounting audit to detect existing Xero records...');
-                      const { data: xeroResult } = await supabase.functions.invoke('sync-xero-status', { body: { userId: user.id } });
-                      await supabase.functions.invoke('match-bank-deposits', { body: {} });
-                      const total = (xeroResult?.updated || 0) + (xeroResult?.fuzzy_matched || 0);
-                      if (total > 0) {
-                        toast.success(`Audit found ${total} Xero match${total !== 1 ? 'es' : ''}`);
-                      } else {
-                        toast.info('Audit complete — no existing Xero records found for these settlements');
-                      }
-                      loadSettlements();
-                    }
+                    await supabase.functions.invoke('match-bank-deposits', { body: {} });
+                    loadSettlements();
                   } catch { /* silent */ }
                 }} onRequestSettings={() => {
                   setTimeout(() => {

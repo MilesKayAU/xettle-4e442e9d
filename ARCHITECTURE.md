@@ -122,16 +122,27 @@ Source of truth: `src/constants/settlement-status.ts`
 
 ### 3.2 Sync Orchestration (Xero-First)
 
-The system follows a **Xero-First** philosophy. All sync flows execute in this order:
+The system follows a **Xero-First** philosophy: audit Xero → compute boundary → fetch marketplaces.
 
-1. **Xero Audit** (`scan-xero-history` / `sync-xero-status`) — Scans Xero for existing invoices, pre-seeds `xero_accounting_matches` cache
+**Execution order per sync path:**
+
+| Sync Path | Xero-First? | Boundary Used? | Notes |
+|-----------|-------------|----------------|-------|
+| **Scheduled cron** (`scheduled-sync`) | ✅ Yes | ✅ `xero_oldest_outstanding_date` | Canonical path. Xero audit → boundary → Amazon/Shopify fetch |
+| **UI manual sync** (PostSetupBanner) | ✅ Yes | ✅ Same | Calls same pipeline as cron |
+| **Amazon Connection Panel** (Fetch All) | ✅ Yes | ✅ Same | Runs `sync-xero-status` → reads boundary → passes `sync_from` to Amazon fetch |
+| **Initial connect** (no Xero data yet) | ⚠️ N/A | ❌ 90-day fallback | No Xero history exists; `createdSince` defaults to 90-day window. Expected behaviour. |
+
+**Steps (when Xero is connected):**
+
+1. **Xero Audit** (`sync-xero-status`) — Scans Xero for existing invoices, pre-seeds `xero_accounting_matches` cache
 2. **Boundary Computation** — Derives `xero_oldest_outstanding_date` from the oldest unresolved Xero invoice
-3. **Marketplace Fetch** — Amazon and Shopify fetches use the boundary as `sync_from` to constrain the window
+3. **Marketplace Fetch** — Amazon and Shopify fetches use the boundary as `sync_from` / `createdSince` to constrain the API query window
 4. **Auto-Link** — Newly ingested settlements are matched against pre-seeded `xero_accounting_matches` entries
 5. **Validation Sweep** — Cross-checks all settlements for consistency
 6. **Bank Matching** — Matches settlements against bank deposits
 
-This ensures marketplaces only fetch what's needed for reconciliation, not full history.
+**Amazon API note:** `fetch-amazon-settlements` uses `sync_from` for `createdSince` when provided. A secondary skip-filter on `dataEndTime < sync_from` exists as defense-in-depth. When no `sync_from` is provided (initial connect), it falls back to a 90-day window — this is correct since there is no Xero data to bound against yet.
 
 ### 3.3 Three-Layer Accounting Model (Rule #11)
 
