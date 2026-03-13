@@ -287,6 +287,8 @@ Deno.serve(async (req) => {
       } else {
         console.error('Xero invoice fetch failed:', xeroResult.status, xeroResult.body);
 
+        xeroWasRateLimited = xeroResult.status === 429;
+
         // Set cooldown on 429
         if (xeroResult.status === 429) {
           const cooldownUntil = new Date(Date.now() + 90 * 1000).toISOString();
