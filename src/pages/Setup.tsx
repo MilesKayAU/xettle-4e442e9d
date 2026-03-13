@@ -135,6 +135,9 @@ export default function Setup() {
   const [phase2Complete, setPhase2Complete] = useState(false);
   const [phase3Complete, setPhase3Complete] = useState(false);
 
+  // Staleness timeout: if scan is running for >5 min, mark it as stale
+  const scanStartTimesRef = useRef<Record<string, number>>({});
+
   // Phase 2
   const [phase2Running, setPhase2Running] = useState(false);
   const [detectedMarketplaces, setDetectedMarketplaces] = useState<DetectedMarketplace[]>([]);
