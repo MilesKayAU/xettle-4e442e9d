@@ -563,7 +563,8 @@ serve(async (req) => {
         xero_status: inv.Status || null,
         xero_journal_id: inv.InvoiceID,
         xero_invoice_id: inv.InvoiceID,
-        status: derivedSt,
+        status: derivedSt.status,
+        sync_origin: derivedSt.syncOrigin,
       };
       if (inv.Status === 'PAID') {
         updatePayload.bank_verified = true;
@@ -761,7 +762,8 @@ serve(async (req) => {
             xero_status: bestMatch.Status || null,
             xero_journal_id: bestMatch.InvoiceID,
             xero_invoice_id: bestMatch.InvoiceID,
-            status: derivedSt,
+            status: derivedSt.status,
+            sync_origin: derivedSt.syncOrigin,
           };
           if (bestMatch.Status === 'PAID') {
             fuzzyUpdatePayload.bank_verified = true;
