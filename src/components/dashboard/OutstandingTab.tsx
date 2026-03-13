@@ -1349,7 +1349,46 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         </div>
       )}
 
-      {/* ─── Invoice cache / rate-limit banners ─── */}
+      {/* ─── Bank sync diagnostics (collapsible) ─── */}
+      {lastBankSyncResult && (
+        <Collapsible>
+          <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1 py-0.5">
+            <Info className="h-3.5 w-3.5" />
+            <span>Show sync details</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-1 p-3 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground space-y-1">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                {lastBankSyncResult.mapped_account_ids_count != null && (
+                  <><span className="font-medium">Mapped accounts</span><span>{lastBankSyncResult.mapped_account_ids_count}</span></>
+                )}
+                {lastBankSyncResult.mapped_account_ids && (
+                  <><span className="font-medium">Account IDs</span><span className="truncate">{(lastBankSyncResult.mapped_account_ids as string[]).join(', ') || '—'}</span></>
+                )}
+                {lastBankSyncResult.synced_row_count != null && (
+                  <><span className="font-medium">Synced rows</span><span>{lastBankSyncResult.synced_row_count}</span></>
+                )}
+                {lastBankSyncResult.lookback_days != null && (
+                  <><span className="font-medium">Lookback days</span><span>{lastBankSyncResult.lookback_days}</span></>
+                )}
+                {lastBankSyncResult.cooldown_until && (
+                  <><span className="font-medium">Cooldown until</span><span>{new Date(lastBankSyncResult.cooldown_until).toLocaleTimeString('en-AU')}</span></>
+                )}
+                <><span className="font-medium">Rate limited</span><span>{lastBankSyncResult.xero_rate_limited ? 'Yes' : 'No'}</span></>
+                <><span className="font-medium">Has mapping</span><span>{lastBankSyncResult.has_any_mapping === true ? 'Yes' : lastBankSyncResult.has_any_mapping === false ? 'No' : '—'}</span></>
+                {lastBankSyncResult.skip_reason && (
+                  <><span className="font-medium">Skip reason</span><span>{lastBankSyncResult.skip_reason}</span></>
+                )}
+                {lastBankSyncResult.refreshed_at && (
+                  <><span className="font-medium">Refreshed at</span><span>{new Date(lastBankSyncResult.refreshed_at).toLocaleTimeString('en-AU')}</span></>
+                )}
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+
       {data?.sync_info?.xero_rate_limited && (
         <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
           <Clock3 className="h-5 w-5 text-amber-600 shrink-0" />
