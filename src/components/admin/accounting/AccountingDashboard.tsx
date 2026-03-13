@@ -710,7 +710,7 @@ export default function AccountingDashboard() {
           .eq('settlement_id', header.settlementId);
 
         const { data: data2, error: err2 } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, reference: reference2, date: date2, dueDate: date2, lineItems: invoiceLines2, country: selectedMarketplace },
+          body: { userId: user.id, settlementId: header.settlementId, splitPart: 2, date: date2, dueDate: date2, lineItems: invoiceLines2, country: selectedMarketplace },
         });
         if (err2 || !data2?.success) {
           // Invoice 2 failed but Invoice 1 exists in Xero — offer targeted rollback
