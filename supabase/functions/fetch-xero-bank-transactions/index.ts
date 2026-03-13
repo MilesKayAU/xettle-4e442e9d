@@ -390,6 +390,7 @@ async function fetchBankTxnsForUser(
   let accountsSkippedByChangeDetection = 0;
 
   const bankAccountIdsUsed: string[] = [];
+  const bankAccountNamesUsed: Record<string, string> = {};
   const stoppedReasonsByAccount: Record<string, string> = {};
   const perAccountStats: Record<string, {
     pages: number;
@@ -500,6 +501,7 @@ async function fetchBankTxnsForUser(
             transactions_seen: totalTransactionsSeen,
             transactions_in_range: totalTransactionsInRange,
             bank_account_ids_used: bankAccountIdsUsed,
+            bank_account_names_used: bankAccountNamesUsed,
             per_account_stats: perAccountStats,
             mapped_account_ids_count: mappedAccountIds.size,
             has_any_mapping: hasAnyMapping,
@@ -523,6 +525,11 @@ async function fetchBankTxnsForUser(
 
       const data = await res.json();
       const txns = data?.BankTransactions || [];
+
+      // Capture bank account name from first transaction if available
+      if (txns.length > 0 && txns[0]?.BankAccount?.Name && !bankAccountNamesUsed[accountId]) {
+        bankAccountNamesUsed[accountId] = txns[0].BankAccount.Name;
+      }
 
       if (txns.length === 0) {
         accountStopReason = 'empty_page';
@@ -664,6 +671,7 @@ async function fetchBankTxnsForUser(
       bank_rows_upserted: 0,
       synced_row_count: 0,
       bank_account_ids_used: bankAccountIdsUsed,
+      bank_account_names_used: bankAccountNamesUsed,
       mapped_account_ids_count: mappedAccountIds.size,
       has_any_mapping: hasAnyMapping,
       used_invoice_range: usedInvoiceRange,
@@ -709,6 +717,7 @@ async function fetchBankTxnsForUser(
         date_range_source: dateRangeSource,
         used_invoice_range: usedInvoiceRange,
         bank_account_ids_used: bankAccountIdsUsed,
+        bank_account_names_used: bankAccountNamesUsed,
         if_modified_since_used: true,
         if_modified_since_value: ifModifiedSinceValue,
         endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
@@ -739,6 +748,7 @@ async function fetchBankTxnsForUser(
     transactions_seen: totalTransactionsSeen,
     transactions_in_range: totalTransactionsInRange,
     bank_account_ids_used: bankAccountIdsUsed,
+    bank_account_names_used: bankAccountNamesUsed,
     per_account_stats: perAccountStats,
     mapped_account_ids_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,

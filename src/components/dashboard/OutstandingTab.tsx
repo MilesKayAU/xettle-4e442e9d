@@ -222,6 +222,7 @@ interface BankSyncDiagnostics {
   transactions_in_range?: number;
   stopped_reason?: string;
   bank_account_ids_used?: string[];
+  bank_account_names_used?: Record<string, string>;
   endpoint_used?: string;
   fetch_from?: string;
   fetch_to?: string;
@@ -1569,6 +1570,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 )}
                 {lastBankSyncResult.bank_account_ids_used && lastBankSyncResult.bank_account_ids_used.length > 0 && (
                   <><span className="font-medium">Bank account IDs</span><span className="truncate max-w-[200px]">{lastBankSyncResult.bank_account_ids_used.join(', ')}</span></>
+                )}
+                {lastBankSyncResult.bank_account_names_used && Object.keys(lastBankSyncResult.bank_account_names_used).length > 0 && (
+                  <><span className="font-medium">Bank account names</span><span className="truncate max-w-[280px]">{Object.values(lastBankSyncResult.bank_account_names_used).join(', ')}</span></>
                 )}
                 {lastBankSyncResult.endpoint_used && (
                   <><span className="font-medium">Endpoint</span><span className="truncate max-w-[200px]">{lastBankSyncResult.endpoint_used}</span></>
