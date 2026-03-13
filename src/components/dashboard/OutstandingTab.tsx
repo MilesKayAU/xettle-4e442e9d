@@ -758,12 +758,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'confirmed_manual') return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+    if (row.match_status === 'unsupported_marketplace') return <AlertTriangle className="h-4 w-4 text-muted-foreground" />;
+    if (row.match_status === 'settlement_not_ingested') return <Clock3 className="h-4 w-4 text-amber-500" />;
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status === 'awaiting_sync') return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
     if ((row.match_status || '').startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      if (isAmazon(row)) return <Clock3 className="h-4 w-4 text-muted-foreground" />;
-      return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+      return <Clock3 className="h-4 w-4 text-muted-foreground" />;
     }
     return <XCircle className="h-4 w-4 text-destructive" />;
   };
@@ -774,6 +775,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
     if (row.match_status === 'suggestion_high') return 'Likely match found';
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
+    if (row.match_status === 'unsupported_marketplace') return `${MARKETPLACE_LABELS[row.marketplace] || row.marketplace} not connected`;
+    if (row.match_status === 'settlement_not_ingested') return 'Settlement not imported';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
     if (row.match_status === 'awaiting_sync') return 'Syncing settlement…';
     if ((row.match_status || '').startsWith('gap_')) {
@@ -781,7 +784,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       return `Gap: $${gap}`;
     }
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      return isAmazon(row) ? 'Awaiting deposit' : 'No deposit found';
+      return 'Awaiting deposit';
     }
     if (row.match_status === 'no_bank_deposit') return 'No deposit found';
     return 'No settlement';
@@ -791,6 +794,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
+    if (row.match_status === 'unsupported_marketplace') return 'bg-muted/30';
+    if (row.match_status === 'settlement_not_ingested') return 'bg-amber-50/30 dark:bg-amber-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status === 'awaiting_sync') return 'bg-blue-50/30 dark:bg-blue-950/10';
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
