@@ -235,18 +235,22 @@ async function fetchBankTxnsForUser(
     };
   }
 
-  // ── Dynamic date range from outstanding invoices cache ──
+  // ══════════════════════════════════════════════════════════════
+  // STEP 4 — Compute date range (invoice-range or fallback)
+  // ══════════════════════════════════════════════════════════════
   const dynamicRange = await computeDateRangeFromCache(adminSupabase, userId, 5);
   let fromDate: Date;
   let toDate: Date | null = null;
   let dateRangeSource: string;
   let effectiveDays: number;
+  let usedInvoiceRange = false;
 
   if (dynamicRange) {
     fromDate = dynamicRange.fromDate;
     toDate = dynamicRange.toDate;
     effectiveDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000);
     dateRangeSource = `dynamic (${dynamicRange.invoiceCount} invoices, ${effectiveDays} days)`;
+    usedInvoiceRange = true;
     console.log(`[fetch-bank-txns] Dynamic range for ${userId}: ${fromDate.toISOString().split('T')[0]} → ${toDate.toISOString().split('T')[0]} (${effectiveDays} days from ${dynamicRange.invoiceCount} invoices)`);
   } else {
     fromDate = new Date();
