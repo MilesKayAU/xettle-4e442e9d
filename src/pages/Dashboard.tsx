@@ -96,6 +96,7 @@ export default function Dashboard() {
   const [justConnectedXero, setJustConnectedXero] = useState(false);
   const [showAiMapper, setShowAiMapper] = useState(false);
   const [showSetupBanner, setShowSetupBanner] = useState(false);
+  const [showBankMappingNudge, setShowBankMappingNudge] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -247,11 +248,15 @@ export default function Dashboard() {
             'xero_scan_completed',
             'amazon_scan_completed',
             'shopify_scan_completed',
+            'payout_account:_default',
           ]);
         const flagMap = new Map(flags?.map(f => [f.key, f.value]) || []);
 
         // AI Mapper banner
         setShowAiMapper(flagMap.get('ai_mapper_status') === 'suggested');
+
+        // Bank mapping nudge — show if no default payout account mapped
+        setShowBankMappingNudge(!flagMap.has('payout_account:_default'));
 
         // Setup in progress banner
         const dismissed = flagMap.get('setup_hub_dismissed') === 'true';
@@ -628,6 +633,24 @@ export default function Dashboard() {
               <DashboardConnectionStrip
                 onSwitchToUpload={() => switchView('smart_upload')}
               />
+
+              {/* Bank account mapping nudge */}
+              {showBankMappingNudge && xeroConnected && (
+                <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-3 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <Settings className="h-4 w-4 text-amber-600" />
+                    <span className="text-sm font-medium text-foreground">
+                      Map your Xero bank accounts to enable deposit matching
+                    </span>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    switchView('settlements');
+                    setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
+                  }}>
+                    Map bank accounts
+                  </Button>
+                </div>
+              )}
 
               {/* AI Account Mapper suggestion banner */}
               <AiMapperBanner show={showAiMapper} />
