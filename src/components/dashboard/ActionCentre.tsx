@@ -604,10 +604,12 @@ export default function ActionCentre({
                 ))}
               </tbody>
             </table>
-            <div className="flex flex-wrap gap-4 mt-3 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Done</span>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
+              <span className="font-medium text-foreground/70">Legend:</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Complete</span>
               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/20 inline-block" /> Pending</span>
-              <span>Pipeline: S → X → B → R (Settlement → Xero → Bank → Reconciled)</span>
+              <span className="flex items-center gap-1"><span className="text-muted-foreground/50">—</span> Pre-boundary</span>
+              <span className="border-l border-border pl-4 ml-1">Each cell: <span className="font-medium">S</span> Settlement → <span className="font-medium">X</span> Xero → <span className="font-medium">B</span> Bank → <span className="font-medium">R</span> Reconciled</span>
             </div>
           </CardContent>
         </Card>
