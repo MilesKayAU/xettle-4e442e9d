@@ -310,6 +310,7 @@ export default function Setup() {
   async function runShopifyScan(token: string, userId: string) {
     const ac = new AbortController();
     shopifyAbortRef.current = ac;
+    scanStartTimesRef.current.shopify = Date.now();
 
     setShopifyPayoutsStep({ status: 'running', message: 'Fetching payouts...' });
     
