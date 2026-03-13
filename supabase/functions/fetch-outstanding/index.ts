@@ -507,33 +507,73 @@ Deno.serve(async (req) => {
       return null;
     }
 
-    // ─── Load payout account mappings ───
-    const { data: payoutSettings } = await supabase
-      .from('app_settings')
-      .select('key, value')
-      .eq('user_id', userId)
-      .like('key', 'payout_account:%');
+    // ─── Rail normalization helper ───
+    const RAIL_ALIASES: Record<string, string> = { ebay_au: 'ebay' };
+    function toRailCode(marketplace: string): string {
+      const lower = marketplace.toLowerCase();
+      return RAIL_ALIASES[lower] || lower;
+    }
 
-    const payoutMappings: Record<string, string> = {};
-    let defaultPayoutAccount: string | null = null;
-    for (const row of (payoutSettings || [])) {
-      if (row.key === 'payout_account:_default') {
-        defaultPayoutAccount = row.value;
-      } else if (row.key.startsWith('payout_account:')) {
-        const mktCode = row.key.slice('payout_account:'.length);
-        payoutMappings[mktCode] = row.value || '';
+    // ─── Load destination account mappings (new-first, legacy-fallback) ───
+    const DEST_PREFIX = 'payout_destination:';
+    const DEST_DEFAULT = 'payout_destination:_default';
+    const LEGACY_PREFIX = 'payout_account:';
+    const LEGACY_DEFAULT = 'payout_account:_default';
+
+    const [destSettingsResp, legacySettingsResp] = await Promise.all([
+      supabase.from('app_settings').select('key, value').eq('user_id', userId).like('key', `${DEST_PREFIX}%`),
+      supabase.from('app_settings').select('key, value').eq('user_id', userId).like('key', `${LEGACY_PREFIX}%`),
+    ]);
+
+    const destinationMappings: Record<string, string> = {};
+    let defaultDestinationAccount: string | null = null;
+    let mappingSourceUsed: 'new' | 'legacy' | 'none' = 'none';
+
+    // Index new keys first
+    for (const row of (destSettingsResp.data || [])) {
+      if (row.key === DEST_DEFAULT) {
+        defaultDestinationAccount = row.value;
+        mappingSourceUsed = 'new';
+      } else if (row.key.startsWith(DEST_PREFIX)) {
+        const railCode = row.key.slice(DEST_PREFIX.length);
+        if (railCode !== '_default') {
+          destinationMappings[railCode] = row.value || '';
+          mappingSourceUsed = 'new';
+        }
       }
     }
 
-    const hasAnyMapping = !!defaultPayoutAccount || Object.keys(payoutMappings).length > 0;
-
-    // Helper: get mapped account for a marketplace
-    function getMappedPayoutAccount(marketplaceCode: string): { account_id: string | null; source: string } {
-      if (payoutMappings[marketplaceCode]) {
-        return { account_id: payoutMappings[marketplaceCode], source: 'explicit' };
+    // Fallback to legacy keys if no new keys found
+    if (!defaultDestinationAccount && Object.keys(destinationMappings).length === 0) {
+      for (const row of (legacySettingsResp.data || [])) {
+        if (row.key === LEGACY_DEFAULT) {
+          defaultDestinationAccount = row.value;
+          mappingSourceUsed = 'legacy';
+        } else if (row.key.startsWith(LEGACY_PREFIX)) {
+          const rawCode = row.key.slice(LEGACY_PREFIX.length);
+          if (rawCode !== '_default') {
+            const railCode = toRailCode(rawCode);
+            destinationMappings[railCode] = row.value || '';
+            mappingSourceUsed = 'legacy';
+          }
+        }
       }
-      if (defaultPayoutAccount) {
-        return { account_id: defaultPayoutAccount, source: 'default' };
+    }
+
+    const hasAnyMapping = !!defaultDestinationAccount || Object.keys(destinationMappings).length > 0;
+
+    // Helper: get destination account for a rail
+    function getDestinationAccount(rail: string): { account_id: string | null; source: string } {
+      const normalised = toRailCode(rail);
+      if (destinationMappings[normalised]) {
+        return { account_id: destinationMappings[normalised], source: 'explicit' };
+      }
+      if (defaultDestinationAccount) {
+        return { account_id: defaultDestinationAccount, source: 'default' };
+      }
+      // Check legacy with original code as last resort
+      if (mappingSourceUsed === 'none') {
+        return { account_id: null, source: 'missing' };
       }
       return { account_id: null, source: 'missing' };
     }
