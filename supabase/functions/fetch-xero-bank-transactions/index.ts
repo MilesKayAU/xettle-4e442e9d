@@ -14,14 +14,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action',
 }
 
-const GUARD_KEY = 'bank_txn_last_fetched_at';
-const COOLDOWN_KEY = 'xero_api_cooldown_until';
-const LAST_SYNC_AT_KEY = 'bank_sync_last_success_at';
-const LAST_SYNC_ROW_COUNT_KEY = 'bank_txn_last_synced_row_count';
-const BANK_CACHE_TTL_MINUTES = 24 * 60;
-
+// ── Keys ──
+const COOLDOWN_KEY = 'xero_api_cooldown_until';          // Set ONLY on 429
+const LAST_SUCCESS_KEY = 'bank_feed_last_success_at';     // Set ONLY after real Xero fetch completes (no 429)
 const GUARD_MINUTES_BATCH = 30;
-const GUARD_MINUTES_SELF = 2; // Allow more frequent manual syncs
+const GUARD_MINUTES_SELF = 2;
 const LOOKBACK_DAYS_BATCH = 60;
 const LOOKBACK_DAYS_SELF = 30;
 
@@ -144,53 +141,10 @@ async function fetchBankTxnsForUser(
   guardMinutes: number,
   fallbackLookbackDays: number,
 ) {
-  // ── Guard: skip if fetched within guardMinutes ──
-  const { data: guardRow } = await adminSupabase
-    .from('app_settings')
-    .select('value')
-    .eq('user_id', userId)
-    .eq('key', GUARD_KEY)
-    .maybeSingle();
-
-  if (guardRow?.value) {
-    const lastFetched = new Date(guardRow.value);
-    const minutesAgo = (Date.now() - lastFetched.getTime()) / 60000;
-    if (minutesAgo < guardMinutes) {
-      const [{ count: guardCachedBankRows }, { data: guardLastSyncAtRow }, { data: guardCooldownRow }] = await Promise.all([
-        adminSupabase
-          .from('bank_transactions')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId),
-        adminSupabase
-          .from('app_settings')
-          .select('value')
-          .eq('user_id', userId)
-          .eq('key', LAST_SYNC_AT_KEY)
-          .maybeSingle(),
-        adminSupabase
-          .from('app_settings')
-          .select('value')
-          .eq('user_id', userId)
-          .eq('key', COOLDOWN_KEY)
-          .maybeSingle(),
-      ]);
-
-      console.log(`[fetch-bank-txns] Skipping ${userId} — fetched ${Math.round(minutesAgo)}m ago`);
-      return {
-        user_id: userId,
-        skipped: true,
-        reason: 'guard',
-        minutes_ago: Math.round(minutesAgo),
-        cached_bank_rows: guardCachedBankRows || 0,
-        last_sync_time: guardLastSyncAtRow?.value || null,
-        cooldown_until: guardCooldownRow?.value || null,
-        cooldown_applied: false,
-      };
-    }
-  }
-
-  // ── Cooldown guard (only when we already have valid recent cache) ──
-  const [{ data: cooldownRow }, { count: cachedBankRows }, { data: lastSyncAtRow }, { data: lastSyncRowCountRow }] = await Promise.all([
+  // ══════════════════════════════════════════════════════════════
+  // STEP 1 — Gather facts for guard evaluation (single parallel batch)
+  // ══════════════════════════════════════════════════════════════
+  const [{ data: cooldownRow }, { count: cachedBankRowsRaw }, { data: lastSuccessRow }] = await Promise.all([
     adminSupabase
       .from('app_settings')
       .select('value')
@@ -205,86 +159,98 @@ async function fetchBankTxnsForUser(
       .from('app_settings')
       .select('value')
       .eq('user_id', userId)
-      .eq('key', LAST_SYNC_AT_KEY)
-      .maybeSingle(),
-    adminSupabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', userId)
-      .eq('key', LAST_SYNC_ROW_COUNT_KEY)
+      .eq('key', LAST_SUCCESS_KEY)
       .maybeSingle(),
   ]);
 
-  const cachedBankRowsCount = cachedBankRows || 0;
-  const lastSyncTime = lastSyncAtRow?.value || null;
-  const lastSyncRows = Number(lastSyncRowCountRow?.value ?? NaN);
-  const hasLastSyncRows = Number.isFinite(lastSyncRows);
-  const lastSyncProducedZeroRows = hasLastSyncRows && lastSyncRows <= 0;
-  const lastSyncTimeMs = lastSyncTime ? new Date(lastSyncTime).getTime() : NaN;
-  const cacheExpired = !lastSyncTime || isNaN(lastSyncTimeMs)
-    || ((Date.now() - lastSyncTimeMs) / 60000) > BANK_CACHE_TTL_MINUTES;
-  const cooldownUntil = cooldownRow?.value || null;
+  const cachedBankRowsTotal = cachedBankRowsRaw ?? 0;
+  const lastSuccessfulBankSyncAt: string | null = lastSuccessRow?.value ?? null;
+  const cooldownUntilStored: string | null = cooldownRow?.value ?? null;
+  const nowMs = Date.now();
 
-  const noCachedBankData = cachedBankRowsCount === 0;
-  const bypassCooldown = noCachedBankData || lastSyncProducedZeroRows || cacheExpired;
+  // Shared diagnostics skeleton (returned on every path)
+  const baseDiag = {
+    cached_bank_rows_total: cachedBankRowsTotal,
+    last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
+    cooldown_until: cooldownUntilStored,
+  };
 
-  if (cooldownUntil) {
-    const cooldownUntilMs = new Date(cooldownUntil).getTime();
-    const nowMs = Date.now();
-    if (cooldownUntilMs > nowMs && !bypassCooldown) {
+  // ══════════════════════════════════════════════════════════════
+  // STEP 2A — Xero 429 cooldown (always respected, never extended on skip)
+  // ══════════════════════════════════════════════════════════════
+  if (cooldownUntilStored) {
+    const cooldownUntilMs = new Date(cooldownUntilStored).getTime();
+    if (!isNaN(cooldownUntilMs) && cooldownUntilMs > nowMs) {
       const secondsRemaining = Math.max(1, Math.ceil((cooldownUntilMs - nowMs) / 1000));
       const clampedRetry = Math.max(5, Math.min(300, secondsRemaining));
-      console.log(`[fetch-bank-txns] Cooldown skip for ${userId}: ${clampedRetry}s remaining, cooldown_until=${cooldownUntil}`);
+      console.log(`[fetch-bank-txns] Xero cooldown active for ${userId}: ${clampedRetry}s remaining`);
+      // DO NOT write/extend cooldown here — just return skipped
       return {
         user_id: userId,
         skipped: true,
         skip_reason: 'cooldown',
-        retry_after_seconds: clampedRetry,
-        cooldown_until: cooldownUntil,
         cooldown_applied: true,
-        cached_bank_rows: cachedBankRowsCount,
-        last_sync_time: lastSyncTime,
-        bank_rows_cached_total: cachedBankRowsCount,
-        has_any_mapping: true,
-        lookback_days: fallbackLookbackDays,
+        retry_after_seconds: clampedRetry,
+        ...baseDiag,
       };
-    }
-
-    if (cooldownUntilMs > nowMs && bypassCooldown) {
-      const bypassReasons = [
-        noCachedBankData ? 'no_cached_bank_rows' : null,
-        lastSyncProducedZeroRows ? 'last_sync_zero_rows' : null,
-        cacheExpired ? 'cache_expired' : null,
-      ].filter(Boolean).join(', ');
-      console.log(`[fetch-bank-txns] Cooldown bypassed for ${userId}: ${bypassReasons}`);
     }
   }
 
-  // Refresh Xero token
+  // ══════════════════════════════════════════════════════════════
+  // STEP 2B — Recent-success guard (anti-hammer, bypassed when cache empty)
+  // ══════════════════════════════════════════════════════════════
+  if (cachedBankRowsTotal > 0 && lastSuccessfulBankSyncAt) {
+    const lastSuccessMs = new Date(lastSuccessfulBankSyncAt).getTime();
+    if (!isNaN(lastSuccessMs)) {
+      const minutesSinceSuccess = (nowMs - lastSuccessMs) / 60000;
+      if (minutesSinceSuccess < guardMinutes) {
+        console.log(`[fetch-bank-txns] Recent-success guard for ${userId}: synced ${Math.round(minutesSinceSuccess)}m ago (guard=${guardMinutes}m), cache has ${cachedBankRowsTotal} rows`);
+        return {
+          user_id: userId,
+          skipped: true,
+          skip_reason: 'recent_success',
+          cooldown_applied: false,
+          retry_after_seconds: 0,
+          minutes_since_last_success: Math.round(minutesSinceSuccess),
+          guard_minutes: guardMinutes,
+          ...baseDiag,
+        };
+      }
+    }
+  } else if (cachedBankRowsTotal === 0) {
+    console.log(`[fetch-bank-txns] Cache empty for ${userId} — bypassing recent-success guard to seed cache`);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // STEP 3 — Refresh Xero token
+  // ══════════════════════════════════════════════════════════════
   const token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
   if (!token) {
     return {
       user_id: userId,
       error: 'Token refresh failed',
-      cached_bank_rows: cachedBankRowsCount,
-      last_sync_time: lastSyncTime,
-      cooldown_until: cooldownUntil,
+      skip_reason: null,
       cooldown_applied: false,
+      ...baseDiag,
     };
   }
 
-  // ── Dynamic date range from outstanding invoices cache ──
+  // ══════════════════════════════════════════════════════════════
+  // STEP 4 — Compute date range (invoice-range or fallback)
+  // ══════════════════════════════════════════════════════════════
   const dynamicRange = await computeDateRangeFromCache(adminSupabase, userId, 5);
   let fromDate: Date;
   let toDate: Date | null = null;
   let dateRangeSource: string;
   let effectiveDays: number;
+  let usedInvoiceRange = false;
 
   if (dynamicRange) {
     fromDate = dynamicRange.fromDate;
     toDate = dynamicRange.toDate;
     effectiveDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000);
     dateRangeSource = `dynamic (${dynamicRange.invoiceCount} invoices, ${effectiveDays} days)`;
+    usedInvoiceRange = true;
     console.log(`[fetch-bank-txns] Dynamic range for ${userId}: ${fromDate.toISOString().split('T')[0]} → ${toDate.toISOString().split('T')[0]} (${effectiveDays} days from ${dynamicRange.invoiceCount} invoices)`);
   } else {
     fromDate = new Date();
@@ -328,18 +294,17 @@ async function fetchBankTxnsForUser(
       user_id: userId,
       skipped: true,
       skip_reason: 'no_mapping',
+      cooldown_applied: false,
       message: 'No destination account mapped. Configure payout mapping first.',
       bank_rows_upserted: 0,
       mapped_account_ids_count: 0,
       has_any_mapping: false,
-      filtered_to_mapped_accounts: false,
-      lookback_days: effectiveDays,
+      used_invoice_range: usedInvoiceRange,
+      invoice_range_days: effectiveDays,
+      fetch_from: fromDate.toISOString().split('T')[0],
+      fetch_to: toDate?.toISOString().split('T')[0] || null,
       date_range_source: dateRangeSource,
-      mapped_account_ids: [],
-      cached_bank_rows: cachedBankRowsCount,
-      last_sync_time: lastSyncTime,
-      cooldown_until: cooldownUntil,
-      cooldown_applied: false,
+      ...baseDiag,
     };
   }
 
@@ -380,42 +345,42 @@ async function fetchBankTxnsForUser(
       if (res.status === 429) {
         const rawRetryAfter = res.headers.get('Retry-After');
         const retryAfterSec = parseRetryAfterSeconds(rawRetryAfter);
-        const cooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
-        console.log(`[fetch-bank-txns] 429 for ${userId}: raw Retry-After="${rawRetryAfter}", parsed=${retryAfterSec}s, cooldown_until=${cooldownUntil}`);
+        const newCooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
+        console.log(`[fetch-bank-txns] 429 for ${userId}: raw="${rawRetryAfter}", parsed=${retryAfterSec}s`);
+        // ONLY place cooldown_until is written — on actual 429
         await adminSupabase.from('app_settings').upsert({
           user_id: userId,
           key: COOLDOWN_KEY,
-          value: cooldownUntil,
+          value: newCooldownUntil,
         }, { onConflict: 'user_id,key' });
-        const { count } = await adminSupabase
-          .from('bank_transactions')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId);
+        // DO NOT update last_success here
         return {
           user_id: userId,
           xero_rate_limited: true,
-          retry_after_seconds: retryAfterSec,
-          cooldown_until: cooldownUntil,
+          skip_reason: null,
           cooldown_applied: false,
-          cached_bank_rows: count || 0,
-          last_sync_time: lastSyncTime,
+          retry_after_seconds: retryAfterSec,
+          cooldown_until: newCooldownUntil,
           bank_rows_upserted: totalUpserted,
-          bank_rows_cached_total: count || 0,
+          synced_row_count: totalUpserted,
           partial: page > 1,
           mapped_account_ids_count: mappedAccountIds.size,
           has_any_mapping: hasAnyMapping,
-          filtered_to_mapped_accounts: mappedAccountIds.size > 0,
-          lookback_days: effectiveDays,
+          used_invoice_range: usedInvoiceRange,
+          invoice_range_days: effectiveDays,
+          fetch_from: fromDate.toISOString().split('T')[0],
+          fetch_to: toDate?.toISOString().split('T')[0] || null,
           date_range_source: dateRangeSource,
+          cached_bank_rows_total: cachedBankRowsTotal,
+          last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
         };
       }
       return {
         user_id: userId,
         error: `Xero API ${res.status}`,
-        cached_bank_rows: cachedBankRowsCount,
-        last_sync_time: lastSyncTime,
-        cooldown_until: cooldownUntil,
+        skip_reason: null,
         cooldown_applied: false,
+        ...baseDiag,
       };
     }
 
@@ -467,23 +432,15 @@ async function fetchBankTxnsForUser(
     }
   }
 
-  await Promise.all([
-    adminSupabase.from('app_settings').upsert({
-      user_id: userId,
-      key: GUARD_KEY,
-      value: new Date().toISOString(),
-    }, { onConflict: 'user_id,key' }),
-    adminSupabase.from('app_settings').upsert({
-      user_id: userId,
-      key: LAST_SYNC_AT_KEY,
-      value: new Date().toISOString(),
-    }, { onConflict: 'user_id,key' }),
-    adminSupabase.from('app_settings').upsert({
-      user_id: userId,
-      key: LAST_SYNC_ROW_COUNT_KEY,
-      value: String(totalUpserted),
-    }, { onConflict: 'user_id,key' }),
-  ]);
+  // ══════════════════════════════════════════════════════════════
+  // STEP 6 — Persist success timestamp (ONLY on real Xero fetch, not on skip/429)
+  // ══════════════════════════════════════════════════════════════
+  const successAt = new Date().toISOString();
+  await adminSupabase.from('app_settings').upsert({
+    user_id: userId,
+    key: LAST_SUCCESS_KEY,
+    value: successAt,
+  }, { onConflict: 'user_id,key' });
 
   // Log to system_events
   await adminSupabase.from('system_events').insert({
@@ -493,14 +450,14 @@ async function fetchBankTxnsForUser(
     details: {
       transactions_upserted: totalUpserted,
       pages_fetched: page,
-      lookback_days: effectiveDays,
+      invoice_range_days: effectiveDays,
       date_range_source: dateRangeSource,
+      used_invoice_range: usedInvoiceRange,
       filtered_accounts: mappedAccountIds.size,
-      from_date: fromDate.toISOString().split('T')[0],
-      to_date: toDate?.toISOString().split('T')[0] || 'open',
+      fetch_from: fromDate.toISOString().split('T')[0],
+      fetch_to: toDate?.toISOString().split('T')[0] || 'open',
     },
   });
-
 
   // Final cache row count for diagnostics
   const { count: finalBankRowsCount } = await adminSupabase
@@ -511,24 +468,24 @@ async function fetchBankTxnsForUser(
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages), range: ${dateRangeSource}, accounts: ${[...mappedAccountIds].join(', ')}`);
   return {
     user_id: userId,
+    skip_reason: null,
+    cooldown_applied: false,
+    retry_after_seconds: 0,
     bank_rows_upserted: totalUpserted,
-    upserted: totalUpserted,
     synced_row_count: totalUpserted,
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
     mapped_account_ids: [...mappedAccountIds],
-    synced_account_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,
-    filtered_to_mapped_accounts: true,
-    lookback_days: effectiveDays,
+    used_invoice_range: usedInvoiceRange,
+    invoice_range_days: effectiveDays,
+    fetch_from: fromDate.toISOString().split('T')[0],
+    fetch_to: toDate?.toISOString().split('T')[0] || null,
     date_range_source: dateRangeSource,
-    cooldown_until: cooldownUntil,
-    cooldown_applied: false,
-    cached_bank_rows: finalBankRowsCount || 0,
-    last_sync_time: new Date().toISOString(),
-    retry_after_seconds: 0,
-    bank_rows_cached_total: finalBankRowsCount || 0,
-    refreshed_at: new Date().toISOString(),
+    cached_bank_rows_total: finalBankRowsCount || 0,
+    last_successful_bank_sync_at: successAt,
+    cooldown_until: null,
+    refreshed_at: successAt,
   };
 }
 
