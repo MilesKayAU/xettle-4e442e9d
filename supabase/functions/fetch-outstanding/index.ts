@@ -281,6 +281,7 @@ Deno.serve(async (req) => {
             await supabase.from('outstanding_invoices_cache').insert(cacheRows.slice(i, i + 500));
           }
           invoiceCacheAgeMinutes = 0;
+          invoiceCacheFetchedAt = now;
         }
         console.log(`[fetch-outstanding] Xero live: ${allInvoices.length} invoices, cache updated`);
       } else {
