@@ -480,7 +480,13 @@ Deno.serve(async (req) => {
       // Single-invoice groups still scored — must meet score ≥ 70 for 'high' confidence
       group.sum = Math.round(group.sum * 100) / 100;
 
+      // Determine group currency from the first invoice (Amazon AU = AUD)
+      const groupCurrency = 'AUD'; // Amazon AU invoices are always AUD
+
       for (const txn of bankTxns) {
+        // Currency hard filter — prevent cross-currency false matches
+        if ((txn.CurrencyCode || 'AUD') !== groupCurrency) continue;
+
         const txnAmount = Math.abs(txn.Total || 0);
         const txnDate = parseXeroDate(txn.Date);
         if (!txnDate) continue;
