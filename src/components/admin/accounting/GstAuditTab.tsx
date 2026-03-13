@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -5,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ChevronDown, ShieldAlert, Info, Search } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ChevronDown, ShieldAlert, Search, ExternalLink, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -56,6 +58,17 @@ interface GstSummaryRow {
   };
 }
 
+interface VarianceSample {
+  settlement_id: string;
+  marketplace: string;
+  period_start?: string;
+  period_end?: string;
+  status?: string;
+  xero_invoice_id?: string | null;
+  gst_contribution: number;
+  note?: string;
+}
+
 interface VarianceLine {
   code: string;
   label: string;
@@ -63,7 +76,9 @@ interface VarianceLine {
   confidence: 'high' | 'medium' | 'low';
   evidence?: {
     settlement_ids?: string[];
-    xero_invoice_ids?: string[];
+    marketplace_codes?: string[];
+    settlement_count?: number;
+    sample?: VarianceSample[];
     notes?: string[];
   };
 }
@@ -84,6 +99,27 @@ interface VarianceResult {
   xero_source_mode: 'tax_summary' | 'xettle_invoices_only' | 'unavailable';
 }
 
+interface EvidenceRow {
+  settlement_id: string;
+  marketplace: string;
+  period_start: string;
+  period_end: string;
+  status: string;
+  bank_verified: boolean | null;
+  xero_invoice_id: string | null;
+  xero_invoice_number: string | null;
+  marketplace_gst_estimate: number | null;
+  gst_contribution: number;
+  issues: string[];
+}
+
+interface EvidenceResult {
+  success: boolean;
+  variance_code: string;
+  rows: EvidenceRow[];
+  totals: { gst_contribution_total: number; settlement_count: number };
+}
+
 function getMonthPeriods(count: number = 12): { start: string; end: string; label: string }[] {
   const periods: { start: string; end: string; label: string }[] = [];
   const now = new Date();
@@ -100,21 +136,16 @@ function getMonthPeriods(count: number = 12): { start: string; end: string; labe
 
 function ConfidenceBadge({ label, score }: { label: string; score: number }) {
   const variant = label === 'High' ? 'default' : label === 'Medium' ? 'secondary' : 'destructive';
-  return (
-    <Badge variant={variant} className="text-xs">
-      {label} ({score})
-    </Badge>
-  );
+  return <Badge variant={variant} className="text-xs">{label} ({score})</Badge>;
 }
 
 const MARKETPLACE_LABELS: Record<string, string> = {
-  amazon_au: 'Amazon AU',
-  shopify: 'Shopify',
-  bunnings: 'Bunnings',
-  woolworths: 'Woolworths',
-  ebay_au: 'eBay AU',
-  catch_au: 'Catch',
-  unknown: 'Unknown',
+  amazon_au: 'Amazon AU', shopify: 'Shopify', bunnings: 'Bunnings',
+  woolworths: 'Woolworths', ebay_au: 'eBay AU', catch_au: 'Catch', unknown: 'Unknown',
+};
+
+const ISSUE_LABELS: Record<string, string> = {
+  NOT_PUSHED: 'Not pushed', UNCLASSIFIED_LINES: 'Unclassified', NOT_BANK_VERIFIED: 'Not bank verified',
 };
 
 export default function GstAuditTab() {
@@ -125,6 +156,8 @@ export default function GstAuditTab() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [variance, setVariance] = useState<VarianceResult | null>(null);
   const [varianceLoading, setVarianceLoading] = useState(false);
+  const [settlementDetail, setSettlementDetail] = useState<EvidenceRow | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const periods = getMonthPeriods(12);
 
@@ -134,9 +167,7 @@ export default function GstAuditTab() {
         .from('gst_audit_summary')
         .select('*')
         .order('period_start', { ascending: false });
-
       if (error) throw error;
-
       const map: Record<string, GstSummaryRow> = {};
       for (const row of (data || []) as any[]) {
         const key = `${row.period_start}_${row.period_end}`;
@@ -154,9 +185,7 @@ export default function GstAuditTab() {
     }
   }, []);
 
-  useEffect(() => {
-    loadCachedSummaries();
-  }, [loadCachedSummaries]);
+  useEffect(() => { loadCachedSummaries(); }, [loadCachedSummaries]);
 
   const refreshPeriod = useCallback(async (periodStart: string, periodEnd: string) => {
     const key = `${periodStart}_${periodEnd}`;
@@ -177,9 +206,7 @@ export default function GstAuditTab() {
 
   const refreshAll = useCallback(async () => {
     setLoading(true);
-    for (const p of periods) {
-      await refreshPeriod(p.start, p.end);
-    }
+    for (const p of periods) { await refreshPeriod(p.start, p.end); }
     setLoading(false);
   }, [periods, refreshPeriod]);
 
@@ -203,9 +230,13 @@ export default function GstAuditTab() {
     setSelectedPeriod(row);
     setDrawerOpen(true);
     setVariance(null);
-    // Auto-load variance when opening drilldown
     loadVariance(row.period_start, row.period_end);
   }, [loadVariance]);
+
+  const openSettlementDetail = useCallback((row: EvidenceRow) => {
+    setSettlementDetail(row);
+    setDetailModalOpen(true);
+  }, []);
 
   if (loading) {
     return (
@@ -239,8 +270,7 @@ export default function GstAuditTab() {
               <CardDescription className="text-xs mt-1">Marketplace-derived GST estimates vs Xero records</CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={refreshAll} disabled={loading} className="gap-1.5">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh All
+              <RefreshCw className="h-3.5 w-3.5" /> Refresh All
             </Button>
           </div>
         </CardHeader>
@@ -261,23 +291,12 @@ export default function GstAuditTab() {
                 const key = `${p.start}_${p.end}`;
                 const row = summaries[key];
                 const isRefreshing = refreshingPeriod === key;
-                const marketplaceGst = row
-                  ? row.marketplace_gst_on_sales_estimate - row.marketplace_refund_gst_estimate
-                  : null;
-
+                const marketplaceGst = row ? row.marketplace_gst_on_sales_estimate - row.marketplace_refund_gst_estimate : null;
                 return (
-                  <TableRow
-                    key={key}
-                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${row ? '' : 'opacity-60'}`}
-                    onClick={() => row && openDrilldown(row)}
-                  >
+                  <TableRow key={key} className={`cursor-pointer hover:bg-muted/50 transition-colors ${row ? '' : 'opacity-60'}`} onClick={() => row && openDrilldown(row)}>
                     <TableCell className="font-medium text-sm">{p.label}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {row ? formatAUD(marketplaceGst) : '—'}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {row ? formatAUD(row.xero_gst) : '—'}
-                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">{row ? formatAUD(marketplaceGst) : '—'}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{row ? formatAUD(row.xero_gst) : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">
                       {row?.difference !== null && row?.difference !== undefined ? (
                         <span className={Math.abs(row.difference) < 1 ? 'text-green-600' : Math.abs(row.difference) < 50 ? 'text-amber-600' : 'text-destructive'}>
@@ -285,22 +304,10 @@ export default function GstAuditTab() {
                         </span>
                       ) : '—'}
                     </TableCell>
+                    <TableCell>{row ? <ConfidenceBadge label={row.confidence_label} score={row.confidence_score} /> : '—'}</TableCell>
                     <TableCell>
-                      {row ? <ConfidenceBadge label={row.confidence_label} score={row.confidence_score} /> : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {isRefreshing ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            refreshPeriod(p.start, p.end);
-                          }}
-                        >
+                      {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); refreshPeriod(p.start, p.end); }}>
                           <RefreshCw className="h-3.5 w-3.5" />
                         </Button>
                       )}
@@ -319,12 +326,8 @@ export default function GstAuditTab() {
           {selectedPeriod && (
             <>
               <SheetHeader>
-                <SheetTitle>
-                  GST Audit — {selectedPeriod.period_start} to {selectedPeriod.period_end}
-                </SheetTitle>
-                <SheetDescription>
-                  Detailed breakdown by marketplace and settlement
-                </SheetDescription>
+                <SheetTitle>GST Audit — {selectedPeriod.period_start} to {selectedPeriod.period_end}</SheetTitle>
+                <SheetDescription>Detailed breakdown by marketplace and settlement</SheetDescription>
               </SheetHeader>
 
               <div className="mt-6 space-y-6">
@@ -348,9 +351,7 @@ export default function GstAuditTab() {
 
                 {/* GST Summary Buckets */}
                 <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">GST Summary (Estimates)</CardTitle>
-                  </CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">GST Summary (Estimates)</CardTitle></CardHeader>
                   <CardContent className="space-y-1 text-sm">
                     <SummaryLine label="GST on Sales" value={selectedPeriod.marketplace_gst_on_sales_estimate} />
                     <SummaryLine label="GST on Fees" value={selectedPeriod.marketplace_gst_on_fees_estimate} negative />
@@ -361,11 +362,7 @@ export default function GstAuditTab() {
                       <SummaryLine label="Unclassified GST" value={selectedPeriod.marketplace_unknown_gst} warn />
                     )}
                     <div className="border-t pt-1 mt-1">
-                      <SummaryLine
-                        label="Net Marketplace GST (est.)"
-                        value={selectedPeriod.marketplace_gst_on_sales_estimate - selectedPeriod.marketplace_refund_gst_estimate}
-                        bold
-                      />
+                      <SummaryLine label="Net Marketplace GST (est.)" value={selectedPeriod.marketplace_gst_on_sales_estimate - selectedPeriod.marketplace_refund_gst_estimate} bold />
                     </div>
                     <div className="border-t pt-1 mt-1">
                       <SummaryLine label="Xero GST" value={selectedPeriod.xero_gst} bold />
@@ -374,18 +371,19 @@ export default function GstAuditTab() {
                   </CardContent>
                 </Card>
 
-                {/* ── VARIANCE ANALYSIS SECTION ── */}
+                {/* ── VARIANCE ANALYSIS ── */}
                 <VarianceAnalysisCard
                   variance={variance}
                   loading={varianceLoading}
                   onRefresh={() => selectedPeriod && loadVariance(selectedPeriod.period_start, selectedPeriod.period_end)}
+                  periodStart={selectedPeriod.period_start}
+                  periodEnd={selectedPeriod.period_end}
+                  onSettlementClick={openSettlementDetail}
                 />
 
                 {/* Per-Marketplace Breakdown */}
                 <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">By Marketplace</CardTitle>
-                  </CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">By Marketplace</CardTitle></CardHeader>
                   <CardContent className="p-0">
                     <Table>
                       <TableHeader>
@@ -414,9 +412,7 @@ export default function GstAuditTab() {
 
                 {/* Contributing Settlements */}
                 <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Contributing Settlements</CardTitle>
-                  </CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Contributing Settlements</CardTitle></CardHeader>
                   <CardContent className="p-0">
                     <div className="max-h-80 overflow-y-auto">
                       <Table>
@@ -434,9 +430,7 @@ export default function GstAuditTab() {
                             <TableRow key={s.settlement_id}>
                               <TableCell className="text-xs font-mono">{s.settlement_id.slice(0, 12)}…</TableCell>
                               <TableCell className="text-xs">{MARKETPLACE_LABELS[s.marketplace] || s.marketplace}</TableCell>
-                              <TableCell>
-                                <StatusBadge status={s.status} />
-                              </TableCell>
+                              <TableCell><StatusBadge status={s.status} /></TableCell>
                               <TableCell className="text-xs text-right font-mono">{formatAUD(s.gst_on_sales)}</TableCell>
                               <TableCell className="text-xs text-right font-mono">{formatAUD(s.bank_deposit)}</TableCell>
                             </TableRow>
@@ -451,26 +445,13 @@ export default function GstAuditTab() {
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                      Problem Indicators
+                      <AlertTriangle className="h-4 w-4 text-amber-500" /> Problem Indicators
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-xs space-y-1.5">
-                    <ProblemRow
-                      label="Settlements not pushed to Xero"
-                      count={(selectedPeriod.breakdown?.settlements || []).filter(s =>
-                        !['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status)
-                      ).length}
-                    />
-                    <ProblemRow
-                      label="Settlements not bank verified"
-                      count={(selectedPeriod.breakdown?.settlements || []).filter(s => s.status !== 'bank_verified').length}
-                    />
-                    <ProblemRow
-                      label="Unclassified GST items"
-                      count={selectedPeriod.marketplace_unknown_gst > 0 ? 1 : 0}
-                      amount={selectedPeriod.marketplace_unknown_gst}
-                    />
+                    <ProblemRow label="Settlements not pushed to Xero" count={(selectedPeriod.breakdown?.settlements || []).filter(s => !['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status)).length} />
+                    <ProblemRow label="Settlements not bank verified" count={(selectedPeriod.breakdown?.settlements || []).filter(s => s.status !== 'bank_verified').length} />
+                    <ProblemRow label="Unclassified GST items" count={selectedPeriod.marketplace_unknown_gst > 0 ? 1 : 0} amount={selectedPeriod.marketplace_unknown_gst} />
                   </CardContent>
                 </Card>
               </div>
@@ -478,6 +459,9 @@ export default function GstAuditTab() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* ── Settlement Detail Modal ── */}
+      <SettlementDetailModal row={settlementDetail} open={detailModalOpen} onOpenChange={setDetailModalOpen} />
     </div>
   );
 }
@@ -485,13 +469,14 @@ export default function GstAuditTab() {
 // ─── Variance Analysis Card ──────────────────────────────────────────
 
 function VarianceAnalysisCard({
-  variance,
-  loading,
-  onRefresh,
+  variance, loading, onRefresh, periodStart, periodEnd, onSettlementClick,
 }: {
   variance: VarianceResult | null;
   loading: boolean;
   onRefresh: () => void;
+  periodStart: string;
+  periodEnd: string;
+  onSettlementClick: (row: EvidenceRow) => void;
 }) {
   if (loading) {
     return (
@@ -523,8 +508,7 @@ function VarianceAnalysisCard({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Search className="h-4 w-4 text-primary" />
-            Explain the Difference
+            <Search className="h-4 w-4 text-primary" /> Explain the Difference
           </CardTitle>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRefresh}>
             <RefreshCw className="h-3.5 w-3.5" />
@@ -535,11 +519,16 @@ function VarianceAnalysisCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Variance Lines Table */}
         {variance.variance_lines.length > 0 ? (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {variance.variance_lines.map((line) => (
-              <VarianceLineRow key={line.code} line={line} />
+              <VarianceLineRow
+                key={line.code}
+                line={line}
+                periodStart={periodStart}
+                periodEnd={periodEnd}
+                onSettlementClick={onSettlementClick}
+              />
             ))}
           </div>
         ) : (
@@ -562,7 +551,7 @@ function VarianceAnalysisCard({
           </div>
         </div>
 
-        {/* Variance-specific confidence */}
+        {/* Confidence */}
         <div className="border-t pt-2 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium">Variance Confidence:</span>
@@ -584,35 +573,77 @@ function VarianceAnalysisCard({
   );
 }
 
-// ─── Variance Line Row (with collapsible evidence) ───────────────────
+// ─── Variance Line Row (with evidence expander) ──────────────────────
 
-function VarianceLineRow({ line }: { line: VarianceLine }) {
+function VarianceLineRow({
+  line, periodStart, periodEnd, onSettlementClick,
+}: {
+  line: VarianceLine;
+  periodStart: string;
+  periodEnd: string;
+  onSettlementClick: (row: EvidenceRow) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [evidenceRows, setEvidenceRows] = useState<EvidenceRow[] | null>(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceTotals, setEvidenceTotals] = useState<{ gst_contribution_total: number; settlement_count: number } | null>(null);
+
   const hasEvidence = line.evidence && (
+    (line.evidence.settlement_count && line.evidence.settlement_count > 0) ||
     (line.evidence.settlement_ids && line.evidence.settlement_ids.length > 0) ||
+    (line.evidence.sample && line.evidence.sample.length > 0) ||
     (line.evidence.notes && line.evidence.notes.length > 0)
   );
 
-  const confidenceColor = line.confidence === 'high'
-    ? 'text-green-600'
-    : line.confidence === 'medium'
-      ? 'text-amber-600'
-      : 'text-destructive';
+  const evidenceCount = line.evidence?.settlement_count || line.evidence?.settlement_ids?.length || 0;
+
+  const confidenceColor = line.confidence === 'high' ? 'text-green-600' : line.confidence === 'medium' ? 'text-amber-600' : 'text-destructive';
+
+  const loadFullEvidence = useCallback(async () => {
+    if (evidenceRows) return; // already loaded
+    setEvidenceLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-gst-variance-evidence', {
+        body: {
+          period_start: periodStart,
+          period_end: periodEnd,
+          variance_code: line.code,
+          settlement_ids: line.evidence?.settlement_ids,
+        },
+      });
+      if (error) throw error;
+      const result = data as EvidenceResult;
+      setEvidenceRows(result.rows);
+      setEvidenceTotals(result.totals);
+    } catch {
+      toast.error('Failed to load evidence details');
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }, [periodStart, periodEnd, line.code, line.evidence?.settlement_ids, evidenceRows]);
+
+  const handleToggle = useCallback((isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen && !evidenceRows && hasEvidence) {
+      loadFullEvidence();
+    }
+  }, [evidenceRows, hasEvidence, loadFullEvidence]);
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={handleToggle}>
       <CollapsibleTrigger asChild>
-        <button className="w-full flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/50 transition-colors text-left group">
+        <button className="w-full flex items-center justify-between py-2 px-2 rounded hover:bg-muted/50 transition-colors text-left group">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {hasEvidence ? (
               open ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-            ) : (
-              <span className="w-3" />
-            )}
+            ) : <span className="w-3" />}
             <span className="text-xs truncate">{line.label}</span>
-            <Badge variant="outline" className={`text-[9px] px-1 py-0 ${confidenceColor} border-current`}>
-              {line.confidence}
-            </Badge>
+            <Badge variant="outline" className={`text-[9px] px-1 py-0 ${confidenceColor} border-current`}>{line.confidence}</Badge>
+            {evidenceCount > 0 && (
+              <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
+                {evidenceCount} settlement{evidenceCount !== 1 ? 's' : ''}
+              </Badge>
+            )}
           </div>
           <span className={`font-mono text-xs font-medium shrink-0 ml-2 ${line.amount >= 0 ? 'text-foreground' : 'text-destructive'}`}>
             {line.amount >= 0 ? '+' : ''}{formatAUD(line.amount)}
@@ -621,21 +652,71 @@ function VarianceLineRow({ line }: { line: VarianceLine }) {
       </CollapsibleTrigger>
       {hasEvidence && (
         <CollapsibleContent>
-          <div className="ml-7 mb-2 space-y-1">
+          <div className="ml-2 mr-2 mb-2 border rounded-md bg-muted/30">
+            {/* Notes */}
             {line.evidence?.notes?.map((note, i) => (
-              <p key={i} className="text-[11px] text-muted-foreground">{note}</p>
+              <p key={i} className="text-[11px] text-muted-foreground px-3 pt-2">{note}</p>
             ))}
-            {line.evidence?.settlement_ids && line.evidence.settlement_ids.length > 0 && (
-              <div className="text-[11px] text-muted-foreground">
-                <span className="font-medium">Settlements: </span>
-                {line.evidence.settlement_ids.map((id, i) => (
-                  <span key={id}>
-                    {i > 0 && ', '}
-                    <span className="font-mono">{id.length > 16 ? `${id.slice(0, 12)}…` : id}</span>
-                  </span>
-                ))}
+
+            {/* Evidence table */}
+            {evidenceLoading ? (
+              <div className="flex items-center justify-center py-4 gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Loading evidence…</span>
               </div>
-            )}
+            ) : evidenceRows && evidenceRows.length > 0 ? (
+              <div className="max-h-64 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[10px] py-1.5">Settlement</TableHead>
+                      <TableHead className="text-[10px] py-1.5">Marketplace</TableHead>
+                      <TableHead className="text-[10px] py-1.5">Status</TableHead>
+                      <TableHead className="text-[10px] py-1.5">Xero</TableHead>
+                      <TableHead className="text-[10px] py-1.5 text-right">GST Contrib.</TableHead>
+                      <TableHead className="text-[10px] py-1.5">Flags</TableHead>
+                      <TableHead className="text-[10px] py-1.5 w-8"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {evidenceRows.map((row) => (
+                      <TableRow key={row.settlement_id} className="cursor-pointer hover:bg-muted/50" onClick={() => onSettlementClick(row)}>
+                        <TableCell className="text-[10px] font-mono py-1">{row.settlement_id.length > 14 ? `${row.settlement_id.slice(0, 12)}…` : row.settlement_id}</TableCell>
+                        <TableCell className="text-[10px] py-1">{MARKETPLACE_LABELS[row.marketplace] || row.marketplace}</TableCell>
+                        <TableCell className="py-1"><StatusBadge status={row.status} /></TableCell>
+                        <TableCell className="text-[10px] py-1 font-mono">{row.xero_invoice_number || (row.xero_invoice_id ? '✓' : '—')}</TableCell>
+                        <TableCell className="text-[10px] py-1 text-right font-mono font-medium">
+                          <span className={row.gst_contribution >= 0 ? 'text-foreground' : 'text-destructive'}>
+                            {row.gst_contribution >= 0 ? '+' : ''}{formatAUD(row.gst_contribution)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-1">
+                          <div className="flex gap-0.5 flex-wrap">
+                            {row.issues.map(issue => (
+                              <Badge key={issue} variant="outline" className="text-[8px] px-1 py-0 text-amber-600 border-amber-300">
+                                {ISSUE_LABELS[issue] || issue}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-1">
+                          <Eye className="h-3 w-3 text-muted-foreground" />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {/* Totals row */}
+                {evidenceTotals && (
+                  <div className="flex justify-between items-center px-3 py-2 border-t text-[10px] font-medium">
+                    <span>{evidenceTotals.settlement_count} settlement{evidenceTotals.settlement_count !== 1 ? 's' : ''}</span>
+                    <span className="font-mono">Total: {formatAUD(evidenceTotals.gst_contribution_total)}</span>
+                  </div>
+                )}
+              </div>
+            ) : !evidenceLoading && evidenceRows?.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground px-3 py-3">No matching settlements found.</p>
+            ) : null}
           </div>
         </CollapsibleContent>
       )}
@@ -643,24 +724,92 @@ function VarianceLineRow({ line }: { line: VarianceLine }) {
   );
 }
 
-// ─── Shared helper components ────────────────────────────────────────
+// ─── Settlement Detail Modal ─────────────────────────────────────────
 
-function SummaryLine({
-  label,
-  value,
-  bold,
-  negative,
-  muted,
-  warn,
-  diff,
+function SettlementDetailModal({
+  row, open, onOpenChange,
 }: {
-  label: string;
-  value: number | null | undefined;
-  bold?: boolean;
-  negative?: boolean;
-  muted?: boolean;
-  warn?: boolean;
-  diff?: boolean;
+  row: EvidenceRow | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!row) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm flex items-center gap-2">
+            <Eye className="h-4 w-4" /> Settlement Detail
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Read-only view — GST audit context
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 text-sm">
+          <div className="grid grid-cols-2 gap-2">
+            <DetailField label="Settlement ID" value={row.settlement_id} mono />
+            <DetailField label="Marketplace" value={MARKETPLACE_LABELS[row.marketplace] || row.marketplace} />
+            <DetailField label="Period" value={`${row.period_start} → ${row.period_end}`} />
+            <DetailField label="Status" value={row.status} badge />
+            <DetailField label="Xero Invoice" value={row.xero_invoice_number || row.xero_invoice_id || 'Not linked'} mono />
+            <DetailField label="Bank Verified" value={row.bank_verified ? 'Yes' : 'No'} />
+          </div>
+
+          <div className="border-t pt-2 space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Marketplace GST (est.)</span>
+              <span className="font-mono font-medium">{formatAUD(row.marketplace_gst_estimate)}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">GST Contribution (this variance)</span>
+              <span className={`font-mono font-medium ${row.gst_contribution >= 0 ? 'text-foreground' : 'text-destructive'}`}>
+                {row.gst_contribution >= 0 ? '+' : ''}{formatAUD(row.gst_contribution)}
+              </span>
+            </div>
+          </div>
+
+          {row.issues.length > 0 && (
+            <div className="border-t pt-2">
+              <p className="text-xs font-medium mb-1.5">Issues</p>
+              <div className="flex gap-1 flex-wrap">
+                {row.issues.map(issue => (
+                  <Badge key={issue} variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                    {ISSUE_LABELS[issue] || issue}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="text-[10px] text-muted-foreground italic border-t pt-2">
+            This is an estimate for audit purposes only. Confirm final figures in Xero.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailField({ label, value, mono, badge }: { label: string; value: string; mono?: boolean; badge?: boolean }) {
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      {badge ? (
+        <StatusBadge status={value} />
+      ) : (
+        <p className={`text-xs font-medium ${mono ? 'font-mono' : ''} truncate`}>{value}</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Shared helpers ──────────────────────────────────────────────────
+
+function SummaryLine({ label, value, bold, negative, muted, warn, diff }: {
+  label: string; value: number | null | undefined;
+  bold?: boolean; negative?: boolean; muted?: boolean; warn?: boolean; diff?: boolean;
 }) {
   let color = 'text-foreground';
   if (muted) color = 'text-muted-foreground';
@@ -668,14 +817,11 @@ function SummaryLine({
   if (diff && value !== null && value !== undefined) {
     color = Math.abs(value) < 1 ? 'text-green-600' : Math.abs(value) < 50 ? 'text-amber-600' : 'text-destructive';
   }
-
   return (
     <div className={`flex justify-between items-center py-0.5 ${bold ? 'font-semibold' : ''}`}>
       <span className={color}>{label}</span>
       <span className={`font-mono ${color}`}>
-        {value !== null && value !== undefined ? (
-          diff && value >= 0 ? `+${formatAUD(value)}` : formatAUD(negative ? -Math.abs(value) : value)
-        ) : '—'}
+        {value !== null && value !== undefined ? (diff && value >= 0 ? `+${formatAUD(value)}` : formatAUD(negative ? -Math.abs(value) : value)) : '—'}
       </span>
     </div>
   );
@@ -694,14 +840,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function ProblemRow({ label, count, amount }: { label: string; count: number; amount?: number }) {
-  if (count === 0) {
-    return (
-      <div className="flex items-center gap-2 text-green-700">
-        <span>✓</span>
-        <span>{label}: None</span>
-      </div>
-    );
-  }
+  if (count === 0) return <div className="flex items-center gap-2 text-green-700"><span>✓</span><span>{label}: None</span></div>;
   return (
     <div className="flex items-center gap-2 text-amber-700">
       <AlertTriangle className="h-3 w-3 shrink-0" />
