@@ -204,6 +204,7 @@ const MARKETPLACE_LABELS: Record<string, string> = {
 export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [data, setData] = useState<OutstandingSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<Set<string>>(new Set());
