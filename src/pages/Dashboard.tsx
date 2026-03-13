@@ -95,6 +95,8 @@ export default function Dashboard() {
   const [hasAmazon, setHasAmazon] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
   const [justConnectedXero, setJustConnectedXero] = useState(false);
+  const [showAiMapper, setShowAiMapper] = useState(false);
+  const [showSetupBanner, setShowSetupBanner] = useState(false);
 
   useEffect(() => {
     if (!user) return;
