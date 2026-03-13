@@ -629,7 +629,7 @@ export default function ActionCentre({
       {events.length > 0 && (
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Recent activity</CardTitle>
+            <CardTitle className="text-sm font-semibold">Issues & recent actions</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-2">
