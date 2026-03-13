@@ -198,6 +198,25 @@ interface OutstandingSummary {
   };
 }
 
+interface BankSyncDiagnostics {
+  mapped_account_ids?: string[];
+  mapped_account_ids_count?: number;
+  synced_row_count?: number;
+  synced_account_count?: number;
+  lookback_days?: number;
+  cooldown_until?: string;
+  retry_after_seconds?: number;
+  xero_rate_limited?: boolean;
+  has_any_mapping?: boolean;
+  skip_reason?: string;
+  skipped?: boolean;
+  refreshed_at?: string;
+  bank_rows_cached_total?: number;
+  error?: string;
+  minutes_ago?: number;
+  upserted?: number;
+}
+
 interface Props {
   onSwitchToUpload: () => void;
 }
