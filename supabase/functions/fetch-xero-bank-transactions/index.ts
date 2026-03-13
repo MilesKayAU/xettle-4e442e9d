@@ -141,6 +141,7 @@ async function fetchBankTxnsForUser(
   clientId: string,
   clientSecret: string,
   guardMinutes: number,
+  cacheFreshMinutes: number,
   fallbackLookbackDays: number,
 ) {
   // ══════════════════════════════════════════════════════════════
