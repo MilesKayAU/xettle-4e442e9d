@@ -97,6 +97,7 @@ export default function SystemStatusStrip({
   onReviewMapping,
   onMapBankAccounts,
   onConnect,
+  onRefreshStatus,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
