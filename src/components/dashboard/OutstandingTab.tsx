@@ -454,8 +454,24 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         toast.error(`Bank feed sync failed: ${resp.error.message}`, { id: 'bank-feed-sync' });
         return;
       }
+      if (resp.data?.xero_rate_limited) {
+        const retryAfter = resp.data.retry_after_seconds || 60;
+        const cached = resp.data.bank_rows_cached_total || 0;
+        toast.warning(
+          `Xero rate limited — try again in ~${retryAfter}s. ${cached} cached transaction${cached !== 1 ? 's' : ''} available.`,
+          { id: 'bank-feed-sync', duration: 8000 }
+        );
+        // Still refetch Outstanding so it can use whatever cache exists
+        await fetchOutstanding({ runSync: false });
+        return;
+      }
       if (resp.data?.error) {
         toast.error(`Bank feed sync failed: ${resp.data.error}`, { id: 'bank-feed-sync' });
+        return;
+      }
+      if (resp.data?.skipped) {
+        toast.info(`Bank feed recently synced — using cache (${resp.data.minutes_ago}m ago)`, { id: 'bank-feed-sync' });
+        await fetchOutstanding({ runSync: false });
         return;
       }
       const count = resp.data?.upserted || 0;
