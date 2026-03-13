@@ -1244,7 +1244,8 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-                <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={async () => {
+              <PayoutBankAccountMapper />
+              <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={async () => {
                   // Xero audit already ran inside AmazonConnectionPanel (Xero-First).
                   // Just reload settlements and run bank matching.
                   loadSettlements();
@@ -1261,7 +1262,6 @@ export default function AccountingDashboard() {
                   setAmazonFetchStatus(status);
                 }} />
                 <XeroConnectionStatus />
-                <PayoutBankAccountMapper />
                 <AccountMapperCard />
                 <ShopifyConnectionStatus />
                 <ChannelManagement />
