@@ -143,6 +143,21 @@ Deno.serve(async (req) => {
     }
     const userId = user.id;
 
+    // ─── Parse optional request body params ───
+    let forceRecompute = false;
+    let lookbackDays = 90;
+    try {
+      if (req.method === 'POST') {
+        const body = await req.json();
+        if (body.force_recompute === true) forceRecompute = true;
+        if (typeof body.lookback_days === 'number') {
+          lookbackDays = Math.max(30, Math.min(180, Math.round(body.lookback_days)));
+        }
+      }
+    } catch {
+      // No body or invalid JSON — use defaults
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get Xero token
