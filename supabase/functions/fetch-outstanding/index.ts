@@ -537,9 +537,12 @@ Deno.serve(async (req) => {
 
       totalOutstanding += amount;
 
-      // Try to match with our settlement (direct ID, then alias lookup)
+      // Try to match with our settlement:
+      // 1) Direct reference-based ID extraction (Amazon AMZN- references)
+      // 2) Alias lookup (LMB- references, etc.)
+      // 3) Fuzzy amount+date+marketplace match (Shopify, Bunnings, Kogan, etc.)
       const extracted = extractSettlementId(reference);
-      const settlementId = extracted.id;
+      let settlementId = extracted.id;
       const splitPart = extracted.part;
       let settlement = settlementId ? settlementMap.get(settlementId) : null;
       
@@ -547,7 +550,21 @@ Deno.serve(async (req) => {
         const canonical = aliasMap.get(settlementId);
         if (canonical) settlement = settlementMap.get(canonical);
       }
+
+      // Fallback: fuzzy match by amount + date + marketplace
+      if (!settlement) {
+        const fuzzyMatch = fuzzyMatchSettlement(amount, invoiceDate, marketplace);
+        if (fuzzyMatch) {
+          settlement = fuzzyMatch;
+          settlementId = fuzzyMatch.settlement_id;
+        }
+      }
       
+      // Mark reference-matched settlements as used to prevent double-matching
+      if (settlement && settlementId) {
+        usedSettlementIds.add(settlementId);
+      }
+
       const hasSettlement = !!settlement;
       if (hasSettlement) matchedWithSettlement++;
 
