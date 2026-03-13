@@ -428,8 +428,8 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
   const summaryCards: { key: StatusCategory; label: string; sublabel: string; count: number; total?: number; color: string; icon: React.ReactNode }[] = [
     {
       key: 'ready',
-      label: 'Ready to Post',
-      sublabel: 'Not yet sent to Xero',
+      label: 'Send to Xero',
+      sublabel: 'Not yet posted',
       count: counts.ready,
       total: counts.readyTotal,
       color: 'border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-900/20',
@@ -437,8 +437,8 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
     },
     {
       key: 'posted',
-      label: 'Posted to Xero',
-      sublabel: 'In Xero, waiting for bank match',
+      label: 'Waiting for Payout',
+      sublabel: 'Posted, awaiting destination match',
       count: counts.posted,
       total: counts.postedTotal,
       color: 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-900/25',
