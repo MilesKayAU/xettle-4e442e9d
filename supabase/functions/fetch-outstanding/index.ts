@@ -537,6 +537,10 @@ Deno.serve(async (req) => {
 
       totalOutstanding += amount;
 
+      // Detect marketplace FIRST so fuzzy matching can use it
+      const marketplace = detectMarketplace(reference, contactName);
+      const isMarketplace = marketplace !== 'unknown';
+
       // Try to match with our settlement:
       // 1) Direct reference-based ID extraction (Amazon AMZN- references)
       // 2) Alias lookup (LMB- references, etc.)
@@ -605,8 +609,6 @@ Deno.serve(async (req) => {
       const isConfirmed = settlement?.bank_tx_id && settlement?.bank_match_confirmed_at;
 
       // Try to find matching bank deposit (exact 1:1 for non-Amazon)
-      const marketplace = detectMarketplace(reference, contactName);
-      const isMarketplace = marketplace !== 'unknown';
       let bankMatch: any = null;
       let bankDifference: number | null = null;
 
