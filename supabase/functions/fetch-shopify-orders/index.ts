@@ -36,6 +36,7 @@ interface ShopifyOrder {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   console.log("[fetch-shopify-orders] Handler invoked", req.method);
 
   if (req.method === "OPTIONS") {
@@ -52,22 +53,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Detect if caller is using the service role key (cron/scheduled-sync)
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.error("[fetch-shopify-orders] Auth failed:", authError?.message);
-      return new Response(JSON.stringify({ error: "Unauthorized", detail: authError?.message }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let authenticatedUserId: string;
+
+    if (isServiceRole) {
+      // Service role callers (scheduled-sync) can specify userId in body
+      authenticatedUserId = ''; // will be resolved from body below
+    } else {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error("[fetch-shopify-orders] Auth failed:", authError?.message);
+        return new Response(JSON.stringify({ error: "Unauthorized", detail: authError?.message }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      authenticatedUserId = user.id;
     }
-    const authenticatedUserId = user.id;
-    console.log("[fetch-shopify-orders] Auth OK, user:", authenticatedUserId);
+    console.log("[fetch-shopify-orders] Auth OK, isServiceRole:", isServiceRole);
 
     let body: any = {};
     try {
@@ -75,11 +87,18 @@ Deno.serve(async (req) => {
     } catch {
       console.error("[fetch-shopify-orders] Failed to parse request body");
     }
-    const { userId, dateFrom, dateTo, limit, channelDetectionOnly } = body;
+    const { dateFrom, dateTo, limit, channelDetectionOnly } = body;
     let shopDomain = body.shopDomain;
-    console.log("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit, channelDetectionOnly });
 
-    const resolvedUserId = userId || authenticatedUserId;
+    // SECURITY: Only accept body.userId when called with service role key.
+    // For regular users, ALWAYS use the authenticated user's ID to prevent cross-user data access.
+    const resolvedUserId = isServiceRole ? (body.userId || authenticatedUserId) : authenticatedUserId;
+    if (!resolvedUserId) {
+      return new Response(JSON.stringify({ error: "userId required for service-role calls" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    console.log("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit, channelDetectionOnly, resolvedUserId });
     const effectiveLimit = Math.min(limit || 250, 250);
 
     // ─── Boundary note: accounting_boundary_date only applies to entry creation,
