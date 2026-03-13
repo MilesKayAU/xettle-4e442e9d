@@ -793,6 +793,28 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ─── Structured diagnostics log ───
+    const bankDates = bankTxns.map((t: any) => parseXeroDate(t.Date)).filter(Boolean).sort();
+    const syncInfo = {
+      invoice_count: invoices.length,
+      settlement_count_total: allSettlements.length,
+      matched_settlement_count: matchedWithSettlement,
+      bank_txn_count_cached: bankTxns.length,
+      bank_feed_empty: bankFeedEmpty,
+      bank_cache_range: bankDates.length > 0
+        ? { min: bankDates[0], max: bankDates[bankDates.length - 1] }
+        : null,
+      bank_matches_count: bankDepositFound,
+      candidates_generated: readyToReconcile,
+      source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
+    };
+
+    console.log(JSON.stringify({
+      event: 'fetch_outstanding_complete',
+      user_id: userId.slice(0, 8),
+      ...syncInfo,
+    }));
+
     return new Response(JSON.stringify({
       success: true,
       source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
@@ -801,6 +823,7 @@ Deno.serve(async (req) => {
       matched_with_settlement: matchedWithSettlement,
       bank_deposit_found: bankDepositFound,
       ready_to_reconcile: readyToReconcile,
+      sync_info: syncInfo,
       rows,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
