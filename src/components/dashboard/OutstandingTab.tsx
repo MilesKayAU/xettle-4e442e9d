@@ -208,8 +208,12 @@ const GATEWAY_LABELS: Record<string, string> = {
 const formatAUD = (n: number) =>
   new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
 
-const formatDate = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—';
+const formatDate = (d: string | null) => {
+  if (!d) return '—';
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime()) || parsed.getFullYear() < 2000) return '—';
+  return parsed.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+};
 
 const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
