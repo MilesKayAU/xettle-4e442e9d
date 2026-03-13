@@ -449,7 +449,7 @@ async function fetchBankTxnsForUser(
     while (hasMore && page <= MAX_PAGES_PER_ACCOUNT) {
       performedRealXeroFetch = true;
 
-      const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}&pageSize=100`;
+      const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}`;
       const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token.access_token}`,
