@@ -244,10 +244,12 @@ async function fetchBankTxnsForUser(
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
   return {
     user_id: userId,
-    upserted: totalUpserted,
+    bank_rows_upserted: totalUpserted,
+    upserted: totalUpserted, // backwards compat for UI
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
-    has_any_mapping: mappedAccountIds.size > 0,
+    has_any_mapping: hasAnyMapping,
+    filtered_to_mapped_accounts: mappedAccountIds.size > 0,
     lookback_days: lookbackDays,
   };
 }
