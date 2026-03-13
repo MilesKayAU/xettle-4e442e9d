@@ -818,8 +818,8 @@ function formatEventLabel(event: SystemEvent): string {
     case 'xero_push_success': return `Pushed to Xero: ${mp} ${period}`;
     case 'xero_push_failed': return `Xero push failed: ${mp} ${period}`;
     case 'reconciliation_run': return `Reconciliation completed: ${mp} ${period}`;
-    case 'bank_match_confirmed': return `Bank deposit matched: ${mp} ${period}`;
-    case 'bank_match_failed': return `Bank feed not synced yet: ${mp} ${period}`;
+    case 'bank_match_confirmed': return `Destination deposit matched: ${mp} ${period}`;
+    case 'bank_match_failed': return `Destination feed not synced yet: ${mp} ${period}`;
     case 'bank_match_query': {
       const count = event.details?.txns_returned;
       return `Bank feed queried: ${mp} — ${count ?? 0} transactions found`;
