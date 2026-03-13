@@ -872,7 +872,7 @@ Deno.serve(async (req) => {
       }
 
       // Determine if pre-boundary
-      const currencyCode = inv.CurrencyCode || 'AUD';
+      // currencyCode already declared at line 661 — reuse it
       const isPreBoundary = accountingBoundary && invoiceDate && invoiceDate < accountingBoundary;
 
       rows.push({
