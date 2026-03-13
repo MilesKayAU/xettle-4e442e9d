@@ -340,87 +340,8 @@ export default function Dashboard() {
     }
   }, [user, loadMarketplaces]);
 
-  // ─── First-load scan trigger ─────────────────────────────────
-  // Catches users with connected tokens but no scan flags (e.g. completed wizard before scanning was wired up)
-  const firstLoadTriggered = useRef(false);
-  useEffect(() => {
-    if (!user || firstLoadTriggered.current) return;
-    firstLoadTriggered.current = true;
-
-    const triggerFirstLoadScan = async () => {
-      try {
-        const caps = await detectCapabilities();
-        const hasAnyToken = caps.hasXero || caps.hasAmazon || caps.hasShopify;
-        if (!hasAnyToken) return;
-
-        // Check if any scan flag exists
-        const { data: scanFlags } = await supabase
-          .from('app_settings')
-          .select('key')
-          .in('key', ['xero_scan_completed', 'amazon_scan_completed', 'shopify_scan_completed'])
-          .limit(1);
-
-        const hasAnyScanFlag = !!(scanFlags && scanFlags.length > 0);
-        const hasAnyData = caps.hasSettlements || caps.hasShopifyOrders;
-
-        if (!hasAnyScanFlag && !hasAnyData && caps.accessToken) {
-          console.log('[dashboard] Tokens found but no scans ran — triggering first-load scan');
-
-          // Fire scans in parallel (fire-and-forget)
-          const scanPromises: Promise<any>[] = [];
-
-          if (caps.hasXero) {
-            scanPromises.push(callEdgeFunctionSafe('scan-xero-history', caps.accessToken));
-          }
-          if (caps.hasAmazon) {
-            scanPromises.push(callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken, {}, { headers: { 'x-action': 'smart-sync' } }));
-          }
-          if (caps.hasShopify) {
-            scanPromises.push(callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken));
-            scanPromises.push(callEdgeFunctionSafe('fetch-shopify-orders', caps.accessToken, {
-              ...(caps.shopDomain ? { shopDomain: caps.shopDomain } : {}),
-              channelDetectionOnly: true,
-            }));
-          }
-
-          await Promise.allSettled(scanPromises);
-
-          // Follow up with channel scan + settlement generation + provisioning + validation sweep
-          if (caps.hasShopify) {
-            await callEdgeFunctionSafe('scan-shopify-channels', caps.accessToken);
-            await callEdgeFunctionSafe('auto-generate-shopify-settlements', caps.accessToken);
-          }
-          if (caps.userId) {
-            await provisionAllMarketplaceConnections(caps.userId);
-          }
-          await callEdgeFunctionSafe('run-validation-sweep', caps.accessToken);
-
-          // Write scan completion flags
-          const flagPromises: Promise<any>[] = [];
-          const writeFlag = async (key: string) => {
-            await supabase.from('app_settings').upsert(
-              { user_id: caps.userId!, key, value: 'true' },
-              { onConflict: 'user_id,key' }
-            );
-          };
-          if (caps.hasXero) flagPromises.push(writeFlag('xero_scan_completed'));
-          if (caps.hasAmazon) flagPromises.push(writeFlag('amazon_scan_completed'));
-          if (caps.hasShopify) {
-            flagPromises.push(writeFlag('shopify_scan_completed'));
-            flagPromises.push(writeFlag('shopify_channel_scan_triggered'));
-          }
-          await Promise.allSettled(flagPromises);
-
-          console.log('[dashboard] First-load scan complete — reloading marketplaces');
-          loadMarketplaces();
-        }
-      } catch (err) {
-        console.warn('[dashboard] first-load scan failed:', err);
-      }
-    };
-
-    triggerFirstLoadScan();
-  }, [user]);
+  // First-load heavy bootstrap scan removed to avoid duplicate API storms.
+  // PostSetupBanner owns adaptive scanning and retry UX.
 
   // ─── Claim demo session (post-signup from landing page) ───────────────────
   useEffect(() => {
