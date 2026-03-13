@@ -426,7 +426,7 @@ Deno.serve(async (req) => {
       CurrencyCode: t.currency || 'AUD',
     }));
 
-    console.log(`[fetch-outstanding] Bank cache: ${bankTxns.length} RECEIVE txns from ${ninetyDaysAgoStr}, empty=${bankFeedEmpty}`);
+    console.log(`[fetch-outstanding] Bank cache: ${bankTxns.length} RECEIVE txns from ${bankLookbackStr}, empty=${bankFeedEmpty}`);
 
     // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
     // Nothing is marked as matched until user explicitly confirms.
