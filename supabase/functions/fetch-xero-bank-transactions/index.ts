@@ -200,28 +200,18 @@ async function fetchBankTxnsForUser(
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STEP 2B — Recent-success guard (anti-hammer, bypassed when cache empty)
+  // STEP 2B — Observe recent success (final skip decision happens per-account)
   // ══════════════════════════════════════════════════════════════
   if (cachedBankRowsTotal > 0 && lastSuccessfulBankSyncAt) {
     const lastSuccessMs = new Date(lastSuccessfulBankSyncAt).getTime();
     if (!isNaN(lastSuccessMs)) {
       const minutesSinceSuccess = (nowMs - lastSuccessMs) / 60000;
       if (minutesSinceSuccess < guardMinutes) {
-        console.log(`[fetch-bank-txns] Recent-success guard for ${userId}: synced ${Math.round(minutesSinceSuccess)}m ago (guard=${guardMinutes}m), cache has ${cachedBankRowsTotal} rows`);
-        return {
-          user_id: userId,
-          skipped: true,
-          skip_reason: 'recent_success',
-          cooldown_applied: false,
-          retry_after_seconds: 0,
-          minutes_since_last_success: Math.round(minutesSinceSuccess),
-          guard_minutes: guardMinutes,
-          ...baseDiag,
-        };
+        console.log(`[fetch-bank-txns] Recent success (${Math.round(minutesSinceSuccess)}m ago); applying change-detection checks before deciding to skip`);
       }
     }
   } else if (cachedBankRowsTotal === 0) {
-    console.log(`[fetch-bank-txns] Cache empty for ${userId} — bypassing recent-success guard to seed cache`);
+    console.log(`[fetch-bank-txns] Cache empty for ${userId} — bypassing recent-success skips to seed cache`);
   }
 
   // ══════════════════════════════════════════════════════════════
