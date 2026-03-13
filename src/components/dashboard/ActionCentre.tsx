@@ -444,13 +444,13 @@ export default function ActionCentre({
             <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/20">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
-                  <h3 className="font-semibold text-sm">Posted — Awaiting Deposit</h3>
-                </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1">In Xero, waiting for bank match</p>
-                <div>
-                  <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting deposit</span></p>
-                  <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
+                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
+                   <h3 className="font-semibold text-sm">Waiting for Payout</h3>
+                 </div>
+                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Posted, awaiting destination match</p>
+                 <div>
+                   <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting payout</span></p>
+                   <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
                 </div>
                 <ul className="space-y-1">
                   {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
