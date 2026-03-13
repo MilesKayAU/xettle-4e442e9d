@@ -381,10 +381,17 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { reference, date, dueDate, lineItems, country, contactName } = body;
+    const { date, dueDate, lineItems, country, contactName } = body;
 
-    console.log('Create invoice request:', { userId, reference, date, country, contactName, lineItemCount: lineItems?.length });
-    if (!reference) throw new Error('Missing reference');
+    // ─── SERVER-SIDE REFERENCE GENERATION ─────────────────────────────
+    const settlementId = body.settlementId;
+    if (!settlementId) {
+      throw new Error('Missing settlementId — reference is generated server-side');
+    }
+    const splitSuffix = body.splitPart ? `-P${body.splitPart}` : '';
+    const reference = `Xettle-${settlementId}${splitSuffix}`;
+
+    console.log('Create invoice request:', { userId, settlementId, reference, date, country, contactName, lineItemCount: lineItems?.length });
     if (!date) throw new Error('Missing date');
     if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
 
