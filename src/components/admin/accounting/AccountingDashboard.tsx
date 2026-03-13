@@ -647,7 +647,7 @@ export default function AccountingDashboard() {
           UnitAmount: round2(-rolloverAmount),
           Quantity: 1,
         });
-        const reference1 = `Xettle-${header.settlementId}-P1`;
+        // Reference generated server-side; just need splitPart
         const date1 = m1.end;
 
         // Invoice 2: DR 612 (clear rollover) + Month-2 actual lines
