@@ -477,6 +477,13 @@ async function fetchBankTxnsForUser(
             value: newCooldownUntil,
           }, { onConflict: 'user_id,key' });
 
+          // Persist any per-account checkpoints accumulated from prior accounts
+          if (accountSettingsUpserts.length > 0) {
+            await adminSupabase
+              .from('app_settings')
+              .upsert(accountSettingsUpserts, { onConflict: 'user_id,key' });
+          }
+
           return {
             user_id: userId,
             xero_rate_limited: true,
@@ -493,6 +500,7 @@ async function fetchBankTxnsForUser(
             transactions_seen: totalTransactionsSeen,
             transactions_in_range: totalTransactionsInRange,
             bank_account_ids_used: bankAccountIdsUsed,
+            per_account_stats: perAccountStats,
             mapped_account_ids_count: mappedAccountIds.size,
             has_any_mapping: hasAnyMapping,
             used_invoice_range: usedInvoiceRange,
