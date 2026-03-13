@@ -1173,6 +1173,10 @@ Deno.serve(async (req) => {
       invoice_cache_age_minutes: invoiceCacheAgeMinutes,
       from_cache: usingCacheFallback,
       xero_rate_limited: usingCacheFallback && !cacheIsFresh,
+      // Bank sync diagnostics
+      bank_sync_last_success_at: bankSyncLastSuccessAt,
+      bank_sync_cooldown_until: bankSyncCooldownUntil,
+      bank_sync_cooldown_seconds_remaining: bankSyncCooldownSecondsRemaining,
     };
 
     console.log(JSON.stringify({
