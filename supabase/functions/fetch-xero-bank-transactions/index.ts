@@ -112,6 +112,7 @@ async function fetchBankTxnsForUser(
     .like('key', 'payout_account:%');
 
   const mappedAccountIds = new Set<string>();
+  const hasAnyMapping = (payoutSettings || []).length > 0; // includes _default
   for (const row of (payoutSettings || [])) {
     if (row.value && row.key.startsWith('payout_account:')) {
       mappedAccountIds.add(row.value);
