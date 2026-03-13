@@ -53,14 +53,15 @@ export default function PayoutBankAccountMapper() {
     setLoading(true);
     applyFetchIssue('');
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        applyFetchIssue('Session not ready. Please sign in again and retry.');
+        return;
+      }
 
       // Parallel fetch: bank accounts, settings, marketplace connections
       const [accountsResp, settingsResp, connectionsResp] = await Promise.all([
-        supabase.functions.invoke('fetch-xero-bank-accounts', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        }),
+        supabase.functions.invoke('fetch-xero-bank-accounts'),
         supabase.from('app_settings').select('key, value').like('key', 'payout_account:%'),
         supabase.from('marketplace_connections').select('marketplace_code, marketplace_name').eq('connection_status', 'active'),
       ]);
