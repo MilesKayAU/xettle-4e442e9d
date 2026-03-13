@@ -290,6 +290,16 @@ export default function SystemStatusStrip({
             ))}
           </div>
 
+          {/* Refresh status button — single source of truth */}
+          {onRefreshStatus && (
+            <div className="flex items-center justify-end">
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground" onClick={onRefreshStatus}>
+                <RefreshCw className="h-3 w-3" />
+                Refresh status
+              </Button>
+            </div>
+          )}
+
           {/* Action items */}
           {actions.map(action => (
             <div
