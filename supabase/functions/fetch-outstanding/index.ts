@@ -272,12 +272,23 @@ Deno.serve(async (req) => {
     // ─── Pass ALL outstanding ACCREC invoices through — UI toggle controls marketplace vs all ───
     const invoices = allInvoices;
 
-    // ─── Get ALL user's settlements for matching (including already_recorded) ───
+    // ─── Get user's settlements for matching (including already_recorded) ───
     // Include already_recorded because they exist in Xero and need reconciliation tracking
-    const { data: settlements } = await supabase
+    // When force_recompute is true, scope to lookback window for bounded re-scan
+    const lookbackDate = new Date();
+    lookbackDate.setDate(lookbackDate.getDate() - lookbackDays);
+    const lookbackDateStr = lookbackDate.toISOString().split('T')[0];
+
+    let settlementQuery = supabase
       .from('settlements')
       .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data, bank_tx_id, bank_match_method, bank_match_confidence, bank_match_confirmed_at, bank_match_confirmed_by')
       .eq('user_id', userId);
+
+    if (forceRecompute) {
+      settlementQuery = settlementQuery.gte('period_end', lookbackDateStr);
+    }
+
+    const { data: settlements } = await settlementQuery;
 
     const settlementMap = new Map<string, any>();
     const allSettlements = settlements || [];
