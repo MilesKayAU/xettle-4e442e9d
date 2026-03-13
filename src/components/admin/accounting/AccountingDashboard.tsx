@@ -38,6 +38,7 @@ import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplica
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 import InsightsTab from '@/components/admin/accounting/InsightsTab';
+import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
