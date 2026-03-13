@@ -525,6 +525,11 @@ async function fetchBankTxnsForUser(
       const data = await res.json();
       const txns = data?.BankTransactions || [];
 
+      // Capture bank account name from first transaction if available
+      if (txns.length > 0 && txns[0]?.BankAccount?.Name && !bankAccountNamesUsed[accountId]) {
+        bankAccountNamesUsed[accountId] = txns[0].BankAccount.Name;
+      }
+
       if (txns.length === 0) {
         accountStopReason = 'empty_page';
         hasMore = false;
