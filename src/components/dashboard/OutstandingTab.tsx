@@ -204,6 +204,7 @@ interface BankSyncDiagnostics {
   synced_row_count?: number;
   synced_account_count?: number;
   lookback_days?: number;
+  date_range_source?: string;
   cooldown_until?: string;
   retry_after_seconds?: number;
   xero_rate_limited?: boolean;
