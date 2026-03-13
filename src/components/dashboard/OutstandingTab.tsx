@@ -1033,16 +1033,35 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             Xero invoices awaiting payment — matched against your settlements and bank deposits.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fetchOutstanding({ runSync: true })}
-          disabled={loading}
-          className="gap-1.5"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Sync with Xero
-        </Button>
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={rescanMatches}
+                disabled={rescanning || loading}
+                className="gap-1.5"
+              >
+                <Search className={`h-4 w-4 ${rescanning ? 'animate-pulse' : ''}`} />
+                {rescanning ? 'Scanning…' : 'Re-scan matches'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Rebuild suggestions from the last 90 days</p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchOutstanding({ runSync: true })}
+            disabled={loading || rescanning}
+            className="gap-1.5"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Sync with Xero
+          </Button>
+        </div>
       </div>
 
       {/* Smart marketplace connection prompt */}
