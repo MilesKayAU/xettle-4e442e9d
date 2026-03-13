@@ -663,13 +663,14 @@ export default function ActionCentre({
         </Card>
       )}
 
-      {/* Floating upload button */}
+      {/* Floating upload button — secondary style, dashboard is read-only feeling */}
       <div className="fixed bottom-6 right-6 z-40">
         <Button
+          variant="outline"
           onClick={() => onSwitchToUpload()}
-          className="h-12 px-5 gap-2 shadow-lg rounded-full"
+          className="h-10 px-4 gap-2 shadow-md rounded-full bg-background/90 backdrop-blur-sm text-xs"
         >
-          <Plus className="h-4 w-4" /> Upload settlement
+          <Plus className="h-3.5 w-3.5" /> Upload settlement
         </Button>
       </div>
     </div>
