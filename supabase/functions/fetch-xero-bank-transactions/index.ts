@@ -821,7 +821,7 @@ Deno.serve(async (req) => {
 
     for (const userId of userIds) {
       try {
-        const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
+        const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, CACHE_FRESH_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
         results.push(result);
       } catch (err: any) {
         console.error(`[fetch-bank-txns] Error for ${userId}:`, err.message);
