@@ -440,10 +440,10 @@ export default function ActionCentre({
           {awaitingBank.length > 0 && (() => {
             const grouped = groupByMarketplaceMonth(awaitingBank);
             return (
-            <Card className="border-border bg-muted/20">
+            <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
                   <h3 className="font-semibold text-sm">Posted — Awaiting Deposit</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
