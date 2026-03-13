@@ -42,21 +42,9 @@ type DashboardView = 'dashboard' | 'outstanding' | 'smart_upload' | 'settlements
 type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
-function AiMapperBanner() {
-  const [show, setShow] = useState(false);
-  const navigate = useNavigate();
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: status } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'ai_mapper_status')
-          .maybeSingle();
-        if (status?.value === 'suggested') setShow(true);
-      } catch {}
-    })();
-  }, []);
+function AiMapperBanner({ show: showProp }: { show?: boolean }) {
+  const [show, setShow] = useState(showProp ?? false);
+  useEffect(() => { if (showProp !== undefined) setShow(showProp); }, [showProp]);
   if (!show) return null;
   return (
     <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 px-5 py-3 shadow-sm">
@@ -68,7 +56,6 @@ function AiMapperBanner() {
       </div>
       <Button size="sm" variant="outline" onClick={() => {
         setShow(false);
-        // Navigate to settlements view which contains settings tab
         window.dispatchEvent(new CustomEvent('open-settings-tab'));
       }}>
         Review mapping
