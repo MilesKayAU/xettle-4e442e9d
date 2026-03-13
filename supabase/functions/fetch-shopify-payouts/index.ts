@@ -287,9 +287,8 @@ async function syncPayoutsForUser(
       const feesExGst = Math.abs(totalFees) - gstOnExpenses;
       const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
-      // API-fetched payouts default to 'saved' — sync-xero-status determines
-      // the real status by checking if an invoice already exists in Xero.
-      // Only user-uploaded settlements get 'ready_to_push'.
+      // All ingestion paths start at 'saved'; sync-xero-status promotes to 'ready_to_push'
+      // See: src/constants/settlement-status.ts for canonical state machine
       const isBeforeBoundary = dateMin && payoutDate < dateMin;
       const settlementStatus = isBeforeBoundary ? "already_recorded" : "saved";
 
