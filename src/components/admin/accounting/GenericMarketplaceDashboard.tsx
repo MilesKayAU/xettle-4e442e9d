@@ -434,7 +434,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     Retry {settlements.filter(s => s.status === 'push_failed' || s.status === 'push_failed_permanent').length} Failed
                   </Button>
                 )}
-                {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
+                {settlements.some(s => s.status === 'ingested') && (
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleBulkMarkSynced(settlements)}>
                     <SkipForward className="h-3.5 w-3.5 mr-1" />
                     Mark All as Already in Xero
