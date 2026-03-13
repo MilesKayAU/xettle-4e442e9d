@@ -1060,6 +1060,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   };
 
   const getRowBgClass = (row: OutstandingRow) => {
+    if (row.match_status === 'pending_enrichment') return '';
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
