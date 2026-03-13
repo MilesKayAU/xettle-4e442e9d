@@ -220,9 +220,15 @@ async function fetchBankTxnsForUser(
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STEP 3 — Refresh Xero token
+  // STEP 3 — Refresh Xero token (catch throw → structured error)
   // ══════════════════════════════════════════════════════════════
-  const token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
+  let token: any;
+  try {
+    token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
+  } catch (tokenErr: any) {
+    console.error(`[fetch-bank-txns] Token refresh threw for ${userId}:`, tokenErr.message);
+    token = null;
+  }
   if (!token) {
     return {
       user_id: userId,
