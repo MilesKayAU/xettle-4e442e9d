@@ -487,10 +487,10 @@ export default function ActionCentre({
             <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  <h3 className="font-semibold text-sm">Fully Reconciled</h3>
-                </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1">Matched + verified</p>
+                   <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                   <h3 className="font-semibold text-sm">All Good</h3>
+                 </div>
+                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Verified payouts</p>
                 <p className="text-xs text-muted-foreground">
                   {complete.length} settlement{complete.length > 1 ? 's' : ''} matched
                 </p>
