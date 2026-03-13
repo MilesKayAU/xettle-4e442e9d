@@ -88,7 +88,9 @@ Deno.serve(async (req) => {
 
   // ═══════════════════════════════════════════════════════════════════
   // XERO-FIRST PIPELINE: Discover what exists before fetching marketplace data
+  // 4-minute elapsed guard: edge functions have ~5min max, reserve time for final writes
   // ═══════════════════════════════════════════════════════════════════
+  const MAX_ELAPSED_MS = 4 * 60 * 1000; // 4 minutes
 
   // 1. Xero status audit (discover what's already in Xero)
   console.log("[scheduled-sync] Step 1: Xero status audit (discovery)...");
