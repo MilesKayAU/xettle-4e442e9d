@@ -30,9 +30,20 @@ interface XeroBankAccount {
   account_id: string;
   name: string;
   currency_code: string;
+  bank_account_type?: string | null;
+  type?: string | null;
 }
 
-export default function PayoutBankAccountMapper() {
+function getAccountTypeBadge(acc: XeroBankAccount): { label: string; className: string } {
+  const name = acc.name.toLowerCase();
+  if (name.includes('paypal')) return { label: 'PayPal', className: 'bg-accent text-accent-foreground' };
+  if (name.includes('wise') || name.includes('transferwise')) return { label: 'Wise', className: 'bg-accent text-accent-foreground' };
+  if (name.includes('clearing') || name.includes('suspense')) return { label: 'Clearing', className: 'bg-muted text-muted-foreground' };
+  if (name.includes('stripe')) return { label: 'Stripe', className: 'bg-accent text-accent-foreground' };
+  return { label: 'Bank', className: 'bg-secondary text-secondary-foreground' };
+}
+
+export default function DestinationAccountMapper() {
   const [accounts, setAccounts] = useState<XeroBankAccount[]>([]);
   const [rails, setRails] = useState<Array<{ code: string; label: string }>>([]);
   const [defaultAccountId, setDefaultAccountId] = useState<string>('');
