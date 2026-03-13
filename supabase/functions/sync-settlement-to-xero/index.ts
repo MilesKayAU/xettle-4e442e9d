@@ -858,11 +858,11 @@ serve(async (req) => {
     console.log('Invoice created successfully:', invoiceId, 'Number:', invoiceNumber);
 
     // ─── Write to reference index cache (prevents future duplicates) ──
-    if (invoiceId && settlementId) {
+    if (invoiceId) {
       const sd = body.settlementData || {};
       await supabase.from('xero_accounting_matches').upsert({
         user_id: userId,
-        settlement_id: settlementId,
+        settlement_id: cacheSettlementKey,
         marketplace_code: sd.marketplace || 'unknown',
         xero_invoice_id: invoiceId,
         xero_invoice_number: invoiceNumber || null,
@@ -876,7 +876,7 @@ serve(async (req) => {
         matched_reference: reference,
         reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
       }, { onConflict: 'user_id,settlement_id' });
-      console.log(`[cache-write] Indexed ${settlementId} → ${invoiceId}`);
+      console.log(`[cache-write] Indexed ${cacheSettlementKey} → ${invoiceId}`);
     }
 
     // ─── Balance check: settlement vs Xero invoice total ──────────
