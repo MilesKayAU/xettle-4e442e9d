@@ -255,6 +255,9 @@ export default function Dashboard() {
         // AI Mapper banner
         setShowAiMapper(flagMap.get('ai_mapper_status') === 'suggested');
 
+        // Bank mapping nudge — show if no default payout account mapped
+        setShowBankMappingNudge(!flagMap.has('payout_account:_default'));
+
         // Setup in progress banner
         const dismissed = flagMap.get('setup_hub_dismissed') === 'true';
         const phase3Done = flagMap.get('setup_phase3_complete') === 'true';
