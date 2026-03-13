@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ShieldAlert, Info } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ChevronDown, ShieldAlert, Info, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -56,6 +56,34 @@ interface GstSummaryRow {
   };
 }
 
+interface VarianceLine {
+  code: string;
+  label: string;
+  amount: number;
+  confidence: 'high' | 'medium' | 'low';
+  evidence?: {
+    settlement_ids?: string[];
+    xero_invoice_ids?: string[];
+    notes?: string[];
+  };
+}
+
+interface VarianceResult {
+  success: boolean;
+  period_start: string;
+  period_end: string;
+  marketplace_gst_total_estimate: number | null;
+  xero_gst: number | null;
+  difference: number | null;
+  variance_lines: VarianceLine[];
+  explained_total: number;
+  unexplained_remainder: number | null;
+  confidence_score: number;
+  confidence_label: string;
+  confidence_reasons: string[];
+  xero_source_mode: 'tax_summary' | 'xettle_invoices_only' | 'unavailable';
+}
+
 function getMonthPeriods(count: number = 12): { start: string; end: string; label: string }[] {
   const periods: { start: string; end: string; label: string }[] = [];
   const now = new Date();
@@ -95,6 +123,8 @@ export default function GstAuditTab() {
   const [refreshingPeriod, setRefreshingPeriod] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<GstSummaryRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [variance, setVariance] = useState<VarianceResult | null>(null);
+  const [varianceLoading, setVarianceLoading] = useState(false);
 
   const periods = getMonthPeriods(12);
 
@@ -153,10 +183,29 @@ export default function GstAuditTab() {
     setLoading(false);
   }, [periods, refreshPeriod]);
 
-  const openDrilldown = (row: GstSummaryRow) => {
+  const loadVariance = useCallback(async (periodStart: string, periodEnd: string) => {
+    setVarianceLoading(true);
+    setVariance(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-gst-variance', {
+        body: { period_start: periodStart, period_end: periodEnd },
+      });
+      if (error) throw error;
+      setVariance(data as VarianceResult);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to load variance analysis');
+    } finally {
+      setVarianceLoading(false);
+    }
+  }, []);
+
+  const openDrilldown = useCallback((row: GstSummaryRow) => {
     setSelectedPeriod(row);
     setDrawerOpen(true);
-  };
+    setVariance(null);
+    // Auto-load variance when opening drilldown
+    loadVariance(row.period_start, row.period_end);
+  }, [loadVariance]);
 
   if (loading) {
     return (
@@ -325,6 +374,13 @@ export default function GstAuditTab() {
                   </CardContent>
                 </Card>
 
+                {/* ── VARIANCE ANALYSIS SECTION ── */}
+                <VarianceAnalysisCard
+                  variance={variance}
+                  loading={varianceLoading}
+                  onRefresh={() => selectedPeriod && loadVariance(selectedPeriod.period_start, selectedPeriod.period_end)}
+                />
+
                 {/* Per-Marketplace Breakdown */}
                 <Card>
                   <CardHeader className="pb-2">
@@ -425,6 +481,169 @@ export default function GstAuditTab() {
     </div>
   );
 }
+
+// ─── Variance Analysis Card ──────────────────────────────────────────
+
+function VarianceAnalysisCard({
+  variance,
+  loading,
+  onRefresh,
+}: {
+  variance: VarianceResult | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-8 flex items-center justify-center gap-3">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Analyzing variance…</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!variance) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-center">
+          <Search className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">Variance analysis unavailable</p>
+          <Button variant="outline" size="sm" onClick={onRefresh} className="mt-2 gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" /> Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-primary/20">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Search className="h-4 w-4 text-primary" />
+            Explain the Difference
+          </CardTitle>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRefresh}>
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <CardDescription className="text-xs">
+          Variance analysis — {variance.xero_source_mode === 'xettle_invoices_only' ? 'Xettle invoices (fallback)' : variance.xero_source_mode === 'tax_summary' ? 'Xero Tax Summary' : 'Xero data unavailable'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Variance Lines Table */}
+        {variance.variance_lines.length > 0 ? (
+          <div className="space-y-1">
+            {variance.variance_lines.map((line) => (
+              <VarianceLineRow key={line.code} line={line} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground py-2">No variance components identified.</p>
+        )}
+
+        {/* Explained / Unexplained totals */}
+        <div className="border-t pt-2 space-y-1">
+          <div className="flex justify-between items-center text-sm">
+            <span className="font-medium">Explained difference</span>
+            <span className="font-mono font-medium">{formatAUD(variance.explained_total)}</span>
+          </div>
+          <div className="flex justify-between items-center text-sm">
+            <span className={`font-medium ${variance.unexplained_remainder !== null && Math.abs(variance.unexplained_remainder) >= 1 ? 'text-destructive' : 'text-muted-foreground'}`}>
+              Unexplained remainder
+            </span>
+            <span className={`font-mono font-medium ${variance.unexplained_remainder !== null && Math.abs(variance.unexplained_remainder) >= 1 ? 'text-destructive' : 'text-muted-foreground'}`}>
+              {formatAUD(variance.unexplained_remainder)}
+            </span>
+          </div>
+        </div>
+
+        {/* Variance-specific confidence */}
+        <div className="border-t pt-2 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium">Variance Confidence:</span>
+            <ConfidenceBadge label={variance.confidence_label} score={variance.confidence_score} />
+          </div>
+          {variance.confidence_reasons.length > 0 && (
+            <ul className="space-y-1">
+              {variance.confidence_reasons.map((reason, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <span className="text-muted-foreground/60 mt-0.5">•</span>
+                  <span>{reason}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Variance Line Row (with collapsible evidence) ───────────────────
+
+function VarianceLineRow({ line }: { line: VarianceLine }) {
+  const [open, setOpen] = useState(false);
+  const hasEvidence = line.evidence && (
+    (line.evidence.settlement_ids && line.evidence.settlement_ids.length > 0) ||
+    (line.evidence.notes && line.evidence.notes.length > 0)
+  );
+
+  const confidenceColor = line.confidence === 'high'
+    ? 'text-green-600'
+    : line.confidence === 'medium'
+      ? 'text-amber-600'
+      : 'text-destructive';
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/50 transition-colors text-left group">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {hasEvidence ? (
+              open ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+            ) : (
+              <span className="w-3" />
+            )}
+            <span className="text-xs truncate">{line.label}</span>
+            <Badge variant="outline" className={`text-[9px] px-1 py-0 ${confidenceColor} border-current`}>
+              {line.confidence}
+            </Badge>
+          </div>
+          <span className={`font-mono text-xs font-medium shrink-0 ml-2 ${line.amount >= 0 ? 'text-foreground' : 'text-destructive'}`}>
+            {line.amount >= 0 ? '+' : ''}{formatAUD(line.amount)}
+          </span>
+        </button>
+      </CollapsibleTrigger>
+      {hasEvidence && (
+        <CollapsibleContent>
+          <div className="ml-7 mb-2 space-y-1">
+            {line.evidence?.notes?.map((note, i) => (
+              <p key={i} className="text-[11px] text-muted-foreground">{note}</p>
+            ))}
+            {line.evidence?.settlement_ids && line.evidence.settlement_ids.length > 0 && (
+              <div className="text-[11px] text-muted-foreground">
+                <span className="font-medium">Settlements: </span>
+                {line.evidence.settlement_ids.map((id, i) => (
+                  <span key={id}>
+                    {i > 0 && ', '}
+                    <span className="font-mono">{id.length > 16 ? `${id.slice(0, 12)}…` : id}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      )}
+    </Collapsible>
+  );
+}
+
+// ─── Shared helper components ────────────────────────────────────────
 
 function SummaryLine({
   label,
