@@ -15,6 +15,11 @@ const corsHeaders = {
 }
 
 const GUARD_KEY = 'bank_txn_last_fetched_at';
+const COOLDOWN_KEY = 'xero_api_cooldown_until';
+const LAST_SYNC_AT_KEY = 'bank_sync_last_success_at';
+const LAST_SYNC_ROW_COUNT_KEY = 'bank_txn_last_synced_row_count';
+const BANK_CACHE_TTL_MINUTES = 24 * 60;
+
 const GUARD_MINUTES_BATCH = 30;
 const GUARD_MINUTES_SELF = 2; // Allow more frequent manual syncs
 const LOOKBACK_DAYS_BATCH = 60;
