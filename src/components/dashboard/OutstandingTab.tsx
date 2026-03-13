@@ -487,14 +487,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         },
         body: { action: 'self' },
       });
+      // Store diagnostics for every response path — before any early return
+      setLastBankSyncResult(resp.data ?? { error: resp.error?.message });
+
       if (resp.error) {
         toast.error(`Bank feed sync failed: ${resp.error.message}`, { id: 'bank-feed-sync' });
         // Still refetch so cached data renders
         await fetchOutstanding({ runSync: false });
         return;
       }
-      // Store diagnostics for every response path
-      setLastBankSyncResult(resp.data);
 
       if (resp.data?.xero_rate_limited) {
         const retryAfter = Number(resp.data?.retry_after_seconds) || 60;
@@ -1369,7 +1370,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* ─── Bank sync diagnostics (collapsible) ─── */}
-      {lastBankSyncResult && (
+      {lastBankSyncResult ? (
         <Collapsible>
           <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1 py-0.5">
             <Info className="h-3.5 w-3.5" />
@@ -1415,6 +1416,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             </div>
           </CollapsibleContent>
         </Collapsible>
+      ) : (
+        <p className="text-xs text-muted-foreground px-1">No bank sync diagnostics yet.</p>
       )}
 
 
