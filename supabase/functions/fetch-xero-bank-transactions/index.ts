@@ -276,7 +276,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     // ── Determine mode: "self" (user-scoped) or "batch" (service-role) ──
-    const action = body.action || req.headers.get('x-action') || 'batch';
+    const action = req.headers.get('x-action') ?? body.action ?? 'batch';
 
     if (action === 'self') {
       // ── USER-SCOPED MODE ──
