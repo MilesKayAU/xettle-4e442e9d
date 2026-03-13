@@ -141,6 +141,22 @@ export default function PostSetupBanner({
       // Amazon scan
       if (hasAmazon && caps.hasAmazon && !completedFlags.has('amazon_scan_completed')) {
         phase1Promises.push((async () => {
+          // GUARDRAIL: Check per-user cooldown before attempting Amazon fetch
+          const { data: cooldownRow } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'amazon_rate_limit_until')
+            .maybeSingle();
+          if (cooldownRow?.value) {
+            const retryAt = new Date(cooldownRow.value);
+            if (retryAt > new Date()) {
+              const minutesLeft = Math.ceil((retryAt.getTime() - Date.now()) / 60000);
+              setAmazonMessage(`Amazon cooldown active — will retry in ${minutesLeft}m`);
+              setAmazonStatus('rate_limited');
+              return; // Don't attempt fetch during cooldown
+            }
+          }
+
           setAmazonStatus('scanning');
           const opts: any = { headers: { 'x-action': 'smart-sync' } };
           if (syncFromBoundary) {
