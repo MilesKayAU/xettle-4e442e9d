@@ -762,7 +762,8 @@ serve(async (req) => {
             xero_status: bestMatch.Status || null,
             xero_journal_id: bestMatch.InvoiceID,
             xero_invoice_id: bestMatch.InvoiceID,
-            status: derivedSt,
+            status: derivedSt.status,
+            sync_origin: derivedSt.syncOrigin,
           };
           if (bestMatch.Status === 'PAID') {
             fuzzyUpdatePayload.bank_verified = true;

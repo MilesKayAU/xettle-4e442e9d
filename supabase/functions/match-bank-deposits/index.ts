@@ -439,10 +439,13 @@ Deno.serve(async (req) => {
                 deposit_group_id: batchGroupId,
               }, { onConflict: 'settlement_id,gateway_code' } as any)
 
-              // Update settlement status if high confidence
+              // Batch match: auto bank_verified for high-confidence batch sums
               if (batchScore >= 90) {
                 await adminSupabase.from('settlements').update({
                   status: 'bank_verified',
+                  bank_verified: true,
+                  bank_verified_at: new Date().toISOString(),
+                  bank_verified_by: 'auto_batch_match',
                 }).eq('settlement_id', s.settlement_id).eq('user_id', userId)
                   .in('status', ['pushed_to_xero', 'reconciled_in_xero'])
               }
