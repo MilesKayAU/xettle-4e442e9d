@@ -613,7 +613,11 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
       totalImported += userImported;
       totalSkipped += userSkipped;
       totalErrors += userErrors;
+      // Release lock after processing
+      await supabaseAdmin.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: 'settlement_sync' });
     } catch (userErr: any) {
+      // Release lock on error too
+      await supabaseAdmin.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: 'settlement_sync' });
       details.push(`User ${userId}: FAILED — ${userErr.message}`);
       totalErrors++;
     }
