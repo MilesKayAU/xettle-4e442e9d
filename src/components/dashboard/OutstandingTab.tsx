@@ -124,6 +124,12 @@ interface OutstandingRow {
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
   recent_bank_txns?: BankTxn[];
+  routing?: {
+    rail_code: string;
+    destination_account_id: string | null;
+    destination_account_name: string | null;
+    mapping_source: string;
+  };
   // Payment verification (Rule #11 — verification only, never accounting)
   payment_verifications?: PaymentVerificationState[];
 }
@@ -180,8 +186,12 @@ interface OutstandingSummary {
     mapping_status?: {
       has_any_mapping?: boolean;
       missing_marketplaces?: string[];
+      missing_rails?: string[];
       used_default_for?: string[];
     };
+    bank_sync_last_success_at?: string | null;
+    bank_sync_cooldown_until?: string | null;
+    bank_sync_cooldown_seconds_remaining?: number | null;
   };
 }
 
@@ -1275,13 +1285,41 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           </Button>
         </div>
       )}
-      {data?.sync_info?.mapping_status?.missing_marketplaces && data.sync_info.mapping_status.missing_marketplaces.length > 0 && (
+      {(() => {
+        const missingRails = data?.sync_info?.mapping_status?.missing_rails || data?.sync_info?.mapping_status?.missing_marketplaces || [];
+        return missingRails.length > 0 ? (
+          <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+            <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Missing destination mappings for: <strong>{missingRails.map((m: string) => MARKETPLACE_LABELS[m] || m).join(', ')}</strong>. 
+              Deposit matching is disabled for these rails until mapped.
+            </p>
+          </div>
+        ) : null;
+      })()}
+
+      {/* ─── Bank sync timestamp + cooldown ─── */}
+      {data?.sync_info?.bank_feed_empty && (
         <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-          <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
-          <p className="text-xs text-muted-foreground">
-            Missing payout bank mappings for: <strong>{data.sync_info.mapping_status.missing_marketplaces.map(m => MARKETPLACE_LABELS[m] || m).join(', ')}</strong>. 
-            Deposit matching is disabled for these channels until mapped.
-          </p>
+          <Clock3 className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="flex-1 text-xs text-muted-foreground">
+            <span className="font-medium">Last successful bank sync: </span>
+            {data.sync_info.bank_sync_last_success_at
+              ? (() => {
+                  const mins = Math.round((Date.now() - new Date(data.sync_info.bank_sync_last_success_at!).getTime()) / 60000);
+                  return mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+                })()
+              : 'never'}
+            {data.sync_info.bank_sync_cooldown_seconds_remaining != null && (
+              <span className="ml-2">
+                · Retry in ~{data.sync_info.bank_sync_cooldown_seconds_remaining}s
+              </span>
+            )}
+          </div>
+          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
+            <RefreshCw className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+            {syncingBankFeed ? 'Syncing…' : 'Sync now'}
+          </Button>
         </div>
       )}
 
@@ -1735,6 +1773,17 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         <td colSpan={9} className="px-6 py-4 bg-muted/20 border-b border-border">
                           <div className="space-y-3">
                             <h4 className="text-sm font-semibold text-foreground">Match Evidence</h4>
+
+                            {/* Routing diagnostics */}
+                            {row.routing && row.is_marketplace && (
+                              <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground p-2 rounded bg-muted/30 border border-border">
+                                <span>Rail: <span className="font-mono font-medium text-foreground">{row.routing.rail_code}</span></span>
+                                <span className="text-border">·</span>
+                                <span>Destination: <span className="font-medium text-foreground">{row.routing.destination_account_name || row.routing.destination_account_id || '—'}</span></span>
+                                <span className="text-border">·</span>
+                                <Badge variant="outline" className="text-[10px]">{row.routing.mapping_source}</Badge>
+                              </div>
+                            )}
 
                             {/* Bank match action panel (5 states) */}
                             {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || (row.match_status === 'no_bank_deposit' && isAmazon(row))) && (
