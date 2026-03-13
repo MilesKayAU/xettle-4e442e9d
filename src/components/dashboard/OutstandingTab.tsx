@@ -308,6 +308,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
+        body: { force_refresh: true },
       });
 
       // Check for structured no_xero_connection signal from fetch-outstanding
