@@ -102,6 +102,7 @@ export default function Dashboard() {
   const [showSetupBanner, setShowSetupBanner] = useState(false);
   const [showBankMappingNudge, setShowBankMappingNudge] = useState(false);
   const [showBankMapper, setShowBankMapper] = useState(false);
+  const [pipelineFilter, setPipelineFilter] = useState<{ marketplace: string; month: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
