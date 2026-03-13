@@ -345,42 +345,42 @@ async function fetchBankTxnsForUser(
       if (res.status === 429) {
         const rawRetryAfter = res.headers.get('Retry-After');
         const retryAfterSec = parseRetryAfterSeconds(rawRetryAfter);
-        const cooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
-        console.log(`[fetch-bank-txns] 429 for ${userId}: raw Retry-After="${rawRetryAfter}", parsed=${retryAfterSec}s, cooldown_until=${cooldownUntil}`);
+        const newCooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
+        console.log(`[fetch-bank-txns] 429 for ${userId}: raw="${rawRetryAfter}", parsed=${retryAfterSec}s`);
+        // ONLY place cooldown_until is written — on actual 429
         await adminSupabase.from('app_settings').upsert({
           user_id: userId,
           key: COOLDOWN_KEY,
-          value: cooldownUntil,
+          value: newCooldownUntil,
         }, { onConflict: 'user_id,key' });
-        const { count } = await adminSupabase
-          .from('bank_transactions')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId);
+        // DO NOT update last_success here
         return {
           user_id: userId,
           xero_rate_limited: true,
-          retry_after_seconds: retryAfterSec,
-          cooldown_until: cooldownUntil,
+          skip_reason: null,
           cooldown_applied: false,
-          cached_bank_rows: count || 0,
-          last_sync_time: lastSyncTime,
+          retry_after_seconds: retryAfterSec,
+          cooldown_until: newCooldownUntil,
           bank_rows_upserted: totalUpserted,
-          bank_rows_cached_total: count || 0,
+          synced_row_count: totalUpserted,
           partial: page > 1,
           mapped_account_ids_count: mappedAccountIds.size,
           has_any_mapping: hasAnyMapping,
-          filtered_to_mapped_accounts: mappedAccountIds.size > 0,
-          lookback_days: effectiveDays,
+          used_invoice_range: usedInvoiceRange,
+          invoice_range_days: effectiveDays,
+          fetch_from: fromDate.toISOString().split('T')[0],
+          fetch_to: toDate?.toISOString().split('T')[0] || null,
           date_range_source: dateRangeSource,
+          cached_bank_rows_total: cachedBankRowsTotal,
+          last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
         };
       }
       return {
         user_id: userId,
         error: `Xero API ${res.status}`,
-        cached_bank_rows: cachedBankRowsCount,
-        last_sync_time: lastSyncTime,
-        cooldown_until: cooldownUntil,
+        skip_reason: null,
         cooldown_applied: false,
+        ...baseDiag,
       };
     }
 
