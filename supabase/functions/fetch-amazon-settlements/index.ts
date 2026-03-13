@@ -832,9 +832,19 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
   const syncedSettlements: Array<{ settlement_id: string; period_start: string; period_end: string; deposit: number }> = [];
   const errors: string[] = [];
 
-  for (let i = 0; i < sorted.length; i++) {
+    let earlyRateLimitCount = 0;
+    for (let i = 0; i < sorted.length; i++) {
     const report = sorted[i];
     if (!report.reportDocumentId) continue;
+
+    // Skip reports outside sync window (boundary-aware)
+    if (smartSyncFrom && report.dataEndTime) {
+      const reportEnd = report.dataEndTime.split('T')[0];
+      if (reportEnd < smartSyncFrom) {
+        console.log(`[smart-sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${smartSyncFrom}`);
+        continue;
+      }
+    }
 
     // Rate-limit delay
     if (i > 0) await new Promise(r => setTimeout(r, 3000));
