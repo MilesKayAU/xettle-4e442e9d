@@ -421,7 +421,8 @@ async function fetchBankTxnsForUser(
     const lastSuccessRecent = !isNaN(accountLastSuccessMs) && (nowMs - accountLastSuccessMs) < guardMinutes * 60000;
     const invoiceRangeUnchanged = lastRange === rangeSignature;
 
-    if (cacheFresh && invoiceRangeUnchanged && lastSuccessRecent) {
+    // Change detection: skip only when we HAVE cached data AND account-level state is fresh
+    if (cachedBankRowsTotal > 0 && cacheFresh && invoiceRangeUnchanged && lastSuccessRecent) {
       accountsSkippedByChangeDetection++;
       stoppedReasonsByAccount[accountId] = 'unchanged_recent';
       perAccountStats[accountId] = {
@@ -432,6 +433,7 @@ async function fetchBankTxnsForUser(
         stop_reason: 'unchanged_recent',
         skipped_by_change_detection: true,
       };
+      console.log(`[fetch-bank-txns] Skipping account ${accountId}: cache fresh, range unchanged, success recent`);
       continue;
     }
 
