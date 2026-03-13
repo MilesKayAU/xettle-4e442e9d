@@ -17,7 +17,8 @@ const corsHeaders = {
 const GUARD_KEY = 'bank_txn_last_fetched_at';
 const GUARD_MINUTES_BATCH = 30;
 const GUARD_MINUTES_SELF = 2; // Allow more frequent manual syncs
-const LOOKBACK_DAYS = 60;
+const LOOKBACK_DAYS_BATCH = 60;
+const LOOKBACK_DAYS_SELF = 30;
 
 function formatXeroDateTime(d: Date): string {
   const y = d.getFullYear();

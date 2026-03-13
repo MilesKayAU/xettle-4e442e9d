@@ -153,11 +153,13 @@ Deno.serve(async (req) => {
 
     // ─── Parse optional request body params ───
     let forceRecompute = false;
+    let forceRefresh = false;
     let lookbackDays = 90;
     try {
       if (req.method === 'POST') {
         const body = await req.json();
         if (body.force_recompute === true) forceRecompute = true;
+        if (body.force_refresh === true) forceRefresh = true;
         if (typeof body.lookback_days === 'number') {
           lookbackDays = Math.max(30, Math.min(180, Math.round(body.lookback_days)));
         }
