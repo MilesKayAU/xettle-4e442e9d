@@ -1261,6 +1261,7 @@ export default function AccountingDashboard() {
                   setAmazonFetchStatus(status);
                 }} />
                 <XeroConnectionStatus />
+                <PayoutBankAccountMapper />
                 <AccountMapperCard />
                 <ShopifyConnectionStatus />
                 <ChannelManagement />
