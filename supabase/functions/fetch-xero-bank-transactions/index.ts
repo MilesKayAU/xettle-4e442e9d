@@ -24,12 +24,7 @@ const CACHE_FRESH_MINUTES_SELF = 15;
 const LOOKBACK_DAYS_BATCH = 60;
 const LOOKBACK_DAYS_SELF = 30;
 
-function formatXeroDateTime(d: Date): string {
-  const y = d.getFullYear();
-  const m = d.getMonth() + 1;
-  const dd = d.getDate();
-  return `DateTime(${y}, ${m}, ${dd})`;
-}
+// formatXeroDateTime removed — no longer used after switching to If-Modified-Since header
 
 async function refreshXeroToken(supabase: any, userId: string, clientId: string, clientSecret: string) {
   // Optimistic locking: re-read token immediately before refresh
@@ -225,9 +220,15 @@ async function fetchBankTxnsForUser(
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STEP 3 — Refresh Xero token
+  // STEP 3 — Refresh Xero token (catch throw → structured error)
   // ══════════════════════════════════════════════════════════════
-  const token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
+  let token: any;
+  try {
+    token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
+  } catch (tokenErr: any) {
+    console.error(`[fetch-bank-txns] Token refresh threw for ${userId}:`, tokenErr.message);
+    token = null;
+  }
   if (!token) {
     return {
       user_id: userId,
@@ -420,7 +421,8 @@ async function fetchBankTxnsForUser(
     const lastSuccessRecent = !isNaN(accountLastSuccessMs) && (nowMs - accountLastSuccessMs) < guardMinutes * 60000;
     const invoiceRangeUnchanged = lastRange === rangeSignature;
 
-    if (cacheFresh && invoiceRangeUnchanged && lastSuccessRecent) {
+    // Change detection: skip only when we HAVE cached data AND account-level state is fresh
+    if (cachedBankRowsTotal > 0 && cacheFresh && invoiceRangeUnchanged && lastSuccessRecent) {
       accountsSkippedByChangeDetection++;
       stoppedReasonsByAccount[accountId] = 'unchanged_recent';
       perAccountStats[accountId] = {
@@ -431,6 +433,7 @@ async function fetchBankTxnsForUser(
         stop_reason: 'unchanged_recent',
         skipped_by_change_detection: true,
       };
+      console.log(`[fetch-bank-txns] Skipping account ${accountId}: cache fresh, range unchanged, success recent`);
       continue;
     }
 
@@ -446,7 +449,7 @@ async function fetchBankTxnsForUser(
     while (hasMore && page <= MAX_PAGES_PER_ACCOUNT) {
       performedRealXeroFetch = true;
 
-      const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}&pageSize=100`;
+      const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}`;
       const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token.access_token}`,
@@ -474,6 +477,13 @@ async function fetchBankTxnsForUser(
             value: newCooldownUntil,
           }, { onConflict: 'user_id,key' });
 
+          // Persist any per-account checkpoints accumulated from prior accounts
+          if (accountSettingsUpserts.length > 0) {
+            await adminSupabase
+              .from('app_settings')
+              .upsert(accountSettingsUpserts, { onConflict: 'user_id,key' });
+          }
+
           return {
             user_id: userId,
             xero_rate_limited: true,
@@ -490,6 +500,7 @@ async function fetchBankTxnsForUser(
             transactions_seen: totalTransactionsSeen,
             transactions_in_range: totalTransactionsInRange,
             bank_account_ids_used: bankAccountIdsUsed,
+            per_account_stats: perAccountStats,
             mapped_account_ids_count: mappedAccountIds.size,
             has_any_mapping: hasAnyMapping,
             used_invoice_range: usedInvoiceRange,
