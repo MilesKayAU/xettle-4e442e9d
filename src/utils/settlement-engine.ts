@@ -663,7 +663,9 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
           settlement_id: settlement.settlement_id,
           details: { errors: bgErrors },
           severity: 'warning',
-        } as any).catch(() => {});
+        } as any).then(({ error: logErr }) => {
+          if (logErr) console.error('[background_write_failures] log error:', logErr);
+        });
       }
     }, 5000);
 
