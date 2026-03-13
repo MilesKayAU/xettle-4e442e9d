@@ -657,7 +657,8 @@ Deno.serve(async (req) => {
       totalOutstanding += amount;
 
       // Detect marketplace FIRST so fuzzy matching can use it
-      const marketplace = detectMarketplace(reference, contactName);
+      const currencyCode = inv.CurrencyCode || 'AUD';
+      const marketplace = detectMarketplace(reference, contactName, currencyCode);
       const isMarketplace = marketplace !== 'unknown';
 
       // Try to match with our settlement:
