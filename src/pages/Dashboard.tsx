@@ -513,10 +513,7 @@ export default function Dashboard() {
                 </Link>
               </Button>
             )}
-            <ConnectionStatusBar onNavigateToSettings={() => {
-              switchView('settlements');
-              setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
-            }} />
+            <ConnectionStatusBar onNavigateToSettings={() => switchView('settings')} />
             <span className="text-sm text-muted-foreground hidden sm:inline">
               {user?.email}
             </span>
