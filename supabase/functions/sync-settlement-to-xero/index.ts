@@ -748,9 +748,8 @@ serve(async (req) => {
     token = await refreshXeroToken(supabase, token);
 
     // ─── CACHE-FIRST DUPLICATE CHECK ─────────────────────────────────
-    // Check local reference index before hitting the Xero API
-    const settlementIdFromRef = extractSettlementIdFromReference(reference);
-    if (settlementIdFromRef) {
+    // settlementId is already available (server-generated reference), no need to extract
+    {
       const { data: cachedMatch } = await supabase
         .from('xero_accounting_matches')
         .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference')
