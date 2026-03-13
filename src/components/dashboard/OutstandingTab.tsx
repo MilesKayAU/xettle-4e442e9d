@@ -186,8 +186,12 @@ interface OutstandingSummary {
     mapping_status?: {
       has_any_mapping?: boolean;
       missing_marketplaces?: string[];
+      missing_rails?: string[];
       used_default_for?: string[];
     };
+    bank_sync_last_success_at?: string | null;
+    bank_sync_cooldown_until?: string | null;
+    bank_sync_cooldown_seconds_remaining?: number | null;
   };
 }
 
