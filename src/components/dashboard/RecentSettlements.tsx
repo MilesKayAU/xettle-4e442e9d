@@ -403,10 +403,11 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
     );
   }
 
-  const summaryCards: { key: StatusCategory; label: string; count: number; total?: number; color: string; icon: React.ReactNode }[] = [
+  const summaryCards: { key: StatusCategory; label: string; sublabel: string; count: number; total?: number; color: string; icon: React.ReactNode }[] = [
     {
       key: 'ready',
       label: 'Ready to Post',
+      sublabel: 'Not yet sent to Xero',
       count: counts.ready,
       total: counts.readyTotal,
       color: 'border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-900/20',
@@ -415,6 +416,7 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
     {
       key: 'posted',
       label: 'Posted to Xero',
+      sublabel: 'In Xero, waiting for bank match',
       count: counts.posted,
       total: counts.postedTotal,
       color: 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-900/25',
@@ -424,6 +426,7 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
     ...(counts.attention > 0 ? [{
       key: 'attention' as StatusCategory,
       label: 'Needs Attention',
+      sublabel: 'Failed or needs review',
       count: counts.attention,
       color: 'border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-900/20',
       icon: <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />,
@@ -473,10 +476,11 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                 card.count === 0 && 'opacity-50'
               )}
             >
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-0.5">
                 {card.icon}
                 <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
               </div>
+              <p className="text-[10px] text-muted-foreground/70 mb-1 ml-6">{card.sublabel}</p>
               {card.total !== undefined && card.count > 0 ? (
                 <>
                   <p className="text-xl font-bold text-foreground">{formatAUD(card.total)}</p>

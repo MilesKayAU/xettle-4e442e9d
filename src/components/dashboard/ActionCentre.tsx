@@ -408,6 +408,7 @@ export default function ActionCentre({
                   <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
                   <h3 className="font-semibold text-sm">Ready to Post</h3>
                 </div>
+                <p className="text-[10px] text-muted-foreground/70 -mt-1">Not yet sent to Xero</p>
                 <div>
                   <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to post</span></p>
                   <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
@@ -446,6 +447,7 @@ export default function ActionCentre({
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
                   <h3 className="font-semibold text-sm">Posted — Awaiting Deposit</h3>
                 </div>
+                <p className="text-[10px] text-muted-foreground/70 -mt-1">In Xero, waiting for bank match</p>
                 <div>
                   <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting deposit</span></p>
                   <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
@@ -488,6 +490,7 @@ export default function ActionCentre({
                   <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                   <h3 className="font-semibold text-sm">Fully Reconciled</h3>
                 </div>
+                <p className="text-[10px] text-muted-foreground/70 -mt-1">Matched + verified</p>
                 <p className="text-xs text-muted-foreground">
                   {complete.length} settlement{complete.length > 1 ? 's' : ''} matched
                 </p>
@@ -630,16 +633,19 @@ export default function ActionCentre({
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-2">
-              {events.map(e => {
-                const cfg = EVENT_ICONS[e.event_type] || { icon: <Clock className="h-3.5 w-3.5" />, color: 'text-muted-foreground' };
+              {groupActivityEvents(events).map((item, idx) => {
+                const cfg = EVENT_ICONS[item.event_type] || { icon: <Clock className="h-3.5 w-3.5" />, color: 'text-muted-foreground' };
                 return (
-                  <div key={e.id} className="flex items-center gap-2.5 text-xs">
+                  <div key={idx} className="flex items-center gap-2.5 text-xs">
                     <span className={cfg.color}>{cfg.icon}</span>
                     <span className="text-foreground flex-1">
-                      {formatEventLabel(e)}
+                      {item.label}
+                      {item.count > 1 && (
+                        <span className="text-muted-foreground ml-1">({item.count} periods)</span>
+                      )}
                     </span>
                     <span className="text-muted-foreground flex-shrink-0">
-                      {formatTimeAgo(new Date(e.created_at))}
+                      {formatTimeAgo(new Date(item.created_at))}
                     </span>
                   </div>
                 );
@@ -728,6 +734,60 @@ function groupByMarketplaceMonth(rows: ValidationRow[]): GroupedRow[] {
     }
   }
   return Array.from(map.values());
+}
+
+interface GroupedEvent {
+  event_type: string;
+  label: string;
+  count: number;
+  created_at: string;
+}
+
+function groupActivityEvents(events: SystemEvent[]): GroupedEvent[] {
+  const result: GroupedEvent[] = [];
+  const groupable = new Map<string, { events: SystemEvent[]; latestAt: string }>();
+
+  for (const e of events) {
+    // Group repeated same-type events by event_type + marketplace
+    const groupKey = `${e.event_type}:${e.marketplace_code || ''}`;
+    const existing = groupable.get(groupKey);
+    if (existing) {
+      existing.events.push(e);
+      if (e.created_at > existing.latestAt) existing.latestAt = e.created_at;
+    } else {
+      groupable.set(groupKey, { events: [e], latestAt: e.created_at });
+    }
+  }
+
+  for (const [, group] of groupable) {
+    const first = group.events[0];
+    if (group.events.length === 1) {
+      result.push({
+        event_type: first.event_type,
+        label: formatEventLabel(first),
+        count: 1,
+        created_at: group.latestAt,
+      });
+    } else {
+      // Use a summary label for the group
+      const mp = first.marketplace_code ? (MARKETPLACE_LABELS[first.marketplace_code] || first.marketplace_code) : '';
+      const baseLabel = first.event_type === 'bank_match_failed'
+        ? `Bank feed not synced yet: ${mp}`
+        : first.event_type === 'bank_match_confirmed'
+        ? `Bank deposit matched: ${mp}`
+        : formatEventLabel(first);
+      result.push({
+        event_type: first.event_type,
+        label: baseLabel,
+        count: group.events.length,
+        created_at: group.latestAt,
+      });
+    }
+  }
+
+  // Sort by most recent first
+  result.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return result;
 }
 
 function formatTimeAgo(date: Date): string {
