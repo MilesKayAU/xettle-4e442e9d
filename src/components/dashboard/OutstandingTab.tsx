@@ -467,8 +467,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         return;
       }
       if (resp.data?.xero_rate_limited) {
-        const retryAfter = resp.data.retry_after_seconds || 60;
-        const cached = resp.data.bank_rows_cached_total || 0;
+        const retryAfter = Number(resp.data?.retry_after_seconds) || 60;
+        const cached = Number(resp.data?.bank_rows_cached_total) || 0;
         const hasMappings = resp.data.has_any_mapping;
         const mappingNote = hasMappings === false ? ' No payout mappings configured — go to Settings.' : '';
         if (cached > 0) {
@@ -492,8 +492,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         return;
       }
       if (resp.data?.skipped) {
+        const retryAfter = Number(resp.data?.retry_after_seconds) || 60;
         const retryInfo = resp.data.retry_after_seconds
-          ? ` Try again in ~${resp.data.retry_after_seconds}s.`
+          ? ` Try again in ~${retryAfter}s.`
           : ` (${resp.data.minutes_ago}m ago)`;
         const reason = resp.data.skip_reason === 'cooldown'
           ? `Xero cooldown active —${retryInfo}`
