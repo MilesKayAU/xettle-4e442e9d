@@ -634,66 +634,56 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
 // - Returns summary with totals for UI
 // ═══════════════════════════════════════════════════════════════
 async function handleSmartSync(supabase: any, userId: string): Promise<Response> {
-  // ─── Check rate limit cooldown (Amazon 429 backoff) ────────────
-  const { data: rateLimitSetting } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'amazon_rate_limit_until')
-    .eq('user_id', userId)
-    .maybeSingle();
+  // ─── Check rate limit cooldown (atomic RPC) ────────────────────
+  const { data: cooldownResult } = await supabase.rpc('check_sync_cooldown', {
+    p_user_id: userId,
+    p_key: 'amazon_rate_limit_until',
+    p_window_seconds: 0,
+  });
 
-  if (rateLimitSetting?.value) {
-    const rateLimitUntil = new Date(rateLimitSetting.value);
-    if (rateLimitUntil > new Date()) {
-      const minutesLeft = Math.ceil((rateLimitUntil.getTime() - Date.now()) / 60000);
-      return new Response(
-        JSON.stringify({
-          error: 'rate_limited',
-          error_type: 'rate_limit',
-          message: `Amazon API rate limited — this is temporary. Will retry automatically in ${minutesLeft} minutes.`,
-          retry_after: rateLimitSetting.value,
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  if (cooldownResult && !cooldownResult.ok) {
+    const retryAfter = cooldownResult.retry_after;
+    const minutesLeft = Math.ceil((new Date(retryAfter).getTime() - Date.now()) / 60000);
+    return new Response(
+      JSON.stringify({
+        error: 'rate_limited',
+        error_type: 'rate_limit',
+        message: `Amazon API rate limited — this is temporary. Will retry automatically in ${minutesLeft} minutes.`,
+        retry_after: retryAfter,
+      }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
-  // ─── Check sync mutex (prevent concurrent Amazon syncs) ────────
-  const { data: lockSetting } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'amazon_sync_lock_expiry')
-    .eq('user_id', userId)
-    .maybeSingle();
+  // ─── Atomic lock acquisition (10 minute TTL) ──────────────────
+  const { data: lockResult } = await supabase.rpc('acquire_sync_lock', {
+    p_user_id: userId,
+    p_integration: 'amazon',
+    p_lock_key: 'settlement_sync',
+    p_ttl_seconds: 600,
+  });
 
-  if (lockSetting?.value) {
-    const lockExpiry = new Date(lockSetting.value);
-    if (lockExpiry > new Date()) {
-      return new Response(
-        JSON.stringify({
-          error: 'sync_in_progress',
-          error_type: 'mutex',
-          message: 'Amazon sync already running. Please wait for it to complete.',
-          retry_after: lockSetting.value,
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  if (!lockResult?.acquired) {
+    return new Response(
+      JSON.stringify({
+        error: 'sync_in_progress',
+        error_type: 'mutex',
+        message: 'Amazon sync already running. Please wait for it to complete.',
+        retry_after: lockResult?.expires_at,
+      }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
-
-  // ─── Acquire sync lock (10 minute expiry) ──────────────────────
-  await upsertSetting(supabase, userId, 'amazon_sync_lock_expiry',
-    new Date(Date.now() + 10 * 60 * 1000).toISOString()
-  );
 
   try {
     return await _executeSmartSync(supabase, userId);
   } finally {
     // ─── Always release lock when done ────────────────────────────
-    await supabase.from('app_settings')
-      .delete()
-      .eq('user_id', userId)
-      .eq('key', 'amazon_sync_lock_expiry');
+    await supabase.rpc('release_sync_lock', {
+      p_user_id: userId,
+      p_integration: 'amazon',
+      p_lock_key: 'settlement_sync',
+    });
   }
 }
 
