@@ -755,12 +755,13 @@ Deno.serve(async (req) => {
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,
         bank_match_confirmed_at: settlement?.bank_match_confirmed_at || null,
-        // Recent bank transactions for manual picker
-        recent_bank_txns: matchStatus === 'no_bank_deposit' && marketplace === 'amazon_au'
+        // Recent bank transactions for manual picker — serve for ALL marketplaces, not just Amazon
+        recent_bank_txns: matchStatus === 'no_bank_deposit' && isMarketplace
           ? bankTxns
               .filter(t => {
                 const n = `${t.LineItems?.[0]?.Description || ''} ${t.Contact?.Name || ''} ${t.Reference || ''}`.toLowerCase();
-                return n.includes('amazon') || n.includes('amzn');
+                const patterns = marketplacePatterns[marketplace] || [];
+                return patterns.some(p => n.includes(p));
               })
               .slice(0, 10)
               .map(t => ({
