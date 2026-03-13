@@ -703,9 +703,20 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
 
+      // Skip verification if we know bank feed is empty (from sync_info)
+      if (data?.sync_info?.bank_feed_empty) {
+        console.log('[OutstandingTab] Bank feed empty — skipping payment verification');
+        return;
+      }
+
       const resp = await supabase.functions.invoke('verify-payment-matches', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
+
+      if (resp.data?.bank_feed_empty) {
+        console.log('[OutstandingTab] verify-payment-matches reports bank feed empty — no verification attempted');
+        return;
+      }
 
       if (resp.data?.candidates) {
         setPaymentVerifications(resp.data.candidates);
@@ -713,7 +724,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     } catch {
       // Non-blocking — payment verification is optional
     }
-  }, []);
+  }, [data?.sync_info?.bank_feed_empty]);
 
   useEffect(() => {
     if (hasLoaded && data) {
