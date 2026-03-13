@@ -241,6 +241,12 @@ export default function PostSetupBanner({
       // Wait for all Phase 1 to complete
       await Promise.allSettled(phase1Promises);
 
+      // Nothing pending: skip heavy follow-up work on every dashboard mount
+      if (phase1Promises.length === 0) {
+        setScanPhase('done');
+        return;
+      }
+
       // ─── Phase 2: Provision all marketplace connections ───
       if (caps.userId) {
         try {
@@ -276,10 +282,15 @@ export default function PostSetupBanner({
         console.warn('[poll] settlement count error:', err);
       }
     };
+
     poll();
-    const interval = setInterval(poll, 10000);
+
+    // Only poll while actively scanning; stop background polling once done.
+    if (scanPhase === 'done') return;
+
+    const interval = setInterval(poll, 30000);
     return () => clearInterval(interval);
-  }, [dismissed]);
+  }, [dismissed, scanPhase]);
 
   const handleDismiss = () => {
     sessionStorage.setItem(DISMISS_KEY, 'true');
