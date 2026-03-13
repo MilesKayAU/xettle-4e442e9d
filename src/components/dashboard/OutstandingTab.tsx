@@ -180,6 +180,7 @@ interface OutstandingSummary {
     force_recompute_used?: boolean;
     missing_settlement_ids?: string[];
     invoice_cache_age_minutes?: number | null;
+    invoice_cache_fetched_at?: string | null;
     from_cache?: boolean;
     xero_rate_limited?: boolean;
     no_xero_connection?: boolean;
