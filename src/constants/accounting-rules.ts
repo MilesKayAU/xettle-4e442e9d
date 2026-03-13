@@ -1,7 +1,10 @@
 /**
  * ACCOUNTING RULES — Canonical constant file
  * 
- * These rules are HARDCODED and NEVER configurable by user settings.
+ * These rules are SYSTEM-ENFORCED and apply to all sync/push paths.
+ * The user's `accounting_boundary_date` setting determines WHEN the
+ * boundary takes effect, but the boundary logic itself is non-negotiable.
+ * 
  * Referenced at the entry point of every payment and sync function.
  * 
  * See: ARCHITECTURE.md Rule #11 — Three-Layer Accounting Source Model
@@ -12,6 +15,7 @@ export const ACCOUNTING_RULES = {
   ORDERS_NEVER_CREATE_ACCOUNTING_ENTRIES: true,
   PAYMENTS_NEVER_CREATE_ACCOUNTING_ENTRIES: true,
   USER_MUST_CONFIRM_ALL_MATCHES: true,
+  /** Boundary logic is system-enforced; user boundary date determines behaviour. */
   BOUNDARY_DATE_IS_ABSOLUTE: true,
 } as const;
 
