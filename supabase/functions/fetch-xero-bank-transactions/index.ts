@@ -320,6 +320,7 @@ async function fetchBankTxnsForUser(
     user_id: userId,
     bank_rows_upserted: totalUpserted,
     upserted: totalUpserted, // backwards compat for UI
+    synced_row_count: totalUpserted,
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
     synced_account_count: mappedAccountIds.size,

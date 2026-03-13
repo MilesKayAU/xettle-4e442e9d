@@ -507,8 +507,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         await fetchOutstanding({ runSync: false });
         return;
       }
-      const count = resp.data?.upserted || 0;
-      toast.success(`Bank feed synced — ${count} transaction${count !== 1 ? 's' : ''} cached`, { id: 'bank-feed-sync' });
+      const count = resp.data?.synced_row_count || resp.data?.upserted || 0;
+      const accts = resp.data?.synced_account_count || 0;
+      const acctNote = accts > 0 ? ` across ${accts} account${accts !== 1 ? 's' : ''}` : '';
+      toast.success(`Bank feed synced — ${count} transaction${count !== 1 ? 's' : ''}${acctNote}`, { id: 'bank-feed-sync' });
       await fetchOutstanding({ runSync: false });
     } catch (err: any) {
       toast.error(`Bank feed sync failed: ${err.message}`, { id: 'bank-feed-sync' });
