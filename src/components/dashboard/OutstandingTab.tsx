@@ -375,9 +375,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         toast.warning('Xero is temporarily rate limited — showing cached outstanding data while background sync continues.');
       }
 
-      setData(resp.data as OutstandingSummary);
+      const summary = resp.data as OutstandingSummary;
+      setData(summary);
       setHasLoaded(true);
       setSelected(new Set());
+      // Persist to client-side cache so next page load is instant
+      persistToCache(summary.rows);
     } catch (err: any) {
       if (!isBackground) {
         toast.error(`Failed to fetch outstanding: ${err.message}`);
