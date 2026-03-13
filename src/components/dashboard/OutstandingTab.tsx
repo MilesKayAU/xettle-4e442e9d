@@ -1568,12 +1568,26 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 {lastBankSyncResult.stopped_reason && (
                   <><span className="font-medium">Stopped reason</span><span>{lastBankSyncResult.stopped_reason}</span></>
                 )}
-                {lastBankSyncResult.bank_account_ids_used && lastBankSyncResult.bank_account_ids_used.length > 0 && (
-                  <><span className="font-medium">Bank account IDs</span><span className="truncate max-w-[200px]">{lastBankSyncResult.bank_account_ids_used.join(', ')}</span></>
-                )}
-                {lastBankSyncResult.bank_account_names_used && Object.keys(lastBankSyncResult.bank_account_names_used).length > 0 && (
-                  <><span className="font-medium">Bank account names</span><span className="truncate max-w-[280px]">{Object.values(lastBankSyncResult.bank_account_names_used).join(', ')}</span></>
-                )}
+                {(() => {
+                  const ids = lastBankSyncResult.bank_account_ids_used || [];
+                  const namesById = lastBankSyncResult.bank_account_names_used || {};
+                  const hasIds = ids.length > 0;
+                  const hasNames = Object.keys(namesById).length > 0;
+
+                  if (!hasIds && !hasNames) return null;
+
+                  const paired = (hasIds ? ids : Object.keys(namesById)).map((id) => {
+                    const name = namesById[id];
+                    return name ? `${id} (${name})` : id;
+                  });
+
+                  return (
+                    <>
+                      <span className="font-medium">Bank accounts used</span>
+                      <span className="max-w-[420px] break-all">{paired.join(' · ')}</span>
+                    </>
+                  );
+                })()}
                 {lastBankSyncResult.endpoint_used && (
                   <><span className="font-medium">Endpoint</span><span className="truncate max-w-[200px]">{lastBankSyncResult.endpoint_used}</span></>
                 )}
