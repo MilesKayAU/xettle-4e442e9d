@@ -430,8 +430,8 @@ export default function ActionCentre({
                   )}
                 </ul>
                 <Button size="sm" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
-                  <Send className="h-3 w-3" /> Push all to Xero
-                </Button>
+                   <Send className="h-3 w-3" /> Send all to Xero
+                 </Button>
               </CardContent>
             </Card>
             );
