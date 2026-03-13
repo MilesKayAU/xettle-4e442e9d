@@ -147,7 +147,7 @@ export default function PayoutBankAccountMapper() {
       const extraRails: Array<{ code: string; label: string }> = [];
       for (const c of connections) {
         const railCode = toRailCode(c.marketplace_code);
-        if (!canonicalCodes.has(railCode)) {
+        if (!canonicalCodes.has(railCode as any)) {
           extraRails.push({ code: railCode, label: c.marketplace_name });
         }
       }
