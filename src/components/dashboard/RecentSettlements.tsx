@@ -273,6 +273,17 @@ function SettlementDrillDown({ row }: { row: SettlementRow }) {
 
 const PAGE_SIZE = 25;
 
+function getPrimaryAction(row: SettlementRow): { label: string } {
+  if (row.status === 'hidden') return { label: 'Unhide' };
+  if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return { label: 'Retry' };
+  if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return { label: 'View match' };
+  if (row.status === 'pushed_to_xero' && row.bank_verified) return { label: 'View match' };
+  if (row.status === 'pushed_to_xero') return { label: 'Sync bank' };
+  if (row.status === 'ready_to_push' || row.status === 'parsed' || row.status === 'saved') return { label: 'Post to Xero' };
+  if (row.status === 'ingested') return { label: 'View' };
+  return { label: 'View' };
+}
+
 interface RecentSettlementsProps {
   onViewAll?: () => void;
 }
@@ -556,10 +567,13 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                       <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} />
                     </td>
                     <td className="px-4 py-3 text-center">
+                      {(() => {
+                        const primaryAction = getPrimaryAction(row);
+                        return (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-medium">
-                            Action
+                            {primaryAction.label}
                             <MoreHorizontal className="h-3 w-3 ml-1" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -607,6 +621,8 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                        );
+                      })()}
                     </td>
                   </tr>
                   {/* ── Inline drill-down ── */}

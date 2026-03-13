@@ -19,7 +19,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import XettleLogo from '@/components/shared/XettleLogo';
-import DashboardConnectionStrip from '@/components/dashboard/DashboardConnectionStrip';
+import SystemStatusStrip from '@/components/dashboard/SystemStatusStrip';
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
@@ -641,33 +641,20 @@ export default function Dashboard() {
                 onScanComplete={loadMarketplaces}
               />
 
-              {/* Compact connection health strip */}
-              <DashboardConnectionStrip
-                onSwitchToUpload={() => switchView('smart_upload')}
+              {/* System status — consolidated connections + actions */}
+              <SystemStatusStrip
+                showAiMapper={showAiMapper}
+                showBankMappingNudge={showBankMappingNudge}
+                xeroConnected={xeroConnected}
+                onReviewMapping={() => {
+                  window.dispatchEvent(new CustomEvent('open-settings-tab'));
+                }}
+                onMapBankAccounts={() => setShowBankMapper(!showBankMapper)}
+                onConnect={() => switchView('smart_upload')}
               />
-
-              {/* Bank account mapping nudge */}
-              {showBankMappingNudge && xeroConnected && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-3 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <Settings className="h-4 w-4 text-amber-600" />
-                      <span className="text-sm font-medium text-foreground">
-                        Map your Xero bank accounts to enable deposit matching
-                      </span>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => setShowBankMapper(!showBankMapper)}>
-                      {showBankMapper ? 'Hide' : 'Map bank accounts'}
-                    </Button>
-                  </div>
-                  {showBankMapper && (
-                    <DestinationAccountMapper />
-                  )}
-                </div>
+              {showBankMapper && (
+                <DestinationAccountMapper />
               )}
-
-              {/* AI Account Mapper suggestion banner */}
-              <AiMapperBanner show={showAiMapper} />
 
               {/* CoA-detected channels awaiting confirmation */}
               {suggestedConnections.length > 0 && (
