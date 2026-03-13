@@ -403,6 +403,25 @@ async function fetchBankTxnsForUser(
 
   const bankAccountIdsUsed: string[] = [];
   const bankAccountNamesUsed: Record<string, string> = {};
+
+  // Pre-seed account names from local cache so diagnostics always show names
+  // even when Xero returns 0 txns or 429s before any data arrives
+  if (accountIds.length > 0) {
+    const { data: cachedNames } = await adminSupabase
+      .from('bank_transactions')
+      .select('bank_account_id, bank_account_name')
+      .eq('user_id', userId)
+      .in('bank_account_id', accountIds)
+      .not('bank_account_name', 'is', null)
+      .limit(accountIds.length);
+    if (cachedNames) {
+      for (const row of cachedNames) {
+        if (row.bank_account_id && row.bank_account_name && !bankAccountNamesUsed[row.bank_account_id]) {
+          bankAccountNamesUsed[row.bank_account_id] = row.bank_account_name;
+        }
+      }
+    }
+  }
   const stoppedReasonsByAccount: Record<string, string> = {};
   const perAccountStats: Record<string, {
     pages: number;
