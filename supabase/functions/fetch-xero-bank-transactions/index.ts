@@ -456,7 +456,8 @@ async function fetchBankTxnsForUser(
           'Authorization': `Bearer ${token.access_token}`,
           'Xero-Tenant-Id': token.tenant_id,
           'Accept': 'application/json',
-          'If-Modified-Since': ifModifiedSinceValue,
+          // If-Modified-Since DISABLED for testing — uncomment to re-enable
+          // 'If-Modified-Since': ifModifiedSinceValue,
         },
       });
 
