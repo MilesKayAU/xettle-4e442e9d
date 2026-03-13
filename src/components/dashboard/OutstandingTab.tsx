@@ -124,6 +124,12 @@ interface OutstandingRow {
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
   recent_bank_txns?: BankTxn[];
+  routing?: {
+    rail_code: string;
+    destination_account_id: string | null;
+    destination_account_name: string | null;
+    mapping_source: string;
+  };
   // Payment verification (Rule #11 — verification only, never accounting)
   payment_verifications?: PaymentVerificationState[];
 }
