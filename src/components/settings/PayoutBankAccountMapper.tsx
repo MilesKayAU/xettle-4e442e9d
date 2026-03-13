@@ -125,7 +125,7 @@ export default function PayoutBankAccountMapper() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyFetchIssue]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
