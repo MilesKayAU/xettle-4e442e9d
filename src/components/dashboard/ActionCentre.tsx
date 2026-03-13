@@ -539,7 +539,14 @@ export default function ActionCentre({
                       if (isCellPreBoundary(m)) {
                         return (
                           <td key={m} className="text-center py-2.5 px-3">
-                            <span className="text-[10px] text-muted-foreground/50">—</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-[10px] text-muted-foreground/50 cursor-default">—</span>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs">Before accounting boundary — not tracked</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </td>
                         );
                       }
