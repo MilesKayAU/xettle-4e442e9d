@@ -309,34 +309,52 @@ async function fetchBankTxnsForUser(
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STEP 5 — Fetch per-account using dedicated bankAccountID param
+  // STEP 5 — Fetch per-account using bankAccountID + If-Modified-Since
   // ══════════════════════════════════════════════════════════════
-  const MAX_PAGES_PER_ACCOUNT = 10;
+  const MAX_PAGES_PER_ACCOUNT = 5;
+  const ifModifiedSinceValue = fromDate.toISOString();
+  const fetchFromDate = fromDate.toISOString().split('T')[0];
+  const fetchToDate = toDate ? toDate.toISOString().split('T')[0] : null;
+
   let totalUpserted = 0;
   let totalPagesFetched = 0;
-  const bankAccountIdsUsed: string[] = [];
-  const perAccountStats: Record<string, { pages: number; rows: number }> = {};
+  let totalTransactionsSeen = 0;
+  let totalTransactionsInRange = 0;
 
-  // Build date where clause (RECEIVE + date range only — account scoping via URL param)
-  let dateWhereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
-  if (toDate) {
-    dateWhereClause += ` AND Date<=${formatXeroDateTime(toDate)}`;
-  }
+  const bankAccountIdsUsed: string[] = [];
+  const perAccountStats: Record<string, { pages: number; rows: number; seen: number; in_range: number }> = {};
+
+  const parseXeroTxnDate = (rawDateInput: string | undefined): string | null => {
+    const rawDate = rawDateInput?.replace('/Date(', '').replace(')/', '').split('+')[0];
+    if (!rawDate) return null;
+    const ts = parseInt(rawDate);
+    if (isNaN(ts)) return null;
+    return new Date(ts).toISOString().split('T')[0];
+  };
+
+  // Only keep RECEIVE filter in where clause. Date scoping is handled by
+  // If-Modified-Since + strict local in-range checks.
+  const whereClause = `Type=="RECEIVE"`;
 
   for (const accountId of mappedAccountIds) {
     bankAccountIdsUsed.push(accountId);
+
     let page = 1;
     let hasMore = true;
     let accountRows = 0;
+    let accountSeen = 0;
+    let accountInRange = 0;
 
     while (hasMore && page <= MAX_PAGES_PER_ACCOUNT) {
-      const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(dateWhereClause)}&page=${page}&pageSize=100`;
-      console.log(`[fetch-bank-txns] Fetching account=${accountId} page=${page}`);
+      const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}&pageSize=100`;
+      console.log(`[fetch-bank-txns] Fetching account=${accountId} page=${page} (If-Modified-Since=${ifModifiedSinceValue})`);
+
       const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token.access_token}`,
           'Xero-Tenant-Id': token.tenant_id,
           'Accept': 'application/json',
+          'If-Modified-Since': ifModifiedSinceValue,
         },
       });
 
@@ -345,17 +363,20 @@ async function fetchBankTxnsForUser(
       if (!res.ok) {
         const errText = await res.text();
         console.error(`[fetch-bank-txns] Xero API error [${res.status}] account=${accountId}:`, errText.substring(0, 300));
+
         if (res.status === 429) {
           const rawRetryAfter = res.headers.get('Retry-After');
           const retryAfterSec = parseRetryAfterSeconds(rawRetryAfter);
           const newCooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
           console.log(`[fetch-bank-txns] 429 for ${userId}: raw="${rawRetryAfter}", parsed=${retryAfterSec}s`);
+
           // ONLY place cooldown_until is written — on actual 429
           await adminSupabase.from('app_settings').upsert({
             user_id: userId,
             key: COOLDOWN_KEY,
             value: newCooldownUntil,
           }, { onConflict: 'user_id,key' });
+
           return {
             user_id: userId,
             xero_rate_limited: true,
@@ -372,15 +393,20 @@ async function fetchBankTxnsForUser(
             has_any_mapping: hasAnyMapping,
             used_invoice_range: usedInvoiceRange,
             invoice_range_days: effectiveDays,
-            fetch_from: fromDate.toISOString().split('T')[0],
-            fetch_to: toDate?.toISOString().split('T')[0] || null,
+            fetch_from: fetchFromDate,
+            fetch_to: fetchToDate,
             date_range_source: dateRangeSource,
-            endpoint_used: 'BankTransactions?bankAccountID=...',
+            endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
+            if_modified_since_used: true,
+            if_modified_since_value: ifModifiedSinceValue,
+            transactions_seen: totalTransactionsSeen,
+            transactions_in_range: totalTransactionsInRange,
             cached_bank_rows_total: cachedBankRowsTotal,
             last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
           };
         }
-        // Non-429 error: skip this account, continue to next
+
+        // Non-429 error: skip this account and continue others
         console.error(`[fetch-bank-txns] Skipping account ${accountId} due to ${res.status}`);
         break;
       }
@@ -393,41 +419,64 @@ async function fetchBankTxnsForUser(
         break;
       }
 
-      // Parse and upsert
-      const rows = txns.map((txn: any) => {
-        const rawDate = txn.Date?.replace('/Date(', '').replace(')/', '').split('+')[0];
-        const ts = parseInt(rawDate);
-        const parsedDate = !isNaN(ts) ? new Date(ts).toISOString().split('T')[0] : null;
+      let stopBecauseBeyondToDate = false;
 
-        return {
-          user_id: userId,
-          xero_transaction_id: txn.BankTransactionID,
-          bank_account_id: txn.BankAccount?.AccountID || null,
-          bank_account_name: txn.BankAccount?.Name || null,
-          date: parsedDate,
-          amount: Math.abs(txn.Total || 0),
-          currency: txn.CurrencyCode || 'AUD',
-          description: txn.LineItems?.[0]?.Description || null,
-          reference: txn.Reference || null,
-          contact_name: txn.Contact?.Name || null,
-          transaction_type: txn.Type || 'RECEIVE',
-          fetched_at: new Date().toISOString(),
-        };
-      });
+      const rows = txns
+        .filter((txn: any) => (txn?.Type || 'RECEIVE') === 'RECEIVE')
+        .map((txn: any) => {
+          accountSeen++;
+          totalTransactionsSeen++;
 
-      const { error: upsertErr } = await adminSupabase
-        .from('bank_transactions')
-        .upsert(rows, { onConflict: 'user_id,xero_transaction_id' });
+          const parsedDate = parseXeroTxnDate(txn.Date);
 
-      if (upsertErr) {
-        console.error(`[fetch-bank-txns] Upsert error for ${userId}:`, upsertErr.message);
-      } else {
-        totalUpserted += rows.length;
-        accountRows += rows.length;
+          // Strict in-range filtering
+          if (parsedDate && parsedDate < fetchFromDate) {
+            return null;
+          }
+
+          if (fetchToDate && parsedDate && parsedDate > fetchToDate) {
+            stopBecauseBeyondToDate = true;
+            return null;
+          }
+
+          accountInRange++;
+          totalTransactionsInRange++;
+
+          return {
+            user_id: userId,
+            xero_transaction_id: txn.BankTransactionID,
+            bank_account_id: txn.BankAccount?.AccountID || null,
+            bank_account_name: txn.BankAccount?.Name || null,
+            date: parsedDate,
+            amount: Math.abs(txn.Total || 0),
+            currency: txn.CurrencyCode || 'AUD',
+            description: txn.LineItems?.[0]?.Description || null,
+            reference: txn.Reference || null,
+            contact_name: txn.Contact?.Name || null,
+            transaction_type: 'RECEIVE',
+            fetched_at: new Date().toISOString(),
+          };
+        })
+        .filter(Boolean) as any[];
+
+      if (rows.length > 0) {
+        const { error: upsertErr } = await adminSupabase
+          .from('bank_transactions')
+          .upsert(rows, { onConflict: 'user_id,xero_transaction_id' });
+
+        if (upsertErr) {
+          console.error(`[fetch-bank-txns] Upsert error for ${userId}:`, upsertErr.message);
+        } else {
+          totalUpserted += rows.length;
+          accountRows += rows.length;
+        }
       }
 
-      // Xero returns max 100 per page
-      if (txns.length < 100) {
+      // Strict paging stop rules
+      if (stopBecauseBeyondToDate) {
+        console.log(`[fetch-bank-txns] Stopping early for account ${accountId}: encountered transaction date beyond fetch_to (${fetchToDate})`);
+        hasMore = false;
+      } else if (txns.length < 100) {
         hasMore = false;
       } else {
         page++;
@@ -438,7 +487,12 @@ async function fetchBankTxnsForUser(
       console.warn(`[fetch-bank-txns] Hit max pages (${MAX_PAGES_PER_ACCOUNT}) for account ${accountId}`);
     }
 
-    perAccountStats[accountId] = { pages: Math.min(page, MAX_PAGES_PER_ACCOUNT), rows: accountRows };
+    perAccountStats[accountId] = {
+      pages: Math.min(page, MAX_PAGES_PER_ACCOUNT),
+      rows: accountRows,
+      seen: accountSeen,
+      in_range: accountInRange,
+    };
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -459,13 +513,18 @@ async function fetchBankTxnsForUser(
     details: {
       transactions_upserted: totalUpserted,
       pages_fetched: totalPagesFetched,
+      transactions_seen: totalTransactionsSeen,
+      transactions_in_range: totalTransactionsInRange,
       invoice_range_days: effectiveDays,
       date_range_source: dateRangeSource,
       used_invoice_range: usedInvoiceRange,
       bank_account_ids_used: bankAccountIdsUsed,
+      if_modified_since_used: true,
+      if_modified_since_value: ifModifiedSinceValue,
+      endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
       per_account_stats: perAccountStats,
-      fetch_from: fromDate.toISOString().split('T')[0],
-      fetch_to: toDate?.toISOString().split('T')[0] || 'open',
+      fetch_from: fetchFromDate,
+      fetch_to: fetchToDate || 'open',
     },
   });
 
@@ -484,16 +543,20 @@ async function fetchBankTxnsForUser(
     bank_rows_upserted: totalUpserted,
     synced_row_count: totalUpserted,
     pages_fetched: totalPagesFetched,
+    transactions_seen: totalTransactionsSeen,
+    transactions_in_range: totalTransactionsInRange,
     bank_account_ids_used: bankAccountIdsUsed,
     per_account_stats: perAccountStats,
     mapped_account_ids_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,
     used_invoice_range: usedInvoiceRange,
     invoice_range_days: effectiveDays,
-    fetch_from: fromDate.toISOString().split('T')[0],
-    fetch_to: toDate?.toISOString().split('T')[0] || null,
+    fetch_from: fetchFromDate,
+    fetch_to: fetchToDate,
     date_range_source: dateRangeSource,
-    endpoint_used: 'BankTransactions?bankAccountID=...',
+    endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
+    if_modified_since_used: true,
+    if_modified_since_value: ifModifiedSinceValue,
     cached_bank_rows_total: finalBankRowsCount || 0,
     last_successful_bank_sync_at: successAt,
     cooldown_until: null,
