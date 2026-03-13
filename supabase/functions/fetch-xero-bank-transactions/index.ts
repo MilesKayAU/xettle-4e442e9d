@@ -209,7 +209,7 @@ async function fetchBankTxnsForUser(
     } else {
       whereClause += ` AND (${accountFilters.join(' OR ')})`;
     }
-    console.log(`[fetch-bank-txns] Filtering to ${mappedAccountIds.size} mapped account(s)`);
+    console.log(`[fetch-bank-txns] Filtering to ${mappedAccountIds.size} mapped account(s): ${[...mappedAccountIds].join(', ')}`);
   }
 
   let page = 1;
