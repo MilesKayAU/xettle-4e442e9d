@@ -436,6 +436,7 @@ export default function Setup() {
   async function runAmazonScan(token: string, userId: string) {
     const ac = new AbortController();
     amazonAbortRef.current = ac;
+    scanStartTimesRef.current.amazon = Date.now();
     setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements (this can take several minutes)...' });
 
     // Retry loop for 503/429 with backoff
