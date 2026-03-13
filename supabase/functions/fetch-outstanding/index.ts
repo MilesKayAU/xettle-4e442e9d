@@ -143,6 +143,21 @@ Deno.serve(async (req) => {
     }
     const userId = user.id;
 
+    // ─── Parse optional request body params ───
+    let forceRecompute = false;
+    let lookbackDays = 90;
+    try {
+      if (req.method === 'POST') {
+        const body = await req.json();
+        if (body.force_recompute === true) forceRecompute = true;
+        if (typeof body.lookback_days === 'number') {
+          lookbackDays = Math.max(30, Math.min(180, Math.round(body.lookback_days)));
+        }
+      }
+    } catch {
+      // No body or invalid JSON — use defaults
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get Xero token
@@ -257,12 +272,23 @@ Deno.serve(async (req) => {
     // ─── Pass ALL outstanding ACCREC invoices through — UI toggle controls marketplace vs all ───
     const invoices = allInvoices;
 
-    // ─── Get ALL user's settlements for matching (including already_recorded) ───
+    // ─── Get user's settlements for matching (including already_recorded) ───
     // Include already_recorded because they exist in Xero and need reconciliation tracking
-    const { data: settlements } = await supabase
+    // When force_recompute is true, scope to lookback window for bounded re-scan
+    const lookbackDate = new Date();
+    lookbackDate.setDate(lookbackDate.getDate() - lookbackDays);
+    const lookbackDateStr = lookbackDate.toISOString().split('T')[0];
+
+    let settlementQuery = supabase
       .from('settlements')
       .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data, bank_tx_id, bank_match_method, bank_match_confidence, bank_match_confirmed_at, bank_match_confirmed_by')
       .eq('user_id', userId);
+
+    if (forceRecompute) {
+      settlementQuery = settlementQuery.gte('period_end', lookbackDateStr);
+    }
+
+    const { data: settlements } = await settlementQuery;
 
     const settlementMap = new Map<string, any>();
     const allSettlements = settlements || [];
@@ -361,16 +387,17 @@ Deno.serve(async (req) => {
     }
 
     // ─── Get bank matches from cached bank_transactions table (populated by fetch-xero-bank-transactions every 30 min) ───
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
+    // Use lookbackDays for bank txn window too (matches settlement scope)
+    const bankLookbackDate = new Date();
+    bankLookbackDate.setDate(bankLookbackDate.getDate() - lookbackDays);
+    const bankLookbackStr = bankLookbackDate.toISOString().split('T')[0];
 
     const { data: cachedBankTxns, error: bankCacheError } = await supabase
       .from('bank_transactions')
       .select('*')
       .eq('user_id', userId)
       .eq('transaction_type', 'RECEIVE')
-      .gte('date', ninetyDaysAgoStr);
+      .gte('date', bankLookbackStr);
 
     const bankCacheQueryError = !!bankCacheError;
     if (bankCacheError) {
@@ -836,6 +863,9 @@ Deno.serve(async (req) => {
       bank_cache_last_refreshed_at: bankCacheNewestFetchedAt,
       bank_cache_stale: bankCacheStale,
       bank_cache_query_error: bankCacheQueryError,
+      // Re-scan diagnostics
+      lookback_days_effective: lookbackDays,
+      force_recompute_used: forceRecompute,
     };
 
     console.log(JSON.stringify({

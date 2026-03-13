@@ -168,6 +168,8 @@ interface OutstandingSummary {
     bank_cache_last_refreshed_at?: string | null;
     bank_cache_stale?: boolean;
     bank_cache_query_error?: boolean;
+    lookback_days_effective?: number;
+    force_recompute_used?: boolean;
   };
 }
 
@@ -202,6 +204,7 @@ const MARKETPLACE_LABELS: Record<string, string> = {
 export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [data, setData] = useState<OutstandingSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<Set<string>>(new Set());
@@ -318,6 +321,48 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       toast.error(`Failed to fetch outstanding: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // ─── Re-scan matches: force recompute with bounded lookback ───
+  const rescanMatches = useCallback(async () => {
+    setRescanning(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
+      const resp = await supabase.functions.invoke('fetch-outstanding', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: { force_recompute: true, lookback_days: 90 },
+      });
+
+      if (resp.data?.sync_info?.no_xero_connection === true) {
+        setNoXeroConnection(true);
+        setHasLoaded(true);
+        setRescanning(false);
+        return;
+      }
+
+      if (resp.error) throw resp.error;
+
+      const result = resp.data as OutstandingSummary;
+      setData(result);
+      setHasLoaded(true);
+      setSelected(new Set());
+
+      const matched = result.sync_info?.matched_settlement_count || 0;
+      const candidates = result.sync_info?.candidates_generated || 0;
+      toast.success(`Re-scan complete — ${matched} matched, ${candidates} suggested`);
+
+      if (result.sync_info?.bank_feed_empty) {
+        // Existing banner will show
+      } else if (result.sync_info?.bank_cache_stale) {
+        toast.warning('Bank feed cache is stale — run bank sync or check connection.');
+      }
+    } catch (err: any) {
+      toast.error(`Re-scan failed: ${err.message}`);
+    } finally {
+      setRescanning(false);
     }
   }, []);
 
@@ -988,16 +1033,35 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             Xero invoices awaiting payment — matched against your settlements and bank deposits.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fetchOutstanding({ runSync: true })}
-          disabled={loading}
-          className="gap-1.5"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Sync with Xero
-        </Button>
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={rescanMatches}
+                disabled={rescanning || loading}
+                className="gap-1.5"
+              >
+                <Search className={`h-4 w-4 ${rescanning ? 'animate-pulse' : ''}`} />
+                {rescanning ? 'Scanning…' : 'Re-scan matches'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Rebuild suggestions from the last 90 days</p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchOutstanding({ runSync: true })}
+            disabled={loading || rescanning}
+            className="gap-1.5"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Sync with Xero
+          </Button>
+        </div>
       </div>
 
       {/* Smart marketplace connection prompt */}
