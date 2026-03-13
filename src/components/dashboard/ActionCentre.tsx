@@ -612,7 +612,7 @@ export default function ActionCentre({
                                       )}
                                     />
                                   ))}
-                                </div>
+                                </button>
                               </TooltipTrigger>
                               <TooltipContent className="text-xs space-y-0.5">
                                 {stageEntries.map(s => (
