@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
+import PayoutBankAccountMapper from '@/components/settings/PayoutBankAccountMapper';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
@@ -97,6 +98,7 @@ export default function Dashboard() {
   const [showAiMapper, setShowAiMapper] = useState(false);
   const [showSetupBanner, setShowSetupBanner] = useState(false);
   const [showBankMappingNudge, setShowBankMappingNudge] = useState(false);
+  const [showBankMapper, setShowBankMapper] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -636,19 +638,21 @@ export default function Dashboard() {
 
               {/* Bank account mapping nudge */}
               {showBankMappingNudge && xeroConnected && (
-                <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-3 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <Settings className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm font-medium text-foreground">
-                      Map your Xero bank accounts to enable deposit matching
-                    </span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-3 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <Settings className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-medium text-foreground">
+                        Map your Xero bank accounts to enable deposit matching
+                      </span>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setShowBankMapper(!showBankMapper)}>
+                      {showBankMapper ? 'Hide' : 'Map bank accounts'}
+                    </Button>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => {
-                    switchView('settlements');
-                    setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
-                  }}>
-                    Map bank accounts
-                  </Button>
+                  {showBankMapper && (
+                    <PayoutBankAccountMapper />
+                  )}
                 </div>
               )}
 
