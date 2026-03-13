@@ -1,6 +1,6 @@
 /**
  * ActionCentre — The main dashboard landing page.
- * Shows status cards, 3-month timeline, overdue alerts, and activity log.
+ * Shows 4 workflow-stage cards, visual pipeline timeline, and activity log.
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -62,20 +62,28 @@ interface ActionCentreProps {
   userName?: string;
 }
 
-// Status icons for the timeline grid
-const STATUS_ICONS: Record<string, { icon: string; label: string }> = {
-  complete: { icon: '✅', label: 'Complete — verified in Xero + bank matched' },
-  bank_matched: { icon: '✅', label: 'Bank matched' },
-  pushed_to_xero: { icon: '✅', label: 'In Xero — awaiting bank match' },
-  synced_external: { icon: '✅', label: 'Already in Xero (legacy)' },
-  partial: { icon: '🟡', label: 'Partial — some settlements still pending' },
-  ready_to_push: { icon: '🟡', label: 'Ready to push to Xero' },
-  settlement_needed: { icon: '❌', label: 'Settlement needed' },
-  missing: { icon: '❌', label: 'Missing/needed' },
-  gap_detected: { icon: '⚠️', label: 'Gap detected' },
-  already_in_xero: { icon: '📋', label: 'Already recorded in Xero — managed outside Xettle' },
-  not_tracked: { icon: '·', label: 'Before accounting boundary — not tracked by Xettle' },
-};
+// Pipeline stage helpers
+const PIPELINE_STAGES = ['S', 'X', 'B', 'R'] as const; // Settlement, Xero, Bank, Reconciled
+type PipelineStage = { settlement: boolean; xero: boolean; bank: boolean; reconciled: boolean };
+
+function getPipelineForRow(r: ValidationRow): PipelineStage {
+  const hasSettlement = r.settlement_uploaded || r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || r.overall_status === 'complete' || r.overall_status === 'bank_matched';
+  const hasXero = r.xero_pushed || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || r.overall_status === 'complete' || r.overall_status === 'bank_matched';
+  const hasBank = r.bank_matched || r.overall_status === 'complete' || r.overall_status === 'bank_matched';
+  const isReconciled = r.overall_status === 'complete' || r.overall_status === 'bank_matched';
+  return { settlement: hasSettlement, xero: hasXero, bank: hasBank, reconciled: isReconciled };
+}
+
+function getPipelineForCell(rows: ValidationRow[]): PipelineStage {
+  if (rows.length === 0) return { settlement: false, xero: false, bank: false, reconciled: false };
+  // Aggregate: a stage is "done" if ALL rows in the cell have it
+  return {
+    settlement: rows.every(r => getPipelineForRow(r).settlement),
+    xero: rows.every(r => getPipelineForRow(r).xero),
+    bank: rows.every(r => getPipelineForRow(r).bank),
+    reconciled: rows.every(r => getPipelineForRow(r).reconciled),
+  };
+}
 
 const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
   settlement_saved: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
@@ -108,7 +116,6 @@ export default function ActionCentre({
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
-  const [unmatchedDeposits, setUnmatchedDeposits] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -118,7 +125,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, depositAlertsRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -126,7 +133,6 @@ export default function ActionCentre({
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('channel_alerts').select('deposit_amount, total_revenue, alert_type').eq('status', 'pending').eq('alert_type', 'unmatched_deposit'),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -145,13 +151,6 @@ export default function ActionCentre({
       }
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
-      }
-      // Unmatched deposit alerts
-      if (depositAlertsRes.data && depositAlertsRes.data.length > 0) {
-        const total = (depositAlertsRes.data as any[]).reduce((sum: number, a: any) => sum + (a.deposit_amount || a.total_revenue || 0), 0);
-        setUnmatchedDeposits({ count: depositAlertsRes.data.length, total });
-      } else {
-        setUnmatchedDeposits({ count: 0, total: 0 });
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
@@ -214,9 +213,15 @@ export default function ActionCentre({
     return Array.from(seen.values());
   }, [rows]);
 
+  const now = new Date();
+
   const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-  // Filter out API-synced marketplaces from the "needs upload" list — they sync automatically
-  const uploadNeededManual = uploadNeeded.filter(r => !apiSyncedMarketplaces.has(r.marketplace_code));
+  // Filter out API-synced marketplaces AND only show for closed months
+  const uploadNeededManual = uploadNeeded.filter(r => {
+    if (apiSyncedMarketplaces.has(r.marketplace_code)) return false;
+    const periodEnd = new Date(r.period_end);
+    return periodEnd < now; // only show if period already ended
+  });
   const readyToPush = normalisedRows.filter(r => r.overall_status === 'ready_to_push');
   // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
   const awaitingBank = normalisedRows.filter(r =>
@@ -224,8 +229,7 @@ export default function ActionCentre({
     r.overall_status !== 'already_recorded' &&
     (r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || (r.xero_pushed && !r.bank_matched))
   );
-  const complete = normalisedRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
-  const preBoundary = normalisedRows.filter(r => r.overall_status === 'already_recorded');
+  const complete = normalisedRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched');
   const gapDetected = normalisedRows.filter(r => r.overall_status === 'gap_detected');
   const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && (complete.length > 0);
 
@@ -254,11 +258,8 @@ export default function ActionCentre({
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at) : null;
 
-  // Overdue alerts removed — they were creating noise with historical backfill data
-
   // 3-month timeline
   const timelineData = useMemo(() => {
-    const now = new Date();
     const months: string[] = [];
     for (let i = 2; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -266,7 +267,6 @@ export default function ActionCentre({
     }
 
     // Combine marketplaces from validation rows AND connected marketplaces
-    // Normalise aliases and exclude gateways
     const allMps = new Set<string>();
     for (const r of normalisedRows) allMps.add(r.marketplace_code);
     for (const c of connectedMarketplaces) {
@@ -278,65 +278,17 @@ export default function ActionCentre({
     return { months, marketplaces };
   }, [normalisedRows, connectedMarketplaces]);
 
-  const getStatusForCell = (marketplace: string, monthKey: string): { status: string; tooltip: string } => {
-    // Before accounting boundary — check if there's actual already_recorded data
-    if (accountingBoundary) {
-      const boundaryMonth = accountingBoundary.substring(0, 7); // YYYY-MM
-      if (monthKey < boundaryMonth) {
-        // Check if this marketplace has already_recorded rows for this month
-        const hasRecordedData = normalisedRows.some(r =>
-          r.marketplace_code === marketplace &&
-          r.period_start?.substring(0, 7) === monthKey &&
-          r.overall_status === 'already_recorded'
-        );
-        if (hasRecordedData) {
-          return { status: 'already_in_xero', tooltip: 'Already recorded in Xero before you connected Xettle' };
-        }
-        return { status: 'not_tracked', tooltip: 'Before accounting boundary' };
-      }
-    }
-
-    // Find ALL validation rows for this marketplace + month
-    const matchingRows = normalisedRows.filter(r => {
-      const rowMonth = r.period_start?.substring(0, 7); // YYYY-MM from YYYY-MM-DD
+  const getRowsForCell = (marketplace: string, monthKey: string): ValidationRow[] => {
+    return normalisedRows.filter(r => {
+      const rowMonth = r.period_start?.substring(0, 7);
       return r.marketplace_code === marketplace && rowMonth === monthKey;
     });
+  };
 
-    if (matchingRows.length === 0) return { status: 'missing', tooltip: 'No data for this period' };
-
-    // Count statuses
-    const statuses = matchingRows.map(r => r.overall_status || 'missing');
-    const isInXero = (s: string) => s === 'complete' || s === 'bank_matched' || s === 'pushed_to_xero' || s === 'synced_external';
-    const isReady = (s: string) => s === 'ready_to_push';
-    const isMissing = (s: string) => s === 'settlement_needed' || s === 'missing';
-    const isPreBoundary = (s: string) => s === 'already_recorded';
-
-    const inXeroCount = statuses.filter(isInXero).length;
-    const readyCount = statuses.filter(isReady).length;
-    const missingCount = statuses.filter(isMissing).length;
-    const preBoundaryCount = statuses.filter(isPreBoundary).length;
-    const gapCount = statuses.filter(s => s === 'gap_detected').length;
-    const total = statuses.length;
-
-    // Build tooltip breakdown
-    const parts: string[] = [];
-    if (inXeroCount > 0) parts.push(`${inXeroCount} in Xero`);
-    if (readyCount > 0) parts.push(`${readyCount} ready to push`);
-    if (missingCount > 0) parts.push(`${missingCount} missing`);
-    if (gapCount > 0) parts.push(`${gapCount} gap detected`);
-    if (preBoundaryCount > 0) parts.push(`${preBoundaryCount} pre-boundary`);
-    const tooltip = parts.join(' · ') || 'No data';
-
-    // Priority cascade — exact rules, no majority logic
-    if (preBoundaryCount === total) return { status: 'not_tracked', tooltip };
-    if (gapCount > 0) return { status: 'gap_detected', tooltip };
-    if (inXeroCount === total) return { status: 'pushed_to_xero', tooltip };
-    if (inXeroCount > 0 && (readyCount > 0 || missingCount > 0)) return { status: 'partial', tooltip };
-    if (missingCount > 0 && !matchingRows.some(r => r.settlement_uploaded)) return { status: 'missing', tooltip };
-    if (readyCount > 0) return { status: 'ready_to_push', tooltip };
-    if (missingCount > 0) return { status: 'settlement_needed', tooltip };
-
-    return { status: 'missing', tooltip };
+  const isCellPreBoundary = (monthKey: string): boolean => {
+    if (!accountingBoundary) return false;
+    const boundaryMonth = accountingBoundary.substring(0, 7);
+    return monthKey < boundaryMonth;
   };
 
   const formatMonthLabel = (key: string): string => {
@@ -354,8 +306,8 @@ export default function ActionCentre({
     return (
       <div className="space-y-6">
         <Skeleton className="h-12 w-96" />
-        <div className="grid grid-cols-3 gap-4">
-          {[1,2,3].map(i => <Skeleton key={i} className="h-40" />)}
+        <div className="grid grid-cols-4 gap-4">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-40" />)}
         </div>
         <Skeleton className="h-48" />
       </div>
@@ -389,31 +341,29 @@ export default function ActionCentre({
         </div>
       </div>
 
-      {/* Overdue alerts removed — historical backfill was creating false alerts */}
-
-      {/* All-complete banner OR 3 status cards */}
+      {/* All-complete banner OR 4 workflow cards */}
       {allComplete ? (
         <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20">
           <CardContent className="py-8 text-center space-y-2">
             <PartyPopper className="h-8 w-8 text-emerald-600 dark:text-emerald-400 mx-auto" />
             <h3 className="text-lg font-semibold text-emerald-800 dark:text-emerald-300">
-              All settlements complete for {currentMonth}
+              All settlements reconciled for {currentMonth}
             </h3>
             <p className="text-sm text-emerald-700/80 dark:text-emerald-400/80">
-              Everything is reconciled and in Xero.
+              Everything is matched and in Xero.
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Needs Attention */}
+          {/* Card 1 — Needs Upload (only closed months) */}
           {uploadNeededManual.length > 0 && (
             <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">🔴</span>
-                    <h3 className="font-semibold text-sm">Upload Needed</h3>
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
+                    <h3 className="font-semibold text-sm">Needs Upload</h3>
                   </div>
                   <Button
                     size="icon"
@@ -426,12 +376,12 @@ export default function ActionCentre({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {refreshingUploads ? 'Checking...' : `${uploadNeededManual.length} marketplace settlement${uploadNeededManual.length > 1 ? 's' : ''} missing`}
+                  {refreshingUploads ? 'Checking...' : `${uploadNeededManual.length} missing settlement${uploadNeededManual.length > 1 ? 's' : ''} from closed periods`}
                 </p>
                 <ul className="space-y-1">
                   {uploadNeededManual.map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
-                      <span className="text-amber-500">•</span>
+                      <span className="text-amber-400">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
                     </li>
                   ))}
@@ -445,21 +395,21 @@ export default function ActionCentre({
             </Card>
           )}
 
-          {/* Ready for Xero */}
+          {/* Card 2 — Ready to Post */}
           {readyToPush.length > 0 && (
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">🔵</span>
-                  <h3 className="font-semibold text-sm">Ready for Xero</h3>
+                  <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
+                  <h3 className="font-semibold text-sm">Ready to Post</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''} validated
+                  {readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''} validated, not yet in Xero
                 </p>
                 <ul className="space-y-1">
                   {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
                     <li key={r.id} className="text-xs flex items-center gap-1.5">
-                      <span className="text-blue-500">•</span>
+                      <span className="text-blue-400">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start, r.period_end)}
                       {r.settlement_net ? ` — ${formatAUD(r.settlement_net)}` : ''}
                     </li>
@@ -479,23 +429,23 @@ export default function ActionCentre({
             </Card>
           )}
 
-          {/* Awaiting Bank Match */}
+          {/* Card 3 — Posted — Waiting for Bank */}
           {awaitingBank.length > 0 && (() => {
             const grouped = groupByMarketplaceMonth(awaitingBank);
             return (
-            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-900/10">
+            <Card className="border-border bg-muted/20">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">🔵</span>
-                  <h3 className="font-semibold text-sm">Awaiting bank match</h3>
+                  <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block" />
+                  <h3 className="font-semibold text-sm">Posted — Waiting for Bank</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} pending bank match
+                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} in Xero, deposit not yet detected
                 </p>
                 <ul className="space-y-1">
                   {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
                     <li key={g.key} className="text-xs flex items-center gap-1.5">
-                      <span className="text-blue-500">•</span>
+                      <span className="text-muted-foreground">•</span>
                       <span>{g.label}</span>
                       {g.count > 1 ? (
                         <span className="text-muted-foreground">· {g.count} settlements{g.total ? ` · ${formatAUD(g.total)}` : ''}</span>
@@ -512,44 +462,26 @@ export default function ActionCentre({
                     </li>
                   )}
                 </ul>
-                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
-                  <Search className="h-3 w-3" /> Check bank feed
-                </Button>
+                <p className="text-[10px] text-muted-foreground italic">
+                  Bank feed not synced yet — deposits usually appear within 1–3 business days.
+                </p>
               </CardContent>
             </Card>
             );
           })()}
 
-          {/* Unmatched Deposits */}
-          {unmatchedDeposits.count > 0 && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">💰</span>
-                  <h3 className="font-semibold text-sm">Unmatched Deposits</h3>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {unmatchedDeposits.count} deposit{unmatchedDeposits.count > 1 ? 's' : ''} totalling {formatAUD(unmatchedDeposits.total)} couldn't be matched to any settlement
-                </p>
-                <p className="text-xs text-muted-foreground italic">
-                  These may be marketplace payments that aren't being tracked yet.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* All Clear */}
+          {/* Card 4 — Fully Reconciled */}
           {complete.length > 0 && (() => {
             const grouped = groupByMarketplaceMonth(complete);
             return (
             <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">🟢</span>
-                  <h3 className="font-semibold text-sm">Complete this month</h3>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <h3 className="font-semibold text-sm">Fully Reconciled</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {complete.length} settlement{complete.length > 1 ? 's' : ''} synced
+                  {complete.length} settlement{complete.length > 1 ? 's' : ''} matched
                 </p>
                 <ul className="space-y-1">
                   {(expandedCards['complete'] ? grouped : grouped.slice(0, 3)).map(g => (
@@ -573,47 +505,14 @@ export default function ActionCentre({
             </Card>
             );
           })()}
-
-          {/* Already in Xero (pre-boundary) */}
-          {preBoundary.length > 0 && (() => {
-            // Group pre-boundary by marketplace
-            const mpSet = new Set(preBoundary.map(r => r.marketplace_code));
-            const mpList = [...mpSet].map(code => ({
-              code,
-              label: MARKETPLACE_LABELS[code] || code,
-              count: preBoundary.filter(r => r.marketplace_code === code).length,
-            }));
-            return (
-            <Card className="border-border bg-muted/30">
-              <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">📋</span>
-                  <h3 className="font-semibold text-sm">Already in Xero</h3>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  These settlements exist in Xero before you connected Xettle — we won't touch them.
-                </p>
-                <ul className="space-y-1">
-                  {mpList.map(m => (
-                    <li key={m.code} className="text-xs flex items-center gap-1.5">
-                      <span className="text-muted-foreground">•</span>
-                      <span>{m.label}</span>
-                      <span className="text-muted-foreground">· {m.count} settlement{m.count > 1 ? 's' : ''}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-            );
-          })()}
         </div>
       )}
 
-      {/* 3-Month Timeline Grid */}
+      {/* Visual Pipeline Timeline */}
       {timelineData.marketplaces.length > 0 && (
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Settlement history</CardTitle>
+            <CardTitle className="text-sm font-semibold">Settlement pipeline</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 overflow-x-auto">
             <table className="w-full text-sm">
@@ -634,16 +533,58 @@ export default function ActionCentre({
                       {MARKETPLACE_LABELS[mp] || mp}
                     </td>
                     {timelineData.months.map(m => {
-                      const { status, tooltip } = getStatusForCell(mp, m);
-                      const config = STATUS_ICONS[status] || STATUS_ICONS.missing;
+                      if (isCellPreBoundary(m)) {
+                        return (
+                          <td key={m} className="text-center py-2.5 px-3">
+                            <span className="text-[10px] text-muted-foreground/50">—</span>
+                          </td>
+                        );
+                      }
+                      const cellRows = getRowsForCell(mp, m);
+                      if (cellRows.length === 0) {
+                        return (
+                          <td key={m} className="text-center py-2.5 px-3">
+                            <span className="text-[10px] text-muted-foreground/40">—</span>
+                          </td>
+                        );
+                      }
+                      const pipeline = getPipelineForCell(cellRows);
+                      const stageEntries: { key: string; label: string; done: boolean }[] = [
+                        { key: 'S', label: 'Settlement uploaded', done: pipeline.settlement },
+                        { key: 'X', label: 'Posted to Xero', done: pipeline.xero },
+                        { key: 'B', label: 'Bank deposit matched', done: pipeline.bank },
+                        { key: 'R', label: 'Fully reconciled', done: pipeline.reconciled },
+                      ];
                       return (
                         <td key={m} className="text-center py-2.5 px-3">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="text-base cursor-default">{config.icon}</span>
+                                <div className="inline-flex items-center gap-1 cursor-default">
+                                  {stageEntries.map(s => (
+                                    <span
+                                      key={s.key}
+                                      className={cn(
+                                        "h-2.5 w-2.5 rounded-full inline-block transition-colors",
+                                        s.done ? "bg-emerald-500" : "bg-muted-foreground/20"
+                                      )}
+                                    />
+                                  ))}
+                                </div>
                               </TooltipTrigger>
-                              <TooltipContent className="text-xs">{tooltip}</TooltipContent>
+                              <TooltipContent className="text-xs space-y-0.5">
+                                {stageEntries.map(s => (
+                                  <div key={s.key} className="flex items-center gap-1.5">
+                                    <span className={s.done ? 'text-emerald-500' : 'text-muted-foreground'}>
+                                      {s.done ? '✓' : '○'}
+                                    </span>
+                                    <span>{s.label}</span>
+                                  </div>
+                                ))}
+                                <div className="text-muted-foreground pt-1 border-t border-border mt-1">
+                                  {cellRows.length} settlement{cellRows.length > 1 ? 's' : ''}
+                                </div>
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </td>
@@ -654,12 +595,9 @@ export default function ActionCentre({
               </tbody>
             </table>
             <div className="flex flex-wrap gap-4 mt-3 text-[10px] text-muted-foreground">
-              <span>✅ Complete (verified)</span>
-              <span>🟡 Ready to push</span>
-              <span>⚠️ Gap detected</span>
-              <span>❌ Missing/needed</span>
-              <span>📋 Already in Xero</span>
-              <span>· Not tracked (pre-boundary)</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Done</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/20 inline-block" /> Pending</span>
+              <span>Pipeline: S → X → B → R (Settlement → Xero → Bank → Reconciled)</span>
             </div>
           </CardContent>
         </Card>
@@ -786,7 +724,7 @@ function formatEventLabel(event: SystemEvent): string {
     case 'xero_push_failed': return `Xero push failed: ${mp} ${period}`;
     case 'reconciliation_run': return `Reconciliation completed: ${mp} ${period}`;
     case 'bank_match_confirmed': return `Bank deposit matched: ${mp} ${period}`;
-    case 'bank_match_failed': return `No bank deposit found: ${mp} ${period}`;
+    case 'bank_match_failed': return `Bank feed not synced yet: ${mp} ${period}`;
     case 'bank_match_query': {
       const count = event.details?.txns_returned;
       return `Bank feed queried: ${mp} — ${count ?? 0} transactions found`;

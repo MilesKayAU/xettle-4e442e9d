@@ -346,7 +346,8 @@ export default function PostSetupBanner({
     (xeroStatus === 'done' || xeroStatus === 'skipped') &&
     (amazonStatus === 'done' || amazonStatus === 'skipped' || amazonStatus === 'rate_limited') &&
     (shopifyStatus === 'done' || shopifyStatus === 'skipped');
-  if (allConnected && allScansTerminal && scanPhase === 'done' && settlementCount !== null && settlementCount > 3) return null;
+  // Hide the entire banner once all scans are done — no lingering "Scan complete" messages
+  if (allScansTerminal && scanPhase === 'done') return null;
 
   const connectedCount = [hasXero, hasAmazon, hasShopify].filter(Boolean).length;
 
