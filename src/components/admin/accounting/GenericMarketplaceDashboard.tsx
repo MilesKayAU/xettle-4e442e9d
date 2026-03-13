@@ -195,8 +195,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       // Marketplace filter
       if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
       // Status filter
-      if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
-      if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '');
+      if (settlementFilter === 'attention') return s.status === 'ingested' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
+      if (settlementFilter === 'synced') return ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
       return true;
     });
   }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
