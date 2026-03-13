@@ -980,6 +980,57 @@ export type Database = {
         }
         Relationships: []
       }
+      outstanding_invoices_cache: {
+        Row: {
+          amount_due: number | null
+          contact_name: string | null
+          currency_code: string | null
+          date: string | null
+          due_date: string | null
+          fetched_at: string | null
+          id: string
+          invoice_number: string | null
+          reference: string | null
+          status: string | null
+          total: number | null
+          user_id: string
+          xero_invoice_id: string
+          xero_tenant_id: string | null
+        }
+        Insert: {
+          amount_due?: number | null
+          contact_name?: string | null
+          currency_code?: string | null
+          date?: string | null
+          due_date?: string | null
+          fetched_at?: string | null
+          id?: string
+          invoice_number?: string | null
+          reference?: string | null
+          status?: string | null
+          total?: number | null
+          user_id: string
+          xero_invoice_id: string
+          xero_tenant_id?: string | null
+        }
+        Update: {
+          amount_due?: number | null
+          contact_name?: string | null
+          currency_code?: string | null
+          date?: string | null
+          due_date?: string | null
+          fetched_at?: string | null
+          id?: string
+          invoice_number?: string | null
+          reference?: string | null
+          status?: string | null
+          total?: number | null
+          user_id?: string
+          xero_invoice_id?: string
+          xero_tenant_id?: string | null
+        }
+        Relationships: []
+      }
       payment_processor_registry: {
         Row: {
           added_by: string | null
