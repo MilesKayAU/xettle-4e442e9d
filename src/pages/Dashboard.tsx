@@ -661,7 +661,7 @@ export default function Dashboard() {
                     </Button>
                   </div>
                   {showBankMapper && (
-                    <PayoutBankAccountMapper />
+                    <DestinationAccountMapper />
                   )}
                 </div>
               )}
