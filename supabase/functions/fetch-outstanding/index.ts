@@ -236,6 +236,7 @@ Deno.serve(async (req) => {
 
     if (cacheAgeRow?.fetched_at) {
       invoiceCacheAgeMinutes = Math.round((Date.now() - new Date(cacheAgeRow.fetched_at).getTime()) / 60000);
+      invoiceCacheFetchedAt = cacheAgeRow.fetched_at;
     }
 
     const shouldHitXero = forceRefresh || !cacheIsFresh;
