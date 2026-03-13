@@ -129,7 +129,33 @@ Deno.serve(async (req) => {
         // Build where clause: RECEIVE transactions from last 60 days
         const fromDate = new Date();
         fromDate.setDate(fromDate.getDate() - LOOKBACK_DAYS);
-        const whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
+        
+        // Load payout account mappings to filter by mapped accounts
+        const { data: payoutSettings } = await adminSupabase
+          .from('app_settings')
+          .select('key, value')
+          .eq('user_id', userId)
+          .like('key', 'payout_account:%');
+        
+        const mappedAccountIds = new Set<string>();
+        for (const row of (payoutSettings || [])) {
+          if (row.value && row.key.startsWith('payout_account:')) {
+            mappedAccountIds.add(row.value);
+          }
+        }
+
+        let whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
+        
+        // If mappings exist, filter to only those bank accounts
+        if (mappedAccountIds.size > 0) {
+          const accountFilters = [...mappedAccountIds].map(id => `BankAccount.AccountID==Guid("${id}")`);
+          if (accountFilters.length === 1) {
+            whereClause += ` AND ${accountFilters[0]}`;
+          } else {
+            whereClause += ` AND (${accountFilters.join(' OR ')})`;
+          }
+          console.log(`[fetch-bank-txns] Filtering to ${mappedAccountIds.size} mapped account(s)`);
+        }
 
         let page = 1;
         let totalUpserted = 0;

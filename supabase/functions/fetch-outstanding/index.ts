@@ -483,7 +483,7 @@ Deno.serve(async (req) => {
       Reference: t.reference || '',
       Contact: { Name: t.contact_name || '' },
       LineItems: [{ Description: t.description || '' }],
-      BankAccount: { Name: t.bank_account_name || '' },
+      BankAccount: { Name: t.bank_account_name || '', AccountID: t.bank_account_id || '' },
       CurrencyCode: t.currency || 'AUD',
     }));
 
