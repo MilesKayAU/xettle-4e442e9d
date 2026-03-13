@@ -701,7 +701,7 @@ async function handleSmartSync(supabase: any, userId: string, syncFrom?: string)
   }
 }
 
-async function _executeSmartSync(supabase: any, userId: string): Promise<Response> {
+async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: string): Promise<Response> {
   // ─── Check cooldown (1 hour minimum between syncs) ────────────
   const { data: cooldownSetting } = await supabase
     .from('app_settings')
