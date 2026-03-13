@@ -408,6 +408,7 @@ export default function ActionCentre({
                   <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
                   <h3 className="font-semibold text-sm">Ready to Post</h3>
                 </div>
+                <p className="text-[10px] text-muted-foreground/70 -mt-1">Not yet sent to Xero</p>
                 <div>
                   <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to post</span></p>
                   <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
