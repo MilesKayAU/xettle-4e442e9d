@@ -467,7 +467,7 @@ serve(async (req) => {
 
       const { data: stillUnmatched } = await supabase
         .from('settlements').select('settlement_id').eq('user_id', userId)
-        .is('xero_journal_id', null).in('status', ['parsed', 'ready_to_push']);
+        .is('xero_journal_id', null).in('status', ['ingested', 'ready_to_push']);
 
       await supabase.from('system_events').insert({
         user_id: userId,
