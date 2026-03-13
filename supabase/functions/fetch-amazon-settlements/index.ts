@@ -380,29 +380,30 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
   for (const amazonToken of amazonTokens) {
     const userId = amazonToken.user_id;
 
-    // ─── Check mutex: skip if manual sync in progress ────────────
-    const { data: lockSetting } = await supabaseAdmin
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'amazon_sync_lock_expiry')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // ─── Atomic lock check: skip if manual sync holds the lock ────
+    const { data: lockResult } = await supabaseAdmin.rpc('acquire_sync_lock', {
+      p_user_id: userId,
+      p_integration: 'amazon',
+      p_lock_key: 'settlement_sync',
+      p_ttl_seconds: 600,
+    });
 
-    if (lockSetting?.value && new Date(lockSetting.value) > new Date()) {
-      details.push(`User ${userId}: Skipped — manual sync in progress`);
-      console.log(`[Sync] Amazon sync skipped for ${userId} — manual sync in progress`);
+    if (!lockResult?.acquired) {
+      details.push(`User ${userId}: Skipped — sync lock held until ${lockResult?.expires_at}`);
+      console.log(`[Sync] Amazon sync skipped for ${userId} — lock held`);
       continue;
     }
 
-    // ─── Check rate limit cooldown ───────────────────────────────
-    const { data: rateLimitSetting } = await supabaseAdmin
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'amazon_rate_limit_until')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // ─── Check rate limit cooldown (atomic RPC) ─────────────────
+    const { data: cooldownResult } = await supabaseAdmin.rpc('check_sync_cooldown', {
+      p_user_id: userId,
+      p_key: 'amazon_rate_limit_until',
+      p_window_seconds: 0, // Rate limit uses absolute expiry, not relative window
+    });
 
-    if (rateLimitSetting?.value && new Date(rateLimitSetting.value) > new Date()) {
+    if (cooldownResult && !cooldownResult.ok) {
+      // Release lock since we're skipping
+      await supabaseAdmin.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: 'settlement_sync' });
       details.push(`User ${userId}: Skipped — Amazon rate limit cooldown active`);
       console.log(`[Sync] Amazon rate limited for ${userId} — cooldown active`);
       continue;
