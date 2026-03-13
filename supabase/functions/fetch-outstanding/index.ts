@@ -107,10 +107,16 @@ async function fetchXeroWithRetry(url: string, headers: Record<string, string>, 
   return { ok: false as const, status: lastStatus, body: lastBody };
 }
 
-function detectMarketplace(reference: string, contactName: string): string {
+function detectMarketplace(reference: string, contactName: string, currencyCode?: string): string {
   const ref = reference.toLowerCase();
   const contact = contactName.toLowerCase();
+  // Amazon US detection: LMB-US refs or USD Amazon invoices
+  if (ref.startsWith('lmb-us-')) return 'amazon_us';
+  if ((ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon')) && currencyCode === 'USD') return 'amazon_us';
+  if (contact.includes('amazon.com') && !contact.includes('amazon.com.au') && currencyCode === 'USD') return 'amazon_us';
+  // Amazon AU
   if (ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon')) return 'amazon_au';
+  if (ref.startsWith('lmb-')) return 'amazon_au';
   if (ref.includes('shopify') || contact.includes('shopify')) return 'shopify_payments';
   if (contact.includes('kogan')) return 'kogan';
   if (contact.includes('big w') || contact.includes('bigw')) return 'bigw';
@@ -118,7 +124,6 @@ function detectMarketplace(reference: string, contactName: string): string {
   if (contact.includes('mydeal') || contact.includes('my deal')) return 'mydeal';
   if (contact.includes('catch')) return 'catch';
   if (contact.includes('ebay')) return 'ebay_au';
-  if (ref.startsWith('lmb-')) return 'amazon_au';
   return 'unknown';
 }
 
