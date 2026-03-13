@@ -556,10 +556,13 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                       <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} />
                     </td>
                     <td className="px-4 py-3 text-center">
+                      {(() => {
+                        const primaryAction = getPrimaryAction(row);
+                        return (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-medium">
-                            Action
+                            {primaryAction.label}
                             <MoreHorizontal className="h-3 w-3 ml-1" />
                           </Button>
                         </DropdownMenuTrigger>
