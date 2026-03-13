@@ -75,6 +75,7 @@ async function fetchBankTxnsForUser(
   clientId: string,
   clientSecret: string,
   guardMinutes: number,
+  lookbackDays: number,
 ) {
   // ── Guard: skip if fetched within guardMinutes ──
   const { data: guardRow } = await adminSupabase
