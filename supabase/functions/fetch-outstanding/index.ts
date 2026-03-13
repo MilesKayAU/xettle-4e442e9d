@@ -397,7 +397,7 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('user_id', userId)
       .eq('transaction_type', 'RECEIVE')
-      .gte('date', ninetyDaysAgoStr);
+      .gte('date', bankLookbackStr);
 
     const bankCacheQueryError = !!bankCacheError;
     if (bankCacheError) {
