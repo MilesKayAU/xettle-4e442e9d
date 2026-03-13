@@ -390,6 +390,7 @@ async function fetchBankTxnsForUser(
   let accountsSkippedByChangeDetection = 0;
 
   const bankAccountIdsUsed: string[] = [];
+  const bankAccountNamesUsed: Record<string, string> = {};
   const stoppedReasonsByAccount: Record<string, string> = {};
   const perAccountStats: Record<string, {
     pages: number;
