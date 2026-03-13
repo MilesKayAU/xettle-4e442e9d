@@ -490,6 +490,7 @@ export default function ActionCentre({
                   <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                   <h3 className="font-semibold text-sm">Fully Reconciled</h3>
                 </div>
+                <p className="text-[10px] text-muted-foreground/70 -mt-1">Matched + verified</p>
                 <p className="text-xs text-muted-foreground">
                   {complete.length} settlement{complete.length > 1 ? 's' : ''} matched
                 </p>
