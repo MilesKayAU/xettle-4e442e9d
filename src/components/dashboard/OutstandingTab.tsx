@@ -1311,16 +1311,22 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                   return mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
                 })()
               : 'never'}
-            {data.sync_info.bank_sync_cooldown_seconds_remaining != null && (
-              <span className="ml-2">
-                · Retry in ~{data.sync_info.bank_sync_cooldown_seconds_remaining}s
-              </span>
-            )}
+            {(() => {
+              const cooldownSec = Number(data.sync_info.bank_sync_cooldown_seconds_remaining);
+              return cooldownSec > 0 ? (
+                <span className="ml-2">· Retry in ~{cooldownSec}s</span>
+              ) : null;
+            })()}
           </div>
           <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
             <RefreshCw className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
             {syncingBankFeed ? 'Syncing…' : 'Sync now'}
           </Button>
+          {!data.sync_info.bank_sync_last_success_at && (
+            <p className="w-full text-xs text-muted-foreground mt-1">
+              If this continues, open Xero and confirm your bank feed is connected and has RECEIVE transactions.
+            </p>
+          )}
         </div>
       )}
 
