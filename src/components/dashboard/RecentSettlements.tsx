@@ -297,6 +297,9 @@ function getActionSort(row: SettlementRow): number {
 
 interface RecentSettlementsProps {
   onViewAll?: () => void;
+  /** External filter from pipeline click: { marketplace, month (YYYY-MM) } */
+  pipelineFilter?: { marketplace: string; month: string } | null;
+  onClearPipelineFilter?: () => void;
 }
 
 export default function RecentSettlements({ onViewAll }: RecentSettlementsProps) {
