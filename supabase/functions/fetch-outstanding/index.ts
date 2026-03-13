@@ -1110,6 +1110,17 @@ Deno.serve(async (req) => {
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,
         bank_match_confirmed_at: settlement?.bank_match_confirmed_at || null,
+        // Routing diagnostics
+        routing: (() => {
+          const rail = toRailCode(marketplace);
+          const dest = getDestinationAccount(rail);
+          return {
+            rail_code: rail,
+            destination_account_id: dest.account_id,
+            destination_account_name: dest.account_id ? (destinationAccountNames[dest.account_id] || null) : null,
+            mapping_source: dest.source,
+          };
+        })(),
         // Recent bank transactions for manual picker — serve for ALL marketplaces, not just Amazon
         recent_bank_txns: matchStatus === 'no_bank_deposit' && isMarketplace
           ? bankTxns
