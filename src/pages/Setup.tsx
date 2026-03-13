@@ -18,7 +18,7 @@ import {
   Square, HelpCircle, Clock3
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
-import PayoutBankAccountMapper from '@/components/settings/PayoutBankAccountMapper';
+import DestinationAccountMapper from '@/components/settings/DestinationAccountMapper';
 import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 
