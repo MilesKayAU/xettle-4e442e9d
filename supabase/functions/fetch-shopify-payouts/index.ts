@@ -165,31 +165,31 @@ async function syncPayoutsForUser(
     if (aliasedIds.has(numericId)) return false;
 
     // P0: Check if a CSV-uploaded version exists with bank_reference as settlement_id
-    // and normalize it to the numeric payout ID
+    // Instead of rewriting settlement_id (race-prone), keep CSV record stable and register aliases
     const bankRef = (p as any).bank_reference;
     if (bankRef) {
       const csvByBankRef = existingShopifyList.find((e: any) => e.settlement_id === bankRef);
       if (csvByBankRef) {
-        // Normalize: update the existing CSV record to use the numeric payout ID
-        console.log(`[fetch-shopify-payouts] Normalizing CSV settlement ${bankRef} → ${numericId}`);
+        // Keep CSV settlement_id stable; store numeric payout ID in source_reference only
+        console.log(`[fetch-shopify-payouts] Linking CSV settlement ${bankRef} ↔ API payout ${numericId} (no rewrite)`);
         supabase.from("settlements")
-          .update({ settlement_id: numericId, source_reference: bankRef } as any)
+          .update({ source_reference: numericId } as any)
           .eq("settlement_id", bankRef)
           .eq("user_id", userId)
           .eq("marketplace", "shopify_payments")
-          .then(({ error }) => {
-            if (error) console.error(`[fetch-shopify-payouts] Normalize error:`, error);
+          .then(({ error }: any) => {
+            if (error) console.error(`[fetch-shopify-payouts] source_reference update error:`, error);
           });
-        // Register alias
+        // Register bidirectional aliases so both IDs resolve
         supabase.from("settlement_id_aliases")
           .upsert([
-            { canonical_settlement_id: numericId, alias_id: bankRef, user_id: userId, source: "api_normalize" },
-            { canonical_settlement_id: numericId, alias_id: numericId, user_id: userId, source: "api" },
+            { canonical_settlement_id: bankRef, alias_id: numericId, user_id: userId, source: "api_link" },
+            { canonical_settlement_id: bankRef, alias_id: bankRef, user_id: userId, source: "csv_original" },
           ] as any, { onConflict: "alias_id,user_id" })
-          .then(({ error }) => {
+          .then(({ error }: any) => {
             if (error) console.error(`[fetch-shopify-payouts] Alias error:`, error);
           });
-        return false; // skip insert — existing CSV record was normalized
+        return false; // skip insert — existing CSV record preserved
       }
     }
 
