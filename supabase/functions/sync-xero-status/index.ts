@@ -215,18 +215,18 @@ async function generateSettlementStyleFingerprint(marketplace: string, periodSta
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function deriveStatus(inv: any): string {
+function deriveStatus(inv: any): { status: string; syncOrigin: string } {
   const ref = inv.Reference || '';
   const isXettleFormat = ref.startsWith('Xettle-');
   if (isXettleFormat) {
     switch (inv.Status) {
-      case 'DRAFT': return 'draft_in_xero';
-      case 'AUTHORISED': return 'authorised_in_xero';
-      case 'PAID': return 'reconciled_in_xero';
-      default: return 'pushed_to_xero';
+      case 'DRAFT': return { status: 'pushed_to_xero', syncOrigin: 'xettle' };
+      case 'AUTHORISED': return { status: 'pushed_to_xero', syncOrigin: 'xettle' };
+      case 'PAID': return { status: 'reconciled_in_xero', syncOrigin: 'xettle' };
+      default: return { status: 'pushed_to_xero', syncOrigin: 'xettle' };
     }
   }
-  return 'synced_external';
+  return { status: 'pushed_to_xero', syncOrigin: 'external' };
 }
 
 serve(async (req) => {
