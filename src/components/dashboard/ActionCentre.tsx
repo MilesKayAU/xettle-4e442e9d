@@ -599,7 +599,10 @@ export default function ActionCentre({
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="inline-flex items-center gap-1 cursor-default">
+                                <button
+                                  className="inline-flex items-center gap-1 cursor-pointer hover:scale-110 transition-transform rounded-md p-1 hover:bg-muted/40"
+                                  onClick={() => onPipelineFilter?.(mp, m)}
+                                >
                                   {stageEntries.map(s => (
                                     <span
                                       key={s.key}
