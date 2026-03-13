@@ -19,6 +19,8 @@ const COOLDOWN_KEY = 'xero_api_cooldown_until';          // Set ONLY on 429
 const LAST_SUCCESS_KEY = 'bank_feed_last_success_at';     // Set ONLY after real Xero fetch completes (no 429)
 const GUARD_MINUTES_BATCH = 30;
 const GUARD_MINUTES_SELF = 2;
+const CACHE_FRESH_MINUTES_BATCH = 60;
+const CACHE_FRESH_MINUTES_SELF = 15;
 const LOOKBACK_DAYS_BATCH = 60;
 const LOOKBACK_DAYS_SELF = 30;
 
