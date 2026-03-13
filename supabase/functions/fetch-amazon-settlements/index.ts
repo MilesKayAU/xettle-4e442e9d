@@ -1108,10 +1108,23 @@ serve(async (req) => {
   try {
     const action = req.headers.get('x-action') || 'list';
 
-    // ─── SYNC: Server-side full sync (cron) ──────────────────────
+    // ─── SYNC: Server-side full sync (cron/scheduled only) ─────
+    // GUARDRAIL A: Block global sync from public client calls.
+    // Only service-role (internal cron) may trigger this path.
     if (action === 'sync') {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = req.headers.get('Authorization') || '';
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+
+      if (!isServiceRole) {
+        console.warn(`[fetch-amazon] Blocked global sync attempt from non-service-role caller`);
+        return new Response(JSON.stringify({
+          error: 'forbidden',
+          message: 'Global sync is only available to internal scheduled jobs. Use smart-sync instead.',
+        }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
       // Accept optional sync_from from request body (Xero-first smart sync window)
