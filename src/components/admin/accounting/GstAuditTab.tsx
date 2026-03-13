@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ChevronDown, ShieldAlert, Search, ExternalLink, Eye } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ChevronDown, ShieldAlert, Search, Eye, ChevronLeft, FileText, Filter } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -69,16 +69,27 @@ interface VarianceSample {
   note?: string;
 }
 
+interface LineSample {
+  settlement_id: string;
+  line_type: string;
+  description?: string;
+  amount: number;
+  gst_amount?: number | null;
+  note?: string;
+}
+
 interface VarianceLine {
   code: string;
   label: string;
   amount: number;
   confidence: 'high' | 'medium' | 'low';
+  evidence_level: 'settlement' | 'line';
   evidence?: {
     settlement_ids?: string[];
     marketplace_codes?: string[];
     settlement_count?: number;
     sample?: VarianceSample[];
+    line_samples?: LineSample[];
     notes?: string[];
   };
 }
@@ -117,8 +128,12 @@ interface EvidenceResult {
   success: boolean;
   variance_code: string;
   rows: EvidenceRow[];
-  totals: { gst_contribution_total: number; settlement_count: number };
+  next_cursor: string | null;
+  totals: { gst_contribution_total: number; settlement_count_total: number };
+  line_samples?: LineSample[];
 }
+
+type EvidenceFilter = 'all' | 'not_pushed' | 'unclassified' | 'top_contributors';
 
 function getMonthPeriods(count: number = 12): { start: string; end: string; label: string }[] {
   const periods: { start: string; end: string; label: string }[] = [];
@@ -147,6 +162,13 @@ const MARKETPLACE_LABELS: Record<string, string> = {
 const ISSUE_LABELS: Record<string, string> = {
   NOT_PUSHED: 'Not pushed', UNCLASSIFIED_LINES: 'Unclassified', NOT_BANK_VERIFIED: 'Not bank verified',
 };
+
+const FILTER_OPTIONS: { key: EvidenceFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'not_pushed', label: 'Not pushed' },
+  { key: 'unclassified', label: 'Unclassified' },
+  { key: 'top_contributors', label: 'Top contributors' },
+];
 
 export default function GstAuditTab() {
   const [summaries, setSummaries] = useState<Record<string, GstSummaryRow>>({});
@@ -573,7 +595,7 @@ function VarianceAnalysisCard({
   );
 }
 
-// ─── Variance Line Row (with evidence expander) ──────────────────────
+// ─── Variance Line Row (with evidence expander + pagination + filters + line samples) ────
 
 function VarianceLineRow({
   line, periodStart, periodEnd, onSettlementClick,
@@ -584,9 +606,14 @@ function VarianceLineRow({
   onSettlementClick: (row: EvidenceRow) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [evidenceRows, setEvidenceRows] = useState<EvidenceRow[] | null>(null);
+  const [evidenceRows, setEvidenceRows] = useState<EvidenceRow[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
-  const [evidenceTotals, setEvidenceTotals] = useState<{ gst_contribution_total: number; settlement_count: number } | null>(null);
+  const [evidenceTotals, setEvidenceTotals] = useState<{ gst_contribution_total: number; settlement_count_total: number } | null>(null);
+  const [lineSamples, setLineSamples] = useState<LineSample[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<EvidenceFilter>('all');
+  const [expandedSettlement, setExpandedSettlement] = useState<string | null>(null);
 
   const hasEvidence = line.evidence && (
     (line.evidence.settlement_count && line.evidence.settlement_count > 0) ||
@@ -596,12 +623,23 @@ function VarianceLineRow({
   );
 
   const evidenceCount = line.evidence?.settlement_count || line.evidence?.settlement_ids?.length || 0;
+  const isLineDriven = line.evidence_level === 'line';
 
   const confidenceColor = line.confidence === 'high' ? 'text-green-600' : line.confidence === 'medium' ? 'text-amber-600' : 'text-destructive';
 
-  const loadFullEvidence = useCallback(async () => {
-    if (evidenceRows) return; // already loaded
-    setEvidenceLoading(true);
+  const buildFilters = useCallback((filter: EvidenceFilter) => {
+    if (filter === 'all') return undefined;
+    return {
+      only_not_pushed: filter === 'not_pushed',
+      only_unclassified: filter === 'unclassified',
+      top_contributors: filter === 'top_contributors',
+    };
+  }, []);
+
+  const loadEvidence = useCallback(async (cursor: string | null = null, filter: EvidenceFilter = activeFilter, append = false) => {
+    if (!append) setEvidenceLoading(true);
+    else setLoadingMore(true);
+
     try {
       const { data, error } = await supabase.functions.invoke('fetch-gst-variance-evidence', {
         body: {
@@ -609,25 +647,52 @@ function VarianceLineRow({
           period_end: periodEnd,
           variance_code: line.code,
           settlement_ids: line.evidence?.settlement_ids,
+          cursor,
+          limit: 25,
+          filters: buildFilters(filter),
         },
       });
       if (error) throw error;
       const result = data as EvidenceResult;
-      setEvidenceRows(result.rows);
+      if (append) {
+        setEvidenceRows(prev => [...prev, ...result.rows]);
+      } else {
+        setEvidenceRows(result.rows);
+      }
       setEvidenceTotals(result.totals);
+      setNextCursor(result.next_cursor);
+      if (result.line_samples) setLineSamples(result.line_samples);
     } catch {
       toast.error('Failed to load evidence details');
     } finally {
       setEvidenceLoading(false);
+      setLoadingMore(false);
     }
-  }, [periodStart, periodEnd, line.code, line.evidence?.settlement_ids, evidenceRows]);
+  }, [periodStart, periodEnd, line.code, line.evidence?.settlement_ids, activeFilter, buildFilters]);
 
   const handleToggle = useCallback((isOpen: boolean) => {
     setOpen(isOpen);
-    if (isOpen && !evidenceRows && hasEvidence) {
-      loadFullEvidence();
+    if (isOpen && evidenceRows.length === 0 && hasEvidence) {
+      loadEvidence(null, 'all', false);
     }
-  }, [evidenceRows, hasEvidence, loadFullEvidence]);
+  }, [evidenceRows.length, hasEvidence, loadEvidence]);
+
+  const handleFilterChange = useCallback((filter: EvidenceFilter) => {
+    setActiveFilter(filter);
+    setEvidenceRows([]);
+    setNextCursor(null);
+    setExpandedSettlement(null);
+    loadEvidence(null, filter, false);
+  }, [loadEvidence]);
+
+  const handleLoadMore = useCallback(() => {
+    if (nextCursor) loadEvidence(nextCursor, activeFilter, true);
+  }, [nextCursor, activeFilter, loadEvidence]);
+
+  // Line samples for an expanded settlement row
+  const getSettlementLineSamples = useCallback((settlementId: string) => {
+    return lineSamples.filter(ls => ls.settlement_id === settlementId);
+  }, [lineSamples]);
 
   return (
     <Collapsible open={open} onOpenChange={handleToggle}>
@@ -644,6 +709,11 @@ function VarianceLineRow({
                 {evidenceCount} settlement{evidenceCount !== 1 ? 's' : ''}
               </Badge>
             )}
+            {isLineDriven && (
+              <Badge variant="outline" className="text-[9px] px-1 py-0 text-primary border-primary/30">
+                <FileText className="h-2.5 w-2.5 mr-0.5" />line
+              </Badge>
+            )}
           </div>
           <span className={`font-mono text-xs font-medium shrink-0 ml-2 ${line.amount >= 0 ? 'text-foreground' : 'text-destructive'}`}>
             {line.amount >= 0 ? '+' : ''}{formatAUD(line.amount)}
@@ -658,17 +728,34 @@ function VarianceLineRow({
               <p key={i} className="text-[11px] text-muted-foreground px-3 pt-2">{note}</p>
             ))}
 
+            {/* Quick Filters */}
+            <div className="flex items-center gap-1 px-3 pt-2 pb-1">
+              <Filter className="h-3 w-3 text-muted-foreground mr-1" />
+              {FILTER_OPTIONS.map(opt => (
+                <Button
+                  key={opt.key}
+                  variant={activeFilter === opt.key ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-5 text-[9px] px-1.5 py-0"
+                  onClick={() => handleFilterChange(opt.key)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+
             {/* Evidence table */}
             {evidenceLoading ? (
               <div className="flex items-center justify-center py-4 gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Loading evidence…</span>
               </div>
-            ) : evidenceRows && evidenceRows.length > 0 ? (
-              <div className="max-h-64 overflow-y-auto">
+            ) : evidenceRows.length > 0 ? (
+              <div className="max-h-80 overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="text-[10px] py-1.5 w-5"></TableHead>
                       <TableHead className="text-[10px] py-1.5">Settlement</TableHead>
                       <TableHead className="text-[10px] py-1.5">Marketplace</TableHead>
                       <TableHead className="text-[10px] py-1.5">Status</TableHead>
@@ -679,42 +766,101 @@ function VarianceLineRow({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {evidenceRows.map((row) => (
-                      <TableRow key={row.settlement_id} className="cursor-pointer hover:bg-muted/50" onClick={() => onSettlementClick(row)}>
-                        <TableCell className="text-[10px] font-mono py-1">{row.settlement_id.length > 14 ? `${row.settlement_id.slice(0, 12)}…` : row.settlement_id}</TableCell>
-                        <TableCell className="text-[10px] py-1">{MARKETPLACE_LABELS[row.marketplace] || row.marketplace}</TableCell>
-                        <TableCell className="py-1"><StatusBadge status={row.status} /></TableCell>
-                        <TableCell className="text-[10px] py-1 font-mono">{row.xero_invoice_number || (row.xero_invoice_id ? '✓' : '—')}</TableCell>
-                        <TableCell className="text-[10px] py-1 text-right font-mono font-medium">
-                          <span className={row.gst_contribution >= 0 ? 'text-foreground' : 'text-destructive'}>
-                            {row.gst_contribution >= 0 ? '+' : ''}{formatAUD(row.gst_contribution)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-1">
-                          <div className="flex gap-0.5 flex-wrap">
-                            {row.issues.map(issue => (
-                              <Badge key={issue} variant="outline" className="text-[8px] px-1 py-0 text-amber-600 border-amber-300">
-                                {ISSUE_LABELS[issue] || issue}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-1">
-                          <Eye className="h-3 w-3 text-muted-foreground" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {evidenceRows.map((row) => {
+                      const settlementLines = isLineDriven ? getSettlementLineSamples(row.settlement_id) : [];
+                      const isExpanded = expandedSettlement === row.settlement_id;
+                      return (
+                        <>
+                          <TableRow key={row.settlement_id} className="cursor-pointer hover:bg-muted/50">
+                            <TableCell className="py-1 px-1">
+                              {isLineDriven && settlementLines.length > 0 && (
+                                <button onClick={(e) => { e.stopPropagation(); setExpandedSettlement(isExpanded ? null : row.settlement_id); }}>
+                                  {isExpanded ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                                </button>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-[10px] font-mono py-1" onClick={() => onSettlementClick(row)}>
+                              {row.settlement_id.length > 14 ? `${row.settlement_id.slice(0, 12)}…` : row.settlement_id}
+                            </TableCell>
+                            <TableCell className="text-[10px] py-1">{MARKETPLACE_LABELS[row.marketplace] || row.marketplace}</TableCell>
+                            <TableCell className="py-1"><StatusBadge status={row.status} /></TableCell>
+                            <TableCell className="text-[10px] py-1 font-mono">{row.xero_invoice_number || (row.xero_invoice_id ? '✓' : '—')}</TableCell>
+                            <TableCell className="text-[10px] py-1 text-right font-mono font-medium">
+                              <span className={row.gst_contribution >= 0 ? 'text-foreground' : 'text-destructive'}>
+                                {row.gst_contribution >= 0 ? '+' : ''}{formatAUD(row.gst_contribution)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="py-1">
+                              <div className="flex gap-0.5 flex-wrap">
+                                {row.issues.map(issue => (
+                                  <Badge key={issue} variant="outline" className="text-[8px] px-1 py-0 text-amber-600 border-amber-300">
+                                    {ISSUE_LABELS[issue] || issue}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-1">
+                              <button onClick={() => onSettlementClick(row)}>
+                                <Eye className="h-3 w-3 text-muted-foreground" />
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                          {/* Line-level evidence nested row */}
+                          {isExpanded && settlementLines.length > 0 && (
+                            <TableRow key={`${row.settlement_id}-lines`} className="bg-muted/20">
+                              <TableCell colSpan={8} className="py-0 px-0">
+                                <div className="pl-8 pr-2 py-1.5 border-l-2 border-primary/20 ml-2">
+                                  <p className="text-[9px] font-medium text-muted-foreground mb-1">Line items contributing to this variance:</p>
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead className="text-[9px] py-1">Type</TableHead>
+                                        <TableHead className="text-[9px] py-1">Description</TableHead>
+                                        <TableHead className="text-[9px] py-1 text-right">Amount</TableHead>
+                                        <TableHead className="text-[9px] py-1 text-right">GST</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {settlementLines.map((ls, idx) => (
+                                        <TableRow key={idx}>
+                                          <TableCell className="text-[9px] py-0.5 font-mono">{ls.line_type}</TableCell>
+                                          <TableCell className="text-[9px] py-0.5 truncate max-w-[120px]">{ls.description || '—'}</TableCell>
+                                          <TableCell className="text-[9px] py-0.5 text-right font-mono">{formatAUD(ls.amount)}</TableCell>
+                                          <TableCell className="text-[9px] py-0.5 text-right font-mono">{formatAUD(ls.gst_amount)}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })}
                   </TableBody>
                 </Table>
-                {/* Totals row */}
-                {evidenceTotals && (
-                  <div className="flex justify-between items-center px-3 py-2 border-t text-[10px] font-medium">
-                    <span>{evidenceTotals.settlement_count} settlement{evidenceTotals.settlement_count !== 1 ? 's' : ''}</span>
-                    <span className="font-mono">Total: {formatAUD(evidenceTotals.gst_contribution_total)}</span>
-                  </div>
-                )}
+
+                {/* Totals + Pagination */}
+                <div className="flex justify-between items-center px-3 py-2 border-t text-[10px]">
+                  <span className="font-medium">
+                    {evidenceRows.length} of {evidenceTotals?.settlement_count_total || 0} settlement{(evidenceTotals?.settlement_count_total || 0) !== 1 ? 's' : ''}
+                    {' · '}Total: <span className="font-mono">{formatAUD(evidenceTotals?.gst_contribution_total)}</span>
+                  </span>
+                  {nextCursor && (
+                    <Button
+                      variant="outline" size="sm"
+                      className="h-5 text-[9px] px-2 gap-1"
+                      onClick={handleLoadMore}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <ChevronRight className="h-2.5 w-2.5" />}
+                      Load more
+                    </Button>
+                  )}
+                </div>
               </div>
-            ) : !evidenceLoading && evidenceRows?.length === 0 ? (
+            ) : !evidenceLoading && evidenceRows.length === 0 ? (
               <p className="text-[11px] text-muted-foreground px-3 py-3">No matching settlements found.</p>
             ) : null}
           </div>
