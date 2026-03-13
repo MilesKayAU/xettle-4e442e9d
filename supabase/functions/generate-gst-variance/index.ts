@@ -6,24 +6,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// ══════════════════════════════════════════════════════════════
-// INTERNAL FINANCIAL CATEGORIES (canonical)
-// Source: src/constants/financial-categories.ts
-//
-//   gst_income       — GST collected on sales
-//   gst_expense      — GST on fees
-//   refund           — refunded sale
-//   adjustment       — reserve, correction, reimbursement
-// ══════════════════════════════════════════════════════════════
-
 const GST_INCOME_CATEGORIES = ['gst_income'];
 const GST_EXPENSE_CATEGORIES = ['gst_expense'];
 const REFUND_CATEGORY = 'refund';
 const ADJUSTMENT_CATEGORY = 'adjustment';
 const PUSHED_STATUSES = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'];
+const KNOWN_CATEGORIES = ['revenue', 'marketplace_fee', 'payment_fee', 'shipping_income', 'shipping_cost', 'fba_fee', 'storage_fee', 'advertising', 'promotion', 'gst_income', 'gst_expense', 'refund', 'adjustment'];
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function formatAUD(n: number): string {
+  const prefix = n < 0 ? '-$' : '$';
+  return `${prefix}${Math.abs(n).toFixed(2)}`;
 }
 
 Deno.serve(async (req: Request) => {
@@ -74,16 +70,10 @@ Deno.serve(async (req: Request) => {
 
     if (!settlements || settlements.length === 0) {
       return new Response(JSON.stringify({
-        success: true,
-        period_start, period_end,
-        marketplace_gst_total_estimate: 0,
-        xero_gst: null,
-        difference: null,
-        variance_lines: [],
-        explained_total: 0,
-        unexplained_remainder: null,
-        confidence_score: 0,
-        confidence_label: 'Low',
+        success: true, period_start, period_end,
+        marketplace_gst_total_estimate: 0, xero_gst: null, difference: null,
+        variance_lines: [], explained_total: 0, unexplained_remainder: null,
+        confidence_score: 0, confidence_label: 'Low',
         confidence_reasons: ['No settlements found in this period'],
         xero_source_mode: 'unavailable',
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -101,15 +91,17 @@ Deno.serve(async (req: Request) => {
     // ─── Step 3: Get xero_accounting_matches ─────────────────────
     const { data: xeroMatches } = await supabase
       .from('xero_accounting_matches')
-      .select('settlement_id, xero_invoice_id')
+      .select('settlement_id, xero_invoice_id, xero_invoice_number')
       .eq('user_id', userId)
       .in('settlement_id', settlementIds);
 
-    const matchedSettlementIds = new Set(
-      (xeroMatches || []).filter((m: any) => m.xero_invoice_id).map((m: any) => m.settlement_id)
-    );
+    const matchMap: Record<string, { xero_invoice_id: string | null; xero_invoice_number: string | null }> = {};
+    for (const m of (xeroMatches || []) as any[]) {
+      if (m.xero_invoice_id) matchMap[m.settlement_id] = { xero_invoice_id: m.xero_invoice_id, xero_invoice_number: m.xero_invoice_number };
+    }
+    const matchedSettlementIds = new Set(Object.keys(matchMap));
 
-    // ─── Step 4: Compute per-settlement GST ──────────────────────
+    // ─── Step 4: Compute per-settlement GST + build evidence ─────
     const linesBySettlement: Record<string, any[]> = {};
     for (const line of (lines || [])) {
       if (!linesBySettlement[line.settlement_id]) linesBySettlement[line.settlement_id] = [];
@@ -123,14 +115,38 @@ Deno.serve(async (req: Request) => {
     let totalLineCount = 0;
     let unclassifiedLineCount = 0;
 
-    // Track unpushed settlements' GST
+    // Per-settlement computed data for evidence samples
+    interface SettEvidence {
+      settlement_id: string;
+      marketplace: string;
+      period_start: string;
+      period_end: string;
+      status: string;
+      bank_deposit: number;
+      xero_invoice_id: string | null;
+      xero_invoice_number: string | null;
+      gst_on_sales: number;
+      refund_gst: number;
+      adjustment_gst: number;
+      unknown_gst: number;
+      unclassified_count: number;
+      is_pushed: boolean;
+    }
+
+    const settEvidenceMap: Record<string, SettEvidence> = {};
     let unpushedGst = 0;
     const unpushedSettlementIds: string[] = [];
+    const refundSettlementIds: string[] = [];
+    const adjustmentSettlementIds: string[] = [];
+    const unclassifiedSettlementIds: string[] = [];
 
     for (const sett of settlements) {
       const settLines = linesBySettlement[sett.settlement_id] || [];
       let settGstSales = 0;
       let settRefundGst = 0;
+      let settAdjGst = 0;
+      let settUnknownGst = 0;
+      let settUnclassified = 0;
 
       if (settLines.length > 0) {
         for (const line of settLines) {
@@ -141,36 +157,59 @@ Deno.serve(async (req: Request) => {
           if (GST_INCOME_CATEGORIES.includes(cat)) {
             settGstSales += amt;
           } else if (GST_EXPENSE_CATEGORIES.includes(cat)) {
-            // GST on fees — not part of payable GST comparison
+            // fees GST — not part of payable comparison
           } else if (cat === REFUND_CATEGORY) {
             settRefundGst += Math.abs(amt) / 11;
           } else if (cat === ADJUSTMENT_CATEGORY) {
-            totalAdjustmentGst += Math.abs(amt) / 11;
-          } else if (!['revenue', 'marketplace_fee', 'payment_fee', 'shipping_income', 'shipping_cost', 'fba_fee', 'storage_fee', 'advertising', 'promotion'].includes(cat)) {
+            settAdjGst += Math.abs(amt) / 11;
+          } else if (!KNOWN_CATEGORIES.includes(cat)) {
+            settUnclassified++;
             unclassifiedLineCount++;
-            totalUnknownGst += Math.abs(amt) / 11;
+            settUnknownGst += Math.abs(amt) / 11;
           }
         }
       } else {
-        // Fallback: header GST fields
         settGstSales = Number(sett.gst_on_income) || 0;
       }
 
       totalGstOnSales += settGstSales;
       totalRefundGst += settRefundGst;
+      totalAdjustmentGst += settAdjGst;
+      totalUnknownGst += settUnknownGst;
 
-      // Check if this settlement is pushed to Xero
       const isPushed = PUSHED_STATUSES.includes(sett.status) || matchedSettlementIds.has(sett.settlement_id);
+      const xm = matchMap[sett.settlement_id];
+
+      settEvidenceMap[sett.settlement_id] = {
+        settlement_id: sett.settlement_id,
+        marketplace: sett.marketplace,
+        period_start: sett.period_start,
+        period_end: sett.period_end,
+        status: sett.status,
+        bank_deposit: sett.bank_deposit,
+        xero_invoice_id: xm?.xero_invoice_id || null,
+        xero_invoice_number: xm?.xero_invoice_number || null,
+        gst_on_sales: round2(settGstSales),
+        refund_gst: round2(settRefundGst),
+        adjustment_gst: round2(settAdjGst),
+        unknown_gst: round2(settUnknownGst),
+        unclassified_count: settUnclassified,
+        is_pushed: isPushed,
+      };
+
       if (!isPushed) {
         const netGst = round2(settGstSales - settRefundGst);
         unpushedGst += netGst;
         unpushedSettlementIds.push(sett.settlement_id);
       }
+      if (settRefundGst > 0.001) refundSettlementIds.push(sett.settlement_id);
+      if (settAdjGst > 0.001) adjustmentSettlementIds.push(sett.settlement_id);
+      if (settUnclassified > 0) unclassifiedSettlementIds.push(sett.settlement_id);
     }
 
     const marketplaceGstTotal = round2(totalGstOnSales - totalRefundGst);
 
-    // ─── Step 5: Xero GST (fallback: from matched settlements) ──
+    // ─── Step 5: Xero GST ───────────────────────────────────────
     let xeroGst: number | null = null;
     let xeroSourceMode: 'tax_summary' | 'xettle_invoices_only' | 'unavailable' = 'unavailable';
 
@@ -188,7 +227,25 @@ Deno.serve(async (req: Request) => {
 
     const difference = xeroGst !== null ? round2(marketplaceGstTotal - xeroGst) : null;
 
-    // ─── Step 6: Build variance lines ────────────────────────────
+    // ─── Helper: build sample array (max 20) ─────────────────────
+    function buildSample(ids: string[], gstField: 'gst_on_sales' | 'refund_gst' | 'adjustment_gst' | 'unknown_gst', signed: number = 1) {
+      const samples = ids.slice(0, 20).map(id => {
+        const e = settEvidenceMap[id];
+        return {
+          settlement_id: e.settlement_id,
+          marketplace: e.marketplace,
+          period_start: e.period_start,
+          period_end: e.period_end,
+          status: e.status,
+          xero_invoice_id: e.xero_invoice_id,
+          gst_contribution: round2(signed * (e[gstField] || 0)),
+          note: !e.is_pushed ? 'Not pushed to Xero' : undefined,
+        };
+      });
+      return samples.sort((a, b) => Math.abs(b.gst_contribution) - Math.abs(a.gst_contribution));
+    }
+
+    // ─── Step 6: Build variance lines with evidence ──────────────
     const varianceLines: any[] = [];
 
     // A) Settlements not pushed
@@ -200,6 +257,9 @@ Deno.serve(async (req: Request) => {
         confidence: unpushedSettlementIds.length <= 3 ? 'high' : 'medium',
         evidence: {
           settlement_ids: unpushedSettlementIds,
+          settlement_count: unpushedSettlementIds.length,
+          marketplace_codes: [...new Set(unpushedSettlementIds.map(id => settEvidenceMap[id]?.marketplace).filter(Boolean))],
+          sample: buildSample(unpushedSettlementIds, 'gst_on_sales'),
           notes: [`${unpushedSettlementIds.length} settlement(s) in this period have no linked Xero invoice`],
         },
       });
@@ -213,6 +273,9 @@ Deno.serve(async (req: Request) => {
         amount: round2(totalUnknownGst),
         confidence: 'low',
         evidence: {
+          settlement_ids: unclassifiedSettlementIds,
+          settlement_count: unclassifiedSettlementIds.length,
+          sample: buildSample(unclassifiedSettlementIds, 'unknown_gst'),
           notes: [`${unclassifiedLineCount} line item(s) could not be classified into known GST buckets`],
         },
       });
@@ -226,6 +289,9 @@ Deno.serve(async (req: Request) => {
         amount: round2(-totalRefundGst),
         confidence: 'high',
         evidence: {
+          settlement_ids: refundSettlementIds,
+          settlement_count: refundSettlementIds.length,
+          sample: buildSample(refundSettlementIds, 'refund_gst', -1),
           notes: ['GST component of refunds estimated at 1/11 of refund amounts'],
         },
       });
@@ -239,14 +305,17 @@ Deno.serve(async (req: Request) => {
         amount: round2(totalAdjustmentGst),
         confidence: 'medium',
         evidence: {
+          settlement_ids: adjustmentSettlementIds,
+          settlement_count: adjustmentSettlementIds.length,
+          sample: buildSample(adjustmentSettlementIds, 'adjustment_gst'),
           notes: ['GST component of adjustments/corrections estimated at 1/11'],
         },
       });
     }
 
     // E) Rounding variance
-    // Compute per-settlement rounding drift
     let roundingDrift = 0;
+    const roundingSettlementIds: string[] = [];
     for (const sett of settlements) {
       const settLines = linesBySettlement[sett.settlement_id] || [];
       if (settLines.length > 0) {
@@ -258,7 +327,11 @@ Deno.serve(async (req: Request) => {
         }
         const headerGst = Number(sett.gst_on_income) || 0;
         if (headerGst !== 0) {
-          roundingDrift += round2(lineGst) - round2(headerGst);
+          const drift = round2(lineGst) - round2(headerGst);
+          if (Math.abs(drift) >= 0.005) {
+            roundingDrift += drift;
+            roundingSettlementIds.push(sett.settlement_id);
+          }
         }
       }
     }
@@ -269,6 +342,8 @@ Deno.serve(async (req: Request) => {
         amount: round2(roundingDrift),
         confidence: 'high',
         evidence: {
+          settlement_ids: roundingSettlementIds,
+          settlement_count: roundingSettlementIds.length,
           notes: ['Cumulative rounding drift between line-level and header-level GST totals'],
         },
       });
@@ -282,54 +357,29 @@ Deno.serve(async (req: Request) => {
     let score = 100;
     const reasons: string[] = [];
 
-    if (xeroGst === null) {
-      score -= 40;
-      reasons.push('Xero GST data unavailable — cannot compare');
-    }
-
+    if (xeroGst === null) { score -= 40; reasons.push('Xero GST data unavailable — cannot compare'); }
     if (unexplainedRemainder !== null && Math.abs(unexplainedRemainder) >= 1.00) {
       score -= 25;
       reasons.push(`Unexplained remainder of ${formatAUD(unexplainedRemainder)} could not be traced to specific data`);
     }
-
-    if (totalUnknownGst > 0.01) {
-      score -= 15;
-      reasons.push(`${unclassifiedLineCount} line item(s) have unknown GST classification`);
-    }
-
+    if (totalUnknownGst > 0.01) { score -= 15; reasons.push(`${unclassifiedLineCount} line item(s) have unknown GST classification`); }
     const unpushedPct = settlements.length > 0 ? unpushedSettlementIds.length / settlements.length : 0;
-    if (unpushedPct > 0.2) {
-      score -= 10;
-      reasons.push(`${Math.round(unpushedPct * 100)}% of settlements not pushed to Xero`);
-    }
-
-    if (xeroSourceMode === 'xettle_invoices_only') {
-      score -= 10;
-      reasons.push('Using Xettle invoice data (fallback) — Xero Tax Summary not available');
-    }
+    if (unpushedPct > 0.2) { score -= 10; reasons.push(`${Math.round(unpushedPct * 100)}% of settlements not pushed to Xero`); }
+    if (xeroSourceMode === 'xettle_invoices_only') { score -= 10; reasons.push('Using Xettle invoice data (fallback) — Xero Tax Summary not available'); }
 
     score = Math.max(0, score);
     const label = score >= 80 ? 'High' : score >= 50 ? 'Medium' : 'Low';
 
-    const result = {
-      success: true,
-      period_start,
-      period_end,
+    return new Response(JSON.stringify({
+      success: true, period_start, period_end,
       marketplace_gst_total_estimate: marketplaceGstTotal,
-      xero_gst: xeroGst,
-      difference,
+      xero_gst: xeroGst, difference,
       variance_lines: varianceLines,
       explained_total: explainedTotal,
       unexplained_remainder: unexplainedRemainder,
-      confidence_score: score,
-      confidence_label: label,
-      confidence_reasons: reasons,
-      xero_source_mode: xeroSourceMode,
-    };
-
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+      confidence_score: score, confidence_label: label,
+      confidence_reasons: reasons, xero_source_mode: xeroSourceMode,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (err: any) {
     console.error('generate-gst-variance error:', err);
@@ -338,8 +388,3 @@ Deno.serve(async (req: Request) => {
     });
   }
 });
-
-function formatAUD(n: number): string {
-  const prefix = n < 0 ? '-$' : '$';
-  return `${prefix}${Math.abs(n).toFixed(2)}`;
-}
