@@ -1,120 +1,468 @@
-# Xettle Architecture Rules
+# Xettle — Architecture & System Review
 
-## Rule 1: All Marketplace Dashboards Must Use Shared Hooks
+**Last updated**: 2026-03-13  
+**Codebase**: React + Vite + TypeScript + Tailwind CSS + Lovable Cloud (Supabase)
 
-Every marketplace dashboard (Amazon, Shopify Payments, Bunnings, Generic, ShopifyOrders, etc.)
-**MUST** compose from the shared hooks and components below.
+---
 
-This prevents feature drift where one dashboard gets a capability (e.g. inline recon, Xero-aware
-bulk delete) but others don't.
+## 1. What Xettle Is
 
-### Mandatory Shared Hooks
+Xettle is an **automated marketplace accounting bridge** designed for Australian e-commerce sellers who sell through multiple marketplaces (Amazon AU, Shopify, Bunnings, Kogan, Catch, eBay, Big W, MyDeal, Everyday Market, etc.) and need those marketplace settlements reconciled into Xero.
 
-| Hook | Location | What it provides |
-|------|----------|-----------------|
-| `useSettlementManager` | `src/hooks/use-settlement-manager.ts` | Load, delete, realtime subscription |
-| `useBulkSelect` | `src/hooks/use-bulk-select.ts` | Checkbox selection, Xero-aware bulk delete |
-| `useXeroSync` | `src/hooks/use-xero-sync.ts` | Push, rollback, refresh, mark-as-synced |
-| `useReconciliation` | `src/hooks/use-reconciliation.ts` | Inline recon checks per settlement |
-| `useTransactionDrilldown` | `src/hooks/use-transaction-drilldown.ts` | Line item expansion + loading |
+The core value proposition:
 
-### Mandatory Shared Components
+> **Marketplace settlement → Xero invoice → Bank reconciliation — fully automated.**
 
-| Component | Location | What it provides |
-|-----------|----------|-----------------|
-| `SettlementStatusBadge` | `src/components/admin/accounting/shared/SettlementStatusBadge.tsx` | Consistent status badges |
-| `ReconChecksInline` | `src/components/admin/accounting/shared/ReconChecksInline.tsx` | Reconciliation check display |
-| `BulkDeleteDialog` | `src/components/admin/accounting/shared/BulkDeleteDialog.tsx` | Xero-aware delete confirmation |
-| `GapDetector` | `src/components/admin/accounting/shared/GapDetector.tsx` | Period gap warnings |
+Xettle replaces manual data entry, CSV gymnastics, and services like LinkMyBooks by providing a settlement-centric accounting pipeline that:
 
-### Mandatory Feature Checklist
+1. **Ingests** marketplace settlement data (via API or CSV upload)
+2. **Normalises** it into a standard financial model (13 categories)
+3. **Pushes** it to Xero as DRAFT invoices with correct GST, account codes, and line-by-line breakdowns
+4. **Verifies** the Xero entry against bank deposits for one-click reconciliation
+5. **Monitors** the full lifecycle from ingestion to bank verification
 
-Every marketplace dashboard **MUST** implement all of:
+---
 
-- [ ] **Dedup on save** — `saveSettlement()` checks `settlement_id + marketplace + user_id` uniqueness
-- [ ] **Transaction drill-down** — Eye button queries `settlement_lines`, fallback shows summary
-- [ ] **Inline reconciliation** — `runUniversalReconciliation()` results shown per settlement card
-- [ ] **Xero push with recon gate** — Block push if `canSync === false`
-- [ ] **Rollback** — Void Xero invoice and reset status
-- [ ] **Refresh from Xero** — `syncXeroStatus()` wired to UI button
-- [ ] **Bulk select + delete** — With Xero-aware confirmation dialog
-- [ ] **Gap detection** — Warn on missing periods between settlements
-- [ ] **Mark as Already in Xero** — Skip button for pre-existing invoices
+## 2. System Architecture Overview
 
-### Pattern: Composing a New Dashboard
-
-```tsx
-import { useSettlementManager } from '@/hooks/use-settlement-manager';
-import { useBulkSelect } from '@/hooks/use-bulk-select';
-import { useXeroSync } from '@/hooks/use-xero-sync';
-import { useReconciliation } from '@/hooks/use-reconciliation';
-import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
-import SettlementStatusBadge from './shared/SettlementStatusBadge';
-import ReconChecksInline from './shared/ReconChecksInline';
-import BulkDeleteDialog from './shared/BulkDeleteDialog';
-import GapDetector from './shared/GapDetector';
-
-function NewMarketplaceDashboard({ marketplace }) {
-  const { settlements, loading, loadSettlements, handleDelete, deleting } =
-    useSettlementManager({ marketplaceCode: marketplace.marketplace_code });
-
-  const { pushing, rollingBack, refreshingXero, toStandardSettlement, handlePushToXero, handleRollback, handleRefreshXero, handleMarkAlreadySynced, handleBulkMarkSynced } =
-    useXeroSync({ loadSettlements });
-
-  const { selected, toggleSelect, toggleSelectAll, bulkDeleting, bulkDeleteDialogOpen, syncedSelectedCount, handleBulkDelete, confirmBulkDelete, cancelBulkDelete } =
-    useBulkSelect({ settlements, onComplete: loadSettlements });
-
-  const { reconResults, expandedRecon, toggleReconCheck } =
-    useReconciliation({ toStandardSettlement });
-
-  const { expandedLines, lineItems, loadingLines, loadLineItems } =
-    useTransactionDrilldown();
-
-  // All features are now inherited. Just render the UI.
-}
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        FRONTEND                             │
+│  React + Vite + TypeScript + Tailwind + shadcn/ui           │
+│                                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │
+│  │ Landing  │  │  Setup   │  │Dashboard │  │   Admin    │  │
+│  │  Page    │  │  Wizard  │  │  (User)  │  │(Accounting)│  │
+│  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │
+│                                                             │
+│  Shared: ErrorBoundary, PinGate, BugReport, AI Assistant    │
+│  Auth: Email/password with email verification               │
+│  State: React Query (5min stale), Supabase Realtime         │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    EDGE FUNCTIONS (Deno)                     │
+│                                                             │
+│  Ingestion:          Sync:              Verification:       │
+│  ├ fetch-amazon-     ├ sync-xero-       ├ match-bank-       │
+│  │ settlements       │ status           │ deposits          │
+│  ├ fetch-shopify-    ├ sync-settlement- ├ verify-payment-   │
+│  │ payouts           │ to-xero          │ matches           │
+│  ├ fetch-shopify-    ├ sync-amazon-     ├ apply-xero-       │
+│  │ orders            │ journal          │ payment           │
+│  ├ auto-generate-    ├ auto-push-xero   ├ fetch-xero-bank-  │
+│  │ shopify-          ├ scan-xero-       │ transactions      │
+│  │ settlements       │ history          └───────────────────│
+│  └──────────────     └──────────────                        │
+│                                                             │
+│  Auth:               Admin:             AI:                 │
+│  ├ xero-auth         ├ admin-list-users ├ ai-assistant      │
+│  ├ amazon-auth       ├ admin-manage-    ├ ai-file-          │
+│  ├ shopify-auth      │ users            │ interpreter       │
+│  └──────────────     ├ account-reset    ├ ai-account-mapper │
+│                      └──────────────    ├ ai-bug-triage     │
+│                                         └──────────────     │
+│  Orchestration:                                             │
+│  ├ scheduled-sync (cron)                                    │
+│  ├ run-validation-sweep                                     │
+│  ├ historical-audit                                         │
+│  ├ scan-shopify-channels                                    │
+│  └ fetch-outstanding                                        │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    DATABASE (Postgres)                       │
+│                                                             │
+│  Core:                    Cache/Index:                       │
+│  ├ settlements             ├ xero_accounting_matches        │
+│  ├ settlement_lines        ├ xero_chart_of_accounts         │
+│  ├ settlement_unmapped     ├ shopify_orders                 │
+│  ├ marketplace_validation  ├ bank_transactions              │
+│  ├ payment_verifications   ├ shopify_sub_channels           │
+│  ├ system_events           └─────────────────────           │
+│  ├ sync_history                                             │
+│  ├ sync_locks              Auth/Config:                     │
+│  └─────────────            ├ xero_tokens                    │
+│                            ├ amazon_tokens                  │
+│                            ├ shopify_tokens                 │
+│                            ├ app_settings                   │
+│                            ├ user_roles                     │
+│                            ├ profiles                       │
+│                            ├ bug_reports                    │
+│                            └─────────────────────           │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    EXTERNAL APIs                            │
+│                                                             │
+│  ├ Xero API (Invoices, Attachments, Bank Transactions,      │
+│  │           Chart of Accounts, Contacts, Tracking)         │
+│  ├ Amazon SP-API (Settlement Reports)                       │
+│  ├ Shopify REST API (Payouts, Balance Transactions, Orders) │
+│  └ Lovable AI (Gemini, GPT for assistant & file parsing)    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Why Composition Over Inheritance
+---
 
-React doesn't support class-based component inheritance. The equivalent is:
-- **Hooks** for shared stateful logic
-- **Components** for shared UI patterns
-- **Architecture rules** (this document) for governance
+## 3. Core Pipeline — The Settlement Lifecycle
 
-This ensures every dashboard automatically gets new features when hooks are updated,
-and prevents the "placeholder dashboard" problem where a new marketplace launches
-without critical data integrity protections.
+### 3.1 State Machine
 
-## Rule 2: No Direct Color Classes in Components
+```
+ingested → ready_to_push → pushed_to_xero → reconciled_in_xero → bank_verified
+                 ↓
+           push_failed → push_failed_permanent
+```
 
-Always use semantic design tokens from `index.css` and `tailwind.config.ts`.
-Never use raw colors like `text-white`, `bg-black`, etc.
+Source of truth: `src/constants/settlement-status.ts`
 
-## Rule 3: Secrets Never in Code
+### 3.2 Sync Orchestration (Xero-First)
 
-Never store private API keys in source code. Use Lovable Cloud secrets.
-Publishable/anon keys are OK.
+The system follows a **Xero-First** philosophy. All sync flows execute in this order:
 
-## Rule 11: Three-Layer Accounting Source Model (Hardcoded, Never Configurable)
+1. **Xero Audit** (`scan-xero-history` / `sync-xero-status`) — Scans Xero for existing invoices, pre-seeds `xero_accounting_matches` cache
+2. **Boundary Computation** — Derives `xero_oldest_outstanding_date` from the oldest unresolved Xero invoice
+3. **Marketplace Fetch** — Amazon and Shopify fetches use the boundary as `sync_from` to constrain the window
+4. **Auto-Link** — Newly ingested settlements are matched against pre-seeded `xero_accounting_matches` entries
+5. **Validation Sweep** — Cross-checks all settlements for consistency
+6. **Bank Matching** — Matches settlements against bank deposits
 
+This ensures marketplaces only fetch what's needed for reconciliation, not full history.
+
+### 3.3 Three-Layer Accounting Model (Rule #11)
+
+```
 Orders     → NEVER create accounting entries
-Payments   → NEVER create accounting entries
+Payments   → NEVER create accounting entries  
 Settlements → ONLY source of accounting entries
+```
 
-Payment matching is VERIFICATION ONLY — no invoice, no journal, no Xero push.
-This rule is enforced by `src/constants/accounting-rules.ts` and referenced
-at the entry point of every payment and sync function.
+Payment matching is **verification only** — it confirms bank deposit parity but never creates Xero invoices, journals, or bills.
 
-Canonical constant file: `src/constants/accounting-rules.ts`
+Source of truth: `src/constants/accounting-rules.ts`
 
-### Payment Verification Layer
+### 3.4 Invoice Reference System
 
-The payment verification system (PayPal, Shopify Payments, other gateways)
-follows the same hybrid matching model as Amazon bank deposit matching:
+References are generated **server-side only** — the client never controls invoice references.
 
-- Detects gateway bank accounts in Xero (Type=BANK)
-- Fetches transactions from those accounts
-- Groups and scores candidates against Shopify orders
-- Presents suggestions requiring explicit user confirmation
-- Stores audit trail in `payment_verifications` table (never in `settlements`)
-- **NEVER** creates invoices, journals, or Xero pushes
+| Format | Usage |
+|--------|-------|
+| `Xettle-{settlement_id}` | Standard single-month settlement |
+| `Xettle-{settlement_id}-P1` | Split-month: first month (P&L allocation) |
+| `Xettle-{settlement_id}-P2` | Split-month: second month (bank deposit match) |
+
+Legacy formats (`AMZN-{id}`, `LMB-*-{id}-*`) are read-only for backwards compatibility.
+
+---
+
+## 4. Marketplace Support
+
+### 4.1 Built-in Marketplaces (Registry)
+
+Source of truth: `src/utils/marketplace-registry.ts`
+
+| Marketplace | Payment Type | Detection Method |
+|-------------|-------------|-----------------|
+| Amazon AU | Direct bank transfer | SP-API settlement reports |
+| Shopify Payments | Gateway clearing | REST API payouts + balance transactions |
+| Bunnings | Direct bank transfer | CSV upload / Shopify sub-channel |
+| Kogan | Direct bank transfer | Shopify order tags/notes |
+| MyDeal | Direct bank transfer | Shopify order tags/notes |
+| Catch | Direct bank transfer | Shopify order tags/notes |
+| eBay | Direct bank transfer | Shopify order tags/notes |
+| Big W | Direct bank transfer | Shopify order tags/notes |
+| Everyday Market | Direct bank transfer | Shopify order tags/notes |
+| PayPal | Gateway clearing | Shopify payment method |
+| Afterpay | Gateway clearing | Shopify payment method |
+| Stripe | Gateway clearing | Shopify payment method |
+
+### 4.2 Sub-Channel Detection
+
+For Shopify sellers who sell on multiple marketplaces via a single Shopify store, Xettle detects sub-channels from order metadata (Note Attributes → Tags → Payment Method) and auto-provisions per-marketplace connections.
+
+### 4.3 Generic CSV Upload
+
+Any marketplace settlement CSV can be uploaded via the Smart Upload Flow. An AI file interpreter detects the marketplace, maps columns, and normalises data into the standard 13-category financial model.
+
+---
+
+## 5. Key Subsystems
+
+### 5.1 Xero Integration
+
+- **Push**: DRAFT invoices (ACCREC) or bills (ACCPAY for negative settlements)
+- **Split-Month**: Settlements spanning month boundaries are split into two invoices using Account 612 (Deferred Revenue) for P&L accuracy
+- **Tracking Categories**: Optional "Sales Channel" tracking for per-marketplace P&L
+- **Chart of Accounts Validation**: Pre-push validation ensures all account codes exist and are correct type (revenue/expense)
+- **Audit CSV**: 16-column settlement CSV auto-attached to each Xero invoice
+- **Duplicate Guard**: Cache-first check (`xero_accounting_matches`) + Xero API fallback + legacy reference search
+- **Rate Limit Protection**: 90-second cooldown after HTTP 429, cursor-based incremental scanning
+
+### 5.2 Push Safety Preview
+
+All Xero pushes are intercepted by a mandatory preview modal showing:
+- Full financial breakdown (line items, GST, net total)
+- 5-point validation suite (Sum match, Account codes, GST, Contact mapping, Bank verification)
+- "Confirm and push" button **disabled** if any red validation errors exist
+- All pushes create DRAFT status — user must approve in Xero
+
+### 5.3 Bank Deposit Matching
+
+Two-pass heuristic matcher:
+1. **Individual match**: Amount ±$0.50 + bank narration analysis + date proximity → score ≥ 90 = auto-apply
+2. **Batch match**: Sum of multiple settlements ±$1.00 → score ≥ 90 = auto-apply
+
+Gateway payment verification (PayPal, Shopify Payments) is **suggestion-only** — never auto-applies.
+
+### 5.4 Insights Engine
+
+- Marketplace profit comparison (revenue, fees, net margin per channel)
+- SKU-level cost tracking and comparison
+- Fee observation engine (trend detection, alert thresholds)
+- Return ratio monitoring per marketplace
+
+### 5.5 AI Assistant
+
+- Chat-based help powered by Lovable AI (Gemini/GPT models)
+- AI file interpreter for unknown CSV formats
+- AI account mapper for Xero Chart of Accounts suggestions
+- AI bug triage for automated issue classification
+
+### 5.6 Onboarding
+
+- 5-step setup wizard (Connect Stores → Connect Xero → Upload CSVs → Scanning → Results)
+- Accounting boundary date configuration (temporal gate for all accounting entries)
+- Post-setup banner with live sync status per integration
+- Welcome guide with contextual next-action suggestions
+
+### 5.7 Admin & Platform
+
+- Role-based access: `admin`, `pro`, `starter`, `trial`, `user`
+- Trial system with configurable duration and tier-gated features
+- Bug report system with AI triage
+- Pre-launch checklist dashboard
+- Data integrity monitoring
+- Knowledge base management
+- Account reset capability (admin-only)
+
+---
+
+## 6. Multi-Tenant Safety
+
+Every database query touching user data **must** include `.eq('user_id', userId)`. This is enforced at:
+
+- **Edge function level**: Authenticated `userId` derived from JWT, never from request body
+- **Database level**: `UNIQUE(user_id, marketplace, settlement_id)` on settlements
+- **Cache level**: `UNIQUE(user_id, settlement_id)` on `xero_accounting_matches`
+- **RLS policies**: Row-level security on all user-facing tables
+
+Roles are stored in a separate `user_roles` table (never on profiles) with `has_role()` security definer function.
+
+---
+
+## 7. Dashboard Composition Architecture
+
+All marketplace dashboards use a **composition pattern** — shared hooks for logic, shared components for UI.
+
+### Mandatory Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `useSettlementManager` | Load, delete, realtime subscription |
+| `useBulkSelect` | Checkbox selection, Xero-aware bulk delete |
+| `useXeroSync` | Push, rollback, refresh, mark-as-synced |
+| `useReconciliation` | Inline recon checks per settlement |
+| `useTransactionDrilldown` | Line item expansion + loading |
+
+### Mandatory Components
+
+| Component | Purpose |
+|-----------|---------|
+| `SettlementStatusBadge` | Consistent status badges across all dashboards |
+| `ReconChecksInline` | Reconciliation check display |
+| `BulkDeleteDialog` | Xero-aware delete confirmation |
+| `GapDetector` | Period gap warnings |
+
+### Feature Checklist (every dashboard MUST implement)
+
+- Dedup on save (`settlement_id + marketplace + user_id`)
+- Transaction drill-down (settlement_lines query)
+- Inline reconciliation checks
+- Xero push with recon gate
+- Rollback (void Xero invoice + reset status)
+- Refresh from Xero
+- Bulk select + delete (Xero-aware)
+- Gap detection
+- Mark as Already in Xero
+
+---
+
+## 8. Idempotency & Data Integrity
+
+| Table | Method | Constraint |
+|-------|--------|-----------|
+| `settlements` | upsert | `UNIQUE(user_id, marketplace, settlement_id)` |
+| `settlement_lines` | delete + insert | delete by `(user_id, settlement_id)` first |
+| `settlement_unmapped` | delete + insert | delete by `(user_id, settlement_id)` first |
+| `xero_accounting_matches` | upsert | `UNIQUE(user_id, settlement_id)` |
+| `payment_verifications` | upsert | `onConflict: 'settlement_id,gateway_code'` |
+| `sync_locks` | atomic RPC | `UNIQUE(user_id, integration, lock_key)` |
+
+---
+
+## 9. Deterministic vs Heuristic Matching
+
+| Function | Type | Method | Overwrites Deterministic? |
+|----------|------|--------|--------------------------|
+| `sync-xero-status` reference match | **Deterministic** | `Xettle-{id}` / `AMZN-{id}` / `LMB-*` | No — only if uncached |
+| `sync-xero-status` fuzzy match | **Heuristic** | Amount ±$5/5% + date ±7d + contact | No — guarded by cache-miss check |
+| `match-bank-deposits` individual | **Heuristic** | Amount ±$0.50 + narration + date | No — status guard |
+| `match-bank-deposits` batch | **Heuristic** | Sum ±$1.00 + narration | No — status guard |
+| `verify-payment-matches` | **Heuristic** | Order sums ±3% | Never writes — suggestions only |
+| Auto-link on ingestion | **Deterministic** | Pre-seeded `xero_accounting_matches` | Yes — first ingestion only |
+
+---
+
+## 10. Parser Architecture
+
+| Location | Runtime | Purpose |
+|----------|---------|---------|
+| `src/utils/settlement-parser.ts` | Browser | CSV upload parsing |
+| `supabase/functions/fetch-amazon-settlements/index.ts` (embedded) | Deno | API settlement parsing |
+
+Both maintain a `PARSER_VERSION` constant (currently `v1.7.1`). Deno edge functions cannot import from `src/`, so the parser is duplicated. Version drift is the primary risk.
+
+---
+
+## 11. Tech Stack Summary
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui |
+| State | React Query, Supabase Realtime |
+| Routing | React Router v6 (lazy-loaded pages) |
+| Charts | Recharts |
+| PDF | pdfjs-dist |
+| Spreadsheets | xlsx |
+| Backend | Lovable Cloud (Supabase — Postgres + Edge Functions) |
+| Auth | Supabase Auth (email/password with verification) |
+| AI | Lovable AI (Gemini 2.5/3, GPT-5 series) |
+| Testing | Vitest (unit), Playwright (visual/E2E) |
+| CI | Percy (visual regression via GitHub Actions) |
+
+---
+
+## 12. Architecture Review — Strengths
+
+### What Xettle does well:
+
+1. **Settlement-centric model is correct** — Using settlements (not orders/payments) as the sole accounting source is the right abstraction for marketplace sellers. It matches how Amazon/Shopify actually pay sellers and eliminates double-counting.
+
+2. **Deterministic reference system** — Server-side `Xettle-{id}` generation with legacy format support and cache-first duplicate detection is robust. The recent fix to remove client-controlled references was critical.
+
+3. **Xero-First sync philosophy** — Scanning Xero before marketplace ingestion is architecturally sound. It minimises API calls and enables instant auto-linking.
+
+4. **Composition architecture** — The shared hooks pattern ensures feature parity across 11+ marketplace dashboards without class inheritance.
+
+5. **Push Safety Preview** — Mandatory pre-push validation with a disabled button on errors is a strong safeguard for financial data.
+
+6. **GST handling** — The Australian GST extraction formula (`÷11` for 10% inclusive amounts) is correctly implemented throughout.
+
+7. **Idempotency** — Most write paths use upsert with proper unique constraints, making retries safe.
+
+8. **Multi-tenant scoping** — JWT-based user isolation with database-level unique constraints prevents cross-user data contamination.
+
+---
+
+## 13. Architecture Review — Gaps & Recommendations
+
+### 13.1 Critical Gaps
+
+| Gap | Risk | Recommendation |
+|-----|------|---------------|
+| **Parser duplication** — Settlement parser exists in both browser and Deno with no automated sync check | CSV uploads and API imports could produce different totals if versions drift | Add CI check comparing `PARSER_VERSION` between both files. Long-term: generate a shared parser artifact. |
+| **No UNIQUE(user_id, xero_invoice_id) on xero_accounting_matches** | Two settlements could link to the same Xero invoice without detection | Add partial unique index `WHERE xero_invoice_id IS NOT NULL` |
+| **Non-canonical `mapping_error` status** — `sync-settlement-to-xero` writes `mapping_error` directly to `settlements.status` (line 643) | Violates the canonical state machine; can strand settlements in an unrecoverable state | Log to `system_events` only; keep settlement in current workflow status |
+| **`marketplace_validation` has no hard unique constraint** | Race conditions on upsert could create duplicate validation rows | Add `UNIQUE(user_id, marketplace_code, period_label)` |
+
+### 13.2 Missing Features (Product Gaps)
+
+| Feature | Impact | Complexity |
+|---------|--------|-----------|
+| **Multi-currency support** — Everything assumes AUD | Cannot serve NZ, UK, US, or multi-country Amazon sellers | High — requires currency field on settlements, exchange rate handling, and Xero multi-currency API integration |
+| **Stripe direct integration** — Stripe detected as Shopify sub-channel only | Sellers using Stripe outside Shopify have no ingestion path | Medium — Stripe Connect API for payout/balance transaction sync |
+| **Scheduled sync dashboard** — `scheduled-sync` runs as cron but has no user-facing status/config | Users can't see when last sync ran, can't adjust frequency, can't see errors | Low — add UI card showing `sync_history` with cron status |
+| **Webhook-based ingestion** — All syncs are poll-based | Adds latency; wastes API calls when nothing changed | Medium — Amazon SNS notifications, Shopify webhooks for new payouts |
+| **Xero bill support for all marketplaces** — Negative settlement → ACCPAY only works for simple cases | Complex fee-only periods with mixed revenue/expense may not push correctly | Low — extend `buildInvoiceLineItems` to handle mixed-sign scenarios |
+| **Offline/retry queue** — If Xero is down during push, settlement is marked `push_failed` | No visible retry queue or manual retry UI beyond `auto-push-xero` | Low — add "Retry failed pushes" button with visible queue |
+| **Audit log export** — `system_events` captures everything but has no export | Users/accountants can't download an audit trail for BAS/tax purposes | Low — CSV export of system_events filtered by date range |
+| **Mobile responsive admin** — Admin/accounting dashboard optimised for desktop | Common use case: quick check on phone shows poor layout | Medium — responsive layout pass on AccountingDashboard |
+
+### 13.3 Technical Debt
+
+| Item | Location | Impact |
+|------|----------|--------|
+| `sync-amazon-journal` is a near-duplicate of `sync-settlement-to-xero` | Two edge functions doing the same job with slightly different features | Should be consolidated into one function |
+| `AccountingDashboard.tsx` is 4200+ lines | Difficult to maintain, test, or review | Should be decomposed into sub-components per concern (push flow, settlement list, settings, insights) |
+| No integration tests for edge functions | Bugs like `deriveStatus()` object assignment survived until manual audit | Add Deno test files alongside edge functions |
+| `callEdgeFunctionSafe` in `sync-capabilities.ts` bypasses Supabase client | Uses raw fetch with manual auth headers | Consider standardising on `supabase.functions.invoke()` everywhere |
+| Legacy status values still exist in database | `normaliseStatus()` maps 12+ legacy values | Run a one-time migration to normalise all existing settlements |
+
+### 13.4 Security Considerations
+
+| Area | Status | Note |
+|------|--------|------|
+| JWT verification in edge functions | ✅ All functions verify JWT | Uses `getUser()` from anon client |
+| User ID from JWT (not request body) | ✅ Fixed | `authenticatedUserId = authUser.id` |
+| RLS on user tables | ✅ Enabled | All user-facing tables have RLS |
+| Admin role check | ✅ Server-side | Uses `has_role()` security definer |
+| Input sanitization | ⚠️ Partial | `src/utils/input-sanitization.ts` exists but not universally applied |
+| Rate limiting | ⚠️ API-level only | Xero 429 handling exists; no application-level rate limiting on edge functions |
+| CORS | ⚠️ Permissive | `Access-Control-Allow-Origin: *` on all edge functions |
+
+---
+
+## 14. File Map
+
+```
+src/
+├── pages/            # Route-level components (lazy loaded)
+├── components/
+│   ├── admin/        # Admin panel (accounting dashboards, settings)
+│   ├── dashboard/    # User dashboard (action centre, recent uploads)
+│   ├── onboarding/   # Setup wizard steps
+│   ├── insights/     # Profit comparison, SKU analysis
+│   ├── settings/     # Account mapper, payment verification
+│   ├── shared/       # Cross-cutting UI (logos, status bars, modals)
+│   ├── shopify/      # Channel management, sub-channel detection
+│   ├── ai-assistant/ # Chat panel, ask button
+│   ├── bug-report/   # Bug report modal + notification
+│   └── ui/           # shadcn/ui primitives
+├── hooks/            # Shared stateful logic
+├── constants/        # Canonical rules (accounting, status, categories)
+├── utils/            # Parsers, engines, API adapters
+└── integrations/     # Supabase client (auto-generated)
+
+supabase/
+├── functions/        # 25+ Deno edge functions
+├── config.toml       # Function configuration
+└── create_storage.sql # Storage bucket definitions
+```
+
+---
+
+## 15. Design System
+
+- **Tokens**: HSL-based semantic tokens in `index.css` (`--primary`, `--background`, etc.)
+- **Components**: shadcn/ui with custom variants via `class-variance-authority`
+- **Rule**: No raw color classes in components — always use design tokens
+- **Dark mode**: Supported via `next-themes` provider
+- **Icons**: Lucide React
+
+---
+
+*This document is the single source of truth for Xettle's architecture. Update it when systems change.*
