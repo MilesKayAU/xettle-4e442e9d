@@ -753,7 +753,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status === 'awaiting_sync') return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
-    if (row.match_status.startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+    if ((row.match_status || '').startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
       if (isAmazon(row)) return <Clock3 className="h-4 w-4 text-muted-foreground" />;
       return <AlertTriangle className="h-4 w-4 text-amber-600" />;
@@ -769,7 +769,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return 'Pre-boundary';
     if (row.match_status === 'awaiting_sync') return 'Syncing settlement…';
-    if (row.match_status.startsWith('gap_')) {
+    if ((row.match_status || '').startsWith('gap_')) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
     }
@@ -787,7 +787,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status === 'awaiting_sync') return 'bg-blue-50/30 dark:bg-blue-950/10';
     if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
-    if (row.match_status.startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
+    if ((row.match_status || '').startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
   };
 
