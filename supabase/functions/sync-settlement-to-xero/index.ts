@@ -461,6 +461,7 @@ serve(async (req) => {
       if (rollbackScope === 'all') {
         updatePayload.status = 'saved';
         updatePayload.xero_journal_id = null;
+        updatePayload.xero_invoice_id = null;
         updatePayload.xero_journal_id_1 = null;
         updatePayload.xero_journal_id_2 = null;
       } else if (rollbackScope === 'journal_1') {
@@ -474,6 +475,7 @@ serve(async (req) => {
         if (!settData?.xero_journal_id_2) {
           updatePayload.status = 'saved';
           updatePayload.xero_journal_id = null;
+          updatePayload.xero_invoice_id = null;
         }
       } else if (rollbackScope === 'journal_2') {
         updatePayload.xero_journal_id_2 = null;
@@ -486,6 +488,7 @@ serve(async (req) => {
         if (!settData?.xero_journal_id_1) {
           updatePayload.status = 'saved';
           updatePayload.xero_journal_id = null;
+          updatePayload.xero_invoice_id = null;
         }
       }
 
