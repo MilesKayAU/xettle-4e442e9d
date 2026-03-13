@@ -405,12 +405,12 @@ export default function ActionCentre({
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
-                  <h3 className="font-semibold text-sm">Ready to Post</h3>
-                </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1">Not yet sent to Xero</p>
-                <div>
-                  <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to post</span></p>
+                   <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
+                   <h3 className="font-semibold text-sm">Send to Xero</h3>
+                 </div>
+                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Not yet posted</p>
+                 <div>
+                   <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to send</span></p>
                   <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
                 </div>
                 <ul className="space-y-1">
