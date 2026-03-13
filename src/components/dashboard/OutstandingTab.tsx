@@ -1001,10 +1001,34 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         const hasShopifyUnmatched = unmatchedMarketplaces.has('shopify_payments');
         const amazonCount = unmatchedMarketplaces.get('amazon_au') || 0;
         const shopifyCount = unmatchedMarketplaces.get('shopify_payments') || 0;
+        const amazonConnected = connectedMarketplaces.amazon;
+        const shopifyConnected = connectedMarketplaces.shopify;
         const otherUnmatched = [...unmatchedMarketplaces.entries()].filter(([k]) => k !== 'amazon_au' && k !== 'shopify_payments');
 
         if (unmatchedMarketplaces.size === 0) return null;
 
+        // If all unmatched marketplaces are already connected, show "syncing" state
+        const allConnected = (!hasAmazonUnmatched || amazonConnected) && (!hasShopifyUnmatched || shopifyConnected) && otherUnmatched.length === 0;
+
+        if (allConnected) {
+          return (
+            <div className="flex items-start gap-3 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+              <Loader2 className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-spin shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                  Fetching settlement data from connected marketplaces
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                  {hasAmazonUnmatched && amazonConnected ? `Amazon (${amazonCount} invoices) ` : ''}
+                  {hasShopifyUnmatched && shopifyConnected ? `Shopify (${shopifyCount} invoices) ` : ''}
+                  — settlements will automatically match as they arrive. Refresh shortly.
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        // Otherwise, prompt to connect missing marketplaces
         return (
           <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
             <div className="flex items-start gap-3">
@@ -1020,32 +1044,37 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             </div>
 
             <div className="flex flex-wrap gap-2 ml-8">
-              {hasAmazonUnmatched && (
+              {hasAmazonUnmatched && !amazonConnected && (
                 <Button
                   size="sm"
                   variant="outline"
                   className="gap-1.5 text-xs border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                  onClick={() => {
-                    // Navigate to setup or trigger Amazon connection
-                    window.location.href = '/setup?connect=amazon';
-                  }}
+                  onClick={() => { window.location.href = '/setup?connect=amazon'; }}
                 >
                   <ShoppingBag className="h-3.5 w-3.5 text-amber-600" />
                   Connect Amazon ({amazonCount} invoice{amazonCount > 1 ? 's' : ''} waiting)
                 </Button>
               )}
-              {hasShopifyUnmatched && (
+              {hasAmazonUnmatched && amazonConnected && (
+                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 dark:text-emerald-400 gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Amazon connected — syncing {amazonCount} invoice{amazonCount > 1 ? 's' : ''}
+                </Badge>
+              )}
+              {hasShopifyUnmatched && !shopifyConnected && (
                 <Button
                   size="sm"
                   variant="outline"
                   className="gap-1.5 text-xs border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                  onClick={() => {
-                    window.location.href = '/setup?connect=shopify';
-                  }}
+                  onClick={() => { window.location.href = '/setup?connect=shopify'; }}
                 >
                   <ShoppingBag className="h-3.5 w-3.5 text-emerald-600" />
                   Connect Shopify ({shopifyCount} invoice{shopifyCount > 1 ? 's' : ''} waiting)
                 </Button>
+              )}
+              {hasShopifyUnmatched && shopifyConnected && (
+                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 dark:text-emerald-400 gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Shopify connected — syncing {shopifyCount} invoice{shopifyCount > 1 ? 's' : ''}
+                </Badge>
               )}
               {otherUnmatched.length > 0 && (
                 <Button
