@@ -1370,7 +1370,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       )}
 
       {/* ─── Bank sync diagnostics (collapsible) ─── */}
-      {lastBankSyncResult && (
+      {lastBankSyncResult ? (
         <Collapsible>
           <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1 py-0.5">
             <Info className="h-3.5 w-3.5" />
