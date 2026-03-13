@@ -88,13 +88,48 @@ function parseRetryAfterSeconds(header: string | null): number {
   return DEFAULT;
 }
 
+/** Compute dynamic date range from outstanding invoices cache. Returns {fromDate, toDate} or null. */
+async function computeDateRangeFromCache(adminSupabase: any, userId: string, paddingDays: number = 5): Promise<{ fromDate: Date; toDate: Date; invoiceCount: number } | null> {
+  const { data: invoices, error } = await adminSupabase
+    .from('outstanding_invoices_cache')
+    .select('date, due_date')
+    .eq('user_id', userId);
+
+  if (error || !invoices || invoices.length === 0) return null;
+
+  let earliest = Infinity;
+  let latest = -Infinity;
+
+  for (const inv of invoices) {
+    // Consider both invoice date and due date to cover the full window
+    for (const d of [inv.date, inv.due_date]) {
+      if (!d) continue;
+      const ms = new Date(d).getTime();
+      if (isNaN(ms)) continue;
+      if (ms < earliest) earliest = ms;
+      if (ms > latest) latest = ms;
+    }
+  }
+
+  if (earliest === Infinity || latest === -Infinity) return null;
+
+  const fromDate = new Date(earliest - paddingDays * 86400000);
+  const toDate = new Date(latest + paddingDays * 86400000);
+
+  // Cap toDate at today + padding (don't query future beyond reason)
+  const maxDate = new Date(Date.now() + paddingDays * 86400000);
+  if (toDate > maxDate) toDate.setTime(maxDate.getTime());
+
+  return { fromDate, toDate, invoiceCount: invoices.length };
+}
+
 async function fetchBankTxnsForUser(
   adminSupabase: any,
   userId: string,
   clientId: string,
   clientSecret: string,
   guardMinutes: number,
-  lookbackDays: number,
+  fallbackLookbackDays: number,
 ) {
   // ── Guard: skip if fetched within guardMinutes ──
   const { data: guardRow } = await adminSupabase
@@ -139,8 +174,8 @@ async function fetchBankTxnsForUser(
         retry_after_seconds: clampedRetry,
         cooldown_until: cooldownRow.value,
         bank_rows_cached_total: count || 0,
-        has_any_mapping: true, // will be refined below but we short-circuit here
-        lookback_days: lookbackDays,
+        has_any_mapping: true,
+        lookback_days: fallbackLookbackDays,
       };
     }
   }
@@ -151,9 +186,26 @@ async function fetchBankTxnsForUser(
     return { user_id: userId, error: 'Token refresh failed' };
   }
 
-  // Build where clause: RECEIVE transactions from lookback period
-  const fromDate = new Date();
-  fromDate.setDate(fromDate.getDate() - lookbackDays);
+  // ── Dynamic date range from outstanding invoices cache ──
+  const dynamicRange = await computeDateRangeFromCache(adminSupabase, userId, 5);
+  let fromDate: Date;
+  let toDate: Date | null = null;
+  let dateRangeSource: string;
+  let effectiveDays: number;
+
+  if (dynamicRange) {
+    fromDate = dynamicRange.fromDate;
+    toDate = dynamicRange.toDate;
+    effectiveDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000);
+    dateRangeSource = `dynamic (${dynamicRange.invoiceCount} invoices, ${effectiveDays} days)`;
+    console.log(`[fetch-bank-txns] Dynamic range for ${userId}: ${fromDate.toISOString().split('T')[0]} → ${toDate.toISOString().split('T')[0]} (${effectiveDays} days from ${dynamicRange.invoiceCount} invoices)`);
+  } else {
+    fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - fallbackLookbackDays);
+    effectiveDays = fallbackLookbackDays;
+    dateRangeSource = `fallback (${fallbackLookbackDays} days)`;
+    console.log(`[fetch-bank-txns] No outstanding cache for ${userId}, falling back to ${fallbackLookbackDays}-day lookback`);
+  }
 
   // Load destination account mappings (new-first, legacy-fallback)
   const DEST_PREFIX = 'payout_destination:';
@@ -194,14 +246,19 @@ async function fetchBankTxnsForUser(
       mapped_account_ids_count: 0,
       has_any_mapping: false,
       filtered_to_mapped_accounts: false,
-      lookback_days: lookbackDays,
+      lookback_days: effectiveDays,
+      date_range_source: dateRangeSource,
       mapped_account_ids: [],
     };
   }
 
+  // Build where clause with dynamic date range
   let whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
+  if (toDate) {
+    whereClause += ` AND Date<=${formatXeroDateTime(toDate)}`;
+  }
 
-  // Filter to only mapped bank accounts (always — we already checked size > 0)
+  // Filter to only mapped bank accounts
   {
     const accountFilters = [...mappedAccountIds].map(id => `BankAccount.AccountID==Guid("${id}")`);
     if (accountFilters.length === 1) {
@@ -234,13 +291,11 @@ async function fetchBankTxnsForUser(
         const retryAfterSec = parseRetryAfterSeconds(rawRetryAfter);
         const cooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
         console.log(`[fetch-bank-txns] 429 for ${userId}: raw Retry-After="${rawRetryAfter}", parsed=${retryAfterSec}s, cooldown_until=${cooldownUntil}`);
-        // Update cooldown guard so we don't hammer Xero
         await adminSupabase.from('app_settings').upsert({
           user_id: userId,
           key: 'xero_api_cooldown_until',
           value: cooldownUntil,
         }, { onConflict: 'user_id,key' });
-        // Count what we already have cached
         const { count } = await adminSupabase
           .from('bank_transactions')
           .select('id', { count: 'exact', head: true })
@@ -256,7 +311,8 @@ async function fetchBankTxnsForUser(
           mapped_account_ids_count: mappedAccountIds.size,
           has_any_mapping: hasAnyMapping,
           filtered_to_mapped_accounts: mappedAccountIds.size > 0,
-          lookback_days: lookbackDays,
+          lookback_days: effectiveDays,
+          date_range_source: dateRangeSource,
         };
       }
       return { user_id: userId, error: `Xero API ${res.status}` };
@@ -322,7 +378,15 @@ async function fetchBankTxnsForUser(
     user_id: userId,
     event_type: 'bank_txn_fetch',
     severity: 'info',
-    details: { transactions_upserted: totalUpserted, pages_fetched: page, lookback_days: lookbackDays, filtered_accounts: mappedAccountIds.size },
+    details: {
+      transactions_upserted: totalUpserted,
+      pages_fetched: page,
+      lookback_days: effectiveDays,
+      date_range_source: dateRangeSource,
+      filtered_accounts: mappedAccountIds.size,
+      from_date: fromDate.toISOString().split('T')[0],
+      to_date: toDate?.toISOString().split('T')[0] || 'open',
+    },
   });
 
   // Update bank_sync_last_success_at for UI diagnostics
@@ -332,11 +396,11 @@ async function fetchBankTxnsForUser(
     value: new Date().toISOString(),
   }, { onConflict: 'user_id,key' });
 
-  console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages), accounts: ${[...mappedAccountIds].join(', ')}`);
+  console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages), range: ${dateRangeSource}, accounts: ${[...mappedAccountIds].join(', ')}`);
   return {
     user_id: userId,
     bank_rows_upserted: totalUpserted,
-    upserted: totalUpserted, // backwards compat for UI
+    upserted: totalUpserted,
     synced_row_count: totalUpserted,
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
@@ -344,7 +408,8 @@ async function fetchBankTxnsForUser(
     synced_account_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,
     filtered_to_mapped_accounts: true,
-    lookback_days: lookbackDays,
+    lookback_days: effectiveDays,
+    date_range_source: dateRangeSource,
     cooldown_until: null,
     retry_after_seconds: 0,
     refreshed_at: new Date().toISOString(),
