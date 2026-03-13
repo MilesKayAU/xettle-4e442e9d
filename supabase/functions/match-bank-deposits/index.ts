@@ -262,9 +262,9 @@ Deno.serve(async (req) => {
 
           // Update settlement status to deposit_matched (but NOT bank_verified)
           await adminSupabase.from('settlements').update({
-            status: 'deposit_matched',
+            status: 'bank_verified',
           }).eq('settlement_id', s.settlement_id).eq('user_id', userId)
-            .in('status', ['synced', 'pushed_to_xero', 'draft_in_xero', 'authorised_in_xero'])
+            .in('status', ['pushed_to_xero', 'reconciled_in_xero'])
 
           results.push({
             matched: false, // GOLDEN RULE: never auto-confirmed
