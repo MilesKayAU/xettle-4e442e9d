@@ -134,7 +134,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     if (hasLoadedOnce && settlements.length > 0 && !hasAutoExpanded) {
       setHasAutoExpanded(true);
       const unpushed = settlements.filter(s =>
-        s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push'
+        s.status === 'ingested' || s.status === 'ready_to_push'
       );
       // Auto-expand the first unpushed settlement
       if (unpushed.length > 0 && unpushed.length <= 5) {
@@ -195,8 +195,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       // Marketplace filter
       if (marketplaceFilter !== 'all' && s.marketplace !== marketplaceFilter) return false;
       // Status filter
-      if (settlementFilter === 'attention') return s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
-      if (settlementFilter === 'synced') return ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '');
+      if (settlementFilter === 'attention') return s.status === 'ingested' || s.status === 'push_failed' || s.status === 'push_failed_permanent';
+      if (settlementFilter === 'synced') return ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
       return true;
     });
   }, [settlements, settlementFilter, marketplaceFilter, includeGateways]);
@@ -219,8 +219,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     });
   }, [settlements, marketplaceFilter, includeGateways]);
 
-  const attentionCount = baseFiltered.filter(s => s.status === 'saved' || s.status === 'parsed' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
-  const syncedCount = baseFiltered.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'deposit_matched', 'verified_payout'].includes(s.status || '')).length;
+  const attentionCount = baseFiltered.filter(s => s.status === 'ingested' || s.status === 'push_failed' || s.status === 'push_failed_permanent').length;
+  const syncedCount = baseFiltered.filter(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '')).length;
 
   return (
     <div className="space-y-6">
@@ -434,7 +434,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     Retry {settlements.filter(s => s.status === 'push_failed' || s.status === 'push_failed_permanent').length} Failed
                   </Button>
                 )}
-                {settlements.some(s => s.status === 'saved' || s.status === 'parsed') && (
+                {settlements.some(s => s.status === 'ingested') && (
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleBulkMarkSynced(settlements)}>
                     <SkipForward className="h-3.5 w-3.5 mr-1" />
                     Mark All as Already in Xero
@@ -464,10 +464,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const fees = s.seller_fees || 0;
                     const net = s.bank_deposit || 0;
                     const isSelected = selected.has(s.id);
-                    const isSyncable = s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push';
+                    const isSyncable = s.status === 'ingested' || s.status === 'ready_to_push';
                     const isPushFailed = s.status === 'push_failed';
-                    const isSynced = ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
-                    const isAlreadyRecorded = s.status === 'already_recorded';
+                    const isSynced = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
+                    const isPreBoundary = !!(s as any).is_pre_boundary;
 
                     const prev = filteredSettlements[idx + 1];
                     let hasGap = false;
@@ -500,7 +500,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                           </div>
                         )}
                         <div className={`border-b border-border last:border-b-0 transition-colors ${
-                          isAlreadyRecorded ? 'opacity-40 bg-muted/20' :
+                          isPreBoundary ? 'opacity-40 bg-muted/20' :
                           isSynced ? 'bg-emerald-50/30 dark:bg-emerald-950/10' :
                           isPushFailed ? 'bg-red-50/30 dark:bg-red-950/10' :
                           'hover:bg-muted/20'
@@ -636,7 +636,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                             {/* Actions */}
                             <div className="flex items-center gap-1 justify-end">
                               {/* Push to Xero */}
-                              {isSyncable && !isAlreadyRecorded && (
+                              {isSyncable && !isPreBoundary && (
                                 <>
                                   <TooltipProvider>
                                     <Tooltip>
@@ -897,7 +897,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                     </div>
 
                                     {/* Unpushed settlement review prompt */}
-                                    {isSyncable && !isAlreadyRecorded && (
+                                    {isSyncable && !isPreBoundary && (
                                       <div className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-primary/5 border border-primary/20">
                                         <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
                                         <p className="text-xs text-foreground">

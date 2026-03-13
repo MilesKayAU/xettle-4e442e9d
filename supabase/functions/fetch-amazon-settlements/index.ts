@@ -527,7 +527,8 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             gst_on_expenses: summary.gstOnExpenses,
             bank_deposit: summary.bankDeposit,
             reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
-            status: isBeforeCutoff ? 'already_recorded' : 'saved',
+            status: 'ingested',
+            is_pre_boundary: !!isBeforeCutoff,
             source: 'api',
             is_split_month: splitMonth.isSplitMonth,
             split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
@@ -834,11 +835,11 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         continue;
       }
 
-      // Determine status based on accounting boundary
-      // All ingestion paths start at 'saved'; sync-xero-status promotes to 'ready_to_push'
+      // Determine status and metadata based on accounting boundary
       // See: src/constants/settlement-status.ts for canonical state machine
       const isBeforeBoundary = accountingBoundary && parsed.header.periodEnd && parsed.header.periodEnd <= accountingBoundary;
-      const settlementStatus = isBeforeBoundary ? 'already_recorded' : 'saved';
+      const settlementStatus = 'ingested';
+      const isPreBoundary = !!isBeforeBoundary;
 
       const { header, summary, lines, unmapped, splitMonth } = parsed;
 
@@ -866,6 +867,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         bank_deposit: summary.bankDeposit,
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: settlementStatus,
+        is_pre_boundary: isPreBoundary,
         source: 'api',
         is_split_month: splitMonth.isSplitMonth,
         split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
@@ -980,7 +982,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
             settlement_uploaded_at: new Date().toISOString(),
             settlement_id: header.settlementId,
             settlement_net: derivedSettlementNet,
-            overall_status: isBeforeBoundary ? 'already_recorded' : 'ready_to_push',
+            overall_status: isBeforeBoundary ? 'pre_boundary' : 'ready_to_push',
           })
           .eq('id', existingVal.id);
       } else {
@@ -994,7 +996,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
           settlement_uploaded_at: new Date().toISOString(),
           settlement_id: header.settlementId,
           settlement_net: derivedSettlementNet,
-          overall_status: isBeforeBoundary ? 'already_recorded' : 'ready_to_push',
+          overall_status: isBeforeBoundary ? 'pre_boundary' : 'ready_to_push',
         } as any);
       }
 

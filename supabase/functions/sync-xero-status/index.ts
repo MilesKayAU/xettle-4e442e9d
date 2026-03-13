@@ -215,18 +215,18 @@ async function generateSettlementStyleFingerprint(marketplace: string, periodSta
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function deriveStatus(inv: any): string {
+function deriveStatus(inv: any): { status: string; syncOrigin: string } {
   const ref = inv.Reference || '';
   const isXettleFormat = ref.startsWith('Xettle-');
   if (isXettleFormat) {
     switch (inv.Status) {
-      case 'DRAFT': return 'draft_in_xero';
-      case 'AUTHORISED': return 'authorised_in_xero';
-      case 'PAID': return 'reconciled_in_xero';
-      default: return 'pushed_to_xero';
+      case 'DRAFT': return { status: 'pushed_to_xero', syncOrigin: 'xettle' };
+      case 'AUTHORISED': return { status: 'pushed_to_xero', syncOrigin: 'xettle' };
+      case 'PAID': return { status: 'reconciled_in_xero', syncOrigin: 'xettle' };
+      default: return { status: 'pushed_to_xero', syncOrigin: 'xettle' };
     }
   }
-  return 'synced_external';
+  return { status: 'pushed_to_xero', syncOrigin: 'external' };
 }
 
 serve(async (req) => {
@@ -307,20 +307,21 @@ serve(async (req) => {
           // Determine derived status using fresh Xero status
           const isXettleFormat = (cached.matched_reference || '').startsWith('Xettle-');
           let derivedStatus: string;
+          let syncOrigin = 'xettle';
           if (isXettleFormat) {
             switch (fresh.status) {
-              case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
-              case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
               case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
               default: derivedStatus = 'pushed_to_xero'; break;
             }
           } else {
-            derivedStatus = 'synced_external';
+            derivedStatus = 'pushed_to_xero';
+            syncOrigin = 'external';
           }
 
           const updatePayload: Record<string, any> = {
             xero_status: fresh.status,
             status: derivedStatus,
+            sync_origin: syncOrigin,
           };
           if (fresh.status === 'PAID') {
             updatePayload.bank_verified = true;
@@ -346,9 +347,11 @@ serve(async (req) => {
     // ════════════════════════════════════════════════════════════════════
     const { data: allSettlements } = await supabase
       .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint, is_pre_boundary, duplicate_of_settlement_id')
       .eq('user_id', userId)
-      .not('status', 'in', '("duplicate_suppressed","already_recorded","push_failed_permanent")');
+      .eq('is_pre_boundary', false)
+      .is('duplicate_of_settlement_id', null)
+      .neq('status', 'push_failed_permanent');
 
     const uncachedSettlements = (allSettlements || []).filter(
       s => !cacheBySettlement.has(s.settlement_id)
@@ -464,7 +467,7 @@ serve(async (req) => {
 
       const { data: stillUnmatched } = await supabase
         .from('settlements').select('settlement_id').eq('user_id', userId)
-        .is('xero_journal_id', null).in('status', ['parsed', 'ready_to_push']);
+        .is('xero_journal_id', null).in('status', ['ingested', 'ready_to_push']);
 
       await supabase.from('system_events').insert({
         user_id: userId,
@@ -488,7 +491,7 @@ serve(async (req) => {
     if (uncachedSettlements.length === 0) {
       const { data: stillUnmatched } = await supabase
         .from('settlements').select('settlement_id').eq('user_id', userId)
-        .is('xero_journal_id', null).in('status', ['parsed', 'ready_to_push']);
+        .is('xero_journal_id', null).in('status', ['ingested', 'ready_to_push']);
 
       return new Response(JSON.stringify({
         success: true,
@@ -795,9 +798,9 @@ serve(async (req) => {
     console.log(`[step-5] Fuzzy matching: ${fuzzyMatched} additional settlements matched`);
 
     // ════════════════════════════════════════════════════════════════════
-    // STEP 5b: Triage unmatched 'saved' settlements after Xero scan.
+    // STEP 5b: Triage unmatched 'ingested' settlements after Xero scan.
     // - Recent (≤60 days old) → promote to 'ready_to_push' (genuinely new)
-    // - Older → mark 'already_recorded' (pre-existing, handled outside Xettle)
+    // - Older → mark is_pre_boundary=true (pre-existing, handled outside Xettle)
     // This prevents hundreds of historical payouts appearing as "Ready to Push"
     // when the user already reconciled them via LinkMyBooks/manual entry.
     // ════════════════════════════════════════════════════════════════════
@@ -805,39 +808,42 @@ serve(async (req) => {
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
     const cutoffDate = sixtyDaysAgo.toISOString().split('T')[0];
 
-    const { data: savedUnmatchedRecent } = await supabase
+    const { data: ingestedUnmatchedRecent } = await supabase
       .from('settlements')
       .select('settlement_id')
       .eq('user_id', userId)
-      .eq('status', 'saved')
+      .eq('status', 'ingested')
+      .eq('is_pre_boundary', false)
       .is('xero_journal_id', null)
       .gte('period_end', cutoffDate);
 
-    if (savedUnmatchedRecent && savedUnmatchedRecent.length > 0) {
-      const ids = savedUnmatchedRecent.map(s => s.settlement_id);
+    if (ingestedUnmatchedRecent && ingestedUnmatchedRecent.length > 0) {
       await supabase.from('settlements')
         .update({ status: 'ready_to_push' })
         .eq('user_id', userId)
-        .eq('status', 'saved')
+        .eq('status', 'ingested')
+        .eq('is_pre_boundary', false)
         .is('xero_journal_id', null)
         .gte('period_end', cutoffDate);
-      console.log(`[step-5b] Promoted ${ids.length} RECENT saved settlements to ready_to_push`);
+      console.log(`[step-5b] Promoted ${ingestedUnmatchedRecent.length} RECENT ingested settlements to ready_to_push`);
     }
 
-    // Mark older unmatched 'saved' as already_recorded — they predate Xettle
-    const { data: savedUnmatchedOld } = await supabase
+    // Mark older unmatched 'ingested' as pre-boundary — they predate Xettle
+    const { data: ingestedUnmatchedOld } = await supabase
       .from('settlements')
       .select('settlement_id')
       .eq('user_id', userId)
-      .eq('status', 'saved')
+      .eq('status', 'ingested')
+      .eq('is_pre_boundary', false)
       .is('xero_journal_id', null)
       .lt('period_end', cutoffDate);
 
-    if (savedUnmatchedOld && savedUnmatchedOld.length > 0) {
+    if (ingestedUnmatchedOld && ingestedUnmatchedOld.length > 0) {
       await supabase.from('settlements')
-        .update({ status: 'already_recorded' })
+        .update({ is_pre_boundary: true })
         .eq('user_id', userId)
-        .eq('status', 'saved')
+        .eq('status', 'ingested')
+        .eq('is_pre_boundary', false)
         .is('xero_journal_id', null)
         .lt('period_end', cutoffDate);
       console.log(`[step-5b] Marked ${savedUnmatchedOld.length} OLD saved settlements as already_recorded`);
@@ -877,7 +883,7 @@ serve(async (req) => {
     // Count remaining unmatched (only ready_to_push, not saved — saved means still being checked)
     const { data: stillUnmatched } = await supabase
       .from('settlements').select('settlement_id').eq('user_id', userId)
-      .is('xero_journal_id', null).in('status', ['parsed', 'ready_to_push']);
+      .is('xero_journal_id', null).in('status', ['ingested', 'ready_to_push']);
     const unmatchedCount = stillUnmatched?.length || 0;
 
     // Log

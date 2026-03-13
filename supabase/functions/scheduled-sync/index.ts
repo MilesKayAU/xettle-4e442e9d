@@ -139,8 +139,9 @@ Deno.serve(async (req) => {
           .from('settlements')
           .select('period_end')
           .eq('user_id', uid)
-          .not('status', 'in', '("reconciled_in_xero","synced_external","already_recorded","duplicate_suppressed")')
-          .neq('bank_verified', true)
+          .not('status', 'in', '("reconciled_in_xero","bank_verified","push_failed_permanent")')
+          .eq('is_pre_boundary', false)
+          .is('duplicate_of_settlement_id', null)
           .order('period_end', { ascending: true })
           .limit(1);
 

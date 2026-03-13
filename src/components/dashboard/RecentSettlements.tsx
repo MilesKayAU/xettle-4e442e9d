@@ -92,29 +92,18 @@ function formatDateRange(start: string, end: string): string {
 type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'other';
 
 function categorize(row: SettlementRow): StatusCategory {
-  if (row.status === 'hidden') return 'hidden';
+  if ((row as any).is_hidden) return 'hidden';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
-  // Any settlement linked to Xero (via sync or push) is "posted"
-  const xeroLinkedStatuses = ['synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero', 'pushed_to_xero'];
-  if (xeroLinkedStatuses.includes(row.status)) return 'posted';
-  if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID' || row.xero_status === 'posted') return 'posted';
-  // Only 'ready_to_push' and 'parsed' are genuinely ready — 'saved' is still awaiting Xero check
-  if (row.status === 'parsed' || row.status === 'ready_to_push') return 'ready';
-  if (row.status === 'saved') return 'other';
+  if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(row.status)) return 'posted';
+  if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID') return 'posted';
+  if (row.status === 'ready_to_push') return 'ready';
+  if (row.status === 'ingested') return 'other';
   return 'other';
 }
 
-function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: string | null }) {
-  if (status === 'hidden') {
-    return (
-      <Badge variant="outline" className="text-muted-foreground text-xs opacity-60">
-        <EyeOff className="h-3 w-3 mr-1" />
-        Hidden
-      </Badge>
-    );
-  }
+function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroStatus: string | null; syncOrigin?: string }) {
   // Fully reconciled (PAID in Xero)
-  if (status === 'reconciled_in_xero' || xeroStatus === 'PAID') {
+  if (status === 'reconciled_in_xero' || status === 'bank_verified' || xeroStatus === 'PAID') {
     return (
       <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
         <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -122,34 +111,40 @@ function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: strin
       </Badge>
     );
   }
-  // Authorised in Xero (awaiting payment)
-  if (status === 'authorised_in_xero' || xeroStatus === 'AUTHORISED') {
-    return (
-      <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-900/30 dark:border-blue-800 text-xs">
-        <CheckCircle2 className="h-3 w-3 mr-1" />
-        In Xero — Awaiting Payment
-      </Badge>
-    );
-  }
-  // Draft in Xero
-  if (status === 'draft_in_xero' || xeroStatus === 'DRAFT') {
-    return (
-      <Badge variant="outline" className="text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-900/30 dark:border-orange-800 text-xs">
-        <FileText className="h-3 w-3 mr-1" />
-        In Xero — Draft
-      </Badge>
-    );
-  }
-  // Synced externally (legacy / LinkMyBooks)
-  if (status === 'synced_external' || status === 'pushed_to_xero' || xeroStatus === 'posted') {
+  // Pushed to Xero (covers draft + authorised + external)
+  if (status === 'pushed_to_xero') {
+    if (syncOrigin === 'external') {
+      return (
+        <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          Already in Xero
+        </Badge>
+      );
+    }
+    if (xeroStatus === 'AUTHORISED') {
+      return (
+        <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-900/30 dark:border-blue-800 text-xs">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          In Xero — Awaiting Payment
+        </Badge>
+      );
+    }
+    if (xeroStatus === 'DRAFT') {
+      return (
+        <Badge variant="outline" className="text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-900/30 dark:border-orange-800 text-xs">
+          <FileText className="h-3 w-3 mr-1" />
+          In Xero — Draft
+        </Badge>
+      );
+    }
     return (
       <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
         <CheckCircle2 className="h-3 w-3 mr-1" />
-        Already in Xero
+        In Xero
       </Badge>
     );
   }
-  if (status === 'ready_to_push' || status === 'parsed') {
+  if (status === 'ready_to_push') {
     return (
       <Badge variant="outline" className="text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-900/30 dark:border-sky-800 text-xs">
         <Send className="h-3 w-3 mr-1" />
@@ -157,7 +152,7 @@ function StatusBadge({ status, xeroStatus }: { status: string; xeroStatus: strin
       </Badge>
     );
   }
-  if (status === 'saved') {
+  if (status === 'ingested') {
     return (
       <Badge variant="outline" className="text-muted-foreground text-xs">
         <Clock className="h-3 w-3 mr-1" />
@@ -341,13 +336,13 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
 
   // ── Actions ──
   const handleHide = async (row: SettlementRow) => {
-    await supabase.from('settlements').update({ status: 'hidden' }).eq('id', row.id);
+    await supabase.from('settlements').update({ is_hidden: true } as any).eq('id', row.id);
     toast.success(`Hidden: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
     fetchAll();
   };
 
   const handleUnhide = async (row: SettlementRow) => {
-    await supabase.from('settlements').update({ status: 'saved' }).eq('id', row.id);
+    await supabase.from('settlements').update({ is_hidden: false } as any).eq('id', row.id);
     toast.success(`Restored: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
     fetchAll();
   };
