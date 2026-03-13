@@ -905,6 +905,12 @@ export default function Setup() {
   function progressStatus(progress: number, done: boolean, apiName: string, stepStatus?: StepStatus): string {
     if (stepStatus === 'pending') return 'Pending...';
     if (done) return 'Complete';
+    if (stepStatus === 'error') return 'Failed';
+    // Check for staleness: if running for >5 minutes
+    const startTime = scanStartTimesRef.current[apiName.toLowerCase()];
+    if (startTime && Date.now() - startTime > 5 * 60 * 1000) {
+      return 'Timed out — retry?';
+    }
     if (progress >= 95) return 'Still working...';
     return 'Scanning...';
   }
