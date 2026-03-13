@@ -241,7 +241,33 @@ export default function Setup() {
     if (phase1Amazon) setAmazonProgress(100);
   }, [caps, loading]);
 
-  // ─── Progress timer helper ────────────────────────────────────────
+  // ─── Staleness timeout: auto-mark stuck scans ─────────────────────
+  useEffect(() => {
+    const STALE_MS = 5 * 60 * 1000; // 5 minutes
+    const id = setInterval(() => {
+      const now = Date.now();
+      if (scanStartTimesRef.current.xero && !phase1Xero && xeroStep.status === 'running' && now - scanStartTimesRef.current.xero > STALE_MS) {
+        setXeroStep({ status: 'error', message: 'Xero scan timed out — the API may be slow. Try again later.', error: 'Timed out after 5 minutes' });
+        setXeroProgress(100);
+        setPhase1Xero(true);
+        xeroAbortRef.current?.abort();
+      }
+      if (scanStartTimesRef.current.shopify && !phase1Shopify && shopifyPayoutsStep.status === 'running' && now - scanStartTimesRef.current.shopify > STALE_MS) {
+        setShopifyPayoutsStep({ status: 'error', message: 'Shopify sync timed out', error: 'Timed out after 5 minutes' });
+        setShopifyProgress(100);
+        setPhase1Shopify(true);
+        shopifyAbortRef.current?.abort();
+      }
+      if (scanStartTimesRef.current.amazon && !phase1Amazon && amazonStep.status === 'running' && now - scanStartTimesRef.current.amazon > STALE_MS) {
+        setAmazonStep({ status: 'error', message: 'Amazon sync timed out', error: 'Timed out after 5 minutes' });
+        setAmazonProgress(100);
+        setPhase1Amazon(true);
+        amazonAbortRef.current?.abort();
+      }
+    }, 10000); // Check every 10s
+    return () => clearInterval(id);
+  }, [phase1Xero, phase1Shopify, phase1Amazon, xeroStep.status, shopifyPayoutsStep.status, amazonStep.status]);
+
   function startProgressTimer(
     setter: React.Dispatch<React.SetStateAction<number>>,
     durationMs: number
