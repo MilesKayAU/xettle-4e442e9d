@@ -316,8 +316,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     checkConnections();
   }, []);
 
-  const fetchOutstanding = useCallback(async (options?: { runSync?: boolean }) => {
-    setLoading(true);
+  const fetchOutstanding = useCallback(async (options?: { runSync?: boolean; background?: boolean }) => {
+    const isBackground = options?.background === true;
+    if (isBackground) {
+      setBackgroundRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setNoXeroConnection(false);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -340,7 +345,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           if (typeof syncError === 'string' && (syncError.includes('No Xero connection') || syncError.includes('Unauthorized'))) {
             setNoXeroConnection(true);
             setHasLoaded(true);
-            setLoading(false);
             return;
           }
         }
@@ -366,7 +370,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       }
 
       if (resp.error) throw resp.error;
-      if ((resp.data as { source?: string })?.source === 'cache_fallback') {
+      if (!isBackground && (resp.data as { source?: string })?.source === 'cache_fallback') {
         toast.warning('Xero is temporarily rate limited — showing cached outstanding data while background sync continues.');
       }
 
@@ -374,9 +378,17 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       setHasLoaded(true);
       setSelected(new Set());
     } catch (err: any) {
-      toast.error(`Failed to fetch outstanding: ${err.message}`);
+      if (!isBackground) {
+        toast.error(`Failed to fetch outstanding: ${err.message}`);
+      } else {
+        console.warn('[OutstandingTab] background fetch failed:', err.message);
+      }
     } finally {
-      setLoading(false);
+      if (isBackground) {
+        setBackgroundRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, []);
 
