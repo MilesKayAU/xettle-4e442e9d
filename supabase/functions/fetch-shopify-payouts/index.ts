@@ -287,10 +287,10 @@ async function syncPayoutsForUser(
       const feesExGst = Math.abs(totalFees) - gstOnExpenses;
       const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
-      // All ingestion paths start at 'saved'; sync-xero-status promotes to 'ready_to_push'
+      // All ingestion paths start at 'ingested'; sync-xero-status promotes to 'ready_to_push'
       // See: src/constants/settlement-status.ts for canonical state machine
       const isBeforeBoundary = dateMin && payoutDate < dateMin;
-      const settlementStatus = isBeforeBoundary ? "already_recorded" : "saved";
+      const settlementStatus = "ingested";
 
       // ─── Insert settlement (ON CONFLICT DO NOTHING) ─────────
       const { error: insertError } = await supabase.from("settlements").upsert({

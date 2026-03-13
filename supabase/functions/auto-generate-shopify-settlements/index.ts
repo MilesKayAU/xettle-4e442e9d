@@ -371,7 +371,7 @@ Deno.serve(async (req) => {
       user_id: userId,
       marketplace: mpCode,
       source: 'api_sync',
-      status: 'parsed',
+      status: 'ingested',
       connection_id: connectionId,
       period_start: periodStart.toISOString().split('T')[0],
       period_end: periodEnd.toISOString().split('T')[0],

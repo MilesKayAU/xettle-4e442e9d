@@ -218,7 +218,7 @@ Deno.serve(async (req) => {
     // ─── Update our settlement to reflect the payment ───
     if (settlement_id) {
       await supabase.from('settlements').update({
-        status: 'synced_external',
+        status: 'reconciled_in_xero',
         xero_status: 'PAID',
         bank_verified: true,
         bank_verified_amount: amount,
