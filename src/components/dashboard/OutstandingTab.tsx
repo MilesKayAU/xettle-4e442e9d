@@ -452,6 +452,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       });
       if (resp.error) {
         toast.error(`Bank feed sync failed: ${resp.error.message}`, { id: 'bank-feed-sync' });
+        // Still refetch so cached data renders
+        await fetchOutstanding({ runSync: false });
         return;
       }
       if (resp.data?.xero_rate_limited) {
