@@ -107,6 +107,7 @@ export default function ActionCentre({
   onSwitchToSettlements,
   onSwitchToReconciliation,
   userName,
+  onPipelineFilter,
 }: ActionCentreProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);
