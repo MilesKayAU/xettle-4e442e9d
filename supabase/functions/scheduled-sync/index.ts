@@ -255,20 +255,25 @@ Deno.serve(async (req) => {
     results.validation = { skipped: true, reason: 'elapsed_timeout' };
   }
 
-  // 8. Auto-push ready settlements to Xero
-  console.log("[scheduled-sync] Step 8: Auto-push to Xero (checking live mode)...");
-  let autoPushLive = false;
-  const { data: liveModeSettings } = await adminClient
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'auto_push_live_mode')
-    .eq('value', 'true');
-  if (liveModeSettings && liveModeSettings.length > 0) {
-    autoPushLive = true;
+  // 8. Auto-push ready settlements to Xero (skip if elapsed > 4 minutes)
+  if (Date.now() - startTime < MAX_ELAPSED_MS) {
+    console.log("[scheduled-sync] Step 8: Auto-push to Xero (checking live mode)...");
+    let autoPushLive = false;
+    const { data: liveModeSettings } = await adminClient
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'auto_push_live_mode')
+      .eq('value', 'true');
+    if (liveModeSettings && liveModeSettings.length > 0) {
+      autoPushLive = true;
+    }
+    console.log(`[scheduled-sync] Auto-push mode: ${autoPushLive ? 'LIVE' : 'DRY RUN'}`);
+    results.xero_push = await callFunction("auto-push-xero", {}, { dry_run: !autoPushLive });
+    if (results.xero_push?.error || (results.xero_push?.errors && results.xero_push.errors > 0)) stepErrors.push('xero_push');
+  } else {
+    console.log("[scheduled-sync] Step 8: SKIPPED (elapsed > 4 min)");
+    results.xero_push = { skipped: true, reason: 'elapsed_timeout' };
   }
-  console.log(`[scheduled-sync] Auto-push mode: ${autoPushLive ? 'LIVE' : 'DRY RUN'}`);
-  results.xero_push = await callFunction("auto-push-xero", {}, { dry_run: !autoPushLive });
-  if (results.xero_push?.error || (results.xero_push?.errors && results.xero_push.errors > 0)) stepErrors.push('xero_push');
 
   // 9. Match bank deposits against settlements (using local cache)
   console.log("[scheduled-sync] Step 9: Bank deposit matching...");

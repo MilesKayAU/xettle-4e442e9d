@@ -178,7 +178,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── Apply payment via POST /Payments ───
+    // ─── Apply payment via Xero Payments API ───
+    // NOTE: Xero uses PUT (not POST) for creating Payments — this is correct per Xero API docs.
+    // See: https://developer.xero.com/documentation/api/accounting/payments#put-payments
     const paymentDate = date || new Date().toISOString().split('T')[0];
     const paymentBody = {
       Invoice: { InvoiceID: invoice_id },
