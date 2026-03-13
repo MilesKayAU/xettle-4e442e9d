@@ -182,17 +182,34 @@ async function fetchBankTxnsForUser(
 
   const hasAnyMapping = destRows.length > 0 || legacyRows.length > 0;
 
+  // ── CRITICAL: If no mapped accounts, do NOT call Xero at all ──
+  if (mappedAccountIds.size === 0) {
+    console.log(`[fetch-bank-txns] No destination accounts mapped for ${userId} — skipping Xero API call`);
+    return {
+      user_id: userId,
+      skipped: true,
+      skip_reason: 'no_mapping',
+      message: 'No destination account mapped. Configure payout mapping first.',
+      bank_rows_upserted: 0,
+      mapped_account_ids_count: 0,
+      has_any_mapping: false,
+      filtered_to_mapped_accounts: false,
+      lookback_days: lookbackDays,
+      mapped_account_ids: [],
+    };
+  }
+
   let whereClause = `Type=="RECEIVE" AND Date>=${formatXeroDateTime(fromDate)}`;
 
-  // If mappings exist, filter to only those bank accounts
-  if (mappedAccountIds.size > 0) {
+  // Filter to only mapped bank accounts (always — we already checked size > 0)
+  {
     const accountFilters = [...mappedAccountIds].map(id => `BankAccount.AccountID==Guid("${id}")`);
     if (accountFilters.length === 1) {
       whereClause += ` AND ${accountFilters[0]}`;
     } else {
       whereClause += ` AND (${accountFilters.join(' OR ')})`;
     }
-    console.log(`[fetch-bank-txns] Filtering to ${mappedAccountIds.size} mapped account(s)`);
+    console.log(`[fetch-bank-txns] Filtering to ${mappedAccountIds.size} mapped account(s): ${[...mappedAccountIds].join(', ')}`);
   }
 
   let page = 1;
@@ -315,7 +332,7 @@ async function fetchBankTxnsForUser(
     value: new Date().toISOString(),
   }, { onConflict: 'user_id,key' });
 
-  console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
+  console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages), accounts: ${[...mappedAccountIds].join(', ')}`);
   return {
     user_id: userId,
     bank_rows_upserted: totalUpserted,
@@ -323,9 +340,10 @@ async function fetchBankTxnsForUser(
     synced_row_count: totalUpserted,
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
+    mapped_account_ids: [...mappedAccountIds],
     synced_account_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,
-    filtered_to_mapped_accounts: mappedAccountIds.size > 0,
+    filtered_to_mapped_accounts: true,
     lookback_days: lookbackDays,
     cooldown_until: null,
     retry_after_seconds: 0,
