@@ -141,53 +141,10 @@ async function fetchBankTxnsForUser(
   guardMinutes: number,
   fallbackLookbackDays: number,
 ) {
-  // ── Guard: skip if fetched within guardMinutes ──
-  const { data: guardRow } = await adminSupabase
-    .from('app_settings')
-    .select('value')
-    .eq('user_id', userId)
-    .eq('key', GUARD_KEY)
-    .maybeSingle();
-
-  if (guardRow?.value) {
-    const lastFetched = new Date(guardRow.value);
-    const minutesAgo = (Date.now() - lastFetched.getTime()) / 60000;
-    if (minutesAgo < guardMinutes) {
-      const [{ count: guardCachedBankRows }, { data: guardLastSyncAtRow }, { data: guardCooldownRow }] = await Promise.all([
-        adminSupabase
-          .from('bank_transactions')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId),
-        adminSupabase
-          .from('app_settings')
-          .select('value')
-          .eq('user_id', userId)
-          .eq('key', LAST_SYNC_AT_KEY)
-          .maybeSingle(),
-        adminSupabase
-          .from('app_settings')
-          .select('value')
-          .eq('user_id', userId)
-          .eq('key', COOLDOWN_KEY)
-          .maybeSingle(),
-      ]);
-
-      console.log(`[fetch-bank-txns] Skipping ${userId} — fetched ${Math.round(minutesAgo)}m ago`);
-      return {
-        user_id: userId,
-        skipped: true,
-        reason: 'guard',
-        minutes_ago: Math.round(minutesAgo),
-        cached_bank_rows: guardCachedBankRows || 0,
-        last_sync_time: guardLastSyncAtRow?.value || null,
-        cooldown_until: guardCooldownRow?.value || null,
-        cooldown_applied: false,
-      };
-    }
-  }
-
-  // ── Cooldown guard (only when we already have valid recent cache) ──
-  const [{ data: cooldownRow }, { count: cachedBankRows }, { data: lastSyncAtRow }, { data: lastSyncRowCountRow }] = await Promise.all([
+  // ══════════════════════════════════════════════════════════════
+  // STEP 1 — Gather facts for guard evaluation (single parallel batch)
+  // ══════════════════════════════════════════════════════════════
+  const [{ data: cooldownRow }, { count: cachedBankRowsRaw }, { data: lastSuccessRow }] = await Promise.all([
     adminSupabase
       .from('app_settings')
       .select('value')
@@ -202,59 +159,66 @@ async function fetchBankTxnsForUser(
       .from('app_settings')
       .select('value')
       .eq('user_id', userId)
-      .eq('key', LAST_SYNC_AT_KEY)
-      .maybeSingle(),
-    adminSupabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', userId)
-      .eq('key', LAST_SYNC_ROW_COUNT_KEY)
+      .eq('key', LAST_SUCCESS_KEY)
       .maybeSingle(),
   ]);
 
-  const cachedBankRowsCount = cachedBankRows || 0;
-  const lastSyncTime = lastSyncAtRow?.value || null;
-  const lastSyncRows = Number(lastSyncRowCountRow?.value ?? NaN);
-  const hasLastSyncRows = Number.isFinite(lastSyncRows);
-  const lastSyncProducedZeroRows = hasLastSyncRows && lastSyncRows <= 0;
-  const lastSyncTimeMs = lastSyncTime ? new Date(lastSyncTime).getTime() : NaN;
-  const cacheExpired = !lastSyncTime || isNaN(lastSyncTimeMs)
-    || ((Date.now() - lastSyncTimeMs) / 60000) > BANK_CACHE_TTL_MINUTES;
-  const cooldownUntil = cooldownRow?.value || null;
+  const cachedBankRowsTotal = cachedBankRowsRaw ?? 0;
+  const lastSuccessfulBankSyncAt: string | null = lastSuccessRow?.value ?? null;
+  const cooldownUntilStored: string | null = cooldownRow?.value ?? null;
+  const nowMs = Date.now();
 
-  const noCachedBankData = cachedBankRowsCount === 0;
-  const bypassCooldown = noCachedBankData || lastSyncProducedZeroRows || cacheExpired;
+  // Shared diagnostics skeleton (returned on every path)
+  const baseDiag = {
+    cached_bank_rows_total: cachedBankRowsTotal,
+    last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
+    cooldown_until: cooldownUntilStored,
+  };
 
-  if (cooldownUntil) {
-    const cooldownUntilMs = new Date(cooldownUntil).getTime();
-    const nowMs = Date.now();
-    if (cooldownUntilMs > nowMs && !bypassCooldown) {
+  // ══════════════════════════════════════════════════════════════
+  // STEP 2A — Xero 429 cooldown (always respected, never extended on skip)
+  // ══════════════════════════════════════════════════════════════
+  if (cooldownUntilStored) {
+    const cooldownUntilMs = new Date(cooldownUntilStored).getTime();
+    if (!isNaN(cooldownUntilMs) && cooldownUntilMs > nowMs) {
       const secondsRemaining = Math.max(1, Math.ceil((cooldownUntilMs - nowMs) / 1000));
       const clampedRetry = Math.max(5, Math.min(300, secondsRemaining));
-      console.log(`[fetch-bank-txns] Cooldown skip for ${userId}: ${clampedRetry}s remaining, cooldown_until=${cooldownUntil}`);
+      console.log(`[fetch-bank-txns] Xero cooldown active for ${userId}: ${clampedRetry}s remaining`);
+      // DO NOT write/extend cooldown here — just return skipped
       return {
         user_id: userId,
         skipped: true,
         skip_reason: 'cooldown',
-        retry_after_seconds: clampedRetry,
-        cooldown_until: cooldownUntil,
         cooldown_applied: true,
-        cached_bank_rows: cachedBankRowsCount,
-        last_sync_time: lastSyncTime,
-        bank_rows_cached_total: cachedBankRowsCount,
-        has_any_mapping: true,
-        lookback_days: fallbackLookbackDays,
+        retry_after_seconds: clampedRetry,
+        ...baseDiag,
       };
     }
+  }
 
-    if (cooldownUntilMs > nowMs && bypassCooldown) {
-      const bypassReasons = [
-        noCachedBankData ? 'no_cached_bank_rows' : null,
-        lastSyncProducedZeroRows ? 'last_sync_zero_rows' : null,
-        cacheExpired ? 'cache_expired' : null,
-      ].filter(Boolean).join(', ');
-      console.log(`[fetch-bank-txns] Cooldown bypassed for ${userId}: ${bypassReasons}`);
+  // ══════════════════════════════════════════════════════════════
+  // STEP 2B — Recent-success guard (anti-hammer, bypassed when cache empty)
+  // ══════════════════════════════════════════════════════════════
+  if (cachedBankRowsTotal > 0 && lastSuccessfulBankSyncAt) {
+    const lastSuccessMs = new Date(lastSuccessfulBankSyncAt).getTime();
+    if (!isNaN(lastSuccessMs)) {
+      const minutesSinceSuccess = (nowMs - lastSuccessMs) / 60000;
+      if (minutesSinceSuccess < guardMinutes) {
+        console.log(`[fetch-bank-txns] Recent-success guard for ${userId}: synced ${Math.round(minutesSinceSuccess)}m ago (guard=${guardMinutes}m), cache has ${cachedBankRowsTotal} rows`);
+        return {
+          user_id: userId,
+          skipped: true,
+          skip_reason: 'recent_success',
+          cooldown_applied: false,
+          retry_after_seconds: 0,
+          minutes_since_last_success: Math.round(minutesSinceSuccess),
+          guard_minutes: guardMinutes,
+          ...baseDiag,
+        };
+      }
     }
+  } else if (cachedBankRowsTotal === 0) {
+    console.log(`[fetch-bank-txns] Cache empty for ${userId} — bypassing recent-success guard to seed cache`);
   }
 
   // Refresh Xero token
