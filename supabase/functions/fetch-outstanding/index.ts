@@ -372,11 +372,20 @@ Deno.serve(async (req) => {
       .eq('transaction_type', 'RECEIVE')
       .gte('date', ninetyDaysAgoStr);
 
+    const bankCacheQueryError = !!bankCacheError;
     if (bankCacheError) {
       console.error('Bank cache query error:', bankCacheError);
     }
 
     const bankFeedEmpty = !cachedBankTxns || cachedBankTxns.length === 0;
+
+    // Compute cache staleness from fetched_at timestamps
+    const bankCacheNewestFetchedAt = cachedBankTxns && cachedBankTxns.length > 0
+      ? new Date(Math.max(...cachedBankTxns.map((t: any) => new Date(t.fetched_at || t.created_at).getTime()))).toISOString()
+      : null;
+    const bankCacheStale = bankCacheNewestFetchedAt
+      ? (Date.now() - new Date(bankCacheNewestFetchedAt).getTime()) > 24 * 60 * 60 * 1000
+      : !bankFeedEmpty; // if empty, not "stale" — it's missing
 
     // Map cached rows to the shape downstream code expects (Xero BankTransaction format)
     const bankTxns = (cachedBankTxns || []).map((t: any) => ({
@@ -471,7 +480,13 @@ Deno.serve(async (req) => {
       // Single-invoice groups still scored — must meet score ≥ 70 for 'high' confidence
       group.sum = Math.round(group.sum * 100) / 100;
 
+      // Determine group currency from the first invoice (Amazon AU = AUD)
+      const groupCurrency = 'AUD'; // Amazon AU invoices are always AUD
+
       for (const txn of bankTxns) {
+        // Currency hard filter — prevent cross-currency false matches
+        if ((txn.CurrencyCode || 'AUD') !== groupCurrency) continue;
+
         const txnAmount = Math.abs(txn.Total || 0);
         const txnDate = parseXeroDate(txn.Date);
         if (!txnDate) continue;
@@ -654,7 +669,13 @@ Deno.serve(async (req) => {
         let bestScore = 0;
         let bestDiff = Infinity;
 
+        // Derive expected currency from invoice or marketplace
+        const expectedCurrency = (inv as any).CurrencyCode || 'AUD';
+
         for (const txn of bankTxns) {
+          // Currency hard filter — prevent cross-currency false matches
+          if ((txn.CurrencyCode || 'AUD') !== expectedCurrency) continue;
+
           const txnAmount = Math.abs(txn.Total || 0);
           const txnDate = parseXeroDate(txn.Date);
           if (!txnDate || !invoiceDate) continue;
@@ -806,7 +827,15 @@ Deno.serve(async (req) => {
         : null,
       bank_matches_count: bankDepositFound,
       candidates_generated: readyToReconcile,
+      // Keep top-level source for UI backward compat (refers to invoice source)
       source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
+      // Explicit per-layer source labels (Condition 1)
+      invoice_source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
+      bank_transactions_source: 'cache' as const,
+      // Cache staleness diagnostics (Condition 3)
+      bank_cache_last_refreshed_at: bankCacheNewestFetchedAt,
+      bank_cache_stale: bankCacheStale,
+      bank_cache_query_error: bankCacheQueryError,
     };
 
     console.log(JSON.stringify({
