@@ -222,6 +222,7 @@ interface BankSyncDiagnostics {
   transactions_in_range?: number;
   stopped_reason?: string;
   bank_account_ids_used?: string[];
+  bank_account_names_used?: Record<string, string>;
   endpoint_used?: string;
   fetch_from?: string;
   fetch_to?: string;
