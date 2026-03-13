@@ -627,6 +627,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Per-destination bank feed diagnostics ───
+    // Build a map: account_id → { has_txns, newest_fetched_at }
+    const destinationBankDiag: Record<string, { has_txns: boolean; newest_fetched_at: string | null }> = {};
+    for (const accountId of allMappedAccountIds) {
+      const txnsForAccount = (cachedBankTxns || []).filter((t: any) => t.bank_account_id === accountId);
+      const fetchedAts = txnsForAccount.map((t: any) => t.fetched_at).filter(Boolean).sort();
+      destinationBankDiag[accountId] = {
+        has_txns: txnsForAccount.length > 0,
+        newest_fetched_at: fetchedAts.length > 0 ? fetchedAts[fetchedAts.length - 1] : null,
+      };
+    }
     // ─── Bank sync timestamp + cooldown diagnostics ───
     const { data: bankSyncRow } = await supabase
       .from('app_settings')
@@ -1114,11 +1125,17 @@ Deno.serve(async (req) => {
         routing: (() => {
           const rail = toRailCode(marketplace);
           const dest = getDestinationAccount(rail);
+          const diag = dest.account_id ? destinationBankDiag[dest.account_id] : null;
+          const newestFetch = diag?.newest_fetched_at || null;
+          const staleThreshold = 24 * 60 * 60 * 1000; // 24h
           return {
             rail_code: rail,
             destination_account_id: dest.account_id,
             destination_account_name: dest.account_id ? (destinationAccountNames[dest.account_id] || null) : null,
             mapping_source: dest.source,
+            bank_feed_empty: diag ? !diag.has_txns : true,
+            bank_cache_stale: newestFetch ? (Date.now() - new Date(newestFetch).getTime() > staleThreshold) : true,
+            last_bank_refresh_at: newestFetch,
           };
         })(),
         // Recent bank transactions for manual picker — serve for ALL marketplaces, not just Amazon

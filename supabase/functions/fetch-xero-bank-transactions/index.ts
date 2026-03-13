@@ -322,11 +322,13 @@ async function fetchBankTxnsForUser(
     upserted: totalUpserted, // backwards compat for UI
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
+    synced_account_count: mappedAccountIds.size,
     has_any_mapping: hasAnyMapping,
     filtered_to_mapped_accounts: mappedAccountIds.size > 0,
     lookback_days: lookbackDays,
     cooldown_until: null,
     retry_after_seconds: 0,
+    refreshed_at: new Date().toISOString(),
   };
 }
 

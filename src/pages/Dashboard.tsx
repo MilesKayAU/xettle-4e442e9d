@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
-import PayoutBankAccountMapper from '@/components/settings/PayoutBankAccountMapper';
+import DestinationAccountMapper from '@/components/settings/DestinationAccountMapper';
 import AccountMapperCard from '@/components/settings/AccountMapperCard';
 import PaymentVerificationSettings from '@/components/settings/PaymentVerificationSettings';
 import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
@@ -661,7 +661,7 @@ export default function Dashboard() {
                     </Button>
                   </div>
                   {showBankMapper && (
-                    <PayoutBankAccountMapper />
+                    <DestinationAccountMapper />
                   )}
                 </div>
               )}
@@ -885,7 +885,7 @@ export default function Dashboard() {
                   Configure bank account mappings, Xero account codes, and reconciliation preferences.
                 </p>
               </div>
-              <PayoutBankAccountMapper />
+              <DestinationAccountMapper />
               <AccountMapperCard />
               <AccountingBoundarySettings
                 xeroConnected={xeroConnected}

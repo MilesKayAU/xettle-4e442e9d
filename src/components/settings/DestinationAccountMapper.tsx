@@ -1,5 +1,5 @@
 /**
- * PayoutBankAccountMapper — Maps settlement rails → Xero destination accounts for deposit matching.
+ * DestinationAccountMapper — Maps settlement rails → Xero destination accounts for deposit matching.
  * Each rail can use the default destination account or an explicit override.
  * 
  * Reads payout_destination:* first, falls back to legacy payout_account:* on load.
@@ -30,9 +30,20 @@ interface XeroBankAccount {
   account_id: string;
   name: string;
   currency_code: string;
+  bank_account_type?: string | null;
+  type?: string | null;
 }
 
-export default function PayoutBankAccountMapper() {
+function getAccountTypeBadge(acc: XeroBankAccount): { label: string; className: string } {
+  const name = acc.name.toLowerCase();
+  if (name.includes('paypal')) return { label: 'PayPal', className: 'bg-accent text-accent-foreground' };
+  if (name.includes('wise') || name.includes('transferwise')) return { label: 'Wise', className: 'bg-accent text-accent-foreground' };
+  if (name.includes('clearing') || name.includes('suspense')) return { label: 'Clearing', className: 'bg-muted text-muted-foreground' };
+  if (name.includes('stripe')) return { label: 'Stripe', className: 'bg-accent text-accent-foreground' };
+  return { label: 'Bank', className: 'bg-secondary text-secondary-foreground' };
+}
+
+export default function DestinationAccountMapper() {
   const [accounts, setAccounts] = useState<XeroBankAccount[]>([]);
   const [rails, setRails] = useState<Array<{ code: string; label: string }>>([]);
   const [defaultAccountId, setDefaultAccountId] = useState<string>('');
@@ -349,10 +360,10 @@ export default function PayoutBankAccountMapper() {
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Banknote className="h-4 w-4" />
-              Settlement Rail → Destination Account
+              Destination accounts
             </CardTitle>
             <CardDescription>
-              Select which bank or clearing account each settlement rail pays into. This controls which deposits are matched during reconciliation.
+              Select which bank or clearing account each settlement rail pays into.
             </CardDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={refreshAccounts} disabled={fetchingAccounts}>
@@ -369,12 +380,16 @@ export default function PayoutBankAccountMapper() {
               <SelectValue placeholder="Select default destination account…" />
             </SelectTrigger>
             <SelectContent>
-              {accounts.map(acc => (
-                <SelectItem key={acc.account_id} value={acc.account_id}>
-                  {acc.name}
-                  <Badge variant="outline" className="ml-2 text-xs">{acc.currency_code}</Badge>
-                </SelectItem>
-              ))}
+              {accounts.map(acc => {
+                const typeBadge = getAccountTypeBadge(acc);
+                return (
+                  <SelectItem key={acc.account_id} value={acc.account_id}>
+                    {acc.name}
+                    <Badge variant="outline" className="ml-2 text-xs">{acc.currency_code}</Badge>
+                    <Badge className={`ml-1 text-xs ${typeBadge.className}`}>{typeBadge.label}</Badge>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
           {invalidAccounts.has('_default') && (
@@ -427,12 +442,16 @@ export default function PayoutBankAccountMapper() {
                           <SelectValue placeholder="Select destination account…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {accounts.map(acc => (
-                            <SelectItem key={acc.account_id} value={acc.account_id}>
-                              {acc.name}
-                              <Badge variant="outline" className="ml-2 text-xs">{acc.currency_code}</Badge>
-                            </SelectItem>
-                          ))}
+                          {accounts.map(acc => {
+                            const typeBadge = getAccountTypeBadge(acc);
+                            return (
+                              <SelectItem key={acc.account_id} value={acc.account_id}>
+                                {acc.name}
+                                <Badge variant="outline" className="ml-2 text-xs">{acc.currency_code}</Badge>
+                                <Badge className={`ml-1 text-xs ${typeBadge.className}`}>{typeBadge.label}</Badge>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       {isInvalid && (

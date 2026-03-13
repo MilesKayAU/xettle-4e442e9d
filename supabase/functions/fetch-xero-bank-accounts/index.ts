@@ -166,6 +166,7 @@ Deno.serve(async (req) => {
       currency_code: acc.CurrencyCode || 'AUD',
       bank_account_number: acc.BankAccountNumber || null,
       bank_account_type: acc.BankAccountType || null,
+      type: acc.Type || null,
     }));
 
     return new Response(JSON.stringify({ accounts, source: 'xero' }), {

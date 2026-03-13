@@ -28,7 +28,7 @@ import AutoImportedTab from '@/components/admin/accounting/AutoImportedTab';
 import { CurrentPlanCard, UpgradeNudgeDialog, incrementManualUploadCount, shouldShowUpgradeNudge, getManualUploadCount } from '@/components/admin/accounting/UpgradePlanComponents';
 import { SyncHistoryCard, CronScheduleCard } from '@/components/admin/accounting/SyncComponents';
 import AutomationSettingsPanel from '@/components/admin/accounting/AutomationSettingsPanel';
-import PayoutBankAccountMapper from '@/components/settings/PayoutBankAccountMapper';
+import DestinationAccountMapper from '@/components/settings/DestinationAccountMapper';
 import { runReconciliation, type ReconciliationResult, type ReconCheck } from '@/utils/reconciliation-engine';
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
 import { useBulkSelect } from '@/hooks/use-bulk-select';
@@ -1244,7 +1244,7 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-              <PayoutBankAccountMapper />
+              <DestinationAccountMapper />
               <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={async () => {
                   // Xero audit already ran inside AmazonConnectionPanel (Xero-First).
                   // Just reload settlements and run bank matching.

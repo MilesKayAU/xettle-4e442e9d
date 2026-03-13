@@ -18,7 +18,7 @@ import {
   Square, HelpCircle, Clock3
 } from 'lucide-react';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
-import PayoutBankAccountMapper from '@/components/settings/PayoutBankAccountMapper';
+import DestinationAccountMapper from '@/components/settings/DestinationAccountMapper';
 import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
 
@@ -1162,7 +1162,7 @@ export default function Setup() {
               <p className="text-xs text-muted-foreground">
                 Tell Xettle which Xero bank account receives deposits from each marketplace — this enables automatic deposit matching.
               </p>
-              <PayoutBankAccountMapper />
+              <DestinationAccountMapper />
             </CardContent>
           </Card>
         )}
