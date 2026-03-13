@@ -466,6 +466,12 @@ async function fetchBankTxnsForUser(
     value: new Date().toISOString(),
   }, { onConflict: 'user_id,key' });
 
+  // Final cache row count for diagnostics
+  const { count: finalBankRowsCount } = await adminSupabase
+    .from('bank_transactions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages), range: ${dateRangeSource}, accounts: ${[...mappedAccountIds].join(', ')}`);
   return {
     user_id: userId,
@@ -480,8 +486,12 @@ async function fetchBankTxnsForUser(
     filtered_to_mapped_accounts: true,
     lookback_days: effectiveDays,
     date_range_source: dateRangeSource,
-    cooldown_until: null,
+    cooldown_until: cooldownUntil,
+    cooldown_applied: false,
+    cached_bank_rows: finalBankRowsCount || 0,
+    last_sync_time: new Date().toISOString(),
     retry_after_seconds: 0,
+    bank_rows_cached_total: finalBankRowsCount || 0,
     refreshed_at: new Date().toISOString(),
   };
 }
