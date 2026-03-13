@@ -226,6 +226,21 @@ export default function SystemStatusStrip({
           {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground ml-1 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground ml-1 flex-shrink-0" />}
         </button>
 
+        {/* Dismiss info-only banners */}
+        {!hasRedAction && !hasAmberAction && hasActions && !dismissed && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground ml-1 flex-shrink-0"
+            onClick={() => {
+              setDismissed(true);
+              try { localStorage.setItem('xettle_mapper_banner_dismissed', 'true'); } catch {}
+            }}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+
         {/* Primary CTA button */}
         {primaryAction?.onAction && (
           <Button
