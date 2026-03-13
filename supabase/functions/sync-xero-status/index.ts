@@ -417,7 +417,14 @@ serve(async (req) => {
 
         const ref = inv.Reference || '';
         const contactName = inv.Contact?.Name || '';
-        const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
+        const detectedMarketplace = detectMarketplaceFromContact(contactName);
+
+        // Skip marketplace assignment if contact cannot be classified — avoids
+        // polluting Amazon connector expectations with unrelated Xero invoices
+        if (!detectedMarketplace) {
+          console.log(`[step-3b] Skipping unclassified contact "${contactName}" for invoice ${inv.InvoiceNumber || inv.InvoiceID}`);
+          continue;
+        }
 
         await supabase.from('xero_accounting_matches').upsert({
           user_id: userId,
