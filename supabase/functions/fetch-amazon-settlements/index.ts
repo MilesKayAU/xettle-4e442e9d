@@ -551,14 +551,12 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             .maybeSingle();
 
           if (preMatch?.xero_invoice_id) {
+            // Map Xero status to canonical settlement states
+            let derivedSt = 'pushed_to_xero';
+            if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
+            // For non-Xettle invoices, mark as pushed (external sync uses sync_origin='external')
             const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
-            let derivedSt = 'synced_external';
-            if (isXettleFormat) {
-              switch (preMatch.xero_status) {
-                case 'DRAFT': derivedSt = 'draft_in_xero'; break;
-                case 'AUTHORISED': derivedSt = 'authorised_in_xero'; break;
-                case 'PAID': derivedSt = 'reconciled_in_xero'; break;
-                default: derivedSt = 'pushed_to_xero'; break;
+            if (!isXettleFormat) derivedSt = 'pushed_to_xero';
               }
             }
             await supabaseAdmin.from('settlements').update({
