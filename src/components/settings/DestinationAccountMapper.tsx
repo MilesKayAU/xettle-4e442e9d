@@ -1,5 +1,5 @@
 /**
- * PayoutBankAccountMapper — Maps settlement rails → Xero destination accounts for deposit matching.
+ * DestinationAccountMapper — Maps settlement rails → Xero destination accounts for deposit matching.
  * Each rail can use the default destination account or an explicit override.
  * 
  * Reads payout_destination:* first, falls back to legacy payout_account:* on load.

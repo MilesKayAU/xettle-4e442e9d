@@ -885,7 +885,7 @@ export default function Dashboard() {
                   Configure bank account mappings, Xero account codes, and reconciliation preferences.
                 </p>
               </div>
-              <PayoutBankAccountMapper />
+              <DestinationAccountMapper />
               <AccountMapperCard />
               <AccountingBoundarySettings
                 xeroConnected={xeroConnected}

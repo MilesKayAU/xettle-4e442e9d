@@ -1162,7 +1162,7 @@ export default function Setup() {
               <p className="text-xs text-muted-foreground">
                 Tell Xettle which Xero bank account receives deposits from each marketplace — this enables automatic deposit matching.
               </p>
-              <PayoutBankAccountMapper />
+              <DestinationAccountMapper />
             </CardContent>
           </Card>
         )}
