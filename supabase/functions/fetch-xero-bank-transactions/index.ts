@@ -240,7 +240,14 @@ async function fetchBankTxnsForUser(
   });
 
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
-  return { user_id: userId, upserted: totalUpserted, pages: page, filtered_accounts: mappedAccountIds.size };
+  return {
+    user_id: userId,
+    upserted: totalUpserted,
+    pages: page,
+    mapped_account_ids_count: mappedAccountIds.size,
+    has_any_mapping: mappedAccountIds.size > 0,
+    lookback_days: lookbackDays,
+  };
 }
 
 Deno.serve(async (req) => {

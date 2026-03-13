@@ -478,6 +478,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       }
       if (resp.data?.error) {
         toast.error(`Bank feed sync failed: ${resp.data.error}`, { id: 'bank-feed-sync' });
+        await fetchOutstanding({ runSync: false });
         return;
       }
       if (resp.data?.skipped) {
