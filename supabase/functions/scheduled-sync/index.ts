@@ -163,40 +163,45 @@ Deno.serve(async (req) => {
   }
   results.sync_windows = { ...userSyncFromMap };
 
-  // 4. Fetch Amazon settlements (with smart sync window)
-  console.log("[scheduled-sync] Step 4: Amazon fetch (smart window)...");
+  // 4. Fetch Amazon settlements (per-user lock/cooldown checks)
+  console.log("[scheduled-sync] Step 4: Amazon fetch (per-user locks)...");
+  const amazonUserIds = [...new Set((amazonTokens || []).map(t => t.user_id))];
 
-  let amazonSkipped = false;
-  for (const uid of [...new Set((amazonTokens || []).map(t => t.user_id))]) {
-    const { data: lockData } = await adminClient
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'amazon_sync_lock_expiry')
-      .eq('user_id', uid)
-      .maybeSingle();
+  // Determine eligible Amazon users (no lock, no cooldown)
+  const eligibleAmazonUsers: string[] = [];
+  for (const uid of amazonUserIds) {
+    // Check lock atomically via RPC
+    const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
+      p_user_id: uid,
+      p_integration: 'amazon',
+      p_lock_key: 'cron_sync',
+      p_ttl_seconds: 300, // 5 min for cron
+    });
 
-    if (lockData?.value && new Date(lockData.value) > new Date()) {
-      console.log(`[scheduled-sync] Amazon sync skipped for ${uid} — manual sync in progress`);
-      amazonSkipped = true;
+    if (!lockResult?.acquired) {
+      console.log(`[scheduled-sync] Amazon skipped for ${uid} — lock held`);
+      continue;
     }
 
-    const { data: rlData } = await adminClient
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'amazon_rate_limit_until')
-      .eq('user_id', uid)
-      .maybeSingle();
+    // Check rate limit cooldown
+    const { data: cooldownResult } = await adminClient.rpc('check_sync_cooldown', {
+      p_user_id: uid,
+      p_key: 'amazon_rate_limit_until',
+      p_window_seconds: 0,
+    });
 
-    if (rlData?.value && new Date(rlData.value) > new Date()) {
+    if (cooldownResult && !cooldownResult.ok) {
+      await adminClient.rpc('release_sync_lock', { p_user_id: uid, p_integration: 'amazon', p_lock_key: 'cron_sync' });
       console.log(`[scheduled-sync] Amazon rate limited for ${uid} — cooldown active`);
-      amazonSkipped = true;
+      continue;
     }
+
+    eligibleAmazonUsers.push(uid);
   }
 
-  if (!amazonSkipped) {
-    // Pass the earliest sync_from across all Amazon users
-    const amazonUserIds = [...new Set((amazonTokens || []).map(t => t.user_id))];
-    const earliestAmazonSyncFrom = amazonUserIds.reduce((earliest, uid) => {
+  if (eligibleAmazonUsers.length > 0) {
+    // Pass the earliest sync_from across eligible Amazon users
+    const earliestAmazonSyncFrom = eligibleAmazonUsers.reduce((earliest, uid) => {
       const sf = userSyncFromMap[uid] || defaultSyncFrom;
       return sf < earliest ? sf : earliest;
     }, defaultSyncFrom);
@@ -206,23 +211,53 @@ Deno.serve(async (req) => {
       sync_from: earliestAmazonSyncFrom,
     });
     if (results.amazon?.error) stepErrors.push('amazon');
+
+    // Release cron locks for eligible users
+    for (const uid of eligibleAmazonUsers) {
+      await adminClient.rpc('release_sync_lock', { p_user_id: uid, p_integration: 'amazon', p_lock_key: 'cron_sync' });
+    }
   } else {
-    results.amazon = { skipped: true, reason: 'mutex_or_rate_limit' };
+    results.amazon = { skipped: true, reason: 'all_users_locked_or_rate_limited', users_checked: amazonUserIds.length };
   }
 
-  // 5. Fetch Shopify payouts (with smart sync window)
-  console.log("[scheduled-sync] Step 5: Shopify payouts fetch (smart window)...");
+  // 5. Fetch Shopify payouts (with per-user Shopify mutex)
+  console.log("[scheduled-sync] Step 5: Shopify payouts fetch (per-user locks)...");
   {
-    const earliestShopifySyncFrom = shopifyUserIds.reduce((earliest, uid) => {
-      const sf = userSyncFromMap[uid] || defaultSyncFrom;
-      return sf < earliest ? sf : earliest;
-    }, defaultSyncFrom);
+    // Acquire Shopify locks per user
+    const eligibleShopifyUsers: string[] = [];
+    for (const uid of shopifyUserIds) {
+      const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
+        p_user_id: uid,
+        p_integration: 'shopify',
+        p_lock_key: 'payout_sync',
+        p_ttl_seconds: 300,
+      });
+      if (lockResult?.acquired) {
+        eligibleShopifyUsers.push(uid);
+      } else {
+        console.log(`[scheduled-sync] Shopify skipped for ${uid} — lock held`);
+      }
+    }
 
-    results.shopify = await callFunction("fetch-shopify-payouts", { "x-action": "sync" }, {
-      time: new Date().toISOString(),
-      sync_from: earliestShopifySyncFrom,
-    });
-    if (results.shopify?.error) stepErrors.push('shopify');
+    if (eligibleShopifyUsers.length > 0) {
+      const earliestShopifySyncFrom = eligibleShopifyUsers.reduce((earliest, uid) => {
+        const sf = userSyncFromMap[uid] || defaultSyncFrom;
+        return sf < earliest ? sf : earliest;
+      }, defaultSyncFrom);
+
+      results.shopify = await callFunction("fetch-shopify-payouts", { "x-action": "sync" }, {
+        time: new Date().toISOString(),
+        sync_from: earliestShopifySyncFrom,
+      });
+      if (results.shopify?.error) stepErrors.push('shopify');
+
+      // Release Shopify locks
+      for (const uid of eligibleShopifyUsers) {
+        await adminClient.rpc('release_sync_lock', { p_user_id: uid, p_integration: 'shopify', p_lock_key: 'payout_sync' });
+      }
+    } else {
+      results.shopify = { skipped: true, reason: 'all_users_locked' };
+    }
   }
 
   // 5.5. Scan Shopify channels for sub-channel detection
