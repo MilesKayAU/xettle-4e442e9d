@@ -301,6 +301,10 @@ async function fetchBankTxnsForUser(
       lookback_days: effectiveDays,
       date_range_source: dateRangeSource,
       mapped_account_ids: [],
+      cached_bank_rows: cachedBankRowsCount,
+      last_sync_time: lastSyncTime,
+      cooldown_until: cooldownUntil,
+      cooldown_applied: false,
     };
   }
 
