@@ -83,7 +83,7 @@ interface ParsedSettlement {
 }
 
 function parseSettlementTSV(tsvContent: string, gstRate = 10): ParsedSettlement {
-  const gstDivisor = 1 + (100 / gstRate);
+  const gstDivisor = 1 + (gstRate / 100); // 10% → 1.1
   const rawLines = tsvContent.split('\n').filter(line => line.trim().length > 0);
   if (rawLines.length < 2) throw new Error('Settlement file must have at least a header row and one data row');
 

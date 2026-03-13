@@ -244,7 +244,7 @@ export interface ParserOptions {
  */
 export function parseSettlementTSV(tsvContent: string, options?: ParserOptions): ParsedSettlement {
   console.log('[PARSER START]', 'version:', PARSER_VERSION, 'input length:', tsvContent.length);
-  const gstDivisor = 1 + (100 / (options?.gstRate || 10)); // 10% → divide by 11
+  const gstDivisor = 1 + ((options?.gstRate || 10) / 100); // 10% → 1.1
   const rawLines = tsvContent.split('\n').filter(line => line.trim().length > 0);
 
   if (rawLines.length < 2) {
