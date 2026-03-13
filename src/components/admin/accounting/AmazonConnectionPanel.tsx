@@ -151,7 +151,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
       onFetchStateChange?.(true, 'Fetching settlement reports from Amazon...');
 
       const { data, error } = await supabase.functions.invoke('fetch-amazon-settlements', {
-        headers: { 'x-action': 'sync' },
+        headers: { 'x-action': 'smart-sync' },
         body: syncFrom ? { sync_from: syncFrom } : undefined,
       });
 

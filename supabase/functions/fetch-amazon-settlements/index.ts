@@ -301,9 +301,10 @@ async function refreshAccessToken(amazonToken: any): Promise<string> {
 async function downloadReport(baseUrl: string, accessToken: string, reportDocumentId: string, supabase?: any, userId?: string): Promise<string> {
   const docUrl = `${baseUrl}/reports/2021-06-30/documents/${reportDocumentId}`;
   let docResponse: Response | null = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // Fail-fast: only 2 retries before setting cooldown (was 5)
+  for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) {
-      const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
+      const delay = 5000; // Fixed 5s backoff
       console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
       await new Promise(r => setTimeout(r, delay));
     }
@@ -313,13 +314,13 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
   }
 
   if (docResponse?.status === 429) {
-    // Store rate limit cooldown so other callers don't also hit Amazon
+    // Fail-fast: set 15-minute cooldown immediately so no other caller retries
     if (supabase && userId) {
-      await upsertSetting(supabase, userId, 'amazon_rate_limit_until',
-        new Date(Date.now() + 15 * 60 * 1000).toISOString()
-      );
+      const retryAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await upsertSetting(supabase, userId, 'amazon_rate_limit_until', retryAt);
+      console.warn(`[downloadReport] 429 fail-fast: cooldown set until ${retryAt} for user ${userId}`);
     }
-    throw new Error('RATE_LIMITED: Amazon API rate limited after 5 retries');
+    throw new Error('RATE_LIMITED: Amazon API rate limited — cooldown set');
   }
 
   if (!docResponse || !docResponse.ok) {
@@ -646,7 +647,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
 // - Deduplicates by settlement_id and fingerprint
 // - Returns summary with totals for UI
 // ═══════════════════════════════════════════════════════════════
-async function handleSmartSync(supabase: any, userId: string): Promise<Response> {
+async function handleSmartSync(supabase: any, userId: string, syncFrom?: string): Promise<Response> {
   // ─── Check rate limit cooldown (atomic RPC) ────────────────────
   const { data: cooldownResult } = await supabase.rpc('check_sync_cooldown', {
     p_user_id: userId,
@@ -689,7 +690,7 @@ async function handleSmartSync(supabase: any, userId: string): Promise<Response>
   }
 
   try {
-    return await _executeSmartSync(supabase, userId);
+    return await _executeSmartSync(supabase, userId, syncFrom);
   } finally {
     // ─── Always release lock when done ────────────────────────────
     await supabase.rpc('release_sync_lock', {
@@ -700,7 +701,7 @@ async function handleSmartSync(supabase: any, userId: string): Promise<Response>
   }
 }
 
-async function _executeSmartSync(supabase: any, userId: string): Promise<Response> {
+async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: string): Promise<Response> {
   // ─── Check cooldown (1 hour minimum between syncs) ────────────
   const { data: cooldownSetting } = await supabase
     .from('app_settings')
@@ -765,8 +766,19 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
     );
   }
 
-  // ─── List settlement reports (default 90 days for standard path) ────────────────────
-  const listStartDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  // ─── Read sync_from from request body (stored in closure by handleSmartSync caller) ───
+  // Smart-sync respects the Xero-derived boundary; clamp to max 90 days
+  let syncFromForSmartSync: string | undefined;
+  try {
+    // The body was already consumed by the main handler, so we read from the closure
+    // We'll pass it through handleSmartSync instead
+  } catch { /* no body */ }
+
+  // Use boundary-aware window: sync_from if available, else 90 days
+  const listStartDate = smartSyncFrom
+    ? new Date(Math.max(new Date(smartSyncFrom).getTime(), Date.now() - 90 * 24 * 60 * 60 * 1000))
+    : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  console.log(`[smart-sync] Report listing window: ${listStartDate.toISOString()} (sync_from: ${smartSyncFrom || 'none'})`);
   const params = new URLSearchParams({
     reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
     processingStatuses: 'DONE',
@@ -820,9 +832,19 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
   const syncedSettlements: Array<{ settlement_id: string; period_start: string; period_end: string; deposit: number }> = [];
   const errors: string[] = [];
 
-  for (let i = 0; i < sorted.length; i++) {
+    let earlyRateLimitCount = 0;
+    for (let i = 0; i < sorted.length; i++) {
     const report = sorted[i];
     if (!report.reportDocumentId) continue;
+
+    // Skip reports outside sync window (boundary-aware)
+    if (smartSyncFrom && report.dataEndTime) {
+      const reportEnd = report.dataEndTime.split('T')[0];
+      if (reportEnd < smartSyncFrom) {
+        console.log(`[smart-sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${smartSyncFrom}`);
+        continue;
+      }
+    }
 
     // Rate-limit delay
     if (i > 0) await new Promise(r => setTimeout(r, 3000));
@@ -1040,6 +1062,12 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
       }
     } catch (dlErr: any) {
       errors.push(`Report ${report.reportDocumentId}: ${dlErr.message}`);
+      // Fail-fast on rate limit: stop processing remaining reports
+      if (dlErr.message?.includes('RATE_LIMITED')) {
+        earlyRateLimitCount++;
+        console.warn(`[smart-sync] Rate limited — aborting remaining ${sorted.length - i - 1} reports`);
+        break;
+      }
     }
   }
 
@@ -1080,10 +1108,23 @@ serve(async (req) => {
   try {
     const action = req.headers.get('x-action') || 'list';
 
-    // ─── SYNC: Server-side full sync (cron) ──────────────────────
+    // ─── SYNC: Server-side full sync (cron/scheduled only) ─────
+    // GUARDRAIL A: Block global sync from public client calls.
+    // Only service-role (internal cron) may trigger this path.
     if (action === 'sync') {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const authHeader = req.headers.get('Authorization') || '';
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+
+      if (!isServiceRole) {
+        console.warn(`[fetch-amazon] Blocked global sync attempt from non-service-role caller`);
+        return new Response(JSON.stringify({
+          error: 'forbidden',
+          message: 'Global sync is only available to internal scheduled jobs. Use smart-sync instead.',
+        }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
       // Accept optional sync_from from request body (Xero-first smart sync window)
@@ -1121,7 +1162,12 @@ serve(async (req) => {
 
     // ─── SMART-SYNC: User-triggered smart sync ──────────────────
     if (action === 'smart-sync') {
-      return await handleSmartSync(supabase, userId);
+      let syncFrom: string | undefined;
+      try {
+        const body = await req.json();
+        syncFrom = body?.sync_from;
+      } catch { /* no body */ }
+      return await handleSmartSync(supabase, userId, syncFrom);
     }
 
     // First, get a fresh access token via the amazon-auth function
