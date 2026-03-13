@@ -1198,8 +1198,9 @@ Deno.serve(async (req) => {
       missing_settlement_ids: missingSettlementIds,
       // Invoice cache diagnostics
       invoice_cache_age_minutes: invoiceCacheAgeMinutes,
+      invoice_cache_fetched_at: invoiceCacheFetchedAt,
       from_cache: usingCacheFallback,
-      xero_rate_limited: usingCacheFallback && !cacheIsFresh,
+      xero_rate_limited: xeroWasRateLimited,
       // Bank sync diagnostics
       bank_sync_last_success_at: bankSyncLastSuccessAt,
       bank_sync_cooldown_until: bankSyncCooldownUntil,
