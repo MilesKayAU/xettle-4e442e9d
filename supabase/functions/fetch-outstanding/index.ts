@@ -863,6 +863,9 @@ Deno.serve(async (req) => {
       bank_cache_last_refreshed_at: bankCacheNewestFetchedAt,
       bank_cache_stale: bankCacheStale,
       bank_cache_query_error: bankCacheQueryError,
+      // Re-scan diagnostics
+      lookback_days_effective: lookbackDays,
+      force_recompute_used: forceRecompute,
     };
 
     console.log(JSON.stringify({
