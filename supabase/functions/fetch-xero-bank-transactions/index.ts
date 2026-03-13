@@ -303,6 +303,12 @@ async function fetchBankTxnsForUser(
       invoice_range_days: effectiveDays,
       fetch_from: fromDate.toISOString().split('T')[0],
       fetch_to: toDate?.toISOString().split('T')[0] || null,
+      endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
+      if_modified_since_used: true,
+      if_modified_since_value: fromDate.toISOString(),
+      pages_fetched: 0,
+      transactions_seen: 0,
+      transactions_in_range: 0,
       date_range_source: dateRangeSource,
       ...baseDiag,
     };
