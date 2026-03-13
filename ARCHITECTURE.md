@@ -12,6 +12,8 @@ Xettle is an **automated marketplace accounting bridge** designed for Australian
 The core value proposition:
 
 > **Marketplace settlement → Xero invoice → Bank reconciliation — fully automated.**
+>
+> The end-to-end flow: Connect Xero → Map bank accounts → Ingest settlements (API or CSV) → Push to Xero as DRAFT → Match against bank deposits → Reconcile in Xero → Verified ✓
 
 Xettle replaces manual data entry, CSV gymnastics, and services like LinkMyBooks by providing a settlement-centric accounting pipeline that:
 
