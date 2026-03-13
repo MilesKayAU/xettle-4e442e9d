@@ -347,9 +347,11 @@ serve(async (req) => {
     // ════════════════════════════════════════════════════════════════════
     const { data: allSettlements } = await supabase
       .from('settlements')
-      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint')
+      .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, status, settlement_fingerprint, is_pre_boundary, duplicate_of_settlement_id')
       .eq('user_id', userId)
-      .not('status', 'in', '("duplicate_suppressed","already_recorded","push_failed_permanent")');
+      .eq('is_pre_boundary', false)
+      .is('duplicate_of_settlement_id', null)
+      .neq('status', 'push_failed_permanent');
 
     const uncachedSettlements = (allSettlements || []).filter(
       s => !cacheBySettlement.has(s.settlement_id)
