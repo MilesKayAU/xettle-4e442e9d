@@ -134,7 +134,44 @@ Deno.serve(async (req) => {
         )
       }
 
-      console.log('HMAC verified, exchanging code for access token...')
+      console.log('HMAC verified, validating OAuth state nonce...')
+
+      // SECURITY: Validate state nonce to prevent CSRF attacks
+      // State format: "{nonce}:{userId}"
+      const stateParts = state.split(':')
+      if (stateParts.length < 2) {
+        console.error('Invalid state format — expected nonce:userId')
+        return new Response(
+          JSON.stringify({ error: 'Invalid OAuth state format' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const userId = stateParts.slice(1).join(':') // Handle userId containing colons
+
+      // Verify the nonce matches what we stored during initiation
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+      const { data: storedState } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', userId)
+        .eq('key', 'shopify_oauth_state')
+        .maybeSingle()
+
+      if (!storedState?.value || storedState.value !== state) {
+        console.error('OAuth state nonce mismatch — potential CSRF attack')
+        return new Response(
+          JSON.stringify({ error: 'Invalid or expired OAuth state. Please try connecting again.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Clean up the used nonce (one-time use)
+      await supabaseAdmin.from('app_settings').delete().eq('user_id', userId).eq('key', 'shopify_oauth_state')
+
+      console.log('State nonce verified, exchanging code for access token...')
 
       // Exchange code for permanent access token
       const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -158,7 +195,6 @@ Deno.serve(async (req) => {
 
       const tokenData = await tokenResponse.json()
       const { access_token, scope } = tokenData
-      const userId = state
 
       console.log('Token exchange successful, storing in database...')
 
