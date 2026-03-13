@@ -628,33 +628,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Only do auto-detection for non-confirmed
-      if (!bankMatch) {
-        for (const txn of bankTxns) {
-          const txnAmount = Math.abs(txn.Total || 0);
-          const txnDate = parseXeroDate(txn.Date);
-          const amountDiff = Math.abs(txnAmount - amount);
-
-          if (amountDiff <= 0.05 && txnDate && invoiceDate) {
-            const daysDiff = Math.abs(
-              (new Date(txnDate).getTime() - new Date(invoiceDate).getTime()) / (1000 * 60 * 60 * 24)
-            );
-            if (daysDiff <= 7) {
-              bankMatch = {
-                amount: txnAmount,
-                date: txnDate,
-                reference: txn.Reference || '',
-                narration: txn.LineItems?.[0]?.Description || '',
-                transaction_id: txn.BankTransactionID,
-              };
-              bankDifference = amountDiff;
-              break;
-            }
-          }
-        }
-      }
-
-      // Fuzzy match for non-confirmed, non-Amazon
+      // ─── Unified scored 1:1 bank matcher (replaces exact + fuzzy paths) ───
       const marketplacePatterns: Record<string, string[]> = {
         amazon_au: ['amazon', 'amzn'],
         shopify_payments: ['shopify'],
@@ -668,27 +642,59 @@ Deno.serve(async (req) => {
       };
 
       if (!bankMatch && !isConfirmed) {
+        let bestCandidate: any = null;
+        let bestScore = 0;
+        let bestDiff = Infinity;
+
         for (const txn of bankTxns) {
           const txnAmount = Math.abs(txn.Total || 0);
           const txnDate = parseXeroDate(txn.Date);
+          if (!txnDate || !invoiceDate) continue;
+
           const amountDiff = Math.abs(txnAmount - amount);
-          const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''}`.toLowerCase();
+          if (amountDiff > 10) continue; // Hard cap: $10 tolerance
 
+          const daysDiff = Math.abs(
+            (new Date(txnDate).getTime() - new Date(invoiceDate).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          if (daysDiff > 7) continue;
+
+          // Score: higher = better
+          let score = 0;
+          if (amountDiff <= 0.05) score += 50;       // Exact amount
+          else if (amountDiff <= 1.00) score += 35;   // Very close
+          else if (amountDiff <= 5) score += 20;      // Close
+          else score += 10;                           // Within $10
+
+          // Narration keyword scoring
+          const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''} ${txn.Reference || ''}`.toLowerCase();
           const patterns = marketplacePatterns[marketplace] || [];
-          const narrationMatch = patterns.some(p => narration.includes(p));
+          if (patterns.some(p => narration.includes(p))) score += 30;
 
-          if (amountDiff <= 10 && narrationMatch && txnDate) {
-            bankMatch = {
-              amount: txnAmount,
-              date: txnDate,
-              reference: txn.Reference || '',
-              narration: txn.LineItems?.[0]?.Description || '',
-              transaction_id: txn.BankTransactionID,
-              fuzzy: true,
-            };
-            bankDifference = amountDiff;
-            break;
+          // Date proximity scoring
+          if (daysDiff <= 2) score += 20;
+          else if (daysDiff <= 5) score += 10;
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestDiff = amountDiff;
+            bestCandidate = txn;
           }
+        }
+
+        // Only populate bankMatch when score ≥ 70 (high confidence)
+        if (bestCandidate && bestScore >= 70) {
+          const isExact = bestDiff <= 0.05;
+          bankMatch = {
+            amount: Math.abs(bestCandidate.Total || 0),
+            date: parseXeroDate(bestCandidate.Date),
+            reference: bestCandidate.Reference || '',
+            narration: bestCandidate.LineItems?.[0]?.Description || '',
+            transaction_id: bestCandidate.BankTransactionID,
+            fuzzy: !isExact,
+            score: bestScore,
+          };
+          bankDifference = bestDiff;
         }
       }
 
