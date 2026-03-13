@@ -277,7 +277,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     setNoXeroConnection(false);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('Not authenticated');
+      if (!session?.access_token) {
+        toast.error('Session expired — please sign in again.');
+        throw new Error('Not authenticated');
+      }
 
       if (options?.runSync) {
         const syncResp = await supabase.functions.invoke('sync-xero-status', {
