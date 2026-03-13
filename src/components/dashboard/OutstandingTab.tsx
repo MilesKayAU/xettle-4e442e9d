@@ -216,6 +216,17 @@ interface BankSyncDiagnostics {
   error?: string;
   minutes_ago?: number;
   upserted?: number;
+  // Pipeline diagnostics
+  pages_fetched?: number;
+  transactions_seen_total?: number;
+  transactions_in_range?: number;
+  stopped_reason?: string;
+  bank_account_ids_used?: string[];
+  endpoint_used?: string;
+  fetch_from?: string;
+  fetch_to?: string;
+  if_modified_since_value?: string;
+  per_account_stats?: Record<string, any>;
 }
 
 interface Props {
@@ -1544,6 +1555,36 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 )}
                 <span className="font-medium">Rate limited</span><span>{lastBankSyncResult.xero_rate_limited ? 'Yes' : 'No'}</span>
                 <span className="font-medium">Has mapping</span><span>{lastBankSyncResult.has_any_mapping === true ? 'Yes' : lastBankSyncResult.has_any_mapping === false ? 'No' : '—'}</span>
+                {lastBankSyncResult.pages_fetched != null && (
+                  <><span className="font-medium">Pages fetched</span><span>{lastBankSyncResult.pages_fetched}</span></>
+                )}
+                {lastBankSyncResult.transactions_seen_total != null && (
+                  <><span className="font-medium">Txns seen (total)</span><span>{lastBankSyncResult.transactions_seen_total}</span></>
+                )}
+                {lastBankSyncResult.transactions_in_range != null && (
+                  <><span className="font-medium">Txns in range</span><span>{lastBankSyncResult.transactions_in_range}</span></>
+                )}
+                {lastBankSyncResult.stopped_reason && (
+                  <><span className="font-medium">Stopped reason</span><span>{lastBankSyncResult.stopped_reason}</span></>
+                )}
+                {lastBankSyncResult.bank_account_ids_used && lastBankSyncResult.bank_account_ids_used.length > 0 && (
+                  <><span className="font-medium">Bank account IDs</span><span className="truncate max-w-[200px]">{lastBankSyncResult.bank_account_ids_used.join(', ')}</span></>
+                )}
+                {lastBankSyncResult.endpoint_used && (
+                  <><span className="font-medium">Endpoint</span><span className="truncate max-w-[200px]">{lastBankSyncResult.endpoint_used}</span></>
+                )}
+                {lastBankSyncResult.fetch_from && (
+                  <><span className="font-medium">Fetch from</span><span>{lastBankSyncResult.fetch_from}</span></>
+                )}
+                {lastBankSyncResult.fetch_to && (
+                  <><span className="font-medium">Fetch to</span><span>{lastBankSyncResult.fetch_to}</span></>
+                )}
+                {lastBankSyncResult.if_modified_since_value && (
+                  <><span className="font-medium">If-Modified-Since</span><span className="truncate max-w-[200px]">{lastBankSyncResult.if_modified_since_value}</span></>
+                )}
+                {lastBankSyncResult.per_account_stats && (
+                  <><span className="font-medium">Per-account</span><span className="truncate max-w-[200px]">{JSON.stringify(lastBankSyncResult.per_account_stats)}</span></>
+                )}
                 {lastBankSyncResult.skip_reason && (
                   <><span className="font-medium">Skip reason</span><span>{lastBankSyncResult.skip_reason}</span></>
                 )}
