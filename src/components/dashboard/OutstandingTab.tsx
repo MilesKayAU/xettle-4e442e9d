@@ -216,6 +216,17 @@ interface BankSyncDiagnostics {
   error?: string;
   minutes_ago?: number;
   upserted?: number;
+  // Pipeline diagnostics
+  pages_fetched?: number;
+  transactions_seen_total?: number;
+  transactions_in_range?: number;
+  stopped_reason?: string;
+  bank_account_ids_used?: string[];
+  endpoint_used?: string;
+  fetch_from?: string;
+  fetch_to?: string;
+  if_modified_since_value?: string;
+  per_account_stats?: Record<string, any>;
 }
 
 interface Props {
