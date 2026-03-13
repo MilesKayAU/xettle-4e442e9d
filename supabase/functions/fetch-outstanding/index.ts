@@ -387,9 +387,10 @@ Deno.serve(async (req) => {
     }
 
     // ─── Get bank matches from cached bank_transactions table (populated by fetch-xero-bank-transactions every 30 min) ───
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
+    // Use lookbackDays for bank txn window too (matches settlement scope)
+    const bankLookbackDate = new Date();
+    bankLookbackDate.setDate(bankLookbackDate.getDate() - lookbackDays);
+    const bankLookbackStr = bankLookbackDate.toISOString().split('T')[0];
 
     const { data: cachedBankTxns, error: bankCacheError } = await supabase
       .from('bank_transactions')
