@@ -265,7 +265,7 @@ Deno.serve(async (req) => {
       const userId = userData.user.id;
       console.log(`[fetch-bank-txns] Self-mode for user ${userId}`);
 
-      const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF);
+      const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF, LOOKBACK_DAYS_SELF);
 
       return new Response(JSON.stringify({
         success: true,
