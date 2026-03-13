@@ -898,6 +898,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
         }
         await supabase.from('settlements').update({
           xero_journal_id: preMatch.xero_invoice_id,
+          xero_invoice_id: preMatch.xero_invoice_id,
           xero_invoice_number: preMatch.xero_invoice_number,
           xero_status: preMatch.xero_status,
           status: derivedSt,
