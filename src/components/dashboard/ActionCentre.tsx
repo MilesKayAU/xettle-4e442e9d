@@ -104,6 +104,7 @@ const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
 export default function ActionCentre({
   onSwitchToUpload,
   onSwitchToSettlements,
+  onSwitchToReconciliation,
   userName,
 }: ActionCentreProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
