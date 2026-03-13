@@ -460,7 +460,7 @@ Deno.serve(async (req) => {
 
     // Score bank transaction candidates for each aggregate group
     for (const group of aggregateGroups) {
-      if (group.invoiceIds.length < 2) continue;
+      // Single-invoice groups still scored — must meet score ≥ 70 for 'high' confidence
       group.sum = Math.round(group.sum * 100) / 100;
 
       for (const txn of bankTxns) {
