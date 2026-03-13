@@ -168,6 +168,8 @@ interface OutstandingSummary {
     bank_cache_last_refreshed_at?: string | null;
     bank_cache_stale?: boolean;
     bank_cache_query_error?: boolean;
+    lookback_days_effective?: number;
+    force_recompute_used?: boolean;
   };
 }
 
