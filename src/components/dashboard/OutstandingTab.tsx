@@ -452,21 +452,33 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       });
       if (resp.error) {
         toast.error(`Bank feed sync failed: ${resp.error.message}`, { id: 'bank-feed-sync' });
+        // Still refetch so cached data renders
+        await fetchOutstanding({ runSync: false });
         return;
       }
       if (resp.data?.xero_rate_limited) {
         const retryAfter = resp.data.retry_after_seconds || 60;
         const cached = resp.data.bank_rows_cached_total || 0;
-        toast.warning(
-          `Xero rate limited — try again in ~${retryAfter}s. ${cached} cached transaction${cached !== 1 ? 's' : ''} available.`,
-          { id: 'bank-feed-sync', duration: 8000 }
-        );
+        const hasMappings = resp.data.has_any_mapping;
+        const mappingNote = hasMappings === false ? ' No payout mappings configured — go to Settings.' : '';
+        if (cached > 0) {
+          toast.warning(
+            `Xero rate limited — try again in ~${retryAfter}s. Using ${cached} cached transaction${cached !== 1 ? 's' : ''}.${mappingNote}`,
+            { id: 'bank-feed-sync', duration: 8000 }
+          );
+        } else {
+          toast.error(
+            `Xero rate limited and no cached bank data available. Try again in ~${retryAfter}s.${mappingNote}`,
+            { id: 'bank-feed-sync', duration: 10000 }
+          );
+        }
         // Still refetch Outstanding so it can use whatever cache exists
         await fetchOutstanding({ runSync: false });
         return;
       }
       if (resp.data?.error) {
         toast.error(`Bank feed sync failed: ${resp.data.error}`, { id: 'bank-feed-sync' });
+        await fetchOutstanding({ runSync: false });
         return;
       }
       if (resp.data?.skipped) {
