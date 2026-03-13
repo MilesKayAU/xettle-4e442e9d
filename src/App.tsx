@@ -67,6 +67,7 @@ function App() {
             </PinGate>
             <BugReportButton />
             <Toaster />
+            <SonnerToaster position="bottom-right" richColors />
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
