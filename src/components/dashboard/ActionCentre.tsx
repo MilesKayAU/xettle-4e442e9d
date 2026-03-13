@@ -642,6 +642,21 @@ export default function ActionCentre({
         </Card>
       )}
 
+      {/* Quick link to Reconciliation Hub */}
+      {(awaitingBank.length > 0 || gapDetected.length > 0) && onSwitchToReconciliation && (
+        <Card className="border-border">
+          <CardContent className="py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Review reconciliation issues in detail</span>
+            </div>
+            <Button variant="outline" size="sm" className="text-xs gap-1" onClick={onSwitchToReconciliation}>
+              Open Reconciliation Hub <ArrowRight className="h-3 w-3" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Floating upload button */}
       <div className="fixed bottom-6 right-6 z-40">
         <Button
