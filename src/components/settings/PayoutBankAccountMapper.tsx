@@ -42,11 +42,11 @@ export default function PayoutBankAccountMapper() {
   const [loadIssue, setLoadIssue] = useState<string>('');
   const [isRateLimited, setIsRateLimited] = useState(false);
 
-  const applyFetchIssue = (issue?: string | null) => {
+  const applyFetchIssue = useCallback((issue?: string | null) => {
     const message = issue || '';
     setLoadIssue(message);
     setIsRateLimited(message.includes('429') || message.toLowerCase().includes('rate limit'));
-  };
+  }, []);
 
   // Fetch Xero bank accounts + existing mappings + marketplace connections
   const loadData = useCallback(async () => {
