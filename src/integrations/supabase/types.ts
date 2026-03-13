@@ -1327,10 +1327,14 @@ export type Database = {
           connection_id: string | null
           created_at: string
           deposit_date: string | null
+          duplicate_of_settlement_id: string | null
+          duplicate_reason: string | null
           fba_fees: number | null
           gst_on_expenses: number | null
           gst_on_income: number | null
           id: string
+          is_hidden: boolean
+          is_pre_boundary: boolean
           is_split_month: boolean | null
           marketplace: string | null
           net_ex_gst: number | null
@@ -1355,6 +1359,7 @@ export type Database = {
           split_month_2_data: Json | null
           status: string | null
           storage_fees: number | null
+          sync_origin: string
           updated_at: string
           user_id: string
           xero_entries: Json | null
@@ -1382,10 +1387,14 @@ export type Database = {
           connection_id?: string | null
           created_at?: string
           deposit_date?: string | null
+          duplicate_of_settlement_id?: string | null
+          duplicate_reason?: string | null
           fba_fees?: number | null
           gst_on_expenses?: number | null
           gst_on_income?: number | null
           id?: string
+          is_hidden?: boolean
+          is_pre_boundary?: boolean
           is_split_month?: boolean | null
           marketplace?: string | null
           net_ex_gst?: number | null
@@ -1410,6 +1419,7 @@ export type Database = {
           split_month_2_data?: Json | null
           status?: string | null
           storage_fees?: number | null
+          sync_origin?: string
           updated_at?: string
           user_id: string
           xero_entries?: Json | null
@@ -1437,10 +1447,14 @@ export type Database = {
           connection_id?: string | null
           created_at?: string
           deposit_date?: string | null
+          duplicate_of_settlement_id?: string | null
+          duplicate_reason?: string | null
           fba_fees?: number | null
           gst_on_expenses?: number | null
           gst_on_income?: number | null
           id?: string
+          is_hidden?: boolean
+          is_pre_boundary?: boolean
           is_split_month?: boolean | null
           marketplace?: string | null
           net_ex_gst?: number | null
@@ -1465,6 +1479,7 @@ export type Database = {
           split_month_2_data?: Json | null
           status?: string | null
           storage_fees?: number | null
+          sync_origin?: string
           updated_at?: string
           user_id?: string
           xero_entries?: Json | null
