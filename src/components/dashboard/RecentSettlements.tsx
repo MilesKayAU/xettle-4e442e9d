@@ -369,7 +369,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  useEffect(() => { setPage(1); }, [activeFilter, showHidden]);
+  useEffect(() => { setPage(1); }, [activeFilter, showHidden, pipelineFilter]);
 
   // ── Actions ──
   const handleHide = async (row: SettlementRow) => {
