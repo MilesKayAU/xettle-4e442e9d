@@ -559,6 +559,7 @@ serve(async (req) => {
         xero_invoice_number: inv.InvoiceNumber || null,
         xero_status: inv.Status || null,
         xero_journal_id: inv.InvoiceID,
+        xero_invoice_id: inv.InvoiceID,
         status: derivedSt,
       };
       if (inv.Status === 'PAID') {
