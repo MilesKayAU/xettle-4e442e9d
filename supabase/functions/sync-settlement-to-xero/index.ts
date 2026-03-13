@@ -754,7 +754,7 @@ serve(async (req) => {
         .from('xero_accounting_matches')
         .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference')
         .eq('user_id', userId)
-        .eq('settlement_id', settlementIdFromRef)
+        .eq('settlement_id', settlementId)
         .maybeSingle();
 
       if (cachedMatch?.xero_invoice_id) {
