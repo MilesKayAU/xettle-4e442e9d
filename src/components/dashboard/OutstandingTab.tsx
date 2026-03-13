@@ -474,6 +474,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         await fetchOutstanding({ runSync: false });
         return;
       }
+      // Store diagnostics for every response path
+      setLastBankSyncResult(resp.data);
+
       if (resp.data?.xero_rate_limited) {
         const retryAfter = Number(resp.data?.retry_after_seconds) || 60;
         const cached = Number(resp.data?.bank_rows_cached_total) || 0;
@@ -490,12 +493,17 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             { id: 'bank-feed-sync', duration: 10000 }
           );
         }
-        // Still refetch Outstanding so it can use whatever cache exists
         await fetchOutstanding({ runSync: false });
         return;
       }
       if (resp.data?.error) {
         toast.error(`Bank feed sync failed: ${resp.data.error}`, { id: 'bank-feed-sync' });
+        await fetchOutstanding({ runSync: false });
+        return;
+      }
+      // Handle no-mapping early exit BEFORE generic skipped handler
+      if (resp.data?.skipped && resp.data?.skip_reason === 'no_mapping') {
+        toast.warning('No destination account mapped. Go to Settings → Payout Mapping to configure.', { id: 'bank-feed-sync', duration: 10000 });
         await fetchOutstanding({ runSync: false });
         return;
       }
