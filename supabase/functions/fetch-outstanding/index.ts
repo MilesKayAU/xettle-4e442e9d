@@ -627,6 +627,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Per-destination bank feed diagnostics ───
+    // Build a map: account_id → { has_txns, newest_fetched_at }
+    const destinationBankDiag: Record<string, { has_txns: boolean; newest_fetched_at: string | null }> = {};
+    for (const accountId of allMappedAccountIds) {
+      const txnsForAccount = (cachedBankTxns || []).filter((t: any) => t.bank_account_id === accountId);
+      const fetchedAts = txnsForAccount.map((t: any) => t.fetched_at).filter(Boolean).sort();
+      destinationBankDiag[accountId] = {
+        has_txns: txnsForAccount.length > 0,
+        newest_fetched_at: fetchedAts.length > 0 ? fetchedAts[fetchedAts.length - 1] : null,
+      };
+    }
     // ─── Bank sync timestamp + cooldown diagnostics ───
     const { data: bankSyncRow } = await supabase
       .from('app_settings')
