@@ -19,7 +19,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
 import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
 import XettleLogo from '@/components/shared/XettleLogo';
-import DashboardConnectionStrip from '@/components/dashboard/DashboardConnectionStrip';
+import SystemStatusStrip from '@/components/dashboard/SystemStatusStrip';
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';

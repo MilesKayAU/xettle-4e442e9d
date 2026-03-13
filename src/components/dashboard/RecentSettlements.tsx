@@ -610,6 +610,8 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                        );
+                      })()}
                     </td>
                   </tr>
                   {/* ── Inline drill-down ── */}
