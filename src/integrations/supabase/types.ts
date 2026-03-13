@@ -350,6 +350,78 @@ export type Database = {
         }
         Relationships: []
       }
+      gst_audit_summary: {
+        Row: {
+          breakdown: Json | null
+          confidence_label: string | null
+          confidence_score: number | null
+          created_at: string
+          difference: number | null
+          id: string
+          marketplace_adjustment_gst_estimate: number | null
+          marketplace_fees_ex_gst: number | null
+          marketplace_gst_on_fees_estimate: number | null
+          marketplace_gst_on_sales_estimate: number | null
+          marketplace_refund_gst_estimate: number | null
+          marketplace_sales_ex_gst: number | null
+          marketplace_tax_collected_by_platform: number | null
+          marketplace_unknown_gst: number | null
+          notes: Json | null
+          period_end: string
+          period_start: string
+          updated_at: string
+          user_id: string
+          xero_gst: number | null
+          xero_source_mode: string
+        }
+        Insert: {
+          breakdown?: Json | null
+          confidence_label?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          difference?: number | null
+          id?: string
+          marketplace_adjustment_gst_estimate?: number | null
+          marketplace_fees_ex_gst?: number | null
+          marketplace_gst_on_fees_estimate?: number | null
+          marketplace_gst_on_sales_estimate?: number | null
+          marketplace_refund_gst_estimate?: number | null
+          marketplace_sales_ex_gst?: number | null
+          marketplace_tax_collected_by_platform?: number | null
+          marketplace_unknown_gst?: number | null
+          notes?: Json | null
+          period_end: string
+          period_start: string
+          updated_at?: string
+          user_id: string
+          xero_gst?: number | null
+          xero_source_mode?: string
+        }
+        Update: {
+          breakdown?: Json | null
+          confidence_label?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          difference?: number | null
+          id?: string
+          marketplace_adjustment_gst_estimate?: number | null
+          marketplace_fees_ex_gst?: number | null
+          marketplace_gst_on_fees_estimate?: number | null
+          marketplace_gst_on_sales_estimate?: number | null
+          marketplace_refund_gst_estimate?: number | null
+          marketplace_sales_ex_gst?: number | null
+          marketplace_tax_collected_by_platform?: number | null
+          marketplace_unknown_gst?: number | null
+          notes?: Json | null
+          period_end?: string
+          period_start?: string
+          updated_at?: string
+          user_id?: string
+          xero_gst?: number | null
+          xero_source_mode?: string
+        }
+        Relationships: []
+      }
       marketplace_account_mapping: {
         Row: {
           account_code: string
