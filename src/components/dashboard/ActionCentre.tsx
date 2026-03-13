@@ -59,6 +59,7 @@ export interface MissingSettlement {
 interface ActionCentreProps {
   onSwitchToUpload: (missing?: MissingSettlement[]) => void;
   onSwitchToSettlements: () => void;
+  onSwitchToReconciliation?: () => void;
   userName?: string;
 }
 
@@ -103,6 +104,7 @@ const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
 export default function ActionCentre({
   onSwitchToUpload,
   onSwitchToSettlements,
+  onSwitchToReconciliation,
   userName,
 }: ActionCentreProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
@@ -216,9 +218,10 @@ export default function ActionCentre({
   const now = new Date();
 
   const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-  // Filter out API-synced marketplaces AND only show for closed months
+  // Filter out API-synced marketplaces, only show for closed months, AND only if no settlement exists
   const uploadNeededManual = uploadNeeded.filter(r => {
     if (apiSyncedMarketplaces.has(r.marketplace_code)) return false;
+    if (r.settlement_uploaded || r.settlement_id) return false; // settlement already exists
     const periodEnd = new Date(r.period_end);
     return periodEnd < now; // only show if period already ended
   });
@@ -429,7 +432,7 @@ export default function ActionCentre({
             </Card>
           )}
 
-          {/* Card 3 — Posted — Waiting for Bank */}
+          {/* Card 3 — Posted — Awaiting Deposit */}
           {awaitingBank.length > 0 && (() => {
             const grouped = groupByMarketplaceMonth(awaitingBank);
             return (
@@ -437,10 +440,10 @@ export default function ActionCentre({
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block" />
-                  <h3 className="font-semibold text-sm">Posted — Waiting for Bank</h3>
+                  <h3 className="font-semibold text-sm">Posted — Awaiting Deposit</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} in Xero, deposit not yet detected
+                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero — waiting for bank deposit to appear
                 </p>
                 <ul className="space-y-1">
                   {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
@@ -463,7 +466,7 @@ export default function ActionCentre({
                   )}
                 </ul>
                 <p className="text-[10px] text-muted-foreground italic">
-                  Bank feed not synced yet — deposits usually appear within 1–3 business days.
+                  This is normal — marketplace deposits typically arrive within 1–3 business days after payout.
                 </p>
               </CardContent>
             </Card>
@@ -536,7 +539,14 @@ export default function ActionCentre({
                       if (isCellPreBoundary(m)) {
                         return (
                           <td key={m} className="text-center py-2.5 px-3">
-                            <span className="text-[10px] text-muted-foreground/50">—</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-[10px] text-muted-foreground/50 cursor-default">—</span>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs">Before accounting boundary — not tracked</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </td>
                         );
                       }
@@ -594,10 +604,12 @@ export default function ActionCentre({
                 ))}
               </tbody>
             </table>
-            <div className="flex flex-wrap gap-4 mt-3 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Done</span>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
+              <span className="font-medium text-foreground/70">Legend:</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Complete</span>
               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground/20 inline-block" /> Pending</span>
-              <span>Pipeline: S → X → B → R (Settlement → Xero → Bank → Reconciled)</span>
+              <span className="flex items-center gap-1"><span className="text-muted-foreground/50">—</span> Pre-boundary</span>
+              <span className="border-l border-border pl-4 ml-1">Each cell: <span className="font-medium">S</span> Settlement → <span className="font-medium">X</span> Xero → <span className="font-medium">B</span> Bank → <span className="font-medium">R</span> Reconciled</span>
             </div>
           </CardContent>
         </Card>
@@ -626,6 +638,21 @@ export default function ActionCentre({
                 );
               })}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quick link to Reconciliation Hub */}
+      {(awaitingBank.length > 0 || gapDetected.length > 0) && onSwitchToReconciliation && (
+        <Card className="border-border">
+          <CardContent className="py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Review reconciliation issues in detail</span>
+            </div>
+            <Button variant="outline" size="sm" className="text-xs gap-1" onClick={onSwitchToReconciliation}>
+              Open Reconciliation Hub <ArrowRight className="h-3 w-3" />
+            </Button>
           </CardContent>
         </Card>
       )}

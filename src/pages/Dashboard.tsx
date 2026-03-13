@@ -690,6 +690,10 @@ export default function Dashboard() {
                   switchView('settlements');
                   switchSettlementsSubTab('overview');
                 }}
+                onSwitchToReconciliation={() => {
+                  switchView('settlements');
+                  switchSettlementsSubTab('reconciliation');
+                }}
                 userName={user?.email?.split('@')[0]}
               />
 
