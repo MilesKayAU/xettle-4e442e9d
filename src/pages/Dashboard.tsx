@@ -30,6 +30,9 @@ import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, Layout
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
 import PayoutBankAccountMapper from '@/components/settings/PayoutBankAccountMapper';
+import AccountMapperCard from '@/components/settings/AccountMapperCard';
+import PaymentVerificationSettings from '@/components/settings/PaymentVerificationSettings';
+import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
@@ -38,7 +41,7 @@ const OutstandingTab = lazy(() => import('@/components/dashboard/OutstandingTab'
 import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
 const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
 
-type DashboardView = 'dashboard' | 'outstanding' | 'smart_upload' | 'settlements' | 'insights';
+type DashboardView = 'dashboard' | 'outstanding' | 'smart_upload' | 'settlements' | 'insights' | 'settings';
 type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
@@ -501,10 +504,7 @@ export default function Dashboard() {
                 Plans
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => {
-              switchView('settlements');
-              setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
-            }}>
+            <Button variant="ghost" size="sm" onClick={() => switchView('settings')}>
               <Settings className="h-4 w-4 mr-1" />
               Settings
             </Button>
@@ -516,10 +516,7 @@ export default function Dashboard() {
                 </Link>
               </Button>
             )}
-            <ConnectionStatusBar onNavigateToSettings={() => {
-              switchView('settlements');
-              setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
-            }} />
+            <ConnectionStatusBar onNavigateToSettings={() => switchView('settings')} />
             <span className="text-sm text-muted-foreground hidden sm:inline">
               {user?.email}
             </span>
@@ -869,6 +866,31 @@ export default function Dashboard() {
                 </p>
               </div>
               <SkuComparisonView />
+            </div>
+          </ErrorBoundary>
+        )}
+
+        {/* ─── Settings ──────────────────────────────────────────────── */}
+        {activeView === 'settings' && (
+          <ErrorBoundary>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Settings</h2>
+                <p className="text-muted-foreground mt-1">
+                  Configure bank account mappings, Xero account codes, and reconciliation preferences.
+                </p>
+              </div>
+              <PayoutBankAccountMapper />
+              <AccountMapperCard />
+              <AccountingBoundarySettings
+                xeroConnected={xeroConnected}
+                onConnectXero={() => {
+                  setWizardInitialStep(2);
+                  setShowWizard(true);
+                }}
+                onGoToUpload={() => switchView('smart_upload')}
+              />
+              <PaymentVerificationSettings />
             </div>
           </ErrorBoundary>
         )}
