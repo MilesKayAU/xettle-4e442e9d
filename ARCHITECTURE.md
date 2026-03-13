@@ -587,4 +587,39 @@ supabase/
 
 ---
 
+## 16. External Feed Sync — Core Rules
+
+All external connectors (Xero bank feeds, PayPal, Stripe, Shopify, Wise, future connectors) must follow these principles:
+
+### Default Behaviour
+- Fetch **only the date range required** for reconciliation
+- Range derived from outstanding invoices / unreconciled settlements
+- Apply a buffer around the range (rail-specific: e.g. -7/+21 days for Amazon)
+- Limit to **mapped destination accounts only**
+- Never fetch full history by default
+
+### Fallback Behaviour
+If reconciliation range cannot be determined:
+- Use a bounded default lookback (e.g. 30 days)
+- Enforce a maximum range cap (e.g. 90 days)
+- Never fetch all accounts
+- Never fetch unlimited pages
+
+### Pagination Rules
+- Paging allowed only within the bounded range
+- Enforce safety limits (max pages, max rows, time budget)
+- Store checkpoints so later syncs continue incrementally
+
+### Deep Sync
+Full-history or long-range sync must only run when:
+- User explicitly requests it, **or**
+- System detects missing historical data
+
+Deep syncs must use throttling + checkpoints.
+
+### Applies To
+Xero bank feeds, PayPal API, Stripe API, Shopify payouts, Wise feeds, and all future connectors.
+
+---
+
 *This document is the single source of truth for Xettle's architecture. Update it when systems change.*
