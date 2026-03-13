@@ -48,10 +48,14 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
 
 function parseXeroDate(dateField: string | null | undefined): string | null {
   if (!dateField) return null;
+  // Already an ISO date string (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss) — return as-is
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateField)) return dateField.split('T')[0];
+  // Xero .NET JSON date format: /Date(1234567890000+0000)/
   const raw = dateField.replace('/Date(', '').replace(')/', '').split('+')[0];
   const ts = parseInt(raw);
-  if (!isNaN(ts)) return new Date(ts).toISOString().split('T')[0];
-  return raw.split('T')[0];
+  if (!isNaN(ts) && ts > 100000000000) return new Date(ts).toISOString().split('T')[0];
+  if (!isNaN(ts)) return null; // Small number = not a valid timestamp
+  return null;
 }
 
 function extractSettlementId(reference: string): { id: string | null; part: number | null } {
