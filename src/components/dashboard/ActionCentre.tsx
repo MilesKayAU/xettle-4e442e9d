@@ -432,7 +432,7 @@ export default function ActionCentre({
             </Card>
           )}
 
-          {/* Card 3 — Posted — Waiting for Bank */}
+          {/* Card 3 — Posted — Awaiting Deposit */}
           {awaitingBank.length > 0 && (() => {
             const grouped = groupByMarketplaceMonth(awaitingBank);
             return (
@@ -440,10 +440,10 @@ export default function ActionCentre({
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block" />
-                  <h3 className="font-semibold text-sm">Posted — Waiting for Bank</h3>
+                  <h3 className="font-semibold text-sm">Posted — Awaiting Deposit</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} in Xero, deposit not yet detected
+                  {awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero — waiting for bank deposit to appear
                 </p>
                 <ul className="space-y-1">
                   {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
@@ -466,7 +466,7 @@ export default function ActionCentre({
                   )}
                 </ul>
                 <p className="text-[10px] text-muted-foreground italic">
-                  Bank feed not synced yet — deposits usually appear within 1–3 business days.
+                  This is normal — marketplace deposits typically arrive within 1–3 business days after payout.
                 </p>
               </CardContent>
             </Card>
