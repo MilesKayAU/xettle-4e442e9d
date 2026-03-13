@@ -487,14 +487,15 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         },
         body: { action: 'self' },
       });
+      // Store diagnostics for every response path — before any early return
+      setLastBankSyncResult(resp.data ?? { error: resp.error?.message });
+
       if (resp.error) {
         toast.error(`Bank feed sync failed: ${resp.error.message}`, { id: 'bank-feed-sync' });
         // Still refetch so cached data renders
         await fetchOutstanding({ runSync: false });
         return;
       }
-      // Store diagnostics for every response path
-      setLastBankSyncResult(resp.data);
 
       if (resp.data?.xero_rate_limited) {
         const retryAfter = Number(resp.data?.retry_after_seconds) || 60;
