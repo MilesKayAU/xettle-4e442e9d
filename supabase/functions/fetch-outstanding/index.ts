@@ -586,12 +586,13 @@ Deno.serve(async (req) => {
       .eq('connection_status', 'active');
     
     const connectedCodes = (userConnections || []).map((c: any) => c.marketplace_code);
-    const missingMarketplaces: string[] = [];
+    const missingRails: string[] = [];
     const usedDefaultFor: string[] = [];
     for (const code of connectedCodes) {
-      const mapping = getMappedPayoutAccount(code);
-      if (mapping.source === 'missing') missingMarketplaces.push(code);
-      if (mapping.source === 'default') usedDefaultFor.push(code);
+      const rail = toRailCode(code);
+      const mapping = getDestinationAccount(rail);
+      if (mapping.source === 'missing') missingRails.push(rail);
+      if (mapping.source === 'default') usedDefaultFor.push(rail);
     }
 
     const mappingStatus = {
