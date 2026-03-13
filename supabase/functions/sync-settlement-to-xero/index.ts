@@ -856,11 +856,11 @@ serve(async (req) => {
     console.log('Invoice created successfully:', invoiceId, 'Number:', invoiceNumber);
 
     // ─── Write to reference index cache (prevents future duplicates) ──
-    if (invoiceId && settlementIdFromRef) {
+    if (invoiceId && settlementId) {
       const sd = body.settlementData || {};
       await supabase.from('xero_accounting_matches').upsert({
         user_id: userId,
-        settlement_id: settlementIdFromRef,
+        settlement_id: settlementId,
         marketplace_code: sd.marketplace || 'unknown',
         xero_invoice_id: invoiceId,
         xero_invoice_number: invoiceNumber || null,
