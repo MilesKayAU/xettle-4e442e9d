@@ -647,7 +647,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
 // - Deduplicates by settlement_id and fingerprint
 // - Returns summary with totals for UI
 // ═══════════════════════════════════════════════════════════════
-async function handleSmartSync(supabase: any, userId: string): Promise<Response> {
+async function handleSmartSync(supabase: any, userId: string, syncFrom?: string): Promise<Response> {
   // ─── Check rate limit cooldown (atomic RPC) ────────────────────
   const { data: cooldownResult } = await supabase.rpc('check_sync_cooldown', {
     p_user_id: userId,
