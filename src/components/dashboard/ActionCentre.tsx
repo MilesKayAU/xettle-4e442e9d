@@ -547,9 +547,9 @@ export default function ActionCentre({
                      <TooltipProvider>
                        <Tooltip>
                          <TooltipTrigger asChild>
-                           <span className="cursor-help border-b border-dotted border-muted-foreground/40">Channel</span>
+                           <span className="cursor-help border-b border-dotted border-muted-foreground/40">Rail</span>
                          </TooltipTrigger>
-                         <TooltipContent className="text-xs max-w-[200px]">Payout source — e.g. Amazon AU, Shopify Payments, PayPal</TooltipContent>
+                         <TooltipContent className="text-xs max-w-[220px]">Payout rail — the source that generates settlement payouts (Amazon AU, Shopify Payments, PayPal, etc.)</TooltipContent>
                        </Tooltip>
                      </TooltipProvider>
                    </th>
