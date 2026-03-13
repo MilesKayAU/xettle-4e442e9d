@@ -746,7 +746,7 @@ export default function AccountingDashboard() {
 
         await supabase
           .from('settlements')
-          .update({ status: 'draft_in_xero', xero_journal_id: data.invoiceId || data.journalId, xero_status: 'DRAFT' })
+          .update({ status: 'draft_in_xero', xero_journal_id: data.invoiceId || data.journalId, xero_invoice_id: data.invoiceId || data.journalId, xero_status: 'DRAFT' } as any)
           .eq('settlement_id', header.settlementId);
 
         setPushed(true);

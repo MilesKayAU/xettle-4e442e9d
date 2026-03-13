@@ -757,6 +757,7 @@ serve(async (req) => {
             xero_invoice_number: bestMatch.InvoiceNumber || null,
             xero_status: bestMatch.Status || null,
             xero_journal_id: bestMatch.InvoiceID,
+            xero_invoice_id: bestMatch.InvoiceID,
             status: derivedSt,
           };
           if (bestMatch.Status === 'PAID') {

@@ -561,6 +561,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             }
             await supabaseAdmin.from('settlements').update({
               xero_journal_id: preMatch.xero_invoice_id,
+              xero_invoice_id: preMatch.xero_invoice_id,
               xero_invoice_number: preMatch.xero_invoice_number,
               xero_status: preMatch.xero_status,
               status: derivedSt,
