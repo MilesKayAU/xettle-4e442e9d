@@ -952,6 +952,7 @@ Deno.serve(async (req) => {
       lookback_days_effective: lookbackDays,
       force_recompute_used: forceRecompute,
       mapping_status: mappingStatus,
+      missing_settlement_ids: missingSettlementIds,
     };
 
     console.log(JSON.stringify({
