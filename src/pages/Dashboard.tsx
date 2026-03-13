@@ -710,7 +710,7 @@ export default function Dashboard() {
               />
 
               {/* AI Account Mapper suggestion banner */}
-              <AiMapperBanner />
+              <AiMapperBanner show={showAiMapper} />
 
               {/* CoA-detected channels awaiting confirmation */}
               {suggestedConnections.length > 0 && (
