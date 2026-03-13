@@ -257,15 +257,26 @@ Deno.serve(async (req) => {
     // ─── Pass ALL outstanding ACCREC invoices through — UI toggle controls marketplace vs all ───
     const invoices = allInvoices;
 
-    // ─── Get user's settlements for matching (including bank match fields) ───
+    // ─── Get ALL user's settlements for matching (including already_recorded) ───
+    // Include already_recorded because they exist in Xero and need reconciliation tracking
     const { data: settlements } = await supabase
       .from('settlements')
       .select('settlement_id, marketplace, period_start, period_end, bank_deposit, net_ex_gst, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, status, source, bank_verified, bank_verified_amount, xero_journal_id, xero_status, xero_invoice_number, is_split_month, split_month_1_data, split_month_2_data, bank_tx_id, bank_match_method, bank_match_confidence, bank_match_confirmed_at, bank_match_confirmed_by')
       .eq('user_id', userId);
 
     const settlementMap = new Map<string, any>();
-    for (const s of (settlements || [])) {
+    const allSettlements = settlements || [];
+    for (const s of allSettlements) {
       settlementMap.set(s.settlement_id, s);
+    }
+
+    // ─── Build marketplace-indexed settlement lists for fuzzy matching ───
+    // Key: marketplace code → sorted settlements by period_end DESC
+    const settlementsByMarketplace = new Map<string, any[]>();
+    for (const s of allSettlements) {
+      const mkt = (s.marketplace || 'unknown').toLowerCase();
+      if (!settlementsByMarketplace.has(mkt)) settlementsByMarketplace.set(mkt, []);
+      settlementsByMarketplace.get(mkt)!.push(s);
     }
 
     // ─── Also load aliases for cross-reference matching ───
@@ -280,8 +291,6 @@ Deno.serve(async (req) => {
     }
 
     // ─── Load pre-seeded cache from xero_accounting_matches ───
-    // When sync-xero-status pre-seeds outstanding invoices before settlement data arrives,
-    // we can use this to show "Awaiting sync" instead of "No settlement"
     const { data: preSeededMatches } = await supabase
       .from('xero_accounting_matches')
       .select('settlement_id, marketplace_code, xero_invoice_id, match_method, matched_amount, matched_date')
@@ -291,6 +300,64 @@ Deno.serve(async (req) => {
     const preSeededSet = new Set<string>();
     for (const m of (preSeededMatches || [])) {
       preSeededSet.add(m.settlement_id);
+    }
+
+    // ─── Universal fuzzy matcher: amount + date + marketplace ───
+    // Falls back when reference-based extraction fails (Shopify, Bunnings, Kogan, etc.)
+    const usedSettlementIds = new Set<string>(); // Prevent double-matching
+
+    function fuzzyMatchSettlement(
+      amount: number,
+      invoiceDate: string | null,
+      marketplace: string,
+    ): any | null {
+      const candidates = settlementsByMarketplace.get(marketplace);
+      if (!candidates || !invoiceDate) return null;
+
+      const invDateMs = new Date(invoiceDate).getTime();
+      let bestMatch: any = null;
+      let bestScore = 0;
+
+      for (const s of candidates) {
+        if (usedSettlementIds.has(s.settlement_id)) continue;
+
+        const settlementAmount = Math.abs(s.bank_deposit || s.net_ex_gst || 0);
+        const amountDiff = Math.abs(settlementAmount - amount);
+        // Allow up to 5% or $50 tolerance (whichever is larger) for amount matching
+        const amountTolerance = Math.max(amount * 0.05, 50);
+        if (amountDiff > amountTolerance) continue;
+
+        // Check date proximity: settlement period should overlap or be near invoice date
+        const periodEnd = new Date(s.period_end).getTime();
+        const periodStart = new Date(s.period_start).getTime();
+        const daysDiffFromEnd = Math.abs(invDateMs - periodEnd) / (1000 * 60 * 60 * 24);
+        const isWithinPeriod = invDateMs >= periodStart && invDateMs <= periodEnd;
+        
+        // Score: higher = better match
+        let score = 0;
+        if (amountDiff <= 0.05) score += 50;       // Exact amount
+        else if (amountDiff <= 1.00) score += 40;   // Very close
+        else if (amountDiff <= 10) score += 25;     // Close
+        else score += 10;                           // Within tolerance
+
+        if (isWithinPeriod) score += 30;            // Invoice date within settlement period
+        else if (daysDiffFromEnd <= 3) score += 25; // Within 3 days of period end
+        else if (daysDiffFromEnd <= 7) score += 15; // Within a week
+        else if (daysDiffFromEnd <= 14) score += 5; // Within 2 weeks
+        else continue;                              // Too far apart
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = s;
+        }
+      }
+
+      // Require minimum score of 35 to match
+      if (bestMatch && bestScore >= 35) {
+        usedSettlementIds.add(bestMatch.settlement_id);
+        return bestMatch;
+      }
+      return null;
     }
 
     // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
