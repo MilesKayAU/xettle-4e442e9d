@@ -172,7 +172,7 @@ export default function PayoutBankAccountMapper() {
     } finally {
       setFetchingAccounts(false);
     }
-  }, [defaultAccountId, overrides]);
+  }, [defaultAccountId, overrides, applyFetchIssue]);
 
   const saveMappings = useCallback(async () => {
     setSaving(true);
