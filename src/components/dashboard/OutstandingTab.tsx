@@ -1868,7 +1868,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         </div>
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {row.has_settlement ? (
+                        {row.match_status === 'pending_enrichment' ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : row.has_settlement ? (
                           <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
                         ) : row.is_pre_boundary ? (
                           <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
@@ -1877,7 +1879,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
+                        {row.match_status === 'pending_enrichment' ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
                           <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
                         ) : row.match_status === 'confirmed_manual' ? (
                           <CheckCircle2 className="h-4 w-4 text-blue-600 inline" />
