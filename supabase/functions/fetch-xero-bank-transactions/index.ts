@@ -221,16 +221,17 @@ async function fetchBankTxnsForUser(
     console.log(`[fetch-bank-txns] Cache empty for ${userId} — bypassing recent-success guard to seed cache`);
   }
 
-  // Refresh Xero token
+  // ══════════════════════════════════════════════════════════════
+  // STEP 3 — Refresh Xero token
+  // ══════════════════════════════════════════════════════════════
   const token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
   if (!token) {
     return {
       user_id: userId,
       error: 'Token refresh failed',
-      cached_bank_rows: cachedBankRowsCount,
-      last_sync_time: lastSyncTime,
-      cooldown_until: cooldownUntil,
+      skip_reason: null,
       cooldown_applied: false,
+      ...baseDiag,
     };
   }
 
