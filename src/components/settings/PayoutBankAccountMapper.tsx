@@ -39,10 +39,19 @@ export default function PayoutBankAccountMapper() {
   const [saving, setSaving] = useState(false);
   const [fetchingAccounts, setFetchingAccounts] = useState(false);
   const [invalidAccounts, setInvalidAccounts] = useState<Set<string>>(new Set());
+  const [loadIssue, setLoadIssue] = useState<string>('');
+  const [isRateLimited, setIsRateLimited] = useState(false);
+
+  const applyFetchIssue = useCallback((issue?: string | null) => {
+    const message = issue || '';
+    setLoadIssue(message);
+    setIsRateLimited(message.includes('429') || message.toLowerCase().includes('rate limit'));
+  }, []);
 
   // Fetch Xero bank accounts + existing mappings + marketplace connections
   const loadData = useCallback(async () => {
     setLoading(true);
+    applyFetchIssue('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
@@ -57,15 +66,27 @@ export default function PayoutBankAccountMapper() {
       ]);
 
       // Bank accounts
-      const fetchedAccounts: XeroBankAccount[] = accountsResp.data?.accounts || [];
+      const payload = (accountsResp.data || {}) as {
+        accounts?: XeroBankAccount[];
+        error?: string;
+        warning?: string;
+      };
+      const fetchedAccounts: XeroBankAccount[] = payload.accounts || [];
       setAccounts(fetchedAccounts);
+
+      const issue = accountsResp.error?.message || payload.error || payload.warning || '';
+      applyFetchIssue(issue);
+
+      if (payload.warning && fetchedAccounts.length > 0) {
+        toast.warning('Using cached bank accounts while Xero rate limits requests');
+      }
+
       const validIds = new Set(fetchedAccounts.map(a => a.account_id));
 
       // Existing mappings
       const settings = settingsResp.data || [];
       let defaultVal = '';
       const overrideMap: Record<string, string> = {};
-      const useDefaultMap: Record<string, boolean> = {};
       const invalid = new Set<string>();
 
       for (const row of settings) {
@@ -77,7 +98,6 @@ export default function PayoutBankAccountMapper() {
           const mktCode = row.key.slice(PAYOUT_KEY_PREFIX.length);
           if (mktCode !== '_default') {
             overrideMap[mktCode] = val;
-            useDefaultMap[mktCode] = false;
             if (val && !validIds.has(val)) invalid.add(mktCode);
           }
         }
@@ -99,11 +119,13 @@ export default function PayoutBankAccountMapper() {
       setUseDefault(finalUseDefault);
 
     } catch (err: any) {
-      toast.error(`Failed to load bank account settings: ${err.message}`);
+      const message = err?.message || 'Failed to load bank account settings';
+      applyFetchIssue(message);
+      toast.error(`Failed to load bank account settings: ${message}`);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyFetchIssue]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -115,8 +137,17 @@ export default function PayoutBankAccountMapper() {
       const resp = await supabase.functions.invoke('fetch-xero-bank-accounts', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      const fetchedAccounts: XeroBankAccount[] = resp.data?.accounts || [];
+
+      const payload = (resp.data || {}) as {
+        accounts?: XeroBankAccount[];
+        error?: string;
+        warning?: string;
+      };
+      const fetchedAccounts: XeroBankAccount[] = payload.accounts || [];
       setAccounts(fetchedAccounts);
+
+      const issue = resp.error?.message || payload.error || payload.warning || '';
+      applyFetchIssue(issue);
 
       // Re-validate existing mappings
       const validIds = new Set(fetchedAccounts.map(a => a.account_id));
@@ -127,13 +158,21 @@ export default function PayoutBankAccountMapper() {
       }
       setInvalidAccounts(invalid);
 
-      toast.success(`Found ${fetchedAccounts.length} bank accounts`);
-    } catch {
-      toast.error('Failed to refresh bank accounts');
+      if (payload.warning && fetchedAccounts.length > 0) {
+        toast.warning('Using cached bank accounts while Xero rate limits requests');
+      } else if (issue) {
+        toast.error(issue);
+      } else {
+        toast.success(`Found ${fetchedAccounts.length} bank accounts`);
+      }
+    } catch (err: any) {
+      const message = err?.message || 'Failed to refresh bank accounts';
+      applyFetchIssue(message);
+      toast.error(message);
     } finally {
       setFetchingAccounts(false);
     }
-  }, [defaultAccountId, overrides]);
+  }, [defaultAccountId, overrides, applyFetchIssue]);
 
   const saveMappings = useCallback(async () => {
     setSaving(true);
@@ -213,13 +252,20 @@ export default function PayoutBankAccountMapper() {
             <Banknote className="h-4 w-4" />
             Payout Bank Accounts
           </CardTitle>
-          <CardDescription>Connect Xero to see your bank accounts.</CardDescription>
+          <CardDescription>
+            {isRateLimited
+              ? 'Xero is rate-limiting requests right now. Please wait a minute, then retry.'
+              : loadIssue || 'Connect Xero to see your bank accounts.'}
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <Button variant="outline" size="sm" onClick={refreshAccounts} disabled={fetchingAccounts}>
             {fetchingAccounts ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
             Retry
           </Button>
+          {loadIssue && !isRateLimited && (
+            <p className="text-xs text-muted-foreground">Tip: reconnect Xero in Settings if this keeps happening.</p>
+          )}
         </CardContent>
       </Card>
     );
