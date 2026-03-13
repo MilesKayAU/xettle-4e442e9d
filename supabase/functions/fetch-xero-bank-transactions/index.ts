@@ -168,6 +168,9 @@ async function fetchBankTxnsForUser(
           bank_rows_upserted: totalUpserted,
           bank_rows_cached_total: count || 0,
           partial: page > 1,
+          mapped_account_ids_count: mappedAccountIds.size,
+          has_any_mapping: mappedAccountIds.size > 0,
+          lookback_days: lookbackDays,
         };
       }
       return { user_id: userId, error: `Xero API ${res.status}` };
