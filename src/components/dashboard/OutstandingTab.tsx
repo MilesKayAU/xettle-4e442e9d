@@ -1184,7 +1184,24 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           </span>
         </div>
       )}
-      {!data?.sync_info?.bank_cache_query_error && data?.sync_info?.bank_feed_empty && data.invoice_count > 0 && (
+      {data?.sync_info?.mapping_status && !data.sync_info.mapping_status.has_any_mapping && data.invoice_count > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
+          <Banknote className="h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            <strong>Payout account setup needed</strong> — select where each marketplace pays you in Xero to match deposits accurately.
+            Invoices and settlements are still visible below.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => window.dispatchEvent(new CustomEvent('xettle:open-settings'))}
+          >
+            Go to Settings
+          </Button>
+        </div>
+      )}
+      {!data?.sync_info?.bank_cache_query_error && data?.sync_info?.bank_feed_empty && data?.sync_info?.mapping_status?.has_any_mapping !== false && data.invoice_count > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span>
