@@ -321,6 +321,7 @@ serve(async (req) => {
           const updatePayload: Record<string, any> = {
             xero_status: fresh.status,
             status: derivedStatus,
+            sync_origin: syncOrigin,
           };
           if (fresh.status === 'PAID') {
             updatePayload.bank_verified = true;
