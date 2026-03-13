@@ -461,7 +461,7 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
         {/* ── Status summary cards (clickable filters) ── */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className={cn("grid gap-3", summaryCards.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
           {summaryCards.map(card => (
             <button
               key={card.key}
