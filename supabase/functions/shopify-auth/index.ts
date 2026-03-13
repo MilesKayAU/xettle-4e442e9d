@@ -61,6 +61,21 @@ Deno.serve(async (req) => {
         )
       }
 
+      // SECURITY: Generate unpredictable nonce for CSRF protection instead of using userId as state
+      const nonce = crypto.randomUUID()
+      const stateValue = `${nonce}:${userId}`
+
+      // Store the nonce in app_settings for validation on callback
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+      await supabaseAdmin.from('app_settings').upsert({
+        user_id: userId,
+        key: 'shopify_oauth_state',
+        value: stateValue,
+      }, { onConflict: 'user_id,key' })
+
       const scopes = 'read_fulfillments,read_inventory,read_orders,read_products,read_reports,read_shopify_payments_accounts,read_shopify_payments_payouts'
       const redirectUri = 'https://xettle.app/shopify/callback'
 
@@ -68,7 +83,7 @@ Deno.serve(async (req) => {
         `client_id=${SHOPIFY_CLIENT_ID}&` +
         `scope=${scopes}&` +
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `state=${userId}`
+        `state=${encodeURIComponent(stateValue)}`
 
       console.log('Generated Shopify auth URL for shop:', shop)
 
