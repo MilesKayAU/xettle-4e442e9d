@@ -128,7 +128,7 @@ export default function SystemStatusStrip({
     });
   }
 
-  if (showAiMapper && onReviewMapping) {
+  if (showAiMapper && onReviewMapping && !dismissed) {
     // If bank mapping is also missing, elevate to amber (mapping blocks payout verification)
     const mapperSeverity: 'amber' | 'info' = showBankMappingNudge ? 'amber' : 'info';
     actions.push({
