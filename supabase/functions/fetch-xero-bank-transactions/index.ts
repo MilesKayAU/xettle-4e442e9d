@@ -671,6 +671,7 @@ async function fetchBankTxnsForUser(
       bank_rows_upserted: 0,
       synced_row_count: 0,
       bank_account_ids_used: bankAccountIdsUsed,
+      bank_account_names_used: bankAccountNamesUsed,
       mapped_account_ids_count: mappedAccountIds.size,
       has_any_mapping: hasAnyMapping,
       used_invoice_range: usedInvoiceRange,
