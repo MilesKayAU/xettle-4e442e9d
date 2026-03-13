@@ -707,15 +707,26 @@ export default function Dashboard() {
                   switchSettlementsSubTab('reconciliation');
                 }}
                 userName={user?.email?.split('@')[0]}
+                onPipelineFilter={(marketplace, month) => {
+                  setPipelineFilter({ marketplace, month });
+                  // Scroll to settlements table
+                  setTimeout(() => {
+                    document.getElementById('settlements-table-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 100);
+                }}
               />
 
               {/* Recent settlements — real payout/settlement records only */}
-              <RecentSettlements
-                onViewAll={() => {
-                  switchView('settlements');
-                  switchSettlementsSubTab('overview');
-                }}
-              />
+              <div id="settlements-table-section">
+                <RecentSettlements
+                  onViewAll={() => {
+                    switchView('settlements');
+                    switchSettlementsSubTab('overview');
+                  }}
+                  pipelineFilter={pipelineFilter}
+                  onClearPipelineFilter={() => setPipelineFilter(null)}
+                />
+              </div>
             </div>
           </ErrorBoundary>
         )}
