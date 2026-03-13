@@ -766,6 +766,8 @@ Deno.serve(async (req) => {
         for (const txn of bankTxns) {
           // Currency hard filter — prevent cross-currency false matches
           if ((txn.CurrencyCode || 'AUD') !== expectedCurrency) continue;
+          // Scope to mapped bank account (Rule 3)
+          if (mappedAccount.account_id && txn.BankAccount?.AccountID && txn.BankAccount.AccountID !== mappedAccount.account_id) continue;
 
           const txnAmount = Math.abs(txn.Total || 0);
           const txnDate = parseXeroDate(txn.Date);
