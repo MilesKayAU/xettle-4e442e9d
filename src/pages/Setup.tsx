@@ -135,6 +135,9 @@ export default function Setup() {
   const [phase2Complete, setPhase2Complete] = useState(false);
   const [phase3Complete, setPhase3Complete] = useState(false);
 
+  // Staleness timeout: if scan is running for >5 min, mark it as stale
+  const scanStartTimesRef = useRef<Record<string, number>>({});
+
   // Phase 2
   const [phase2Running, setPhase2Running] = useState(false);
   const [detectedMarketplaces, setDetectedMarketplaces] = useState<DetectedMarketplace[]>([]);
@@ -238,7 +241,33 @@ export default function Setup() {
     if (phase1Amazon) setAmazonProgress(100);
   }, [caps, loading]);
 
-  // ─── Progress timer helper ────────────────────────────────────────
+  // ─── Staleness timeout: auto-mark stuck scans ─────────────────────
+  useEffect(() => {
+    const STALE_MS = 5 * 60 * 1000; // 5 minutes
+    const id = setInterval(() => {
+      const now = Date.now();
+      if (scanStartTimesRef.current.xero && !phase1Xero && xeroStep.status === 'running' && now - scanStartTimesRef.current.xero > STALE_MS) {
+        setXeroStep({ status: 'error', message: 'Xero scan timed out — the API may be slow. Try again later.', error: 'Timed out after 5 minutes' });
+        setXeroProgress(100);
+        setPhase1Xero(true);
+        xeroAbortRef.current?.abort();
+      }
+      if (scanStartTimesRef.current.shopify && !phase1Shopify && shopifyPayoutsStep.status === 'running' && now - scanStartTimesRef.current.shopify > STALE_MS) {
+        setShopifyPayoutsStep({ status: 'error', message: 'Shopify sync timed out', error: 'Timed out after 5 minutes' });
+        setShopifyProgress(100);
+        setPhase1Shopify(true);
+        shopifyAbortRef.current?.abort();
+      }
+      if (scanStartTimesRef.current.amazon && !phase1Amazon && amazonStep.status === 'running' && now - scanStartTimesRef.current.amazon > STALE_MS) {
+        setAmazonStep({ status: 'error', message: 'Amazon sync timed out', error: 'Timed out after 5 minutes' });
+        setAmazonProgress(100);
+        setPhase1Amazon(true);
+        amazonAbortRef.current?.abort();
+      }
+    }, 10000); // Check every 10s
+    return () => clearInterval(id);
+  }, [phase1Xero, phase1Shopify, phase1Amazon, xeroStep.status, shopifyPayoutsStep.status, amazonStep.status]);
+
   function startProgressTimer(
     setter: React.Dispatch<React.SetStateAction<number>>,
     durationMs: number
@@ -260,6 +289,7 @@ export default function Setup() {
   async function runXeroScan(token: string, userId: string) {
     const ac = new AbortController();
     xeroAbortRef.current = ac;
+    scanStartTimesRef.current.xero = Date.now();
     setXeroStep({ status: 'running', message: 'Scanning Xero invoices, contacts & bank transactions...' });
     const result = await callEdgeFunctionSafe('scan-xero-history', token, {}, { signal: ac.signal });
 
@@ -306,6 +336,7 @@ export default function Setup() {
   async function runShopifyScan(token: string, userId: string) {
     const ac = new AbortController();
     shopifyAbortRef.current = ac;
+    scanStartTimesRef.current.shopify = Date.now();
 
     setShopifyPayoutsStep({ status: 'running', message: 'Fetching payouts...' });
     
@@ -431,6 +462,7 @@ export default function Setup() {
   async function runAmazonScan(token: string, userId: string) {
     const ac = new AbortController();
     amazonAbortRef.current = ac;
+    scanStartTimesRef.current.amazon = Date.now();
     setAmazonStep({ status: 'running', message: 'Fetching Amazon settlements (this can take several minutes)...' });
 
     // Retry loop for 503/429 with backoff
@@ -902,6 +934,12 @@ export default function Setup() {
   function progressStatus(progress: number, done: boolean, apiName: string, stepStatus?: StepStatus): string {
     if (stepStatus === 'pending') return 'Pending...';
     if (done) return 'Complete';
+    if (stepStatus === 'error') return 'Failed';
+    // Check for staleness: if running for >5 minutes
+    const startTime = scanStartTimesRef.current[apiName.toLowerCase()];
+    if (startTime && Date.now() - startTime > 5 * 60 * 1000) {
+      return 'Timed out — retry?';
+    }
     if (progress >= 95) return 'Still working...';
     return 'Scanning...';
   }
