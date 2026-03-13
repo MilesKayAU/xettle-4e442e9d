@@ -324,6 +324,48 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, []);
 
+  // ─── Re-scan matches: force recompute with bounded lookback ───
+  const rescanMatches = useCallback(async () => {
+    setRescanning(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
+      const resp = await supabase.functions.invoke('fetch-outstanding', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: { force_recompute: true, lookback_days: 90 },
+      });
+
+      if (resp.data?.sync_info?.no_xero_connection === true) {
+        setNoXeroConnection(true);
+        setHasLoaded(true);
+        setRescanning(false);
+        return;
+      }
+
+      if (resp.error) throw resp.error;
+
+      const result = resp.data as OutstandingSummary;
+      setData(result);
+      setHasLoaded(true);
+      setSelected(new Set());
+
+      const matched = result.sync_info?.matched_settlement_count || 0;
+      const candidates = result.sync_info?.candidates_generated || 0;
+      toast.success(`Re-scan complete — ${matched} matched, ${candidates} suggested`);
+
+      if (result.sync_info?.bank_feed_empty) {
+        // Existing banner will show
+      } else if (result.sync_info?.bank_cache_stale) {
+        toast.warning('Bank feed cache is stale — run bank sync or check connection.');
+      }
+    } catch (err: any) {
+      toast.error(`Re-scan failed: ${err.message}`);
+    } finally {
+      setRescanning(false);
+    }
+  }, []);
+
   // On mount, fetch cached data only — sync only when user clicks "Sync with Xero"
   // This prevents Xero API rate-limit death spirals (see RCA: ~43 calls per mount)
   useEffect(() => { fetchOutstanding({ runSync: false }); }, [fetchOutstanding]);
