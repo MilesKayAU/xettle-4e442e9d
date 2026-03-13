@@ -82,35 +82,30 @@ export default function PostSetupBanner({
 
       setScanPhase('scanning');
 
-      // ─── Phase 1: Parallel API fetches (only for connected APIs with real tokens) ───
+      // ─── Phase 1a: Xero audit FIRST (determines sync boundary) ───
 
-      const phase1Promises: Promise<void>[] = [];
-
-      // Xero scan
       if (hasXero && caps.hasXero && !completedFlags.has('xero_scan_completed')) {
-        phase1Promises.push((async () => {
-          setXeroStatus('scanning');
-          const result = await callEdgeFunctionSafe('scan-xero-history', caps.accessToken!);
-          if (result.ok) {
-            const data = result.data;
-            const found = data?.detected_settlements?.length || data?.marketplaces_created || 0;
-            if (found > 0) setMarketplacesFound(prev => Math.max(prev, found));
-            setXeroMessage(found > 0
-              ? `Found ${found} marketplace${found > 1 ? 's' : ''} in your Xero history`
-              : 'No marketplace invoices found in Xero yet');
+        setXeroStatus('scanning');
+        const result = await callEdgeFunctionSafe('scan-xero-history', caps.accessToken!);
+        if (result.ok) {
+          const data = result.data;
+          const found = data?.detected_settlements?.length || data?.marketplaces_created || 0;
+          if (found > 0) setMarketplacesFound(prev => Math.max(prev, found));
+          setXeroMessage(found > 0
+            ? `Found ${found} marketplace${found > 1 ? 's' : ''} in your Xero history`
+            : 'No marketplace invoices found in Xero yet');
+          setXeroStatus('done');
+          await setAppFlag('xero_scan_completed');
+        } else {
+          const isRateLimit = result.statusCode === 429 || result.error?.includes('429') || result.error?.includes('rate');
+          if (isRateLimit) {
+            setXeroMessage('Xero API temporarily rate limited — will retry automatically');
             setXeroStatus('done');
-            await setAppFlag('xero_scan_completed');
           } else {
-            const isRateLimit = result.statusCode === 429 || result.error?.includes('429') || result.error?.includes('rate');
-            if (isRateLimit) {
-              setXeroMessage('Xero API temporarily rate limited — will retry automatically');
-              setXeroStatus('done');
-            } else {
-              setXeroMessage('Xero history scan will retry on next sync — connection is active');
-              setXeroStatus('done');
-            }
+            setXeroMessage('Xero history scan will retry on next sync — connection is active');
+            setXeroStatus('done');
           }
-        })());
+        }
       } else if (hasXero && !caps.hasXero) {
         setXeroStatus('skipped');
         setXeroMessage('Xero token not found — please reconnect');
@@ -121,11 +116,37 @@ export default function PostSetupBanner({
         setXeroStatus('skipped');
       }
 
+      // ─── Read Xero boundary for marketplace sync window ───
+      let syncFromBoundary: string | undefined;
+      if (hasXero) {
+        try {
+          const { data: boundaryRow } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'xero_oldest_outstanding_date')
+            .maybeSingle();
+          if (boundaryRow?.value) {
+            syncFromBoundary = boundaryRow.value;
+            console.log('[sync] Using Xero boundary for marketplace fetch:', syncFromBoundary);
+          }
+        } catch (err) {
+          console.warn('[sync] Failed to read xero_oldest_outstanding_date:', err);
+        }
+      }
+
+      // ─── Phase 1b: Marketplace fetches (using Xero boundary) ───
+
+      const phase1Promises: Promise<void>[] = [];
+
       // Amazon scan
       if (hasAmazon && caps.hasAmazon && !completedFlags.has('amazon_scan_completed')) {
         phase1Promises.push((async () => {
           setAmazonStatus('scanning');
-          const result = await callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken!, {}, { headers: { 'x-action': 'smart-sync' } });
+          const opts: any = { headers: { 'x-action': 'smart-sync' } };
+          if (syncFromBoundary) {
+            opts.body = { sync_from: syncFromBoundary };
+          }
+          const result = await callEdgeFunctionSafe('fetch-amazon-settlements', caps.accessToken!, opts.body || {}, { headers: opts.headers });
           if (result.ok) {
             const { count } = await supabase
               .from('settlements')
@@ -164,7 +185,8 @@ export default function PostSetupBanner({
           // Step 1: Payouts (with retry for 503/429)
           let payoutsOk = false;
           for (let attempt = 0; attempt < 3; attempt++) {
-            const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken!);
+            const payoutsBody = syncFromBoundary ? { sync_from: syncFromBoundary } : {};
+            const payoutsResult = await callEdgeFunctionSafe('fetch-shopify-payouts', caps.accessToken!, payoutsBody);
             if (payoutsResult.ok) {
               payoutsOk = true;
               break;
@@ -238,11 +260,11 @@ export default function PostSetupBanner({
         setShopifyStatus('skipped');
       }
 
-      // Wait for all Phase 1 to complete
+      // Wait for all marketplace fetches to complete
       await Promise.allSettled(phase1Promises);
 
       // Nothing pending: skip heavy follow-up work on every dashboard mount
-      if (phase1Promises.length === 0) {
+      if (phase1Promises.length === 0 && !hasXero) {
         setScanPhase('done');
         return;
       }
