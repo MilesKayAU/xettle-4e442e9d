@@ -562,6 +562,25 @@ Deno.serve(async (req) => {
 
     const userId = user.id;
 
+    // ─── Acquire Shopify sync mutex (manual path) ─────────────────────
+    const adminForLock = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: lockResult } = await adminForLock.rpc('acquire_sync_lock', {
+      p_user_id: userId,
+      p_integration: 'shopify',
+      p_lock_key: 'payout_sync',
+      p_ttl_seconds: 600, // 10 min
+    });
+
+    if (!lockResult?.acquired) {
+      return new Response(
+        JSON.stringify({ error: "Sync already in progress", message: "A Shopify payout sync is already running. Please wait." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ─── Get Shopify token ────────────────────────────────────────────
     const { data: tokenRow, error: tokenError } = await supabase
       .from("shopify_tokens")
@@ -571,6 +590,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (tokenError || !tokenRow) {
+      await adminForLock.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'shopify', p_lock_key: 'payout_sync' });
       console.warn(`[fetch-shopify-payouts] No Shopify token found: ${tokenError?.message}`);
       return new Response(
         JSON.stringify({ error: "No Shopify connection found" }),
@@ -578,13 +598,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    const result = await syncPayoutsForUser(
-      supabase,
-      userId,
-      tokenRow.access_token,
-      tokenRow.shop_domain,
-      false // enforce cooldown for manual syncs
-    );
+    let result;
+    try {
+      result = await syncPayoutsForUser(
+        supabase,
+        userId,
+        tokenRow.access_token,
+        tokenRow.shop_domain,
+        false // enforce cooldown for manual syncs
+      );
+    } finally {
+      // Always release lock
+      await adminForLock.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'shopify', p_lock_key: 'payout_sync' });
+    }
 
     if (result.errors.length === 1 && result.errors[0] === "Cooldown active") {
       return new Response(
