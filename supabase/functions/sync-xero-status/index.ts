@@ -307,15 +307,15 @@ serve(async (req) => {
           // Determine derived status using fresh Xero status
           const isXettleFormat = (cached.matched_reference || '').startsWith('Xettle-');
           let derivedStatus: string;
+          let syncOrigin = 'xettle';
           if (isXettleFormat) {
             switch (fresh.status) {
-              case 'DRAFT': derivedStatus = 'draft_in_xero'; break;
-              case 'AUTHORISED': derivedStatus = 'authorised_in_xero'; break;
               case 'PAID': derivedStatus = 'reconciled_in_xero'; break;
               default: derivedStatus = 'pushed_to_xero'; break;
             }
           } else {
-            derivedStatus = 'synced_external';
+            derivedStatus = 'pushed_to_xero';
+            syncOrigin = 'external';
           }
 
           const updatePayload: Record<string, any> = {
