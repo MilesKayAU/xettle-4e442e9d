@@ -112,6 +112,7 @@ async function fetchBankTxnsForUser(
     .like('key', 'payout_account:%');
 
   const mappedAccountIds = new Set<string>();
+  const hasAnyMapping = (payoutSettings || []).length > 0; // includes _default
   for (const row of (payoutSettings || [])) {
     if (row.value && row.key.startsWith('payout_account:')) {
       mappedAccountIds.add(row.value);
@@ -169,7 +170,8 @@ async function fetchBankTxnsForUser(
           bank_rows_cached_total: count || 0,
           partial: page > 1,
           mapped_account_ids_count: mappedAccountIds.size,
-          has_any_mapping: mappedAccountIds.size > 0,
+          has_any_mapping: hasAnyMapping,
+          filtered_to_mapped_accounts: mappedAccountIds.size > 0,
           lookback_days: lookbackDays,
         };
       }
@@ -242,10 +244,12 @@ async function fetchBankTxnsForUser(
   console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} transactions (${page} pages)`);
   return {
     user_id: userId,
-    upserted: totalUpserted,
+    bank_rows_upserted: totalUpserted,
+    upserted: totalUpserted, // backwards compat for UI
     pages: page,
     mapped_account_ids_count: mappedAccountIds.size,
-    has_any_mapping: mappedAccountIds.size > 0,
+    has_any_mapping: hasAnyMapping,
+    filtered_to_mapped_accounts: mappedAccountIds.size > 0,
     lookback_days: lookbackDays,
   };
 }
@@ -272,7 +276,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     // ── Determine mode: "self" (user-scoped) or "batch" (service-role) ──
-    const action = body.action || req.headers.get('x-action') || 'batch';
+    const action = req.headers.get('x-action') ?? body.action ?? 'batch';
 
     if (action === 'self') {
       // ── USER-SCOPED MODE ──
