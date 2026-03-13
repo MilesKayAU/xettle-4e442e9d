@@ -360,29 +360,37 @@ Deno.serve(async (req) => {
       return null;
     }
 
-    // ─── Get bank matches from Xero (RECEIVE transactions from last 90 days) ───
+    // ─── Get bank matches from cached bank_transactions table (populated by fetch-xero-bank-transactions every 30 min) ───
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const [y, m, d] = ninetyDaysAgo.toISOString().split('T')[0].split('-');
-    const bankWhere = `Type=="RECEIVE" AND Date>=DateTime(${y}, ${m}, ${d})`;
+    const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
 
-    let bankTxns: any[] = [];
-    try {
-      const bankUrl = `https://api.xero.com/api.xro/2.0/BankTransactions?where=${encodeURIComponent(bankWhere)}`;
-      const bankResp = await fetch(bankUrl, {
-        headers: {
-          'Authorization': `Bearer ${token.access_token}`,
-          'Accept': 'application/json',
-          'Xero-tenant-id': token.tenant_id,
-        },
-      });
-      if (bankResp.ok) {
-        const bankData = await bankResp.json();
-        bankTxns = bankData?.BankTransactions || [];
-      }
-    } catch (e) {
-      console.error('Bank txn fetch error:', e);
+    const { data: cachedBankTxns, error: bankCacheError } = await supabase
+      .from('bank_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('transaction_type', 'RECEIVE')
+      .gte('date', ninetyDaysAgoStr);
+
+    if (bankCacheError) {
+      console.error('Bank cache query error:', bankCacheError);
     }
+
+    const bankFeedEmpty = !cachedBankTxns || cachedBankTxns.length === 0;
+
+    // Map cached rows to the shape downstream code expects (Xero BankTransaction format)
+    const bankTxns = (cachedBankTxns || []).map((t: any) => ({
+      BankTransactionID: t.xero_transaction_id,
+      Total: t.amount,
+      Date: t.date, // Already ISO date string from cache
+      Reference: t.reference || '',
+      Contact: { Name: t.contact_name || '' },
+      LineItems: [{ Description: t.description || '' }],
+      BankAccount: { Name: t.bank_account_name || '' },
+      CurrencyCode: t.currency || 'AUD',
+    }));
+
+    console.log(`[fetch-outstanding] Bank cache: ${bankTxns.length} RECEIVE txns from ${ninetyDaysAgoStr}, empty=${bankFeedEmpty}`);
 
     // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
     // Nothing is marked as matched until user explicitly confirms.
@@ -460,7 +468,7 @@ Deno.serve(async (req) => {
 
     // Score bank transaction candidates for each aggregate group
     for (const group of aggregateGroups) {
-      if (group.invoiceIds.length < 2) continue;
+      // Single-invoice groups still scored — must meet score ≥ 70 for 'high' confidence
       group.sum = Math.round(group.sum * 100) / 100;
 
       for (const txn of bankTxns) {
@@ -628,33 +636,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Only do auto-detection for non-confirmed
-      if (!bankMatch) {
-        for (const txn of bankTxns) {
-          const txnAmount = Math.abs(txn.Total || 0);
-          const txnDate = parseXeroDate(txn.Date);
-          const amountDiff = Math.abs(txnAmount - amount);
-
-          if (amountDiff <= 0.05 && txnDate && invoiceDate) {
-            const daysDiff = Math.abs(
-              (new Date(txnDate).getTime() - new Date(invoiceDate).getTime()) / (1000 * 60 * 60 * 24)
-            );
-            if (daysDiff <= 7) {
-              bankMatch = {
-                amount: txnAmount,
-                date: txnDate,
-                reference: txn.Reference || '',
-                narration: txn.LineItems?.[0]?.Description || '',
-                transaction_id: txn.BankTransactionID,
-              };
-              bankDifference = amountDiff;
-              break;
-            }
-          }
-        }
-      }
-
-      // Fuzzy match for non-confirmed, non-Amazon
+      // ─── Unified scored 1:1 bank matcher (replaces exact + fuzzy paths) ───
       const marketplacePatterns: Record<string, string[]> = {
         amazon_au: ['amazon', 'amzn'],
         shopify_payments: ['shopify'],
@@ -668,27 +650,59 @@ Deno.serve(async (req) => {
       };
 
       if (!bankMatch && !isConfirmed) {
+        let bestCandidate: any = null;
+        let bestScore = 0;
+        let bestDiff = Infinity;
+
         for (const txn of bankTxns) {
           const txnAmount = Math.abs(txn.Total || 0);
           const txnDate = parseXeroDate(txn.Date);
+          if (!txnDate || !invoiceDate) continue;
+
           const amountDiff = Math.abs(txnAmount - amount);
-          const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''}`.toLowerCase();
+          if (amountDiff > 10) continue; // Hard cap: $10 tolerance
 
+          const daysDiff = Math.abs(
+            (new Date(txnDate).getTime() - new Date(invoiceDate).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          if (daysDiff > 7) continue;
+
+          // Score: higher = better
+          let score = 0;
+          if (amountDiff <= 0.05) score += 50;       // Exact amount
+          else if (amountDiff <= 1.00) score += 35;   // Very close
+          else if (amountDiff <= 5) score += 20;      // Close
+          else score += 10;                           // Within $10
+
+          // Narration keyword scoring
+          const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''} ${txn.Reference || ''}`.toLowerCase();
           const patterns = marketplacePatterns[marketplace] || [];
-          const narrationMatch = patterns.some(p => narration.includes(p));
+          if (patterns.some(p => narration.includes(p))) score += 30;
 
-          if (amountDiff <= 10 && narrationMatch && txnDate) {
-            bankMatch = {
-              amount: txnAmount,
-              date: txnDate,
-              reference: txn.Reference || '',
-              narration: txn.LineItems?.[0]?.Description || '',
-              transaction_id: txn.BankTransactionID,
-              fuzzy: true,
-            };
-            bankDifference = amountDiff;
-            break;
+          // Date proximity scoring
+          if (daysDiff <= 2) score += 20;
+          else if (daysDiff <= 5) score += 10;
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestDiff = amountDiff;
+            bestCandidate = txn;
           }
+        }
+
+        // Only populate bankMatch when score ≥ 70 (high confidence)
+        if (bestCandidate && bestScore >= 70) {
+          const isExact = bestDiff <= 0.05;
+          bankMatch = {
+            amount: Math.abs(bestCandidate.Total || 0),
+            date: parseXeroDate(bestCandidate.Date),
+            reference: bestCandidate.Reference || '',
+            narration: bestCandidate.LineItems?.[0]?.Description || '',
+            transaction_id: bestCandidate.BankTransactionID,
+            fuzzy: !isExact,
+            score: bestScore,
+          };
+          bankDifference = bestDiff;
         }
       }
 
@@ -779,6 +793,28 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ─── Structured diagnostics log ───
+    const bankDates = bankTxns.map((t: any) => parseXeroDate(t.Date)).filter(Boolean).sort();
+    const syncInfo = {
+      invoice_count: invoices.length,
+      settlement_count_total: allSettlements.length,
+      matched_settlement_count: matchedWithSettlement,
+      bank_txn_count_cached: bankTxns.length,
+      bank_feed_empty: bankFeedEmpty,
+      bank_cache_range: bankDates.length > 0
+        ? { min: bankDates[0], max: bankDates[bankDates.length - 1] }
+        : null,
+      bank_matches_count: bankDepositFound,
+      candidates_generated: readyToReconcile,
+      source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
+    };
+
+    console.log(JSON.stringify({
+      event: 'fetch_outstanding_complete',
+      user_id: userId.slice(0, 8),
+      ...syncInfo,
+    }));
+
     return new Response(JSON.stringify({
       success: true,
       source: usingCacheFallback ? 'cache_fallback' : 'live_xero',
@@ -787,6 +823,7 @@ Deno.serve(async (req) => {
       matched_with_settlement: matchedWithSettlement,
       bank_deposit_found: bankDepositFound,
       ready_to_reconcile: readyToReconcile,
+      sync_info: syncInfo,
       rows,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
