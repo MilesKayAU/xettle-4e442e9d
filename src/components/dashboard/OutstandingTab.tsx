@@ -340,7 +340,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     setRescanning(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('Not authenticated');
+      if (!session?.access_token) {
+        toast.error('Session expired — please sign in again.');
+        throw new Error('Not authenticated');
+      }
 
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
