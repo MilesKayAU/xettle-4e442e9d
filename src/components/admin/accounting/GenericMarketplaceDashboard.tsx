@@ -464,10 +464,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const fees = s.seller_fees || 0;
                     const net = s.bank_deposit || 0;
                     const isSelected = selected.has(s.id);
-                    const isSyncable = s.status === 'saved' || s.status === 'parsed' || s.status === 'ready_to_push';
+                    const isSyncable = s.status === 'ingested' || s.status === 'ready_to_push';
                     const isPushFailed = s.status === 'push_failed';
-                    const isSynced = ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '');
-                    const isAlreadyRecorded = s.status === 'already_recorded';
+                    const isSynced = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
+                    const isPreBoundary = !!(s as any).is_pre_boundary;
 
                     const prev = filteredSettlements[idx + 1];
                     let hasGap = false;

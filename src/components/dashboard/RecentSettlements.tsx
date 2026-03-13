@@ -336,13 +336,13 @@ export default function RecentSettlements({ onViewAll }: RecentSettlementsProps)
 
   // ── Actions ──
   const handleHide = async (row: SettlementRow) => {
-    await supabase.from('settlements').update({ status: 'hidden' }).eq('id', row.id);
+    await supabase.from('settlements').update({ is_hidden: true } as any).eq('id', row.id);
     toast.success(`Hidden: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
     fetchAll();
   };
 
   const handleUnhide = async (row: SettlementRow) => {
-    await supabase.from('settlements').update({ status: 'saved' }).eq('id', row.id);
+    await supabase.from('settlements').update({ is_hidden: false } as any).eq('id', row.id);
     toast.success(`Restored: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
     fetchAll();
   };
