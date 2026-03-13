@@ -919,7 +919,7 @@ Deno.serve(async (req) => {
 
       if (!bankMatch && !isConfirmed && hasAnyMapping) {
         // Gate: only attempt bank matching when payout mappings exist
-        const mappedAccount = getMappedPayoutAccount(marketplace);
+        const mappedAccount = getDestinationAccount(toRailCode(marketplace));
         
         let bestCandidate: any = null;
         let bestScore = 0;
