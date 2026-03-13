@@ -313,19 +313,18 @@ export default function Dashboard() {
           return activeConnections.length > 0 ? activeConnections[0].marketplace_code : '';
         });
 
-        // Fetch settlement counts per marketplace
+        // Fetch settlement counts per marketplace (using count queries, not downloading all rows)
         const codes = activeConnections.map((m: any) => m.marketplace_code);
-        const { data: countData } = await supabase
-          .from('settlements')
-          .select('marketplace')
-          .in('marketplace', codes);
-        if (countData) {
-          const counts: Record<string, number> = {};
-          for (const row of countData) {
-            counts[row.marketplace || ''] = (counts[row.marketplace || ''] || 0) + 1;
-          }
-          setSettlementCounts(counts);
-        }
+        const counts: Record<string, number> = {};
+        const countPromises = codes.map(async (code: string) => {
+          const { count } = await supabase
+            .from('settlements')
+            .select('id', { count: 'exact', head: true })
+            .eq('marketplace', code);
+          counts[code] = count ?? 0;
+        });
+        await Promise.all(countPromises);
+        setSettlementCounts(counts);
       } else {
         setUserMarketplaces([]);
         setSuggestedConnections([]);
