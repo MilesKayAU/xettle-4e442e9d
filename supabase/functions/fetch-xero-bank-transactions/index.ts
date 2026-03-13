@@ -19,6 +19,8 @@ const COOLDOWN_KEY = 'xero_api_cooldown_until';          // Set ONLY on 429
 const LAST_SUCCESS_KEY = 'bank_feed_last_success_at';     // Set ONLY after real Xero fetch completes (no 429)
 const GUARD_MINUTES_BATCH = 30;
 const GUARD_MINUTES_SELF = 2;
+const CACHE_FRESH_MINUTES_BATCH = 60;
+const CACHE_FRESH_MINUTES_SELF = 15;
 const LOOKBACK_DAYS_BATCH = 60;
 const LOOKBACK_DAYS_SELF = 30;
 
@@ -139,6 +141,7 @@ async function fetchBankTxnsForUser(
   clientId: string,
   clientSecret: string,
   guardMinutes: number,
+  cacheFreshMinutes: number,
   fallbackLookbackDays: number,
 ) {
   // ══════════════════════════════════════════════════════════════
@@ -189,36 +192,36 @@ async function fetchBankTxnsForUser(
         user_id: userId,
         skipped: true,
         skip_reason: 'cooldown',
+        stopped_reason: 'cooldown',
+        xero_rate_limited: false,
         cooldown_applied: true,
         retry_after_seconds: clampedRetry,
+        pages_fetched: 0,
+        transactions_seen_total: 0,
+        transactions_seen: 0,
+        transactions_in_range: 0,
+        fetch_from: null,
+        fetch_to: null,
+        invoice_range_days: null,
+        mapped_account_ids_count: 0,
         ...baseDiag,
       };
     }
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STEP 2B — Recent-success guard (anti-hammer, bypassed when cache empty)
+  // STEP 2B — Observe recent success (final skip decision happens per-account)
   // ══════════════════════════════════════════════════════════════
   if (cachedBankRowsTotal > 0 && lastSuccessfulBankSyncAt) {
     const lastSuccessMs = new Date(lastSuccessfulBankSyncAt).getTime();
     if (!isNaN(lastSuccessMs)) {
       const minutesSinceSuccess = (nowMs - lastSuccessMs) / 60000;
       if (minutesSinceSuccess < guardMinutes) {
-        console.log(`[fetch-bank-txns] Recent-success guard for ${userId}: synced ${Math.round(minutesSinceSuccess)}m ago (guard=${guardMinutes}m), cache has ${cachedBankRowsTotal} rows`);
-        return {
-          user_id: userId,
-          skipped: true,
-          skip_reason: 'recent_success',
-          cooldown_applied: false,
-          retry_after_seconds: 0,
-          minutes_since_last_success: Math.round(minutesSinceSuccess),
-          guard_minutes: guardMinutes,
-          ...baseDiag,
-        };
+        console.log(`[fetch-bank-txns] Recent success (${Math.round(minutesSinceSuccess)}m ago); applying change-detection checks before deciding to skip`);
       }
     }
   } else if (cachedBankRowsTotal === 0) {
-    console.log(`[fetch-bank-txns] Cache empty for ${userId} — bypassing recent-success guard to seed cache`);
+    console.log(`[fetch-bank-txns] Cache empty for ${userId} — bypassing recent-success skips to seed cache`);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -230,7 +233,17 @@ async function fetchBankTxnsForUser(
       user_id: userId,
       error: 'Token refresh failed',
       skip_reason: null,
+      stopped_reason: 'token_refresh_failed',
+      xero_rate_limited: false,
       cooldown_applied: false,
+      pages_fetched: 0,
+      transactions_seen_total: 0,
+      transactions_seen: 0,
+      transactions_in_range: 0,
+      fetch_from: null,
+      fetch_to: null,
+      invoice_range_days: null,
+      mapped_account_ids_count: 0,
       ...baseDiag,
     };
   }
@@ -294,9 +307,12 @@ async function fetchBankTxnsForUser(
       user_id: userId,
       skipped: true,
       skip_reason: 'no_mapping',
+      stopped_reason: 'no_mapping',
+      xero_rate_limited: false,
       cooldown_applied: false,
       message: 'No destination account mapped. Configure payout mapping first.',
       bank_rows_upserted: 0,
+      synced_row_count: 0,
       mapped_account_ids_count: 0,
       has_any_mapping: false,
       used_invoice_range: usedInvoiceRange,
@@ -307,6 +323,7 @@ async function fetchBankTxnsForUser(
       if_modified_since_used: true,
       if_modified_since_value: fromDate.toISOString(),
       pages_fetched: 0,
+      transactions_seen_total: 0,
       transactions_seen: 0,
       transactions_in_range: 0,
       date_range_source: dateRangeSource,
@@ -315,20 +332,35 @@ async function fetchBankTxnsForUser(
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STEP 5 — Fetch per-account using bankAccountID + If-Modified-Since
+  // STEP 5 — Per-account change detection + strict scoped paging
   // ══════════════════════════════════════════════════════════════
   const MAX_PAGES_PER_ACCOUNT = 5;
   const ifModifiedSinceValue = fromDate.toISOString();
   const fetchFromDate = fromDate.toISOString().split('T')[0];
   const fetchToDate = toDate ? toDate.toISOString().split('T')[0] : null;
+  const rangeSignature = `${fetchFromDate}|${fetchToDate ?? 'open'}`;
+  const cacheFreshMs = cacheFreshMinutes * 60000;
 
-  let totalUpserted = 0;
-  let totalPagesFetched = 0;
-  let totalTransactionsSeen = 0;
-  let totalTransactionsInRange = 0;
+  const accountIds = [...mappedAccountIds];
+  const accountSettingKeys = accountIds.flatMap((accountId) => [
+    `bank_feed_last_fetched_at:${accountId}`,
+    `bank_feed_last_success_at:${accountId}`,
+    `bank_feed_last_seen_updated_utc:${accountId}`,
+    `bank_feed_last_range:${accountId}`,
+  ]);
 
-  const bankAccountIdsUsed: string[] = [];
-  const perAccountStats: Record<string, { pages: number; rows: number; seen: number; in_range: number }> = {};
+  const accountSettingsQuery = accountSettingKeys.length > 0
+    ? await adminSupabase
+        .from('app_settings')
+        .select('key, value')
+        .eq('user_id', userId)
+        .in('key', accountSettingKeys)
+    : { data: [], error: null };
+
+  const accountSettingsMap = new Map<string, string>();
+  for (const row of (accountSettingsQuery.data || [])) {
+    if (row?.key && row?.value) accountSettingsMap.set(row.key, row.value);
+  }
 
   const parseXeroTxnDate = (rawDateInput: string | undefined): string | null => {
     const rawDate = rawDateInput?.replace('/Date(', '').replace(')/', '').split('+')[0];
@@ -338,23 +370,83 @@ async function fetchBankTxnsForUser(
     return new Date(ts).toISOString().split('T')[0];
   };
 
-  // Only keep RECEIVE filter in where clause. Date scoping is handled by
-  // If-Modified-Since + strict local in-range checks.
+  const parseXeroTxnTimestamp = (rawDateInput: string | undefined): string | null => {
+    const rawDate = rawDateInput?.replace('/Date(', '').replace(')/', '').split('+')[0];
+    if (!rawDate) return null;
+    const ts = parseInt(rawDate);
+    if (isNaN(ts)) return null;
+    return new Date(ts).toISOString();
+  };
+
+  // Keep only RECEIVE filter in where clause.
   const whereClause = `Type=="RECEIVE"`;
 
-  for (const accountId of mappedAccountIds) {
+  let totalUpserted = 0;
+  let totalPagesFetched = 0;
+  let totalTransactionsSeen = 0;
+  let totalTransactionsInRange = 0;
+  let performedRealXeroFetch = false;
+  let accountsSkippedByChangeDetection = 0;
+
+  const bankAccountIdsUsed: string[] = [];
+  const stoppedReasonsByAccount: Record<string, string> = {};
+  const perAccountStats: Record<string, {
+    pages: number;
+    rows: number;
+    seen: number;
+    in_range: number;
+    stop_reason: string;
+    skipped_by_change_detection: boolean;
+  }> = {};
+
+  const accountSettingsUpserts: Array<{ user_id: string; key: string; value: string }> = [];
+
+  for (const accountId of accountIds) {
     bankAccountIdsUsed.push(accountId);
+
+    const fetchedAtKey = `bank_feed_last_fetched_at:${accountId}`;
+    const successAtKey = `bank_feed_last_success_at:${accountId}`;
+    const lastSeenUpdatedKey = `bank_feed_last_seen_updated_utc:${accountId}`;
+    const rangeKey = `bank_feed_last_range:${accountId}`;
+
+    const lastFetchedAt = accountSettingsMap.get(fetchedAtKey) ?? null;
+    const accountLastSuccessAt = accountSettingsMap.get(successAtKey) ?? null;
+    const lastRange = accountSettingsMap.get(rangeKey) ?? null;
+
+    const lastFetchedMs = lastFetchedAt ? new Date(lastFetchedAt).getTime() : NaN;
+    const accountLastSuccessMs = accountLastSuccessAt ? new Date(accountLastSuccessAt).getTime() : NaN;
+
+    const cacheFresh = !isNaN(lastFetchedMs) && (nowMs - lastFetchedMs) < cacheFreshMs;
+    const lastSuccessRecent = !isNaN(accountLastSuccessMs) && (nowMs - accountLastSuccessMs) < guardMinutes * 60000;
+    const invoiceRangeUnchanged = lastRange === rangeSignature;
+
+    if (cacheFresh && invoiceRangeUnchanged && lastSuccessRecent) {
+      accountsSkippedByChangeDetection++;
+      stoppedReasonsByAccount[accountId] = 'unchanged_recent';
+      perAccountStats[accountId] = {
+        pages: 0,
+        rows: 0,
+        seen: 0,
+        in_range: 0,
+        stop_reason: 'unchanged_recent',
+        skipped_by_change_detection: true,
+      };
+      continue;
+    }
 
     let page = 1;
     let hasMore = true;
     let accountRows = 0;
     let accountSeen = 0;
     let accountInRange = 0;
+    let accountPagesFetched = 0;
+    let accountStopReason = 'completed';
+    let accountLastSeenUpdatedUtc = accountSettingsMap.get(lastSeenUpdatedKey) ?? null;
 
     while (hasMore && page <= MAX_PAGES_PER_ACCOUNT) {
-      const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}&pageSize=100`;
-      console.log(`[fetch-bank-txns] Fetching account=${accountId} page=${page} (If-Modified-Since=${ifModifiedSinceValue})`);
+      performedRealXeroFetch = true;
 
+      const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}&pageSize=100`;
       const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token.access_token}`,
@@ -365,6 +457,7 @@ async function fetchBankTxnsForUser(
       });
 
       totalPagesFetched++;
+      accountPagesFetched++;
 
       if (!res.ok) {
         const errText = await res.text();
@@ -374,9 +467,7 @@ async function fetchBankTxnsForUser(
           const rawRetryAfter = res.headers.get('Retry-After');
           const retryAfterSec = parseRetryAfterSeconds(rawRetryAfter);
           const newCooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
-          console.log(`[fetch-bank-txns] 429 for ${userId}: raw="${rawRetryAfter}", parsed=${retryAfterSec}s`);
 
-          // ONLY place cooldown_until is written — on actual 429
           await adminSupabase.from('app_settings').upsert({
             user_id: userId,
             key: COOLDOWN_KEY,
@@ -393,7 +484,11 @@ async function fetchBankTxnsForUser(
             bank_rows_upserted: totalUpserted,
             synced_row_count: totalUpserted,
             partial: totalUpserted > 0,
+            stopped_reason: 'rate_limited',
             pages_fetched: totalPagesFetched,
+            transactions_seen_total: totalTransactionsSeen,
+            transactions_seen: totalTransactionsSeen,
+            transactions_in_range: totalTransactionsInRange,
             bank_account_ids_used: bankAccountIdsUsed,
             mapped_account_ids_count: mappedAccountIds.size,
             has_any_mapping: hasAnyMapping,
@@ -405,15 +500,13 @@ async function fetchBankTxnsForUser(
             endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
             if_modified_since_used: true,
             if_modified_since_value: ifModifiedSinceValue,
-            transactions_seen: totalTransactionsSeen,
-            transactions_in_range: totalTransactionsInRange,
             cached_bank_rows_total: cachedBankRowsTotal,
             last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
           };
         }
 
-        // Non-429 error: skip this account and continue others
-        console.error(`[fetch-bank-txns] Skipping account ${accountId} due to ${res.status}`);
+        accountStopReason = `http_${res.status}`;
+        hasMore = false;
         break;
       }
 
@@ -421,49 +514,55 @@ async function fetchBankTxnsForUser(
       const txns = data?.BankTransactions || [];
 
       if (txns.length === 0) {
+        accountStopReason = 'empty_page';
         hasMore = false;
         break;
       }
 
-      let stopBecauseBeyondToDate = false;
+      let inRangeThisPage = 0;
+      const pageTxnDates: string[] = [];
+      const rows: any[] = [];
 
-      const rows = txns
-        .filter((txn: any) => (txn?.Type || 'RECEIVE') === 'RECEIVE')
-        .map((txn: any) => {
-          accountSeen++;
-          totalTransactionsSeen++;
+      for (const txn of txns) {
+        accountSeen++;
+        totalTransactionsSeen++;
 
-          const parsedDate = parseXeroTxnDate(txn.Date);
+        const txnType = txn?.Type || 'RECEIVE';
+        if (txnType !== 'RECEIVE') continue;
 
-          // Strict in-range filtering
-          if (parsedDate && parsedDate < fetchFromDate) {
-            return null;
-          }
+        const parsedDate = parseXeroTxnDate(txn.Date);
+        if (parsedDate) pageTxnDates.push(parsedDate);
 
-          if (fetchToDate && parsedDate && parsedDate > fetchToDate) {
-            stopBecauseBeyondToDate = true;
-            return null;
-          }
+        const updatedUtc = parseXeroTxnTimestamp(txn.UpdatedDateUTC);
+        if (updatedUtc && (!accountLastSeenUpdatedUtc || updatedUtc > accountLastSeenUpdatedUtc)) {
+          accountLastSeenUpdatedUtc = updatedUtc;
+        }
 
-          accountInRange++;
-          totalTransactionsInRange++;
+        const isInRange = !!parsedDate
+          && parsedDate >= fetchFromDate
+          && (!fetchToDate || parsedDate <= fetchToDate);
 
-          return {
-            user_id: userId,
-            xero_transaction_id: txn.BankTransactionID,
-            bank_account_id: txn.BankAccount?.AccountID || null,
-            bank_account_name: txn.BankAccount?.Name || null,
-            date: parsedDate,
-            amount: Math.abs(txn.Total || 0),
-            currency: txn.CurrencyCode || 'AUD',
-            description: txn.LineItems?.[0]?.Description || null,
-            reference: txn.Reference || null,
-            contact_name: txn.Contact?.Name || null,
-            transaction_type: 'RECEIVE',
-            fetched_at: new Date().toISOString(),
-          };
-        })
-        .filter(Boolean) as any[];
+        if (!isInRange) continue;
+
+        inRangeThisPage++;
+        accountInRange++;
+        totalTransactionsInRange++;
+
+        rows.push({
+          user_id: userId,
+          xero_transaction_id: txn.BankTransactionID,
+          bank_account_id: txn.BankAccount?.AccountID || null,
+          bank_account_name: txn.BankAccount?.Name || null,
+          date: parsedDate,
+          amount: Math.abs(txn.Total || 0),
+          currency: txn.CurrencyCode || 'AUD',
+          description: txn.LineItems?.[0]?.Description || null,
+          reference: txn.Reference || null,
+          contact_name: txn.Contact?.Name || null,
+          transaction_type: 'RECEIVE',
+          fetched_at: new Date().toISOString(),
+        });
+      }
 
       if (rows.length > 0) {
         const { error: upsertErr } = await adminSupabase
@@ -478,61 +577,136 @@ async function fetchBankTxnsForUser(
         }
       }
 
-      // Strict paging stop rules
-      if (stopBecauseBeyondToDate) {
-        console.log(`[fetch-bank-txns] Stopping early for account ${accountId}: encountered transaction date beyond fetch_to (${fetchToDate})`);
+      const firstDate = pageTxnDates[0] || null;
+      const lastDate = pageTxnDates[pageTxnDates.length - 1] || null;
+      const newestToOldest = !!firstDate && !!lastDate ? firstDate >= lastDate : null;
+
+      const allOlderThanFrom = pageTxnDates.length > 0 && pageTxnDates.every((d) => d < fetchFromDate);
+      const oldestOlderThanFromInNewestFirst = newestToOldest === true && !!lastDate && lastDate < fetchFromDate;
+
+      if (oldestOlderThanFromInNewestFirst || allOlderThanFrom) {
+        accountStopReason = 'past_fetch_from_boundary';
+        hasMore = false;
+      } else if (inRangeThisPage === 0) {
+        accountStopReason = 'no_in_range_rows';
+        hasMore = false;
+      } else if (page >= MAX_PAGES_PER_ACCOUNT) {
+        accountStopReason = 'max_pages';
         hasMore = false;
       } else if (txns.length < 100) {
+        accountStopReason = 'last_page';
         hasMore = false;
       } else {
         page++;
       }
     }
 
-    if (page > MAX_PAGES_PER_ACCOUNT) {
-      console.warn(`[fetch-bank-txns] Hit max pages (${MAX_PAGES_PER_ACCOUNT}) for account ${accountId}`);
-    }
-
+    stoppedReasonsByAccount[accountId] = accountStopReason;
     perAccountStats[accountId] = {
-      pages: Math.min(page, MAX_PAGES_PER_ACCOUNT),
+      pages: accountPagesFetched,
       rows: accountRows,
       seen: accountSeen,
       in_range: accountInRange,
+      stop_reason: accountStopReason,
+      skipped_by_change_detection: false,
+    };
+
+    // Persist per-account fetch state only when an actual Xero call occurred for this account
+    if (accountPagesFetched > 0) {
+      const accountSyncAt = new Date().toISOString();
+      accountSettingsUpserts.push(
+        { user_id: userId, key: fetchedAtKey, value: accountSyncAt },
+        { user_id: userId, key: successAtKey, value: accountSyncAt },
+        { user_id: userId, key: rangeKey, value: rangeSignature },
+      );
+
+      if (accountLastSeenUpdatedUtc) {
+        accountSettingsUpserts.push({ user_id: userId, key: lastSeenUpdatedKey, value: accountLastSeenUpdatedUtc });
+      }
+    }
+  }
+
+  if (accountSettingsUpserts.length > 0) {
+    await adminSupabase
+      .from('app_settings')
+      .upsert(accountSettingsUpserts, { onConflict: 'user_id,key' });
+  }
+
+  const uniqueStopReasons = [...new Set(Object.values(stoppedReasonsByAccount))];
+  const stoppedReason = uniqueStopReasons.length === 1
+    ? uniqueStopReasons[0]
+    : uniqueStopReasons.join(',');
+
+  if (!performedRealXeroFetch && accountsSkippedByChangeDetection === accountIds.length) {
+    return {
+      user_id: userId,
+      skipped: true,
+      skip_reason: 'unchanged_recent',
+      stopped_reason: 'unchanged_recent',
+      xero_rate_limited: false,
+      cooldown_applied: false,
+      retry_after_seconds: 0,
+      pages_fetched: 0,
+      transactions_seen_total: 0,
+      transactions_seen: 0,
+      transactions_in_range: 0,
+      bank_rows_upserted: 0,
+      synced_row_count: 0,
+      bank_account_ids_used: bankAccountIdsUsed,
+      mapped_account_ids_count: mappedAccountIds.size,
+      has_any_mapping: hasAnyMapping,
+      used_invoice_range: usedInvoiceRange,
+      invoice_range_days: effectiveDays,
+      fetch_from: fetchFromDate,
+      fetch_to: fetchToDate,
+      date_range_source: dateRangeSource,
+      endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
+      if_modified_since_used: true,
+      if_modified_since_value: ifModifiedSinceValue,
+      per_account_stats: perAccountStats,
+      ...baseDiag,
     };
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STEP 6 — Persist success timestamp (ONLY on real Xero fetch, not on skip/429)
+  // STEP 6 — Persist success timestamp only after real Xero fetch
   // ══════════════════════════════════════════════════════════════
-  const successAt = new Date().toISOString();
-  await adminSupabase.from('app_settings').upsert({
-    user_id: userId,
-    key: LAST_SUCCESS_KEY,
-    value: successAt,
-  }, { onConflict: 'user_id,key' });
+  let effectiveLastSuccess = lastSuccessfulBankSyncAt;
+  let refreshedAt: string | null = null;
 
-  // Log to system_events
-  await adminSupabase.from('system_events').insert({
-    user_id: userId,
-    event_type: 'bank_txn_fetch',
-    severity: 'info',
-    details: {
-      transactions_upserted: totalUpserted,
-      pages_fetched: totalPagesFetched,
-      transactions_seen: totalTransactionsSeen,
-      transactions_in_range: totalTransactionsInRange,
-      invoice_range_days: effectiveDays,
-      date_range_source: dateRangeSource,
-      used_invoice_range: usedInvoiceRange,
-      bank_account_ids_used: bankAccountIdsUsed,
-      if_modified_since_used: true,
-      if_modified_since_value: ifModifiedSinceValue,
-      endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
-      per_account_stats: perAccountStats,
-      fetch_from: fetchFromDate,
-      fetch_to: fetchToDate || 'open',
-    },
-  });
+  if (performedRealXeroFetch) {
+    const successAt = new Date().toISOString();
+    await adminSupabase.from('app_settings').upsert({
+      user_id: userId,
+      key: LAST_SUCCESS_KEY,
+      value: successAt,
+    }, { onConflict: 'user_id,key' });
+    effectiveLastSuccess = successAt;
+    refreshedAt = successAt;
+
+    await adminSupabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'bank_txn_fetch',
+      severity: 'info',
+      details: {
+        transactions_upserted: totalUpserted,
+        pages_fetched: totalPagesFetched,
+        transactions_seen_total: totalTransactionsSeen,
+        transactions_in_range: totalTransactionsInRange,
+        stopped_reason: stoppedReason,
+        invoice_range_days: effectiveDays,
+        date_range_source: dateRangeSource,
+        used_invoice_range: usedInvoiceRange,
+        bank_account_ids_used: bankAccountIdsUsed,
+        if_modified_since_used: true,
+        if_modified_since_value: ifModifiedSinceValue,
+        endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
+        per_account_stats: perAccountStats,
+        fetch_from: fetchFromDate,
+        fetch_to: fetchToDate || 'open',
+      },
+    });
+  }
 
   // Final cache row count for diagnostics
   const { count: finalBankRowsCount } = await adminSupabase
@@ -540,15 +714,17 @@ async function fetchBankTxnsForUser(
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId);
 
-  console.log(`[fetch-bank-txns] ${userId}: upserted ${totalUpserted} txns (${totalPagesFetched} pages across ${bankAccountIdsUsed.length} accounts), range: ${dateRangeSource}`);
   return {
     user_id: userId,
     skip_reason: null,
+    stopped_reason: stoppedReason,
+    xero_rate_limited: false,
     cooldown_applied: false,
     retry_after_seconds: 0,
     bank_rows_upserted: totalUpserted,
     synced_row_count: totalUpserted,
     pages_fetched: totalPagesFetched,
+    transactions_seen_total: totalTransactionsSeen,
     transactions_seen: totalTransactionsSeen,
     transactions_in_range: totalTransactionsInRange,
     bank_account_ids_used: bankAccountIdsUsed,
@@ -564,9 +740,9 @@ async function fetchBankTxnsForUser(
     if_modified_since_used: true,
     if_modified_since_value: ifModifiedSinceValue,
     cached_bank_rows_total: finalBankRowsCount || 0,
-    last_successful_bank_sync_at: successAt,
+    last_successful_bank_sync_at: effectiveLastSuccess,
     cooldown_until: null,
-    refreshed_at: successAt,
+    refreshed_at: refreshedAt,
   };
 }
 
@@ -617,7 +793,7 @@ Deno.serve(async (req) => {
       const userId = userData.user.id;
       console.log(`[fetch-bank-txns] Self-mode for user ${userId}`);
 
-      const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF, LOOKBACK_DAYS_SELF);
+      const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF, CACHE_FRESH_MINUTES_SELF, LOOKBACK_DAYS_SELF);
 
       return new Response(JSON.stringify({
         success: true,
@@ -659,7 +835,7 @@ Deno.serve(async (req) => {
 
     for (const userId of userIds) {
       try {
-        const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
+        const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, CACHE_FRESH_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
         results.push(result);
       } catch (err: any) {
         console.error(`[fetch-bank-txns] Error for ${userId}:`, err.message);
