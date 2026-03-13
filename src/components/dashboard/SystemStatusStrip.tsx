@@ -98,6 +98,9 @@ export default function SystemStatusStrip({
   onConnect,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem('xettle_mapper_banner_dismissed') === 'true'; } catch { return false; }
+  });
 
   const { data: connections = [] } = useQuery({
     queryKey: ['system-status-strip'],
