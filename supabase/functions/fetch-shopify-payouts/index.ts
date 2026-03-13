@@ -379,6 +379,16 @@ async function syncPayoutsForUser(
         .eq("period_start", monthStart)
         .maybeSingle();
 
+      // Derive settlement_net from settlements table (never accumulate additively)
+      const { data: monthSettlements } = await supabase
+        .from("settlements")
+        .select("bank_deposit")
+        .eq("user_id", userId)
+        .eq("marketplace", "shopify_payments")
+        .gte("period_end", monthStart)
+        .lte("period_end", monthEnd);
+      const derivedSettlementNet = Math.round(((monthSettlements || []).reduce((sum: number, s: any) => sum + (s.bank_deposit || 0), 0)) * 100) / 100;
+
       if (existingVal) {
         await supabase
           .from("marketplace_validation")
@@ -386,7 +396,7 @@ async function syncPayoutsForUser(
             settlement_uploaded: true,
             settlement_uploaded_at: new Date().toISOString(),
             settlement_id: String(payout.id),
-            settlement_net: (existingVal.settlement_net || 0) + netPayout,
+            settlement_net: derivedSettlementNet,
             overall_status: isBeforeBoundary ? "already_recorded" : "saved",
           })
           .eq("id", existingVal.id);
@@ -400,7 +410,7 @@ async function syncPayoutsForUser(
           settlement_uploaded: true,
           settlement_uploaded_at: new Date().toISOString(),
           settlement_id: String(payout.id),
-          settlement_net: netPayout,
+          settlement_net: derivedSettlementNet,
           overall_status: isBeforeBoundary ? "already_recorded" : "saved",
         } as any);
       }

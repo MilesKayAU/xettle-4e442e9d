@@ -953,9 +953,20 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
       const { data: existingVal } = await supabase
         .from('marketplace_validation')
         .select('id, settlement_net')
+        .eq('user_id', userId)
         .eq('marketplace_code', 'amazon_au')
         .eq('period_start', monthStart)
         .maybeSingle();
+
+      // Derive settlement_net from settlements table (never accumulate additively)
+      const { data: monthSettlements } = await supabase
+        .from('settlements')
+        .select('bank_deposit')
+        .eq('user_id', userId)
+        .eq('marketplace', 'amazon_au')
+        .gte('period_end', monthStart)
+        .lte('period_end', monthEnd);
+      const derivedSettlementNet = round2((monthSettlements || []).reduce((sum: number, s: any) => sum + (s.bank_deposit || 0), 0));
 
       if (existingVal) {
         await supabase
@@ -964,7 +975,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
             settlement_uploaded: true,
             settlement_uploaded_at: new Date().toISOString(),
             settlement_id: header.settlementId,
-            settlement_net: (existingVal.settlement_net || 0) + summary.bankDeposit,
+            settlement_net: derivedSettlementNet,
             overall_status: isBeforeBoundary ? 'already_recorded' : 'ready_to_push',
           })
           .eq('id', existingVal.id);
@@ -978,7 +989,7 @@ async function _executeSmartSync(supabase: any, userId: string): Promise<Respons
           settlement_uploaded: true,
           settlement_uploaded_at: new Date().toISOString(),
           settlement_id: header.settlementId,
-          settlement_net: summary.bankDeposit,
+          settlement_net: derivedSettlementNet,
           overall_status: isBeforeBoundary ? 'already_recorded' : 'ready_to_push',
         } as any);
       }
