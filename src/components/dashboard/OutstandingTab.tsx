@@ -170,6 +170,11 @@ interface OutstandingSummary {
     bank_cache_query_error?: boolean;
     lookback_days_effective?: number;
     force_recompute_used?: boolean;
+    mapping_status?: {
+      has_any_mapping?: boolean;
+      missing_marketplaces?: string[];
+      used_default_for?: string[];
+    };
   };
 }
 
