@@ -473,8 +473,8 @@ export default function ActionCentre({
                   )}
                 </ul>
                 <p className="text-[10px] text-muted-foreground italic">
-                  This is normal — marketplace deposits typically arrive within 1–3 business days after payout.
-                </p>
+                   This is normal — marketplace payouts typically arrive within 1–3 business days.
+                 </p>
               </CardContent>
             </Card>
             );
