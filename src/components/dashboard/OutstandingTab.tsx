@@ -374,6 +374,40 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, []);
 
+  // ─── Evidence-triggered backfill for missing settlements ───
+  const triggerBackfill = useCallback(async (missingIds: string[]) => {
+    if (missingIds.length === 0 || backfilling) return;
+    setBackfilling(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const resp = await supabase.functions.invoke('fetch-amazon-settlements', {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'x-action': 'backfill' },
+        body: { missing_settlement_ids: missingIds },
+      });
+
+      if (resp.data?.backfilled > 0) {
+        toast.success(`Found ${resp.data.backfilled} missing settlement${resp.data.backfilled > 1 ? 's' : ''} — refreshing…`);
+        await fetchOutstanding({ runSync: false });
+      } else {
+        toast.info('Settlement reports not found in Amazon — they may be older than 270 days.');
+      }
+    } catch (err: any) {
+      console.error('[backfill] error:', err);
+    } finally {
+      setBackfilling(false);
+    }
+  }, [backfilling, fetchOutstanding]);
+
+  // Auto-trigger backfill when missing settlement IDs detected
+  useEffect(() => {
+    const missingIds = data?.sync_info?.missing_settlement_ids;
+    if (missingIds && missingIds.length > 0 && hasLoaded && !backfilling) {
+      triggerBackfill(missingIds);
+    }
+  }, [data?.sync_info?.missing_settlement_ids, hasLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // On mount, fetch cached data only — sync only when user clicks "Sync with Xero"
   // This prevents Xero API rate-limit death spirals (see RCA: ~43 calls per mount)
   useEffect(() => { fetchOutstanding({ runSync: false }); }, [fetchOutstanding]);
