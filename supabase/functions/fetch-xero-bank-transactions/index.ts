@@ -233,7 +233,17 @@ async function fetchBankTxnsForUser(
       user_id: userId,
       error: 'Token refresh failed',
       skip_reason: null,
+      stopped_reason: 'token_refresh_failed',
+      xero_rate_limited: false,
       cooldown_applied: false,
+      pages_fetched: 0,
+      transactions_seen_total: 0,
+      transactions_seen: 0,
+      transactions_in_range: 0,
+      fetch_from: null,
+      fetch_to: null,
+      invoice_range_days: null,
+      mapped_account_ids_count: 0,
       ...baseDiag,
     };
   }
