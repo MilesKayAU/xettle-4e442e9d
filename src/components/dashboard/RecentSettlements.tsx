@@ -531,22 +531,36 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         </div>
 
         {/* ── Active filter indicator ── */}
-        {activeFilter && (
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              Showing: {activeFilter === 'hidden' ? 'Hidden' : summaryCards.find(c => c.key === activeFilter)?.label}
-            </Badge>
-            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setActiveFilter(null)}>
-              Clear filter
-            </Button>
+        {(activeFilter || pipelineFilter) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {pipelineFilter && (
+              <>
+                <Badge variant="outline" className="text-xs border-primary/30 bg-primary/5">
+                  Pipeline: {getMarketplaceLabel(pipelineFilter.marketplace)} — {pipelineFilter.month}
+                </Badge>
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={onClearPipelineFilter}>
+                  Clear pipeline filter
+                </Button>
+              </>
+            )}
+            {activeFilter && (
+              <>
+                <Badge variant="secondary" className="text-xs">
+                  Showing: {activeFilter === 'hidden' ? 'Hidden' : summaryCards.find(c => c.key === activeFilter)?.label}
+                </Badge>
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setActiveFilter(null)}>
+                  Clear filter
+                </Button>
+              </>
+            )}
           </div>
         )}
 
         {/* ── Settlement table ── */}
-        <div className="overflow-x-auto rounded-lg border border-border/50">
+        <div className="overflow-x-auto rounded-lg border border-border/50 max-h-[600px] overflow-y-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/40 border-b border-border/50">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-muted border-b border-border/50">
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">
                   <TooltipProvider>
                     <Tooltip>
