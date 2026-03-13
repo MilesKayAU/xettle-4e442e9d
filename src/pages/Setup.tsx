@@ -263,6 +263,7 @@ export default function Setup() {
   async function runXeroScan(token: string, userId: string) {
     const ac = new AbortController();
     xeroAbortRef.current = ac;
+    scanStartTimesRef.current.xero = Date.now();
     setXeroStep({ status: 'running', message: 'Scanning Xero invoices, contacts & bank transactions...' });
     const result = await callEdgeFunctionSafe('scan-xero-history', token, {}, { signal: ac.signal });
 
