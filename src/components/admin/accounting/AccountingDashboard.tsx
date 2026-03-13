@@ -1277,6 +1277,11 @@ export default function AccountingDashboard() {
               <InsightsTab />
             </TabsContent>
 
+            {/* GST AUDIT TAB */}
+            <TabsContent value="gst-audit">
+              <GstAuditTab />
+            </TabsContent>
+
             {/* Upgrade nudge dialog */}
             <UpgradeNudgeDialog
               open={showUpgradeNudge}
