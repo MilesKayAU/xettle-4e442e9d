@@ -248,6 +248,7 @@ export default function Dashboard() {
             'xero_scan_completed',
             'amazon_scan_completed',
             'shopify_scan_completed',
+            'payout_account:_default',
           ]);
         const flagMap = new Map(flags?.map(f => [f.key, f.value]) || []);
 
