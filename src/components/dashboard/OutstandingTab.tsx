@@ -1285,13 +1285,41 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           </Button>
         </div>
       )}
-      {data?.sync_info?.mapping_status?.missing_marketplaces && data.sync_info.mapping_status.missing_marketplaces.length > 0 && (
+      {(() => {
+        const missingRails = data?.sync_info?.mapping_status?.missing_rails || data?.sync_info?.mapping_status?.missing_marketplaces || [];
+        return missingRails.length > 0 ? (
+          <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+            <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Missing destination mappings for: <strong>{missingRails.map((m: string) => MARKETPLACE_LABELS[m] || m).join(', ')}</strong>. 
+              Deposit matching is disabled for these rails until mapped.
+            </p>
+          </div>
+        ) : null;
+      })()}
+
+      {/* ─── Bank sync timestamp + cooldown ─── */}
+      {data?.sync_info?.bank_feed_empty && (
         <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-          <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
-          <p className="text-xs text-muted-foreground">
-            Missing payout bank mappings for: <strong>{data.sync_info.mapping_status.missing_marketplaces.map(m => MARKETPLACE_LABELS[m] || m).join(', ')}</strong>. 
-            Deposit matching is disabled for these channels until mapped.
-          </p>
+          <Clock3 className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="flex-1 text-xs text-muted-foreground">
+            <span className="font-medium">Last successful bank sync: </span>
+            {data.sync_info.bank_sync_last_success_at
+              ? (() => {
+                  const mins = Math.round((Date.now() - new Date(data.sync_info.bank_sync_last_success_at!).getTime()) / 60000);
+                  return mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+                })()
+              : 'never'}
+            {data.sync_info.bank_sync_cooldown_seconds_remaining != null && (
+              <span className="ml-2">
+                · Retry in ~{data.sync_info.bank_sync_cooldown_seconds_remaining}s
+              </span>
+            )}
+          </div>
+          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
+            <RefreshCw className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+            {syncingBankFeed ? 'Syncing…' : 'Sync now'}
+          </Button>
         </div>
       )}
 
