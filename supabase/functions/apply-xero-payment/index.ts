@@ -1,9 +1,19 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
+const ALLOWED_ORIGINS = [
+  'https://xettle.app',
+  'https://xettle.lovable.app',
+  'https://id-preview--7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovable.app',
+];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') || '';
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  };
+}
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -47,6 +57,7 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -167,7 +178,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── Apply payment via POST /Payments ───
+    // ─── Apply payment via Xero Payments API ───
+    // NOTE: Xero uses PUT (not POST) for creating Payments — this is correct per Xero API docs.
+    // See: https://developer.xero.com/documentation/api/accounting/payments#put-payments
     const paymentDate = date || new Date().toISOString().split('T')[0];
     const paymentBody = {
       Invoice: { InvoiceID: invoice_id },

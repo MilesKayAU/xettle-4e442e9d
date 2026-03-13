@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const STEP_TIMEOUT_MS = 45_000; // 45 seconds per step
+const STEP_TIMEOUT_MS = 90_000; // 90 seconds per step (increased from 45s to match Xero cooldown)
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -88,7 +88,9 @@ Deno.serve(async (req) => {
 
   // ═══════════════════════════════════════════════════════════════════
   // XERO-FIRST PIPELINE: Discover what exists before fetching marketplace data
+  // 4-minute elapsed guard: edge functions have ~5min max, reserve time for final writes
   // ═══════════════════════════════════════════════════════════════════
+  const MAX_ELAPSED_MS = 4 * 60 * 1000; // 4 minutes
 
   // 1. Xero status audit (discover what's already in Xero)
   console.log("[scheduled-sync] Step 1: Xero status audit (discovery)...");
@@ -243,25 +245,35 @@ Deno.serve(async (req) => {
   // 6. Shopify orders fetch (always 90-day window for marketplace discovery — unchanged)
   // This is handled by fetch-shopify-orders which already uses its own 90-day window
 
-  // 7. Run validation sweep
-  console.log("[scheduled-sync] Step 7: Validation sweep...");
-  results.validation = await callFunction("run-validation-sweep");
-  if (results.validation?.error) stepErrors.push('validation');
-
-  // 8. Auto-push ready settlements to Xero
-  console.log("[scheduled-sync] Step 8: Auto-push to Xero (checking live mode)...");
-  let autoPushLive = false;
-  const { data: liveModeSettings } = await adminClient
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'auto_push_live_mode')
-    .eq('value', 'true');
-  if (liveModeSettings && liveModeSettings.length > 0) {
-    autoPushLive = true;
+  // 7. Run validation sweep (skip if elapsed > 4 minutes)
+  if (Date.now() - startTime < MAX_ELAPSED_MS) {
+    console.log("[scheduled-sync] Step 7: Validation sweep...");
+    results.validation = await callFunction("run-validation-sweep");
+    if (results.validation?.error) stepErrors.push('validation');
+  } else {
+    console.log("[scheduled-sync] Step 7: SKIPPED (elapsed > 4 min)");
+    results.validation = { skipped: true, reason: 'elapsed_timeout' };
   }
-  console.log(`[scheduled-sync] Auto-push mode: ${autoPushLive ? 'LIVE' : 'DRY RUN'}`);
-  results.xero_push = await callFunction("auto-push-xero", {}, { dry_run: !autoPushLive });
-  if (results.xero_push?.error || (results.xero_push?.errors && results.xero_push.errors > 0)) stepErrors.push('xero_push');
+
+  // 8. Auto-push ready settlements to Xero (skip if elapsed > 4 minutes)
+  if (Date.now() - startTime < MAX_ELAPSED_MS) {
+    console.log("[scheduled-sync] Step 8: Auto-push to Xero (checking live mode)...");
+    let autoPushLive = false;
+    const { data: liveModeSettings } = await adminClient
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'auto_push_live_mode')
+      .eq('value', 'true');
+    if (liveModeSettings && liveModeSettings.length > 0) {
+      autoPushLive = true;
+    }
+    console.log(`[scheduled-sync] Auto-push mode: ${autoPushLive ? 'LIVE' : 'DRY RUN'}`);
+    results.xero_push = await callFunction("auto-push-xero", {}, { dry_run: !autoPushLive });
+    if (results.xero_push?.error || (results.xero_push?.errors && results.xero_push.errors > 0)) stepErrors.push('xero_push');
+  } else {
+    console.log("[scheduled-sync] Step 8: SKIPPED (elapsed > 4 min)");
+    results.xero_push = { skipped: true, reason: 'elapsed_timeout' };
+  }
 
   // 9. Match bank deposits against settlements (using local cache)
   console.log("[scheduled-sync] Step 9: Bank deposit matching...");

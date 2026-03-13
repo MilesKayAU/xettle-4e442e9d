@@ -595,7 +595,10 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
 
     if (error) return { success: false, error: error.message };
 
-    // Fire-and-forget: upsert marketplace_validation
+    // Background writes: collect errors into system_events rather than silently dropping
+    const bgErrors: string[] = [];
+
+    // Background: upsert marketplace_validation
     const periodLabel = `${settlement.period_start} → ${settlement.period_end}`;
     supabase.from('marketplace_validation' as any).upsert({
       user_id: user.id,
@@ -608,10 +611,13 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       settlement_net: settlement.net_payout,
       settlement_uploaded_at: new Date().toISOString(),
     } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
-      if (valErr) console.error('[marketplace_validation] upsert error:', valErr);
+      if (valErr) {
+        console.error('[marketplace_validation] upsert error:', valErr);
+        bgErrors.push(`marketplace_validation: ${valErr.message}`);
+      }
     });
 
-    // Fire-and-forget: log system event
+    // Background: log system event
     supabase.from('system_events' as any).insert({
       user_id: user.id,
       event_type: 'settlement_saved',
@@ -624,12 +630,15 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       if (evErr) console.error('[system_events] insert error:', evErr);
     });
 
-    // Fire-and-forget: extract fee observations for intelligence engine
+    // Background: extract fee observations for intelligence engine
     import('./fee-observation-engine').then(({ extractFeeObservations }) => {
-      extractFeeObservations(settlement, user.id).catch(console.error);
+      extractFeeObservations(settlement, user.id).catch((e) => {
+        console.error('[fee-observation-engine] failed:', e);
+        bgErrors.push(`fee_observations: ${e.message || e}`);
+      });
     });
 
-    // Fire-and-forget: auto-reconcile if Shopify is connected
+    // Background: auto-reconcile if Shopify is connected
     import('./marketplace-reconciliation-engine').then(({ autoReconcileSettlement }) => {
       autoReconcileSettlement(
         settlement.marketplace,
@@ -638,8 +647,27 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
         settlement.period_end,
         settlement.net_payout,
         settlement.fees_ex_gst
-      ).catch(console.error);
+      ).catch((e) => {
+        console.error('[auto-reconcile] failed:', e);
+        bgErrors.push(`auto_reconcile: ${e.message || e}`);
+      });
     });
+
+    // Log any accumulated background errors after a short delay
+    setTimeout(() => {
+      if (bgErrors.length > 0) {
+        supabase.from('system_events' as any).insert({
+          user_id: user.id,
+          event_type: 'background_write_failures',
+          marketplace_code: settlement.marketplace,
+          settlement_id: settlement.settlement_id,
+          details: { errors: bgErrors },
+          severity: 'warning',
+        } as any).then(({ error: logErr }) => {
+          if (logErr) console.error('[background_write_failures] log error:', logErr);
+        });
+      }
+    }, 5000);
 
     // Fire-and-forget: calculate and persist profit data
     (async () => {

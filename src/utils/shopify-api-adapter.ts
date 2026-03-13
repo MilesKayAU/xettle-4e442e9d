@@ -100,13 +100,14 @@ export function convertApiOrdersToRows(
       continue;
     }
 
-    // Dedup by order name
-    const orderName = order.name || `#${order.id}`;
-    if (seenOrders.has(orderName)) {
+    // Dedup by stable numeric order ID (not order.name which can collide or be edited)
+    const orderId = String(order.id);
+    if (seenOrders.has(orderId)) {
       duplicateCount++;
       continue;
     }
-    seenOrders.add(orderName);
+    seenOrders.add(orderId);
+    const orderName = order.name || `#${order.id}`;
 
     // Extract payment method (first gateway name)
     const paymentMethod = order.payment_gateway_names?.[0] || order.gateway || '';

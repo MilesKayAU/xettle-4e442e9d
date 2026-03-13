@@ -1,11 +1,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action',
+const ALLOWED_ORIGINS = [
+  'https://xettle.app',
+  'https://xettle.lovable.app',
+  'https://id-preview--7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovable.app',
+];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') || '';
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action',
+  };
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -50,6 +61,21 @@ Deno.serve(async (req) => {
         )
       }
 
+      // SECURITY: Generate unpredictable nonce for CSRF protection instead of using userId as state
+      const nonce = crypto.randomUUID()
+      const stateValue = `${nonce}:${userId}`
+
+      // Store the nonce in app_settings for validation on callback
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+      await supabaseAdmin.from('app_settings').upsert({
+        user_id: userId,
+        key: 'shopify_oauth_state',
+        value: stateValue,
+      }, { onConflict: 'user_id,key' })
+
       const scopes = 'read_fulfillments,read_inventory,read_orders,read_products,read_reports,read_shopify_payments_accounts,read_shopify_payments_payouts'
       const redirectUri = 'https://xettle.app/shopify/callback'
 
@@ -57,7 +83,7 @@ Deno.serve(async (req) => {
         `client_id=${SHOPIFY_CLIENT_ID}&` +
         `scope=${scopes}&` +
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `state=${userId}`
+        `state=${encodeURIComponent(stateValue)}`
 
       console.log('Generated Shopify auth URL for shop:', shop)
 
@@ -108,7 +134,44 @@ Deno.serve(async (req) => {
         )
       }
 
-      console.log('HMAC verified, exchanging code for access token...')
+      console.log('HMAC verified, validating OAuth state nonce...')
+
+      // SECURITY: Validate state nonce to prevent CSRF attacks
+      // State format: "{nonce}:{userId}"
+      const stateParts = state.split(':')
+      if (stateParts.length < 2) {
+        console.error('Invalid state format — expected nonce:userId')
+        return new Response(
+          JSON.stringify({ error: 'Invalid OAuth state format' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const userId = stateParts.slice(1).join(':') // Handle userId containing colons
+
+      // Verify the nonce matches what we stored during initiation
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+      const { data: storedState } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', userId)
+        .eq('key', 'shopify_oauth_state')
+        .maybeSingle()
+
+      if (!storedState?.value || storedState.value !== state) {
+        console.error('OAuth state nonce mismatch — potential CSRF attack')
+        return new Response(
+          JSON.stringify({ error: 'Invalid or expired OAuth state. Please try connecting again.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Clean up the used nonce (one-time use)
+      await supabaseAdmin.from('app_settings').delete().eq('user_id', userId).eq('key', 'shopify_oauth_state')
+
+      console.log('State nonce verified, exchanging code for access token...')
 
       // Exchange code for permanent access token
       const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -132,17 +195,10 @@ Deno.serve(async (req) => {
 
       const tokenData = await tokenResponse.json()
       const { access_token, scope } = tokenData
-      const userId = state
 
       console.log('Token exchange successful, storing in database...')
 
-      // Use service role to write tokens
-      const supabaseAdmin = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      )
-
-      // Upsert shopify_tokens
+      // Upsert shopify_tokens (supabaseAdmin already created above)
       const { error: tokenError } = await supabaseAdmin
         .from('shopify_tokens')
         .upsert({

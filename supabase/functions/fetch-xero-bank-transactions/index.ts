@@ -47,7 +47,11 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
     }),
   });
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => 'unknown');
+    console.error(`[refreshXeroToken] Token refresh failed for user ${userId}: ${res.status} ${errorBody}`);
+    throw new Error(`Xero token refresh failed (${res.status}): ${errorBody}`);
+  }
   const tokens = await res.json();
   const newExpiry = new Date(Date.now() + (tokens.expires_in || 1800) * 1000).toISOString();
 
