@@ -217,6 +217,8 @@ Deno.serve(async (req) => {
     const CACHE_TTL_MINUTES = 30;
     let allInvoices: any[] = [];
     let usingCacheFallback = false;
+    let xeroWasRateLimited = false;
+    let invoiceCacheFetchedAt: string | null = null;
     let invoiceCacheAgeMinutes: number | null = null;
 
     // Check cache freshness
