@@ -161,35 +161,74 @@ async function fetchBankTxnsForUser(
     }
   }
 
-  // ── Cooldown guard: check xero_api_cooldown_until ──
-  const { data: cooldownRow } = await adminSupabase
-    .from('app_settings')
-    .select('value')
-    .eq('user_id', userId)
-    .eq('key', 'xero_api_cooldown_until')
-    .maybeSingle();
+  // ── Cooldown guard (only when we already have valid recent cache) ──
+  const [{ data: cooldownRow }, { count: cachedBankRows }, { data: lastSyncAtRow }, { data: lastSyncRowCountRow }] = await Promise.all([
+    adminSupabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', COOLDOWN_KEY)
+      .maybeSingle(),
+    adminSupabase
+      .from('bank_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId),
+    adminSupabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', LAST_SYNC_AT_KEY)
+      .maybeSingle(),
+    adminSupabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', LAST_SYNC_ROW_COUNT_KEY)
+      .maybeSingle(),
+  ]);
 
-  if (cooldownRow?.value) {
-    const cooldownUntilMs = new Date(cooldownRow.value).getTime();
+  const cachedBankRowsCount = cachedBankRows || 0;
+  const lastSyncTime = lastSyncAtRow?.value || null;
+  const lastSyncRows = Number(lastSyncRowCountRow?.value ?? NaN);
+  const hasLastSyncRows = Number.isFinite(lastSyncRows);
+  const lastSyncProducedZeroRows = hasLastSyncRows && lastSyncRows <= 0;
+  const lastSyncTimeMs = lastSyncTime ? new Date(lastSyncTime).getTime() : NaN;
+  const cacheExpired = !lastSyncTime || isNaN(lastSyncTimeMs)
+    || ((Date.now() - lastSyncTimeMs) / 60000) > BANK_CACHE_TTL_MINUTES;
+  const cooldownUntil = cooldownRow?.value || null;
+
+  const noCachedBankData = cachedBankRowsCount === 0;
+  const bypassCooldown = noCachedBankData || lastSyncProducedZeroRows || cacheExpired;
+
+  if (cooldownUntil) {
+    const cooldownUntilMs = new Date(cooldownUntil).getTime();
     const nowMs = Date.now();
-    if (cooldownUntilMs > nowMs) {
+    if (cooldownUntilMs > nowMs && !bypassCooldown) {
       const secondsRemaining = Math.max(1, Math.ceil((cooldownUntilMs - nowMs) / 1000));
       const clampedRetry = Math.max(5, Math.min(300, secondsRemaining));
-      const { count } = await adminSupabase
-        .from('bank_transactions')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', userId);
-      console.log(`[fetch-bank-txns] Cooldown skip for ${userId}: ${clampedRetry}s remaining, cooldown_until=${cooldownRow.value}`);
+      console.log(`[fetch-bank-txns] Cooldown skip for ${userId}: ${clampedRetry}s remaining, cooldown_until=${cooldownUntil}`);
       return {
         user_id: userId,
         skipped: true,
         skip_reason: 'cooldown',
         retry_after_seconds: clampedRetry,
-        cooldown_until: cooldownRow.value,
-        bank_rows_cached_total: count || 0,
+        cooldown_until: cooldownUntil,
+        cooldown_applied: true,
+        cached_bank_rows: cachedBankRowsCount,
+        last_sync_time: lastSyncTime,
+        bank_rows_cached_total: cachedBankRowsCount,
         has_any_mapping: true,
         lookback_days: fallbackLookbackDays,
       };
+    }
+
+    if (cooldownUntilMs > nowMs && bypassCooldown) {
+      const bypassReasons = [
+        noCachedBankData ? 'no_cached_bank_rows' : null,
+        lastSyncProducedZeroRows ? 'last_sync_zero_rows' : null,
+        cacheExpired ? 'cache_expired' : null,
+      ].filter(Boolean).join(', ');
+      console.log(`[fetch-bank-txns] Cooldown bypassed for ${userId}: ${bypassReasons}`);
     }
   }
 
