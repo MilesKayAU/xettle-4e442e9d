@@ -144,6 +144,39 @@ Deno.serve(async (req) => {
       })
     }
 
+    // ── EARLY EXIT: Check if bank_transactions cache has any rows ──
+    const { count: bankCacheCount } = await adminSupabase
+      .from('bank_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+
+    if (!bankCacheCount || bankCacheCount === 0) {
+      console.log(`[bank-match] Bank cache empty for ${userId} — exiting early. No verification attempted.`)
+      return new Response(JSON.stringify({
+        success: true,
+        matched: 0,
+        fuzzy: 0,
+        unmatched: settlements.length,
+        results: settlements.map((s: any) => ({
+          matched: false,
+          settlement_id: s.settlement_id,
+          marketplace: s.marketplace || 'unknown',
+        })),
+        bank_feed_empty: true,
+        message: 'Bank feed not seeded yet. Run fetch-xero-bank-transactions to populate cache before matching.',
+        diagnostics: {
+          bank_cache_rows: 0,
+          settlements_checked: 0,
+          xero_api_calls_made: 0,
+          action_required: 'Sync bank feed first.',
+        },
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    console.log(`[bank-match] Bank cache has ${bankCacheCount} rows for ${userId} — proceeding with matching`)
+
     const results: MatchResult[] = []
     // Track which settlements got matched in Pass 1 (for Pass 2 batch matching)
     const unmatchedSettlements: any[] = []
