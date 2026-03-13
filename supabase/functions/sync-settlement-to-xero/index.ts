@@ -762,7 +762,7 @@ serve(async (req) => {
         const refInfo = cachedRef && cachedRef !== reference
           ? ` (matched reference: "${cachedRef}")`
           : '';
-        console.log(`[duplicate-guard] Cache hit: settlement ${settlementIdFromRef} already in Xero as ${cachedMatch.xero_invoice_id}`);
+        console.log(`[duplicate-guard] Cache hit: settlement ${settlementId} already in Xero as ${cachedMatch.xero_invoice_id}`);
         throw new Error(
           `An invoice for this settlement already exists in Xero${refInfo} (ID: ${cachedMatch.xero_invoice_id}, Status: ${cachedMatch.xero_status}). ` +
           `Void it in Xero first if you need to re-push.`
