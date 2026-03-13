@@ -1066,6 +1066,10 @@ Deno.serve(async (req) => {
       force_recompute_used: forceRecompute,
       mapping_status: mappingStatus,
       missing_settlement_ids: missingSettlementIds,
+      // Invoice cache diagnostics
+      invoice_cache_age_minutes: invoiceCacheAgeMinutes,
+      from_cache: usingCacheFallback,
+      xero_rate_limited: usingCacheFallback && !cacheIsFresh,
     };
 
     console.log(JSON.stringify({
