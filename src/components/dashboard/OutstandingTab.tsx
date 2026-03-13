@@ -1326,51 +1326,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         );
       })()}
 
-      {/* Bank feed diagnostic banners */}
-      {data?.sync_info?.bank_cache_query_error && data.invoice_count > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          <XCircle className="h-4 w-4 shrink-0" />
-          <span>
-            <strong>Bank feed unavailable</strong> — there was an error reading cached bank transactions. Try syncing again.
-          </span>
-        </div>
-      )}
-      {data?.sync_info?.mapping_status && !data.sync_info.mapping_status.has_any_mapping && data.invoice_count > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
-          <Banknote className="h-4 w-4 shrink-0" />
-          <span className="flex-1">
-            <strong>Payout account setup needed</strong> — select where each marketplace pays you in Xero to match deposits accurately.
-            Invoices and settlements are still visible below.
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => window.dispatchEvent(new CustomEvent('xettle:open-settings'))}
-          >
-            Go to Settings
-          </Button>
-        </div>
-      )}
-      {!data?.sync_info?.bank_cache_query_error && data?.sync_info?.bank_feed_empty && data?.sync_info?.mapping_status?.has_any_mapping !== false && data.invoice_count > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>
-            <strong>No bank feed data found</strong> — bank deposit matching requires bank transactions to be synced from your accounting software.
-            Check your bank feed connection in Settings.
-          </span>
-        </div>
-      )}
-      {!data?.sync_info?.bank_cache_query_error && !data?.sync_info?.bank_feed_empty && data?.sync_info?.bank_cache_stale && data.invoice_count > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
-          <Clock3 className="h-4 w-4 shrink-0" />
-          <span>
-            <strong>Bank feed data is stale</strong> — last refreshed {data.sync_info.bank_cache_last_refreshed_at
-              ? new Date(data.sync_info.bank_cache_last_refreshed_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-              : 'unknown'}. Sync bank transactions to get latest deposit matches.
-          </span>
-        </div>
-      )}
+      {/* Legacy bank feed banners removed — superseded by actionable banners at top of page */}
 
       {/* Filter toggle */}
       {data && nonMarketplaceCount > 0 && (
