@@ -100,9 +100,9 @@ async function fetchBankTxnsForUser(
     return { user_id: userId, error: 'Token refresh failed' };
   }
 
-  // Build where clause: RECEIVE transactions from last 60 days
+  // Build where clause: RECEIVE transactions from lookback period
   const fromDate = new Date();
-  fromDate.setDate(fromDate.getDate() - LOOKBACK_DAYS);
+  fromDate.setDate(fromDate.getDate() - lookbackDays);
 
   // Load payout account mappings to filter by mapped accounts
   const { data: payoutSettings } = await adminSupabase
