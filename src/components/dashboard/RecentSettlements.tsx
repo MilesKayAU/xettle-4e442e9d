@@ -123,9 +123,9 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
     }
     if (xeroStatus === 'AUTHORISED') {
       return (
-        <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-900/30 dark:border-blue-800 text-xs">
-          <CheckCircle2 className="h-3 w-3 mr-1" />
-          In Xero — Awaiting Payment
+        <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
+          <Clock className="h-3 w-3 mr-1" />
+          Posted — Awaiting Deposit
         </Badge>
       );
     }
