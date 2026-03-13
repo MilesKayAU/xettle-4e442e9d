@@ -717,6 +717,7 @@ async function fetchBankTxnsForUser(
         date_range_source: dateRangeSource,
         used_invoice_range: usedInvoiceRange,
         bank_account_ids_used: bankAccountIdsUsed,
+        bank_account_names_used: bankAccountNamesUsed,
         if_modified_since_used: true,
         if_modified_since_value: ifModifiedSinceValue,
         endpoint_used: 'BankTransactions?bankAccountID=... + If-Modified-Since',
