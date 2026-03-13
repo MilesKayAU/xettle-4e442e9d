@@ -893,7 +893,7 @@ export default function Dashboard() {
               <PaymentVerificationSettings />
             </div>
           </ErrorBoundary>
-        )
+        )}
       </div>
 
       {/* AI Assistant floating button */}
