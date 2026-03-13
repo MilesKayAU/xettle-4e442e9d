@@ -562,7 +562,12 @@ serve(async (req) => {
       const ref = inv.Reference || '';
       const isXettleFormat = ref.startsWith('Xettle-');
       const contactName = inv.Contact?.Name || '';
-      const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
+      const detectedMarketplace = detectMarketplaceFromContact(contactName);
+      // Skip unclassified contacts — don't default to amazon_au
+      if (!detectedMarketplace) {
+        console.log(`[step-4] Skipping unclassified contact "${contactName}" for settlement ${settlementId}`);
+        continue;
+      }
       const derivedSt = deriveStatus(inv);
 
       const updatePayload: Record<string, any> = {

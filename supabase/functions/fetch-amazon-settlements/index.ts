@@ -1162,7 +1162,12 @@ serve(async (req) => {
 
     // ─── SMART-SYNC: User-triggered smart sync ──────────────────
     if (action === 'smart-sync') {
-      return await handleSmartSync(supabase, userId);
+      let syncFrom: string | undefined;
+      try {
+        const body = await req.json();
+        syncFrom = body?.sync_from;
+      } catch { /* no body */ }
+      return await handleSmartSync(supabase, userId, syncFrom);
     }
 
     // First, get a fresh access token via the amazon-auth function
