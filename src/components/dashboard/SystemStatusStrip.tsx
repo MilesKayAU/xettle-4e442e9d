@@ -125,11 +125,15 @@ export default function SystemStatusStrip({
   }
 
   if (showAiMapper && onReviewMapping) {
+    // If bank mapping is also missing, elevate to amber (mapping blocks payout verification)
+    const mapperSeverity: 'amber' | 'info' = showBankMappingNudge ? 'amber' : 'info';
     actions.push({
       id: 'ai-mapper',
-      severity: 'info',
-      label: 'Xero accounts auto-mapped — review and confirm',
-      actionLabel: 'Review mapping',
+      severity: mapperSeverity,
+      label: showBankMappingNudge
+        ? 'Account mapping incomplete — blocking payout verification'
+        : 'Xero accounts auto-mapped — review and confirm',
+      actionLabel: showBankMappingNudge ? 'Fix mapping' : 'Review mapping',
       onAction: onReviewMapping,
     });
   }

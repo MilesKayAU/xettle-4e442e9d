@@ -443,14 +443,28 @@ export default function ActionCentre({
             return (
             <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/20">
               <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
-                   <h3 className="font-semibold text-sm">Waiting for Payout</h3>
-                 </div>
-                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Posted, awaiting destination match</p>
-                 <div>
-                   <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting payout</span></p>
-                   <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
+                 <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
+                    <h3 className="font-semibold text-sm">Waiting for Payout</h3>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 -mt-1">Posted, awaiting destination match</p>
+                  <div>
+                    <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting payout</span></p>
+                    <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
+                    {(() => {
+                      const oldestDate = awaitingBank.reduce((oldest, r) => {
+                        const d = new Date(r.period_end);
+                        return !oldest || d < oldest ? d : oldest;
+                      }, null as Date | null);
+                      if (!oldestDate) return null;
+                      const daysWaiting = Math.floor((Date.now() - oldestDate.getTime()) / 86400000);
+                      return (
+                        <p className={cn("text-[10px] mt-0.5", daysWaiting > 7 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground")}>
+                          Oldest waiting: {daysWaiting} day{daysWaiting !== 1 ? 's' : ''}
+                          {daysWaiting > 7 && ' ⚠'}
+                        </p>
+                      );
+                    })()}
                 </div>
                 <ul className="space-y-1">
                   {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
@@ -529,7 +543,16 @@ export default function ActionCentre({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-2 pr-4 text-xs font-medium text-muted-foreground w-40">Marketplace</th>
+                   <th className="text-left py-2 pr-4 text-xs font-medium text-muted-foreground w-40">
+                     <TooltipProvider>
+                       <Tooltip>
+                         <TooltipTrigger asChild>
+                           <span className="cursor-help border-b border-dotted border-muted-foreground/40">Channel</span>
+                         </TooltipTrigger>
+                         <TooltipContent className="text-xs max-w-[200px]">Payout source — e.g. Amazon AU, Shopify Payments, PayPal</TooltipContent>
+                       </Tooltip>
+                     </TooltipProvider>
+                   </th>
                   {timelineData.months.map(m => (
                     <th key={m} className="text-center py-2 px-3 text-xs font-medium text-muted-foreground">
                       {formatMonthLabel(m)}
@@ -634,22 +657,37 @@ export default function ActionCentre({
           <CardContent className="pt-0">
             <div className="space-y-2">
               {groupActivityEvents(events).map((item, idx) => {
-                const cfg = EVENT_ICONS[item.event_type] || { icon: <Clock className="h-3.5 w-3.5" />, color: 'text-muted-foreground' };
-                return (
-                  <div key={idx} className="flex items-center gap-2.5 text-xs">
-                    <span className={cfg.color}>{cfg.icon}</span>
-                    <span className="text-foreground flex-1">
-                      {item.label}
-                      {item.count > 1 && (
-                        <span className="text-muted-foreground ml-1">({item.count} periods)</span>
-                      )}
-                    </span>
-                    <span className="text-muted-foreground flex-shrink-0">
-                      {formatTimeAgo(new Date(item.created_at))}
-                    </span>
-                  </div>
-                );
-              })}
+                 const cfg = EVENT_ICONS[item.event_type] || { icon: <Clock className="h-3.5 w-3.5" />, color: 'text-muted-foreground' };
+                 const isActionable = item.event_type === 'bank_match_failed' || item.event_type === 'xero_push_failed' || item.event_type === 'reconciliation_mismatch';
+                 return (
+                   <div key={idx} className="flex items-center gap-2.5 text-xs">
+                     <span className={cfg.color}>{cfg.icon}</span>
+                     <span className="text-foreground flex-1">
+                       {item.label}
+                       {item.count > 1 && (
+                         <span className="text-muted-foreground ml-1">({item.count} periods)</span>
+                       )}
+                     </span>
+                     {isActionable && (
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         className="h-6 px-2 text-[10px] text-primary hover:text-primary"
+                         onClick={() => {
+                           if (item.event_type === 'bank_match_failed' && onSwitchToReconciliation) onSwitchToReconciliation();
+                           else if (item.event_type === 'xero_push_failed') onSwitchToSettlements();
+                           else if (item.event_type === 'reconciliation_mismatch' && onSwitchToReconciliation) onSwitchToReconciliation();
+                         }}
+                       >
+                         {item.event_type === 'bank_match_failed' ? 'Sync feed →' : item.event_type === 'xero_push_failed' ? 'Retry →' : 'View →'}
+                       </Button>
+                     )}
+                     <span className="text-muted-foreground flex-shrink-0">
+                       {formatTimeAgo(new Date(item.created_at))}
+                     </span>
+                   </div>
+                 );
+               })}
             </div>
           </CardContent>
         </Card>
