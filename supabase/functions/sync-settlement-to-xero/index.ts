@@ -519,14 +519,23 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { reference, description, date, dueDate, lineItems, country, contactName, netAmount } = body;
+    const { description, date, dueDate, lineItems, country, contactName, netAmount } = body;
+
+    // ─── SERVER-SIDE REFERENCE GENERATION ─────────────────────────────
+    // Rule: Reference MUST be generated server-side from settlementId.
+    // Client-provided reference is ignored when settlementId is present.
+    const settlementId = body.settlementId || body.settlementData?.settlement_id;
+    if (!settlementId) {
+      throw new Error('Missing settlementId — reference is generated server-side and requires a settlement identifier');
+    }
+    const splitSuffix = body.splitPart ? `-P${body.splitPart}` : '';
+    const reference = `Xettle-${settlementId}${splitSuffix}`;
 
     // Determine if this is a negative (fee-only) settlement → create a Bill (ACCPAY)
     const isNegativeSettlement = typeof netAmount === 'number' && netAmount < 0;
     const invoiceType = isNegativeSettlement ? "ACCPAY" : "ACCREC";
 
-    console.log('Create request:', { userId, reference, date, country, contactName, lineItemCount: lineItems?.length, netAmount, invoiceType });
-    if (!reference) throw new Error('Missing reference');
+    console.log('Create request:', { userId, settlementId, reference, date, country, contactName, lineItemCount: lineItems?.length, netAmount, invoiceType });
     if (!date) throw new Error('Missing date');
     if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
 
