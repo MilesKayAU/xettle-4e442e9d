@@ -500,7 +500,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                           </div>
                         )}
                         <div className={`border-b border-border last:border-b-0 transition-colors ${
-                          isAlreadyRecorded ? 'opacity-40 bg-muted/20' :
+                          isPreBoundary ? 'opacity-40 bg-muted/20' :
                           isSynced ? 'bg-emerald-50/30 dark:bg-emerald-950/10' :
                           isPushFailed ? 'bg-red-50/30 dark:bg-red-950/10' :
                           'hover:bg-muted/20'
