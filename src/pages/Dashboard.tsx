@@ -638,19 +638,21 @@ export default function Dashboard() {
 
               {/* Bank account mapping nudge */}
               {showBankMappingNudge && xeroConnected && (
-                <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-3 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <Settings className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm font-medium text-foreground">
-                      Map your Xero bank accounts to enable deposit matching
-                    </span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-3 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <Settings className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-medium text-foreground">
+                        Map your Xero bank accounts to enable deposit matching
+                      </span>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setShowBankMapper(!showBankMapper)}>
+                      {showBankMapper ? 'Hide' : 'Map bank accounts'}
+                    </Button>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => {
-                    switchView('settlements');
-                    setTimeout(() => window.dispatchEvent(new Event('xettle:open-settings')), 100);
-                  }}>
-                    Map bank accounts
-                  </Button>
+                  {showBankMapper && (
+                    <PayoutBankAccountMapper />
+                  )}
                 </div>
               )}
 
