@@ -709,8 +709,8 @@ Deno.serve(async (req) => {
         .from('bank_transactions')
         .select('*')
         .eq('user_id', userId)
-        .eq('transaction_type', 'RECEIVE')
-        .gte('date', bankLookbackStr);
+        .gte('date', bankLookbackStr)
+        .order('date', { ascending: false });
       cachedBankTxns = bankQuery.data;
       bankCacheError = bankQuery.error;
     }
