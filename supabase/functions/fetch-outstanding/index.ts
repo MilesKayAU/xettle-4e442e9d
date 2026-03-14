@@ -933,7 +933,6 @@ Deno.serve(async (req) => {
       gstOnIncome: number;
       gstOnExpenses: number;
       bankDeposit: number;
-      gstApplied: number;
     } {
       // If this is a split sub-group with a known part, use split data as anchor
       if (settlement.is_split_month && part !== null) {
@@ -953,14 +952,12 @@ Deno.serve(async (req) => {
             gstOnIncome: Math.abs(Number(splitData?.gstOnIncome ?? 0)),
             gstOnExpenses: Math.abs(Number(splitData?.gstOnExpenses ?? 0)),
             bankDeposit: Math.abs(settlement.bank_deposit ?? 0),
-            gstApplied: 0, // grossTotal already includes GST for split parts
           };
         }
         // Split data missing/invalid — fall through to parent settlement anchor
       }
       // Non-split or fallback: use parent settlement values with payout anchor
       const basis = getInvoiceBasisNet(settlement);
-      const gstOnInc = Math.abs(settlement.gst_on_income ?? 0);
       return {
         net: basis.anchor,
         method: basis.method,
@@ -969,10 +966,9 @@ Deno.serve(async (req) => {
           + Math.abs(settlement.storage_fees ?? 0)
           + Math.abs(settlement.other_fees ?? 0),
         refunds: Math.abs(settlement.refunds ?? 0),
-        gstOnIncome: gstOnInc,
+        gstOnIncome: Math.abs(settlement.gst_on_income ?? 0),
         gstOnExpenses: Math.abs(settlement.gst_on_expenses ?? 0),
         bankDeposit: Math.abs(settlement.bank_deposit ?? settlement.net_ex_gst ?? 0),
-        gstApplied: basis.method === 'bank_deposit_plus_gst' ? gstOnInc : 0,
       };
     }
 
