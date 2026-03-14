@@ -1142,9 +1142,14 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
    const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'pending_enrichment') return 'Loading matches…';
+    if (row.match_status === 'settlement_matched') {
+      const conf = row.settlement_group_confidence === 'high' ? '' : ' (approx)';
+      return `Settlement matched${conf}`;
+    }
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
+    if (row.match_status === 'awaiting_confirmation') return 'Ready to confirm';
     if (row.match_status === 'suggestion_high') return 'Likely match found';
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
     if (row.match_status === 'unsupported_marketplace') return `${MARKETPLACE_LABELS[row.marketplace] || row.marketplace} not connected`;
@@ -1155,10 +1160,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
     }
-    if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      return 'Awaiting deposit';
-    }
-    if (row.match_status === 'no_bank_deposit') return 'No deposit found';
     return 'No settlement';
   };
 
