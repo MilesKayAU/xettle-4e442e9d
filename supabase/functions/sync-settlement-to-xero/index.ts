@@ -902,6 +902,23 @@ serve(async (req) => {
     }
 
     // Build the payload — ACCPAY (Bill) for negative, ACCREC (Invoice) for positive
+    // Line items are ALWAYS server-rebuilt from settlementData (no client fallback).
+    // For negative settlements, if server rebuild produces no lines (all zeros),
+    // create a single summary line for the net amount.
+    let finalLineItems: InvoiceLineItem[];
+    if (isNegativeSettlement && lineItems.length === 0) {
+      // Edge case: negative settlement where all individual fields are zero but net is negative
+      finalLineItems = [{
+        Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
+        AccountCode: getCode('Other Fees'),
+        TaxType: "INPUT",
+        UnitAmount: round2(Math.abs(netAmount!)),
+        Quantity: 1,
+      }];
+    } else {
+      finalLineItems = lineItems;
+    }
+
     const invoiceData: Record<string, any> = {
       Type: invoiceType,
       Contact: { Name: contactName || "Amazon.com.au" },
@@ -911,23 +928,14 @@ serve(async (req) => {
       Status: "DRAFT",
       LineAmountTypes: "Exclusive",
       Reference: reference,
-      LineItems: isNegativeSettlement
-        ? [{
-            Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
-            AccountCode: getCode('Other Fees'),
-            TaxType: "INPUT",
-            UnitAmount: round2(Math.abs(netAmount!)),
-            Quantity: 1,
-            ...(trackingArray ? { Tracking: trackingArray } : {}),
-          }]
-        : lineItems.map(item => ({
-            Description: item.Description,
-            AccountCode: item.AccountCode,
-            TaxType: item.TaxType,
-            UnitAmount: round2(item.UnitAmount),
-            Quantity: item.Quantity || 1,
-            ...(trackingArray ? { Tracking: trackingArray } : {}),
-          }))
+      LineItems: finalLineItems.map(item => ({
+        Description: item.Description,
+        AccountCode: item.AccountCode,
+        TaxType: item.TaxType,
+        UnitAmount: round2(item.UnitAmount),
+        Quantity: item.Quantity || 1,
+        ...(trackingArray ? { Tracking: trackingArray } : {}),
+      })),
     };
 
     if (description) {
