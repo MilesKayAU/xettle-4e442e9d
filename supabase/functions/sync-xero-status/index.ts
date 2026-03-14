@@ -356,12 +356,25 @@ serve(async (req) => {
 
     // ════════════════════════════════════════════════════════════════════
     // STEP 2: Batch-verify status of all cached invoices (1-2 API calls)
+    // GOVERNOR: Check cooldown before batch verify (P2 priority)
     // ════════════════════════════════════════════════════════════════════
     let cacheVerified = 0;
     let cacheStatusChanged = 0;
+    let step2Skipped = false;
     if (cachedInvoiceIds.length > 0) {
-      const freshStatuses = await batchVerifyInvoiceStatuses(token, cachedInvoiceIds);
-      console.log(`[step-2] Batch-verified ${freshStatuses.size}/${cachedInvoiceIds.length} invoices`);
+      // Check shared cooldown first
+      const { data: cdRow } = await supabase
+        .from('app_settings').select('value')
+        .eq('user_id', userId).eq('key', 'xero_api_cooldown_until')
+        .maybeSingle();
+      const cdActive = cdRow?.value && new Date(cdRow.value).getTime() > Date.now();
+
+      if (cdActive) {
+        console.log(`[step-2] GOVERNOR: cooldown active — skipping batch verify to preserve quota for bank sync`);
+        step2Skipped = true;
+      } else {
+        const freshStatuses = await batchVerifyInvoiceStatuses(token, cachedInvoiceIds, supabase, userId);
+        console.log(`[step-2] Batch-verified ${freshStatuses.size}/${cachedInvoiceIds.length} invoices`);
 
       for (const [settlementId, cached] of cacheBySettlement.entries()) {
         if (!cached.xero_invoice_id) continue;
