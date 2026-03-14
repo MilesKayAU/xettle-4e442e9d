@@ -467,18 +467,10 @@ serve(async (req) => {
 
         let outstandingInvoices: any[] = [];
         try {
-          outstandingInvoices = await queryXeroInvoicesPaginated(token, 'Type=="ACCREC"', modifiedAfter);
+          outstandingInvoices = await queryXeroInvoicesPaginated(token, 'Type=="ACCREC"', modifiedAfter, supabase, userId);
         } catch (e: any) {
-          // If rate limited, set 90-second cooldown and continue with cached data
-          if (e?.message?.includes('429') || e?.status === 429) {
-            console.warn('[step-3b] Xero 429 detected, setting 90s cooldown');
-            const cooldownExpiry = new Date(Date.now() + 90_000).toISOString();
-            await supabase.from('app_settings').upsert({
-              user_id: userId,
-              key: 'xero_api_cooldown_until',
-              value: cooldownExpiry,
-            }, { onConflict: 'user_id,key' });
-          }
+          // queryXeroInvoicesPaginated now handles 429 internally (sets cooldown, 0 retries)
+          console.warn('[step-3b] Invoice query threw:', e?.message);
         }
 
         // Also set cooldown if we got 0 invoices (likely silent 429/failure)
