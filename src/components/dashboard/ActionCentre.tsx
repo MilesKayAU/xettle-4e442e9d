@@ -279,12 +279,19 @@ export default function ActionCentre({
     } as ValidationRow));
   }, [readySettlements]);
   // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
-  const awaitingBank = normalisedRows.filter(r =>
+  // Rail payout mode: rails with bank_match_required=false skip "waiting for payout"
+  const postedRows = normalisedRows.filter(r =>
     r.settlement_id &&
     r.overall_status !== 'already_recorded' &&
     (r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || (r.xero_pushed && !r.bank_matched))
   );
-  const complete = normalisedRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched');
+  const awaitingBank = postedRows.filter(r => isBankMatchRequired(r.marketplace_code));
+  // Settlement-confirmed rails (no bank match needed) are treated as complete once posted
+  const settlementConfirmed = postedRows.filter(r => !isBankMatchRequired(r.marketplace_code));
+  const complete = [
+    ...normalisedRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched'),
+    ...settlementConfirmed,
+  ];
   const gapDetected = normalisedRows.filter(r => r.overall_status === 'gap_detected');
   const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && (complete.length > 0);
 
