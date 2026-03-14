@@ -77,6 +77,8 @@ interface BankCandidate {
   confidence: 'high' | 'medium' | 'low';
   score: number;
   match_type: string;
+  reasons?: string[];
+  amount_diff?: number;
 }
 
 interface BankTxn {
