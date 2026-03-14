@@ -610,6 +610,8 @@ async function fetchBankTxnsForUser(
             xero_rate_limited: true,
             skip_reason: null,
             cooldown_applied: false,
+            cooldown_key_used: COOLDOWN_KEY,
+            cooldown_active: false,
             live_xero_call_attempted: true,
             live_xero_429_received: true,
             recent_success_guard_applied: false,
@@ -620,6 +622,8 @@ async function fetchBankTxnsForUser(
             synced_row_count: totalUpserted,
             partial: totalUpserted > 0,
             stopped_reason: 'rate_limited',
+            accounts_checked: accountIds.length,
+            mapped_accounts: mappedAccountIds.size,
             pages_fetched: totalPagesFetched,
             transactions_seen_total: totalTransactionsSeen,
             transactions_seen: totalTransactionsSeen,
@@ -639,6 +643,7 @@ async function fetchBankTxnsForUser(
             if_modified_since_value: null,
             cached_bank_rows_total: cachedBankRowsTotal,
             last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
+            ...buildRequestAudit(),
           };
         }
 
