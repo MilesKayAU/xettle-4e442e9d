@@ -1078,6 +1078,25 @@ Deno.serve(async (req) => {
       };
     }
 
+    // ─── Load settlement_components for deterministic anchors ───
+    const componentSettlementIds = [...new Set([...finalGroups.values()].map(g => g.settlementId))];
+    const componentsMap = new Map<string, any>();
+    if (componentSettlementIds.length > 0) {
+      // Batch fetch in chunks of 100
+      for (let i = 0; i < componentSettlementIds.length; i += 100) {
+        const chunk = componentSettlementIds.slice(i, i + 100);
+        const { data: compRows } = await supabase
+          .from('settlement_components')
+          .select('settlement_id, commerce_gross_total, payout_total, payout_gst_inclusive, reconciled')
+          .eq('user_id', userId)
+          .in('settlement_id', chunk);
+        for (const row of (compRows || [])) {
+          componentsMap.set(row.settlement_id, row);
+        }
+      }
+    }
+    console.log(`[fetch-outstanding] Loaded ${componentsMap.size} settlement_components for ${componentSettlementIds.length} settlements`);
+
     // Second pass: compare each group/sub-group to its anchor
     // Now with invoice_model detection for dual-anchor support
     const settlementGroupResults = new Map<string, SettlementGroupResult>();
