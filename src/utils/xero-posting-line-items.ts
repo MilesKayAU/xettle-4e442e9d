@@ -244,7 +244,10 @@ export function toLineItemPreviews(lineItems: XeroPostingLineItem[]): LineItemPr
  * Build a multi-row audit CSV from a settlement and its line items.
  * One row per category + a totals row.
  * Columns: settlement_id, period_start, period_end, marketplace, category,
- *          amount_ex_gst, gst_amount, amount_inc_gst, account_code, tax_type
+ *          amount_ex_gst, gst_estimate, amount_inc_gst_estimate, account_code, tax_type
+ *
+ * NOTE: GST columns are ESTIMATES (10% flat rate). Refer to settlement source
+ * data for authoritative GST figures.
  */
 export function buildAuditCsvContent(
   settlement: SettlementForPosting,
@@ -252,7 +255,7 @@ export function buildAuditCsvContent(
 ): string {
   const headers = [
     'settlement_id', 'period_start', 'period_end', 'marketplace',
-    'category', 'amount_ex_gst', 'gst_amount', 'amount_inc_gst',
+    'category', 'amount_ex_gst', 'gst_estimate', 'amount_inc_gst_estimate',
     'account_code', 'tax_type',
   ];
 
@@ -261,7 +264,10 @@ export function buildAuditCsvContent(
   const pe = settlement.period_end || '';
   const mp = settlement.marketplace || '';
 
-  const rows: string[] = [headers.join(',')];
+  const rows: string[] = [
+    '# GST values are estimates (10% flat rate). Refer to settlement source for authoritative GST.',
+    headers.join(','),
+  ];
 
   let totalExGst = 0;
   let totalGst = 0;
