@@ -156,7 +156,7 @@ async function attachSettlementToXero(
     }
 
     console.log('CSV attached successfully to invoice:', xeroInvoiceId);
-    return { success: true };
+    return { success: true, csvHash: csvHashValue };
   } catch (err: any) {
     console.error('Attachment failed (non-fatal):', err.message);
     return { success: false, error: err.message };
