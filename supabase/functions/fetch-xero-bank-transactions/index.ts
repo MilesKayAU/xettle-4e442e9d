@@ -790,7 +790,7 @@ async function fetchBankTxnsForUser(
           description: txn.LineItems?.[0]?.Description || null,
           reference: txn.Reference || null,
           contact_name: txn.Contact?.Name || null,
-          transaction_type: 'RECEIVE',
+          transaction_type: txnType,
           fetched_at: new Date().toISOString(),
         });
       }
