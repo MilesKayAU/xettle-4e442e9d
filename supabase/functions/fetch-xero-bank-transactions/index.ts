@@ -142,7 +142,16 @@ async function fetchBankTxnsForUser(
   // ══════════════════════════════════════════════════════════════
   // STEP 1 — Gather facts for guard evaluation (single parallel batch)
   // ══════════════════════════════════════════════════════════════
-  const [{ data: cooldownRow }, { count: cachedBankRowsRaw }, { data: lastSuccessRow }] = await Promise.all([
+  const DEST_PREFIX = 'payout_destination:';
+  const LEGACY_PREFIX = 'payout_account:';
+
+  const [
+    { data: cooldownRow },
+    { count: cachedBankRowsRaw },
+    { data: lastSuccessRow },
+    destResp,
+    legacyResp,
+  ] = await Promise.all([
     adminSupabase
       .from('app_settings')
       .select('value')
@@ -159,7 +168,35 @@ async function fetchBankTxnsForUser(
       .eq('user_id', userId)
       .eq('key', LAST_SUCCESS_KEY)
       .maybeSingle(),
+    adminSupabase
+      .from('app_settings')
+      .select('key, value')
+      .eq('user_id', userId)
+      .like('key', `${DEST_PREFIX}%`),
+    adminSupabase
+      .from('app_settings')
+      .select('key, value')
+      .eq('user_id', userId)
+      .like('key', `${LEGACY_PREFIX}%`),
   ]);
+
+  const mappedAccountIds = new Set<string>();
+  const destRows = destResp.data || [];
+  const legacyRows = legacyResp.data || [];
+
+  // Prefer new keys
+  if (destRows.length > 0) {
+    for (const row of destRows) {
+      if (row.value) mappedAccountIds.add(row.value);
+    }
+  } else {
+    // Fallback to legacy
+    for (const row of legacyRows) {
+      if (row.value) mappedAccountIds.add(row.value);
+    }
+  }
+
+  const hasAnyMapping = destRows.length > 0 || legacyRows.length > 0;
 
   const cachedBankRowsTotal = cachedBankRowsRaw ?? 0;
   const lastSuccessfulBankSyncAt: string | null = lastSuccessRow?.value ?? null;
@@ -171,6 +208,8 @@ async function fetchBankTxnsForUser(
     cached_bank_rows_total: cachedBankRowsTotal,
     last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
     cooldown_until: cooldownUntilStored,
+    mapped_account_ids_count: mappedAccountIds.size,
+    has_any_mapping: hasAnyMapping,
   };
 
   // ══════════════════════════════════════════════════════════════
