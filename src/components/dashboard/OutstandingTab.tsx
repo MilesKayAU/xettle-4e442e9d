@@ -1087,7 +1087,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const handleBulkApply = useCallback(async () => {
     if (!data) return;
     const balancedSelected = data.rows.filter(
-      r => selected.has(r.xero_invoice_id) && (r.match_status === 'balanced' || r.match_status === 'confirmed')
+      r => selected.has(r.xero_invoice_id) && (r.match_status === 'balanced' || r.match_status === 'confirmed' || r.match_status === 'settlement_matched')
     );
     if (balancedSelected.length === 0) {
       toast.error('No balanced invoices selected');
