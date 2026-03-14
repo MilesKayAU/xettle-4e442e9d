@@ -126,7 +126,13 @@ export default function ActionCentre({
   const [readySettlements, setReadySettlements] = useState<Array<{
     id: string; marketplace: string | null; settlement_id: string;
     period_start: string; period_end: string; bank_deposit: number | null;
-    status: string | null;
+    status: string | null; posting_state: string | null;
+  }>>([]);
+  const [autoPostRails, setAutoPostRails] = useState<Set<string>>(new Set());
+  const [autoPostFailed, setAutoPostFailed] = useState<Array<{
+    id: string; marketplace: string | null; settlement_id: string;
+    period_start: string; period_end: string; bank_deposit: number | null;
+    posting_error: string | null;
   }>>([]);
   const [ingestedSettlements, setIngestedSettlements] = useState<Array<{
     id: string; marketplace: string | null; settlement_id: string;
@@ -141,7 +147,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -150,7 +156,7 @@ export default function ActionCentre({
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('settlements')
-          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status')
+          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status, posting_state')
           .eq('status', 'ready_to_push')
           .eq('is_hidden', false)
           .eq('is_pre_boundary', false)
@@ -163,6 +169,14 @@ export default function ActionCentre({
           .eq('is_hidden', false)
           .eq('is_pre_boundary', false)
           .is('duplicate_of_settlement_id', null)
+          .order('period_start', { ascending: false }),
+        supabase.from('rail_posting_settings')
+          .select('rail')
+          .eq('posting_mode', 'auto'),
+        supabase.from('settlements')
+          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, posting_error')
+          .eq('posting_state', 'failed')
+          .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
       ]);
 
@@ -188,6 +202,12 @@ export default function ActionCentre({
       }
       if (ingestedRes.data) {
         setIngestedSettlements(ingestedRes.data as any);
+      }
+      if (autoPostRailsRes.data) {
+        setAutoPostRails(new Set(autoPostRailsRes.data.map((r: any) => r.rail)));
+      }
+      if (autoPostFailedRes.data) {
+        setAutoPostFailed(autoPostFailedRes.data as any);
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
@@ -262,24 +282,34 @@ export default function ActionCentre({
     return periodEnd < now; // only show if period already ended
   });
   // Settlement-native "Send to Xero" — one row per real payout from settlements table
+  // Filter out settlements on auto-post rails (they post automatically)
   const readyToPush = useMemo(() => {
-    return readySettlements.map(s => ({
-      id: s.id,
-      marketplace_code: MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown',
-      period_label: `${s.period_start} to ${s.period_end}`,
-      period_start: s.period_start,
-      period_end: s.period_end,
-      orders_found: false,
-      settlement_uploaded: true,
-      settlement_id: s.settlement_id,
-      settlement_net: s.bank_deposit || 0,
-      reconciliation_status: 'matched',
-      xero_pushed: false,
-      bank_matched: false,
-      overall_status: 'ready_to_push',
-      last_checked_at: null,
-    } as ValidationRow));
-  }, [readySettlements]);
+    return readySettlements
+      .filter(s => {
+        const code = MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown';
+        // Exclude auto-post rails from manual "Send to Xero" card
+        if (autoPostRails.has(code) || autoPostRails.has(s.marketplace || '')) return false;
+        // Exclude settlements already queued/posting
+        if (s.posting_state === 'posting' || s.posting_state === 'posted' || s.posting_state === 'queued') return false;
+        return true;
+      })
+      .map(s => ({
+        id: s.id,
+        marketplace_code: MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown',
+        period_label: `${s.period_start} to ${s.period_end}`,
+        period_start: s.period_start,
+        period_end: s.period_end,
+        orders_found: false,
+        settlement_uploaded: true,
+        settlement_id: s.settlement_id,
+        settlement_net: s.bank_deposit || 0,
+        reconciliation_status: 'matched',
+        xero_pushed: false,
+        bank_matched: false,
+        overall_status: 'ready_to_push',
+        last_checked_at: null,
+      } as ValidationRow));
+  }, [readySettlements, autoPostRails]);
   // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
   // Rail payout mode: rails with bank_match_required=false skip "waiting for payout"
   const postedRows = normalisedRows.filter(r =>
@@ -508,6 +538,35 @@ export default function ActionCentre({
                 <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
                   <Search className="h-3 w-3" /> Review in Settlement Matching
                 </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Card 2c — Auto-post failed */}
+          {autoPostFailed.length > 0 && (
+            <Card className="border-destructive/30 bg-destructive/5">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <h3 className="font-semibold text-sm">Auto-post Failed</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {autoPostFailed.length} settlement{autoPostFailed.length > 1 ? 's' : ''} failed to auto-post.
+                </p>
+                <ul className="space-y-1">
+                  {autoPostFailed.slice(0, 3).map(s => (
+                    <li key={s.id} className="text-xs flex items-center gap-1.5">
+                      <span className="text-destructive">•</span>
+                      {MARKETPLACE_LABELS[s.marketplace || ''] || s.marketplace} — {formatPeriodShort(s.period_start, s.period_end)}
+                    </li>
+                  ))}
+                  {autoPostFailed.length > 3 && (
+                    <li className="text-xs text-muted-foreground">+ {autoPostFailed.length - 3} more</li>
+                  )}
+                </ul>
+                <p className="text-[10px] text-muted-foreground">
+                  Review and retry in Settings → Rail Posting Mode
+                </p>
               </CardContent>
             </Card>
           )}

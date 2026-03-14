@@ -33,6 +33,7 @@ import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
 import DestinationAccountMapper from '@/components/settings/DestinationAccountMapper';
 import AccountMapperCard from '@/components/settings/AccountMapperCard';
 import PaymentVerificationSettings from '@/components/settings/PaymentVerificationSettings';
+import RailPostingSettings from '@/components/settings/RailPostingSettings';
 import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
@@ -922,6 +923,7 @@ export default function Dashboard() {
               </div>
               <DestinationAccountMapper />
               <AccountMapperCard />
+              <RailPostingSettings />
               <AccountingBoundarySettings
                 xeroConnected={xeroConnected}
                 onConnectXero={() => {
