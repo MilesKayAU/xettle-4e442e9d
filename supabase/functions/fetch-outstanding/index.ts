@@ -1574,12 +1574,14 @@ Deno.serve(async (req) => {
       // Anchor basis diagnostics (bounded)
       anchor_basis_summary: (() => {
         let grossCount = 0, netCount = 0, splitCount = 0;
-        const mismatches: { settlement_id: string; basis: string; sum: number; anchor: number; diff: number; components: string[] }[] = [];
+        const mismatches: { settlement_id: string; basis: string; sum: number; anchor: number; diff: number; components: string[]; rail_tax_model?: RailTaxModel }[] = [];
         for (const [, result] of settlementGroupResults) {
           if (result.anchor_basis === 'gross') grossCount++;
           else if (result.anchor_basis === 'split_part_gross') splitCount++;
           else netCount++;
           if (!result.matched && mismatches.length < 10) {
+            const settlement = settlementMap.get(result.settlement_id);
+            const marketplace = (settlement?.marketplace || '').toLowerCase();
             mismatches.push({
               settlement_id: result.settlement_id,
               basis: result.anchor_basis || 'unknown',
@@ -1587,6 +1589,7 @@ Deno.serve(async (req) => {
               anchor: result.settlement_net,
               diff: result.difference,
               components: result.anchor_components_used || [],
+              rail_tax_model: RAIL_TAX_MODELS[marketplace] || DEFAULT_TAX_MODEL,
             });
           }
         }
