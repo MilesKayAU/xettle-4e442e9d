@@ -359,16 +359,21 @@ async function processSettlement(
   // 10-CATEGORY BREAKDOWN — Canonical source: src/utils/xero-posting-line-items.ts
   // If you change this list, bump CANONICAL_VERSION above.
   //
-  //   Sales (Principal)     sales_principal        OUTPUT        as_is
-  //   Shipping Revenue      sales_shipping         OUTPUT        as_is
-  //   Promotional Discounts promotional_discounts  OUTPUT        as_is
-  //   Refunds               refunds                OUTPUT        as_is
-  //   Reimbursements        reimbursements         BASEXCLUDED   as_is
-  //   Seller Fees           seller_fees            INPUT         negate_abs
-  //   FBA Fees              fba_fees               INPUT         negate_abs
-  //   Storage Fees          storage_fees           INPUT         negate_abs
-  //   Advertising           advertising_costs      INPUT         negate_abs
-  //   Other Fees            other_fees             INPUT         negate_abs
+  // SIGN CONVENTION (Option A — "Use Stored Sign"):
+  // All DB fields are stored with their accounting sign.
+  // The builder passes values through WITHOUT sign manipulation.
+  // No abs(), no -abs(). DB value IS the posted value.
+  //
+  //   Sales (Principal)     sales_principal        OUTPUT        stored sign (+)
+  //   Shipping Revenue      sales_shipping         OUTPUT        stored sign (+)
+  //   Promotional Discounts promotional_discounts  OUTPUT        stored sign (-)
+  //   Refunds               refunds                OUTPUT        stored sign (-)
+  //   Reimbursements        reimbursements         BASEXCLUDED   stored sign (+)
+  //   Seller Fees           seller_fees            INPUT         stored sign (-)
+  //   FBA Fees              fba_fees               INPUT         stored sign (-)
+  //   Storage Fees          storage_fees           INPUT         stored sign (-)
+  //   Advertising           advertising_costs      INPUT         stored sign (-)
+  //   Other Fees            other_fees             INPUT         stored sign (-)
   // ══════════════════════════════════════════════════════════════
   const categoryAmounts: Record<string, number> = {
     'Sales (Principal)': round2(settlement.sales_principal || 0),
@@ -376,11 +381,11 @@ async function processSettlement(
     'Promotional Discounts': round2(settlement.promotional_discounts || 0),
     'Refunds': round2(settlement.refunds || 0),
     'Reimbursements': round2(settlement.reimbursements || 0),
-    'Seller Fees': -Math.abs(round2(settlement.seller_fees || 0)),
-    'FBA Fees': -Math.abs(round2(settlement.fba_fees || 0)),
-    'Storage Fees': -Math.abs(round2(settlement.storage_fees || 0)),
-    'Advertising': -Math.abs(round2(settlement.advertising_costs || 0)),
-    'Other Fees': -Math.abs(round2(settlement.other_fees || 0)),
+    'Seller Fees': round2(settlement.seller_fees || 0),
+    'FBA Fees': round2(settlement.fba_fees || 0),
+    'Storage Fees': round2(settlement.storage_fees || 0),
+    'Advertising': round2(settlement.advertising_costs || 0),
+    'Other Fees': round2(settlement.other_fees || 0),
   };
 
   // Find categories with non-zero amounts that lack explicit mappings
