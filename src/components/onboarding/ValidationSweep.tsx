@@ -12,8 +12,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw,
-  Upload, ArrowRight, Send, Search, PartyPopper, Clock,
+  Upload, ArrowRight, Send, Search, PartyPopper, Clock, Filter,
 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
@@ -92,6 +93,7 @@ export default function ValidationSweep({
   const [sweepStartTime, setSweepStartTime] = useState<number | null>(null);
   const [sweepDuration, setSweepDuration] = useState<number | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
+  const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
   const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
@@ -290,14 +292,27 @@ export default function ValidationSweep({
     return c;
   }, [actionableRows]);
 
+  const uniqueMarketplaces = useMemo(() => {
+    const codes = [...new Set(actionableRows.map(r => r.marketplace_code))];
+    return codes.sort().map(code => ({
+      code,
+      label: MARKETPLACE_LABELS[code] || code,
+    }));
+  }, [actionableRows]);
+
   const filteredRows = useMemo(() => {
-    if (filter === 'all') return actionableRows;
-    if (filter === 'complete') return actionableRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
-    if (filter === 'ready_to_push') return actionableRows.filter(r => r.overall_status === 'ready_to_push');
-    if (filter === 'settlement_needed') return actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-    if (filter === 'gap_detected') return actionableRows.filter(r => r.overall_status === 'gap_detected');
-    return actionableRows;
-  }, [actionableRows, filter]);
+    let result = actionableRows;
+    // Marketplace filter
+    if (marketplaceFilter !== 'all') {
+      result = result.filter(r => r.marketplace_code === marketplaceFilter);
+    }
+    // Status filter
+    if (filter === 'complete') return result.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
+    if (filter === 'ready_to_push') return result.filter(r => r.overall_status === 'ready_to_push');
+    if (filter === 'settlement_needed') return result.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+    if (filter === 'gap_detected') return result.filter(r => r.overall_status === 'gap_detected');
+    return result;
+  }, [actionableRows, filter, marketplaceFilter]);
 
   const [vsPage, setVsPage] = useState(1);
   const vsTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
@@ -307,7 +322,7 @@ export default function ValidationSweep({
     const start = (safeVsPage - 1) * DEFAULT_PAGE_SIZE;
     return filteredRows.slice(start, start + DEFAULT_PAGE_SIZE);
   }, [filteredRows, safeVsPage, maxRows]);
-  useEffect(() => { setVsPage(1); }, [filter]);
+  useEffect(() => { setVsPage(1); }, [filter, marketplaceFilter]);
 
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at)
@@ -470,7 +485,29 @@ export default function ValidationSweep({
         />
       </div>
 
-      {/* Validation table */}
+      {/* Marketplace filter */}
+      {uniqueMarketplaces.length > 1 && (
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
+            <SelectTrigger className="w-[200px] h-8 text-sm">
+              <SelectValue placeholder="All Marketplaces" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Marketplaces</SelectItem>
+              {uniqueMarketplaces.map(m => (
+                <SelectItem key={m.code} value={m.code}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {marketplaceFilter !== 'all' && (
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setMarketplaceFilter('all')}>
+              Clear
+            </Button>
+          )}
+        </div>
+      )}
+
       <Card className="border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
