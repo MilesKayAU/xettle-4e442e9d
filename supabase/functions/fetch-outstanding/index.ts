@@ -818,21 +818,31 @@ Deno.serve(async (req) => {
       invoice_ids: string[];
     }
 
+    // ─── Canonical settlement net helper (single source of truth) ───
+    function getSettlementNet(s: any): number {
+      return Math.abs(s.bank_deposit ?? s.net_ex_gst ?? 0);
+    }
+
+    // ─── Canonical settlement_id resolver (alias-aware) ───
+    // Xettle-291854-P1, AMZN-291854, LMB-291854 all resolve to "291854"
+    function resolveCanonicalId(rawId: string): string {
+      // Always prefer alias mapping (canonical wins)
+      const canonical = aliasMap.get(rawId);
+      if (canonical) return canonical;
+      // If raw id exists in settlements, use it directly
+      if (settlementMap.has(rawId)) return rawId;
+      return rawId;
+    }
+
     // First pass: extract settlement_id for every invoice and build groups
     const invoiceSettlementMap = new Map<string, { id: string; invoices: any[] }>();
     
     for (const inv of invoices) {
       const ref = inv.Reference || '';
       const extracted = extractSettlementId(ref);
-      let sId = extracted.id;
+      if (!extracted.id) continue;
       
-      // Also resolve aliases
-      if (sId && !settlementMap.has(sId)) {
-        const canonical = aliasMap.get(sId);
-        if (canonical) sId = canonical;
-      }
-      
-      if (!sId) continue;
+      const sId = resolveCanonicalId(extracted.id);
       
       if (!invoiceSettlementMap.has(sId)) {
         invoiceSettlementMap.set(sId, { id: sId, invoices: [] });
@@ -852,7 +862,7 @@ Deno.serve(async (req) => {
       const settlement = settlementMap.get(sId);
       if (!settlement) continue;
 
-      const settlementNet = Math.abs(settlement.bank_deposit ?? settlement.net_ex_gst ?? 0);
+      const settlementNet = getSettlementNet(settlement);
       const diff = Math.abs(groupSum - settlementNet);
       const matched = diff <= 0.50;
       const confidence: 'high' | 'medium' | null = matched
