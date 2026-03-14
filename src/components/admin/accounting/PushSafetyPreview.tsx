@@ -188,14 +188,44 @@ export default function PushSafetyPreview({
           reconciliation_status: s.reconciliation_status,
         };
 
+        // ─── Check if already in Xero (Layer 1: settlement row, Layer 2: match cache) ───
+        let alreadyInXeroCheck: ValidationCheck | null = null;
+
+        // Layer 1: Settlement row already linked
+        if (s.xero_invoice_id) {
+          alreadyInXeroCheck = {
+            label: 'Invoice already linked in Xero',
+            status: 'red',
+            detail: `Invoice ID: ${s.xero_invoice_id}${s.xero_invoice_number ? ` (${s.xero_invoice_number})` : ''}${s.xero_status ? ` — Status: ${s.xero_status}` : ''}`,
+          };
+        }
+
+        // Layer 2: Check xero_accounting_matches cache
+        if (!alreadyInXeroCheck && user) {
+          const { data: existingMatch } = await supabase
+            .from('xero_accounting_matches')
+            .select('xero_invoice_id, xero_invoice_number, xero_status, match_method')
+            .eq('user_id', user.id)
+            .eq('settlement_id', settlementId)
+            .maybeSingle();
+
+          if (existingMatch) {
+            alreadyInXeroCheck = {
+              label: 'Invoice already exists in Xero',
+              status: 'red',
+              detail: `Matched via ${existingMatch.match_method || 'cache'}${existingMatch.xero_invoice_number ? ` — Invoice: ${existingMatch.xero_invoice_number}` : ''}${existingMatch.xero_invoice_id ? ` (${existingMatch.xero_invoice_id})` : ''}${existingMatch.xero_status ? ` — Status: ${existingMatch.xero_status}` : ''}`,
+            };
+          }
+        }
+
         // Build line items for display using canonical builder
         const resolver = createAccountCodeResolver(userCodes);
         const mpLabel = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
         const xeroLines = buildPostingLineItems(settlement as SettlementForPosting, resolver, mpLabel);
         const lineItems = toLineItemPreviews(xeroLines);
 
-        // Build validation checks (now with CoA awareness)
-        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes);
+        // Build validation checks (now with CoA awareness + already-in-Xero)
+        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck);
 
         const contactName = MARKETPLACE_CONTACTS[settlement.marketplace] || `${settlement.marketplace} Marketplace`;
         const reference = `Xettle-${settlement.settlement_id}`;
@@ -438,8 +468,16 @@ function buildValidationChecks(
   lineItems: LineItemPreview[],
   coaMap?: Map<string, { name: string; type: string; active: boolean }>,
   userCodes?: Record<string, string>,
+  alreadyInXeroCheck?: ValidationCheck | null,
 ): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
+
+  // 0. Already in Xero — must be first (blocks push)
+  if (alreadyInXeroCheck) {
+    checks.push(alreadyInXeroCheck);
+  } else {
+    checks.push({ label: 'No existing invoice found in Xero ✓', status: 'green' });
+  }
 
   // 1. Line items sum to settlement net
   const lineSum = lineItems.reduce((sum, li) => sum + li.amount, 0);
