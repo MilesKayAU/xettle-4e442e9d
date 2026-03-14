@@ -1290,6 +1290,8 @@ Deno.serve(async (req) => {
         tolerance_used: toleranceUsed,
         anchor_basis: anchorBasis,
         anchor_components_used: anchorComponents,
+        comparison_field: comparisonField,
+        amount_due_total: groupAmountDue,
       };
 
       settlementGroupResults.set(groupKey, result);
