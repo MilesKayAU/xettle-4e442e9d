@@ -999,6 +999,12 @@ Deno.serve(async (req) => {
     const settlementGroupResults = new Map<string, SettlementGroupResult>();
     let settlementLevelMatches = 0;
 
+    // ─── GST anchor diagnostics (bounded) ───
+    let gstAnchorAppliedCount = 0;
+    let gstAnchorHelpedCount = 0;
+    const GST_DIAG_LIMIT = 20;
+    const gstAnchorDiagnostics: any[] = [];
+
     for (const [groupKey, group] of finalGroups) {
       const groupSum = Math.round(
         group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.AmountDue ?? inv.Total ?? 0), 0) * 100
@@ -1025,6 +1031,15 @@ Deno.serve(async (req) => {
       const anchor = getGroupAnchor(group.settlement, group.part);
       const net = anchor.net;
       const diff = Math.round(Math.abs(groupSum - net) * 100) / 100;
+
+      // Track GST anchor usage for diagnostics
+      const usedGstAnchor = anchor.method === 'bank_deposit_plus_gst';
+      // Compute what diff would have been WITHOUT GST adjustment
+      const diffWithoutGst = usedGstAnchor
+        ? Math.round(Math.abs(groupSum - anchor.bankDeposit) * 100) / 100
+        : diff;
+
+      if (usedGstAnchor) gstAnchorAppliedCount++;
 
       let matched = false;
       let confidence: SettlementGroupResult['confidence'] = null;
@@ -1075,6 +1090,26 @@ Deno.serve(async (req) => {
             break;
           }
         }
+      }
+
+      // Track if GST anchor helped (diff_before > 0.50 AND diff_after <= 0.50, or GST path used)
+      if (usedGstAnchor && matched && diffWithoutGst > 0.50) {
+        gstAnchorHelpedCount++;
+      }
+      // Emit bounded diagnostics for GST anchor groups
+      if (usedGstAnchor && gstAnchorDiagnostics.length < GST_DIAG_LIMIT) {
+        gstAnchorDiagnostics.push({
+          settlement_id: group.settlementId,
+          marketplace: group.settlement.marketplace,
+          anchor_used: anchor.method,
+          bank_deposit: anchor.bankDeposit,
+          gst_on_income: anchor.gstApplied,
+          effective_anchor: net,
+          group_sum: groupSum,
+          diff_before: diffWithoutGst,
+          diff_after: diff,
+          matched,
+        });
       }
 
       const result: SettlementGroupResult = {
