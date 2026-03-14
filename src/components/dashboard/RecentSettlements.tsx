@@ -29,6 +29,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { isBankMatchRequired } from '@/constants/settlement-rails';
 
 interface SettlementRow {
   id: string;
@@ -102,7 +103,8 @@ function categorize(row: SettlementRow): StatusCategory {
   return 'other';
 }
 
-function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroStatus: string | null; syncOrigin?: string }) {
+
+function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null }) {
   // Fully reconciled (PAID in Xero)
   if (status === 'reconciled_in_xero' || status === 'bank_verified' || xeroStatus === 'PAID') {
     return (
@@ -123,6 +125,15 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
       );
     }
     if (xeroStatus === 'AUTHORISED') {
+      // Rail payout mode: settlement-confirmed rails show "Posted ✓" not "Waiting"
+      if (marketplace && !isBankMatchRequired(marketplace)) {
+        return (
+          <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Posted ✓
+          </Badge>
+        );
+      }
       return (
         <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
           <Clock className="h-3 w-3 mr-1" />
@@ -613,7 +624,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} />
+                      <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} />
                     </td>
                     <td className="px-4 py-3 text-center">
                       {(() => {
