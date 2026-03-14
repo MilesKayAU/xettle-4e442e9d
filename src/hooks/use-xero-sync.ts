@@ -63,8 +63,8 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
         toast.warning('Reconciliation warnings exist — proceeding with sync.');
       }
 
-      const lineItems = await buildSimpleInvoiceLines(stdSettlement);
-      const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace, { lineItems });
+      // syncSettlementToXero now builds canonical 10-category lines internally
+      const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace);
 
       if (result.success) {
         const { data: { user } } = await supabase.auth.getUser();

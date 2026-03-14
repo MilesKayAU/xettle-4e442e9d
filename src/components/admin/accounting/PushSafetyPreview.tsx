@@ -430,25 +430,8 @@ function SettlementPreviewCard({ preview, index, total }: {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function buildLineItemsFromSettlement(s: SettlementPreview): LineItemPreview[] {
-  const items: LineItemPreview[] = [];
-  const add = (desc: string, amount: number, code: string, tax: string) => {
-    if (Math.abs(amount) >= 0.01) {
-      items.push({ description: desc, amount: Math.round(amount * 100) / 100, accountCode: code, taxType: tax });
-    }
-  };
-
-  add('Sales', (s.sales_principal || 0) + (s.sales_shipping || 0), '200', 'OUTPUT');
-  add('Refunds', s.refunds || 0, '205', 'OUTPUT');
-  add('Seller Fees', s.seller_fees || 0, '407', 'INPUT');
-  add('FBA Fees', s.fba_fees || 0, '408', 'INPUT');
-  add('Storage Fees', s.storage_fees || 0, '409', 'INPUT');
-  add('Advertising', s.advertising_costs || 0, '410', 'INPUT');
-  add('Other Fees', s.other_fees || 0, '405', 'INPUT');
-  add('Reimbursements', s.reimbursements || 0, '271', 'BASEXCLUDED');
-
-  return items;
-}
+// buildLineItemsFromSettlement — replaced by canonical builder (xero-posting-line-items.ts)
+// Kept as a no-op reference; actual building now happens in loadPreviews() above.
 
 function buildValidationChecks(
   s: SettlementPreview,
