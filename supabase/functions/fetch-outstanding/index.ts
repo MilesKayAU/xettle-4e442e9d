@@ -1258,6 +1258,8 @@ Deno.serve(async (req) => {
         settlement_group_diff: settlementGroup?.difference ?? null,
         settlement_group_invoice_count: settlementGroup?.invoice_count ?? null,
         settlement_group_confidence: settlementGroup?.confidence ?? null,
+        settlement_group_explanation: settlementGroup?.explanation ?? null,
+        settlement_group_tolerance_used: settlementGroup?.tolerance_used ?? null,
         // Confirmed match audit trail
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,

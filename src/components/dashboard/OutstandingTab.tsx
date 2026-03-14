@@ -1145,8 +1145,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
    const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'pending_enrichment') return 'Loading matches…';
     if (row.match_status === 'settlement_matched') {
-      const conf = row.settlement_group_confidence === 'high' ? '' : ' (approx)';
-      return `Settlement matched${conf}`;
+      const conf = row.settlement_group_confidence;
+      if (conf === 'exact') return 'Matched exact';
+      if (conf === 'high') return 'Matched high';
+      if (conf === 'grouped') return 'Matched grouped';
+      if (conf === 'explainable') return `Matched (${row.settlement_group_explanation || 'explainable'})`;
+      return 'Settlement matched';
     }
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
