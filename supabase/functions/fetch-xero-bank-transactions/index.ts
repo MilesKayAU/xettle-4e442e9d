@@ -580,6 +580,22 @@ async function fetchBankTxnsForUser(
         from_wrapper_retry_logic: false,
       });
 
+      // ── Audit log to system_events ──
+      await adminSupabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_api_call',
+        severity: res.ok ? 'info' : (res.status === 429 ? 'warning' : 'error'),
+        details: {
+          timestamp_utc: requestTimestamp,
+          function_name: 'fetch-xero-bank-transactions',
+          invoker,
+          endpoint: endpointLabel,
+          attempt_number: 1,
+          governor_decision: 'allowed',
+          http_status: res.status,
+        },
+      });
+
       totalPagesFetched++;
       accountPagesFetched++;
 
