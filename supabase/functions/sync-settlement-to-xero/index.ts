@@ -191,13 +191,31 @@ function buildSettlementCsv(data: Record<string, any>, lineItems: InvoiceLineIte
   return rows.join('\n') + '\n';
 }
 
-// Simple hash for CSV immutability verification
-function hashCsv(csv: string): string {
+// Simple hash for immutability verification (djb2)
+function djb2Hash(input: string): string {
   let hash = 5381;
-  for (let i = 0; i < csv.length; i++) {
-    hash = ((hash << 5) + hash + csv.charCodeAt(i)) & 0xFFFFFFFF;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) + hash + input.charCodeAt(i)) & 0xFFFFFFFF;
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function hashCsv(csv: string): string {
+  return djb2Hash(csv);
+}
+
+/** Stable hash of line items array for forensic verification */
+function hashLineItems(items: InvoiceLineItem[]): string {
+  const canonical = items.map(i =>
+    `${i.Description}|${i.AccountCode}|${i.TaxType}|${i.UnitAmount}|${i.Quantity}`
+  ).join('\n');
+  return djb2Hash(canonical);
+}
+
+/** Stable hash of settlementData fields used for rebuild */
+function hashSettlementData(sd: Record<string, any>): string {
+  const fields = SERVER_POSTING_CATEGORIES.map(c => `${c.field}=${sd[c.field] ?? 0}`).join('|');
+  return djb2Hash(fields);
 }
 
 async function attachSettlementToXero(
@@ -664,23 +682,26 @@ serve(async (req) => {
       return userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
     };
 
-    // ─── SERVER-SIDE LINE ITEM REBUILD ──────────────────────────────
-    // Deterministically rebuild line items from settlementData on the server.
-    // Client-provided lineItems are ignored to prevent drift.
-    let lineItems: InvoiceLineItem[];
-    let lineItemsSource: 'server_rebuilt' | 'client_provided';
+    // ─── SERVER-SIDE LINE ITEM REBUILD (MANDATORY) ────────────────────
+    // ALL line items are deterministically rebuilt from settlementData on the server.
+    // Client-provided lineItems are NEVER used — eliminates drift/tampering risk.
+    if (!body.settlementData) {
+      throw new Error('Missing settlementData — server-side line item rebuild is mandatory for all pushes');
+    }
 
-    if (body.settlementData && !isNegativeSettlement) {
-      lineItems = buildServerLineItems(body.settlementData, getCode, contactName);
-      lineItemsSource = 'server_rebuilt';
-      console.log(`[line-items] Rebuilt ${lineItems.length} line items server-side from settlementData`);
-    } else if (body.lineItems && body.lineItems.length > 0) {
-      // Fallback: use client lineItems (negative settlements or missing settlementData)
-      lineItems = body.lineItems;
-      lineItemsSource = 'client_provided';
-      console.warn(`[line-items] Using client-provided line items (source: ${isNegativeSettlement ? 'negative_settlement' : 'missing_settlementData'})`);
-    } else {
-      throw new Error('Missing line items — neither settlementData nor lineItems provided');
+    let lineItems: InvoiceLineItem[];
+    const lineItemsSource: 'server_rebuilt' = 'server_rebuilt';
+
+    lineItems = buildServerLineItems(body.settlementData, getCode, contactName);
+    console.log(`[line-items] Rebuilt ${lineItems.length} line items server-side from settlementData (net=${isNegativeSettlement ? 'negative' : 'positive'})`);
+
+    // If client also provided lineItems, compare hashes for mismatch detection
+    if (body.lineItems && body.lineItems.length > 0) {
+      const clientHash = hashLineItems(body.lineItems);
+      const serverHash = hashLineItems(lineItems);
+      if (clientHash !== serverHash) {
+        console.warn(`[line-items] Client/server mismatch detected: client=${clientHash}, server=${serverHash}. Using server-rebuilt items.`);
+      }
     }
 
     if (lineItems.length === 0) throw new Error('No non-zero line items to post');
@@ -711,12 +732,8 @@ serve(async (req) => {
       const validationErrors: string[] = [];
 
       const usedCodes = new Set<string>();
-      if (!isNegativeSettlement && lineItems) {
-        for (const item of lineItems) {
-          usedCodes.add(item.AccountCode);
-        }
-      } else {
-        usedCodes.add(getCode('Other Fees'));
+      for (const item of lineItems) {
+        usedCodes.add(item.AccountCode);
       }
 
       for (const code of usedCodes) {
@@ -881,6 +898,23 @@ serve(async (req) => {
     }
 
     // Build the payload — ACCPAY (Bill) for negative, ACCREC (Invoice) for positive
+    // Line items are ALWAYS server-rebuilt from settlementData (no client fallback).
+    // For negative settlements, if server rebuild produces no lines (all zeros),
+    // create a single summary line for the net amount.
+    let finalLineItems: InvoiceLineItem[];
+    if (isNegativeSettlement && lineItems.length === 0) {
+      // Edge case: negative settlement where all individual fields are zero but net is negative
+      finalLineItems = [{
+        Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
+        AccountCode: getCode('Other Fees'),
+        TaxType: "INPUT",
+        UnitAmount: round2(Math.abs(netAmount!)),
+        Quantity: 1,
+      }];
+    } else {
+      finalLineItems = lineItems;
+    }
+
     const invoiceData: Record<string, any> = {
       Type: invoiceType,
       Contact: { Name: contactName || "Amazon.com.au" },
@@ -890,23 +924,14 @@ serve(async (req) => {
       Status: "DRAFT",
       LineAmountTypes: "Exclusive",
       Reference: reference,
-      LineItems: isNegativeSettlement
-        ? [{
-            Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
-            AccountCode: getCode('Other Fees'),
-            TaxType: "INPUT",
-            UnitAmount: round2(Math.abs(netAmount!)),
-            Quantity: 1,
-            ...(trackingArray ? { Tracking: trackingArray } : {}),
-          }]
-        : lineItems.map(item => ({
-            Description: item.Description,
-            AccountCode: item.AccountCode,
-            TaxType: item.TaxType,
-            UnitAmount: round2(item.UnitAmount),
-            Quantity: item.Quantity || 1,
-            ...(trackingArray ? { Tracking: trackingArray } : {}),
-          }))
+      LineItems: finalLineItems.map(item => ({
+        Description: item.Description,
+        AccountCode: item.AccountCode,
+        TaxType: item.TaxType,
+        UnitAmount: round2(item.UnitAmount),
+        Quantity: item.Quantity || 1,
+        ...(trackingArray ? { Tracking: trackingArray } : {}),
+      })),
     };
 
     if (description) {
@@ -1039,6 +1064,8 @@ serve(async (req) => {
       settlement_total: settlementTotal,
       xero_invoice_total: xeroTotal,
       balance_difference: balanceDifference,
+      line_items_hash: hashLineItems(finalLineItems),
+      settlement_data_hash: hashSettlementData(body.settlementData),
     };
 
     // ─── Attach audit CSV (REQUIRED — fail if missing or upload fails) ──
