@@ -745,6 +745,29 @@ export default function ValidationSweep({
 
 // ─── Sub-components ──────────────────────────────────────────────────
 
+function SortableHeader({ label, sortKey: key, currentKey, currentDir, onSort, align = 'left' }: {
+  label: string; sortKey: SortKey; currentKey: SortKey; currentDir: SortDir;
+  onSort: (key: SortKey) => void; align?: 'left' | 'center' | 'right';
+}) {
+  const active = currentKey === key;
+  const alignClass = align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
+  return (
+    <th className={cn("px-4 py-2.5 font-medium text-xs uppercase tracking-wider", `text-${align}`)}>
+      <button
+        onClick={() => onSort(key)}
+        className={cn("inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer", active ? 'text-foreground' : 'text-muted-foreground', alignClass)}
+      >
+        {label}
+        {active ? (
+          currentDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </button>
+    </th>
+  );
+}
+
 function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch: (row: ValidationRow, txnId: string) => void }) {
   const [checking, setChecking] = React.useState(false);
   const [fuzzyMatch, setFuzzyMatch] = React.useState<{
