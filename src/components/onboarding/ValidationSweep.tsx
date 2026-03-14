@@ -523,28 +523,48 @@ export default function ValidationSweep({
         />
       </div>
 
-      {/* Marketplace filter */}
-      {uniqueMarketplaces.length > 1 && (
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
-            <SelectTrigger className="w-[200px] h-8 text-sm">
-              <SelectValue placeholder="All Marketplaces" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Marketplaces</SelectItem>
-              {uniqueMarketplaces.map(m => (
-                <SelectItem key={m.code} value={m.code}>{m.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {marketplaceFilter !== 'all' && (
-            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setMarketplaceFilter('all')}>
-              Clear
-            </Button>
-          )}
+      {/* Filters bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        {uniqueMarketplaces.length > 1 && (
+          <>
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
+              <SelectTrigger className="w-[200px] h-8 text-sm">
+                <SelectValue placeholder="All Marketplaces" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Marketplaces</SelectItem>
+                {uniqueMarketplaces.map(m => (
+                  <SelectItem key={m.code} value={m.code}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        <div className="flex items-center gap-1.5">
+          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="h-8 w-[140px] text-xs"
+            placeholder="From"
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="h-8 w-[140px] text-xs"
+            placeholder="To"
+          />
         </div>
-      )}
+        {(marketplaceFilter !== 'all' || dateFrom || dateTo) && (
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => { setMarketplaceFilter('all'); setDateFrom(''); setDateTo(''); }}>
+            Clear filters
+          </Button>
+        )}
+      </div>
 
       <Card className="border-border overflow-hidden">
         <div className="overflow-x-auto">
