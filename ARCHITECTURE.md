@@ -1,7 +1,43 @@
 # Xettle — Architecture & System Review
 
-**Last updated**: 2026-03-13 (v2 — added bank mapping, Outstanding tab, reconciliation flow)
+**Last updated**: 2026-03-14 (v3 — added Core Matching Rule, settlement-level matching)
 **Codebase**: React + Vite + TypeScript + Tailwind CSS + Lovable Cloud (Supabase)
+
+---
+
+## 0. Core Matching Rule (MUST READ FIRST)
+
+> **Xettle = Settlement validation + invoice matching + controlled push to Xero.**
+>
+> Not bank sync. Not statement reader. Not journal uploader.
+
+### Matching Order (canonical, never deviate)
+
+1. Outstanding invoices (from Xero)
+2. Settlement data (Amazon / marketplace / uploaded files)
+3. Group by canonical `settlement_id` (after alias resolution)
+4. Compare grouped invoice totals to `getSettlementNet(settlement)` = `abs(bank_deposit ?? net_ex_gst ?? 0)`
+5. Suggest match with confidence (high ≤$0.10, medium ≤$0.50)
+6. User confirms → push to Xero
+7. Bank feed only confirms — never drives matching
+
+### Rules
+
+- **Settlement data is the source of truth**, not bank transactions.
+- **Match at settlement level**, not invoice level. Invoices may be split (P1/P2), but settlements are the grouping key.
+- **Bank feed is optional verification.** Never require it. Never block matching because bank feed is empty.
+- **Never match invoice → bank → settlement** when settlement data already exists.
+- **Do not create new pipelines** if the data already exists. Fix grouping before adding new APIs.
+
+### UI Rule
+
+Outstanding tab shows: `settlement_matched` · `ready_to_push` · `mismatch` · `missing_settlement` · `missing_invoice`
+
+NOT: `bank not found` · `feed empty` · `waiting for bank`
+
+### Architecture Guardrail
+
+When implementing new logic, ask: *Does this help the user understand which settlement pays which invoices?* If not, it is likely unnecessary complexity.
 
 ---
 
