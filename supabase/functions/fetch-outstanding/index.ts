@@ -688,7 +688,7 @@ Deno.serve(async (req) => {
       .from('app_settings')
       .select('value')
       .eq('user_id', userId)
-      .eq('key', 'bank_txn_last_fetched_at')
+      .eq('key', 'bank_feed_last_success_at')
       .maybeSingle();
     const bankSyncLastSuccessAt = bankSyncRow?.value || null;
 
@@ -696,7 +696,7 @@ Deno.serve(async (req) => {
       .from('app_settings')
       .select('value')
       .eq('user_id', userId)
-      .eq('key', 'xero_api_cooldown_until')
+      .eq('key', 'xero_bank_api_cooldown_until')
       .maybeSingle();
     let bankSyncCooldownUntil: string | null = null;
     let bankSyncCooldownSecondsRemaining: number | null = null;

@@ -321,32 +321,7 @@ async function fetchBankTxnsForUser(
     console.log(`[fetch-bank-txns] No outstanding cache for ${userId}, falling back to ${fallbackLookbackDays}-day lookback`);
   }
 
-  // Load destination account mappings (new-first, legacy-fallback)
-  const DEST_PREFIX = 'payout_destination:';
-  const LEGACY_PREFIX = 'payout_account:';
-
-  const [destResp, legacyResp] = await Promise.all([
-    adminSupabase.from('app_settings').select('key, value').eq('user_id', userId).like('key', `${DEST_PREFIX}%`),
-    adminSupabase.from('app_settings').select('key, value').eq('user_id', userId).like('key', `${LEGACY_PREFIX}%`),
-  ]);
-
-  const mappedAccountIds = new Set<string>();
-  const destRows = destResp.data || [];
-  const legacyRows = legacyResp.data || [];
-
-  // Prefer new keys
-  if (destRows.length > 0) {
-    for (const row of destRows) {
-      if (row.value) mappedAccountIds.add(row.value);
-    }
-  } else {
-    // Fallback to legacy
-    for (const row of legacyRows) {
-      if (row.value) mappedAccountIds.add(row.value);
-    }
-  }
-
-  const hasAnyMapping = destRows.length > 0 || legacyRows.length > 0;
+  // Destination account mappings were loaded in Step 1 (for accurate cooldown diagnostics).
 
   // ── CRITICAL: If no mapped accounts, do NOT call Xero at all ──
   if (mappedAccountIds.size === 0) {
