@@ -813,9 +813,11 @@ Deno.serve(async (req) => {
       settlement_net: number;
       difference: number;
       invoice_count: number;
-      confidence: 'high' | 'medium' | null;
+      confidence: 'exact' | 'high' | 'grouped' | 'explainable' | null;
       settlement_id: string;
       invoice_ids: string[];
+      explanation?: string | null;
+      tolerance_used?: number | null;
     }
 
     // ─── Canonical settlement net helper (single source of truth) ───
@@ -856,28 +858,94 @@ Deno.serve(async (req) => {
 
     for (const [sId, group] of invoiceSettlementMap) {
       const groupSum = Math.round(
-        group.invoices.reduce((sum: number, inv: any) => sum + (inv.AmountDue || inv.Total || 0), 0) * 100
+        group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.AmountDue ?? inv.Total ?? 0), 0) * 100
       ) / 100;
 
       const settlement = settlementMap.get(sId);
-      if (!settlement) continue;
+      if (!settlement) {
+        // No settlement_id → no tolerance allowed
+        const result: SettlementGroupResult = {
+          matched: false,
+          group_sum: groupSum,
+          settlement_net: 0,
+          difference: groupSum,
+          invoice_count: group.invoices.length,
+          confidence: null,
+          settlement_id: sId,
+          invoice_ids: group.invoices.map((inv: any) => inv.InvoiceID),
+          explanation: null,
+          tolerance_used: null,
+        };
+        settlementGroupResults.set(sId, result);
+        continue;
+      }
 
-      const settlementNet = getSettlementNet(settlement);
-      const diff = Math.abs(groupSum - settlementNet);
-      const matched = diff <= 0.50;
-      const confidence: 'high' | 'medium' | null = matched
-        ? (diff <= 0.10 ? 'high' : 'medium')
-        : null;
+      const net = getSettlementNet(settlement);
+      const diff = Math.round(Math.abs(groupSum - net) * 100) / 100;
+
+      let matched = false;
+      let confidence: SettlementGroupResult['confidence'] = null;
+      let explanation: string | null = null;
+      let toleranceUsed: number | null = null;
+
+      // Step 2 — exact match
+      if (diff <= 0.10) {
+        matched = true;
+        confidence = 'exact';
+        toleranceUsed = diff;
+      }
+      // Step 3 — high match
+      else if (diff <= 0.50) {
+        matched = true;
+        confidence = 'high';
+        toleranceUsed = diff;
+      }
+      // Step 4 — grouped tolerance (percentage, capped)
+      else if (diff <= Math.min(net * 0.02, 25.00)) {
+        matched = true;
+        confidence = 'grouped';
+        toleranceUsed = diff;
+      }
+      // Step 5 — explainable match (fees / refunds / tax components)
+      else if (diff <= Math.min(net * 0.10, 100.00)) {
+        const fees = Math.abs(settlement.seller_fees ?? 0)
+          + Math.abs(settlement.fba_fees ?? 0)
+          + Math.abs(settlement.storage_fees ?? 0)
+          + Math.abs(settlement.other_fees ?? 0);
+        const refunds = Math.abs(settlement.refunds ?? 0);
+        const tax = Math.abs(settlement.gst_on_income ?? 0)
+          + Math.abs(settlement.gst_on_expenses ?? 0);
+
+        const candidates: [number, string][] = [
+          [fees, 'fees'],
+          [refunds, 'refunds'],
+          [tax, 'tax'],
+          [fees + tax, 'fees+tax'],
+          [fees + refunds, 'fees+refunds'],
+        ];
+
+        for (const [componentValue, label] of candidates) {
+          if (componentValue > 0 && Math.abs(diff - componentValue) <= 1.00) {
+            matched = true;
+            confidence = 'explainable';
+            explanation = label;
+            toleranceUsed = diff;
+            break;
+          }
+        }
+      }
 
       const result: SettlementGroupResult = {
         matched,
         group_sum: groupSum,
-        settlement_net: settlementNet,
-        difference: Math.round(diff * 100) / 100,
+        settlement_net: net,
+        difference: diff,
         invoice_count: group.invoices.length,
         confidence,
         settlement_id: sId,
         invoice_ids: group.invoices.map((inv: any) => inv.InvoiceID),
+        explanation,
+        tolerance_used: toleranceUsed,
       };
 
       settlementGroupResults.set(sId, result);
@@ -1190,6 +1258,8 @@ Deno.serve(async (req) => {
         settlement_group_diff: settlementGroup?.difference ?? null,
         settlement_group_invoice_count: settlementGroup?.invoice_count ?? null,
         settlement_group_confidence: settlementGroup?.confidence ?? null,
+        settlement_group_explanation: settlementGroup?.explanation ?? null,
+        settlement_group_tolerance_used: settlementGroup?.tolerance_used ?? null,
         // Confirmed match audit trail
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,

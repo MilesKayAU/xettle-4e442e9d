@@ -125,7 +125,9 @@ interface OutstandingRow {
   settlement_group_net?: number | null;
   settlement_group_diff?: number | null;
   settlement_group_invoice_count?: number | null;
-  settlement_group_confidence?: 'high' | 'medium' | null;
+  settlement_group_confidence?: 'exact' | 'high' | 'grouped' | 'explainable' | null;
+  settlement_group_explanation?: string | null;
+  settlement_group_tolerance_used?: number | null;
   bank_match_method?: string | null;
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
@@ -1143,8 +1145,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
    const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'pending_enrichment') return 'Loading matches…';
     if (row.match_status === 'settlement_matched') {
-      const conf = row.settlement_group_confidence === 'high' ? '' : ' (approx)';
-      return `Settlement matched${conf}`;
+      const conf = row.settlement_group_confidence;
+      if (conf === 'exact') return 'Matched exact';
+      if (conf === 'high') return 'Matched high';
+      if (conf === 'grouped') return 'Matched grouped';
+      if (conf === 'explainable') return `Matched (${row.settlement_group_explanation || 'explainable'})`;
+      return 'Settlement matched';
     }
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
