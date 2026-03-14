@@ -501,6 +501,11 @@ serve(async (req) => {
           continue;
         }
 
+        // ─── SAFETY: Only auto-link Xettle-created invoices ─────────────
+        // External invoices (AMZN-, LMB-, A2X-, etc.) are stored as candidates
+        // for user review — they are NEVER auto-linked to settlements.
+        const isXettleCreated = ref.toLowerCase().startsWith('xettle-');
+
         await supabase.from('xero_accounting_matches').upsert({
           user_id: userId,
           settlement_id: sid,
@@ -509,14 +514,16 @@ serve(async (req) => {
           xero_invoice_number: inv.InvoiceNumber || null,
           xero_status: inv.Status || null,
           xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
-          match_method: 'xero_pre_seed',
-          confidence: 1.0,
+          match_method: isXettleCreated ? 'xero_pre_seed' : 'external_candidate',
+          confidence: isXettleCreated ? 1.0 : 0.0,
           matched_amount: inv.Total || null,
           matched_date: parseXeroDate(inv.Date),
           matched_contact: contactName,
           matched_reference: ref,
           reference_hash: ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
-          notes: 'Pre-seeded from outstanding Xero invoice — awaiting settlement data from API/CSV',
+          notes: isXettleCreated
+            ? 'Pre-seeded from Xettle-created Xero invoice'
+            : 'External invoice detected — requires user review before linking',
         }, { onConflict: 'user_id,settlement_id' });
 
         seededCount++;
@@ -690,10 +697,10 @@ serve(async (req) => {
     console.log(`[step-4] Reference matching: ${updated} NEW settlements linked`);
 
     // ════════════════════════════════════════════════════════════════════
-    // STEP 4b: Seed cache for OUTSTANDING Xero invoices with no local settlement
-    // When Xero has an AUTHORISED invoice (e.g. AMZN-12290174743) but we don't
-    // have that settlement yet, pre-cache the Xero link so that when
-    // fetch-amazon-settlements or CSV upload creates the record, it auto-links.
+    // STEP 4b: Seed cache for Xero invoices with no local settlement
+    // SAFETY: Only auto-link Xettle-created invoices (Xettle- prefix).
+    // External invoices (AMZN-, LMB-, A2X-) are stored as 'external_candidate'
+    // with confidence=0 — they require explicit user review before linking.
     // ════════════════════════════════════════════════════════════════════
     const localSettlementIds = new Set((allSettlements || []).map(s => s.settlement_id));
     let seededCount = 0;
@@ -706,6 +713,9 @@ serve(async (req) => {
       const contactName = inv.Contact?.Name || '';
       const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
 
+      // ─── SAFETY: Only auto-link Xettle-created invoices ─────────────
+      const isXettleCreated = ref.toLowerCase().startsWith('xettle-');
+
       await supabase.from('xero_accounting_matches').upsert({
         user_id: userId,
         settlement_id: settlementId,
@@ -714,20 +724,22 @@ serve(async (req) => {
         xero_invoice_number: inv.InvoiceNumber || null,
         xero_status: inv.Status || null,
         xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
-        match_method: 'xero_pre_seed',
-        confidence: 1.0,
+        match_method: isXettleCreated ? 'xero_pre_seed' : 'external_candidate',
+        confidence: isXettleCreated ? 1.0 : 0.0,
         matched_amount: inv.Total || null,
         matched_date: parseXeroDate(inv.Date),
         matched_contact: contactName,
         matched_reference: ref,
         reference_hash: ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
-        notes: `Pre-seeded from outstanding Xero invoice — awaiting settlement data from API/CSV`,
+        notes: isXettleCreated
+          ? 'Pre-seeded from Xettle-created Xero invoice'
+          : 'External invoice detected — requires user review before linking',
       }, { onConflict: 'user_id,settlement_id' });
 
       seededCount++;
     }
     if (seededCount > 0) {
-      console.log(`[step-4b] Pre-seeded ${seededCount} outstanding Xero invoices (no local settlement yet)`);
+      console.log(`[step-4b] Pre-seeded ${seededCount} Xero invoices (no local settlement yet)`);
     }
 
     // ════════════════════════════════════════════════════════════════════

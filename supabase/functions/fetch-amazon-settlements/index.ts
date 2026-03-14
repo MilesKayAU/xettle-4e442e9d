@@ -579,31 +579,36 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             } as any, { onConflict: 'user_id,settlement_id,marketplace_code' });
           }
 
-          // ─── Auto-link to pre-cached Xero invoice (from Outstanding) ───
+          // ─── Auto-link to pre-cached Xero invoice (ONLY Xettle-created) ───
+          // External invoices (AMZN-, LMB-, A2X-) are stored as external_candidate
+          // and require explicit user review — they are NEVER auto-linked.
           const { data: preMatch } = await supabaseAdmin
             .from('xero_accounting_matches')
-            .select('xero_invoice_id, xero_invoice_number, xero_status, xero_type, matched_reference')
+            .select('xero_invoice_id, xero_invoice_number, xero_status, xero_type, matched_reference, match_method')
             .eq('settlement_id', header.settlementId)
             .eq('user_id', userId)
             .maybeSingle();
 
-          if (preMatch?.xero_invoice_id) {
-            // Map Xero status to canonical settlement states
-            let derivedSt = 'pushed_to_xero';
-            if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
-            // For non-Xettle invoices, mark as pushed (external sync uses sync_origin='external')
+          if (preMatch?.xero_invoice_id && preMatch.match_method !== 'external_candidate') {
             const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
-            if (!isXettleFormat) derivedSt = 'pushed_to_xero';
+            // Only auto-link if this is a Xettle-created invoice
+            if (isXettleFormat) {
+              let derivedSt = 'pushed_to_xero';
+              if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
 
-            await supabaseAdmin.from('settlements').update({
-              xero_journal_id: preMatch.xero_invoice_id,
-              xero_invoice_id: preMatch.xero_invoice_id,
-              xero_invoice_number: preMatch.xero_invoice_number,
-              xero_status: preMatch.xero_status,
-              status: derivedSt,
-              sync_origin: isXettleFormat ? 'xettle' : 'external',
-            } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
-            console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
+              await supabaseAdmin.from('settlements').update({
+                xero_journal_id: preMatch.xero_invoice_id,
+                xero_invoice_id: preMatch.xero_invoice_id,
+                xero_invoice_number: preMatch.xero_invoice_number,
+                xero_status: preMatch.xero_status,
+                status: derivedSt,
+                sync_origin: 'xettle',
+                posted_at: new Date().toISOString(),
+              } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
+              console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
+            } else {
+              console.log(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking (requires user review)`);
+            }
           }
 
           // Delete existing lines/unmapped before re-insert (idempotency on retry)
@@ -986,30 +991,33 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
         } as any, { onConflict: 'user_id,settlement_id,marketplace_code' });
       }
 
-      // ─── Auto-link to pre-cached Xero invoice (from Outstanding) ───
+      // ─── Auto-link to pre-cached Xero invoice (ONLY Xettle-created) ───
       const { data: preMatch } = await supabase
         .from('xero_accounting_matches')
-        .select('xero_invoice_id, xero_invoice_number, xero_status, xero_type, matched_reference')
+        .select('xero_invoice_id, xero_invoice_number, xero_status, xero_type, matched_reference, match_method')
         .eq('settlement_id', header.settlementId)
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (preMatch?.xero_invoice_id) {
-        // Map Xero status to canonical settlement states
-        let derivedSt = 'pushed_to_xero';
-        if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
+      if (preMatch?.xero_invoice_id && preMatch.match_method !== 'external_candidate') {
         const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
-        if (!isXettleFormat) derivedSt = 'pushed_to_xero';
+        if (isXettleFormat) {
+          let derivedSt = 'pushed_to_xero';
+          if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
 
-        await supabase.from('settlements').update({
-          xero_journal_id: preMatch.xero_invoice_id,
-          xero_invoice_id: preMatch.xero_invoice_id,
-          xero_invoice_number: preMatch.xero_invoice_number,
-          xero_status: preMatch.xero_status,
-          status: derivedSt,
-          sync_origin: isXettleFormat ? 'xettle' : 'external',
-        } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
-        console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xero invoice ${preMatch.xero_invoice_number}`);
+          await supabase.from('settlements').update({
+            xero_journal_id: preMatch.xero_invoice_id,
+            xero_invoice_id: preMatch.xero_invoice_id,
+            xero_invoice_number: preMatch.xero_invoice_number,
+            xero_status: preMatch.xero_status,
+            status: derivedSt,
+            sync_origin: 'xettle',
+            posted_at: new Date().toISOString(),
+          } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
+          console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
+        } else {
+          console.log(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking`);
+        }
       }
 
       // Delete existing lines/unmapped before re-insert (idempotency on retry)
@@ -1419,28 +1427,30 @@ serve(async (req) => {
                   source: 'api_backfill',
                 } as any, { onConflict: 'user_id,settlement_id,marketplace_code' });
 
-                // Auto-link to pre-cached Xero invoice
+                // Auto-link to pre-cached Xero invoice (ONLY Xettle-created)
                 const { data: preMatch } = await supabase
                   .from('xero_accounting_matches')
-                  .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference')
+                  .select('xero_invoice_id, xero_invoice_number, xero_status, matched_reference, match_method')
                   .eq('settlement_id', header.settlementId)
                   .eq('user_id', userId)
                   .maybeSingle();
 
-                if (preMatch?.xero_invoice_id) {
-                  let derivedSt = 'pushed_to_xero';
-                  if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
+                if (preMatch?.xero_invoice_id && preMatch.match_method !== 'external_candidate') {
                   const isXettleFormat = (preMatch.matched_reference || '').startsWith('Xettle-');
-                  if (!isXettleFormat) derivedSt = 'pushed_to_xero';
+                  if (isXettleFormat) {
+                    let derivedSt = 'pushed_to_xero';
+                    if (preMatch.xero_status === 'PAID') derivedSt = 'reconciled_in_xero';
 
-                  await supabase.from('settlements').update({
-                    xero_journal_id: preMatch.xero_invoice_id,
-                    xero_invoice_id: preMatch.xero_invoice_id,
-                    xero_invoice_number: preMatch.xero_invoice_number,
-                    xero_status: preMatch.xero_status,
-                    status: derivedSt,
-                    sync_origin: isXettleFormat ? 'xettle' : 'external',
-                  } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
+                    await supabase.from('settlements').update({
+                      xero_journal_id: preMatch.xero_invoice_id,
+                      xero_invoice_id: preMatch.xero_invoice_id,
+                      xero_invoice_number: preMatch.xero_invoice_number,
+                      xero_status: preMatch.xero_status,
+                      status: derivedSt,
+                      sync_origin: 'xettle',
+                      posted_at: new Date().toISOString(),
+                    } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
+                  }
                 }
 
                 // Insert settlement lines

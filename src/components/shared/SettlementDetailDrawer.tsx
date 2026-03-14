@@ -3,17 +3,19 @@
  * Shows the exact payload snapshot stored at posting time, header metadata, and audit trail.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CheckCircle2, Clock, Info, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, ExternalLink, Info, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
@@ -60,15 +62,18 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSnapshot, setHasSnapshot] = useState(true);
+  const [externalCandidate, setExternalCandidate] = useState<any>(null);
+  const [dismissingCandidate, setDismissingCandidate] = useState(false);
 
   useEffect(() => {
     if (!open || !settlementId) return;
     setLoading(true);
     setSnapshot(null);
     setHasSnapshot(true);
+    setExternalCandidate(null);
 
     (async () => {
-      const [settRes, eventsRes] = await Promise.all([
+      const [settRes, eventsRes, candidateRes] = await Promise.all([
         supabase
           .from('settlements')
           .select('*')
@@ -79,12 +84,18 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
           .select('*')
           .eq('settlement_id', settlementId)
           .order('created_at', { ascending: true }),
+        supabase
+          .from('xero_accounting_matches')
+          .select('*')
+          .eq('settlement_id', settlementId)
+          .eq('match_method', 'external_candidate')
+          .maybeSingle(),
       ]);
 
       if (settRes.data) setSettlement(settRes.data);
+      if (candidateRes.data) setExternalCandidate(candidateRes.data);
       if (eventsRes.data) {
         setEvents(eventsRes.data as AuditEvent[]);
-        // Find the posting snapshot
         const postEvent = (eventsRes.data as AuditEvent[]).find(
           e => e.event_type === 'xero_push_success' || e.event_type === 'auto_post_success'
         );
@@ -99,6 +110,22 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
       setLoading(false);
     })();
   }, [open, settlementId]);
+
+  const handleDismissCandidate = useCallback(async () => {
+    if (!externalCandidate?.id) return;
+    setDismissingCandidate(true);
+    const { error } = await supabase
+      .from('xero_accounting_matches')
+      .delete()
+      .eq('id', externalCandidate.id);
+    if (error) {
+      toast.error('Failed to dismiss external match');
+    } else {
+      setExternalCandidate(null);
+      toast.success('External match dismissed');
+    }
+    setDismissingCandidate(false);
+  }, [externalCandidate]);
 
   // Build reconstructed line items from settlement row (fallback for pre-snapshot settlements)
   const reconstructedLines: NormalizedLineItem[] = settlement ? [
@@ -140,6 +167,31 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
           </div>
         ) : settlement ? (
           <div className="space-y-5 mt-4">
+            {/* External Xero match banner */}
+            {externalCandidate && !settlement.xero_invoice_id && (
+              <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-xs">
+                <ExternalLink className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">
+                    External Xero invoice detected
+                  </p>
+                  <p className="text-muted-foreground mt-0.5">
+                    Found <span className="font-mono">{externalCandidate.xero_invoice_number}</span> ({formatAUD(externalCandidate.matched_amount || 0)}) created by another integration — not posted by Xettle.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px]"
+                      onClick={handleDismissCandidate}
+                      disabled={dismissingCandidate}
+                    >
+                      Ignore / keep separate
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Auto-post banner */}
             {isAutoPosted && settlement.status === 'pushed_to_xero' && (
               <div className="flex items-start gap-2 p-3 rounded-md bg-accent/50 border border-accent text-xs">
