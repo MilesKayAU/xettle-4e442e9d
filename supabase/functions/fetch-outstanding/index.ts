@@ -1104,6 +1104,8 @@ Deno.serve(async (req) => {
         invoice_ids: group.invoices.map((inv: any) => inv.InvoiceID),
         explanation,
         tolerance_used: toleranceUsed,
+        anchor_basis: anchor.basis,
+        anchor_components_used: anchor.components,
       };
 
       settlementGroupResults.set(groupKey, result);
