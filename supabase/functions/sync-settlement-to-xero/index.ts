@@ -67,35 +67,60 @@ interface InvoiceRequest {
   journalIds?: string[];
 }
 
-// ─── Audit CSV Attachment Helper ──────────────────────────────────────
-function buildSettlementCsv(data: Record<string, any>): string {
+// ─── Canonical Version (must match src/utils/xero-posting-line-items.ts) ──
+const CANONICAL_VERSION = 'v2-10cat';
+
+// ─── Multi-Row Audit CSV Attachment Helper ──────────────────────────────
+// Mirrors buildAuditCsvContent from src/utils/xero-posting-line-items.ts
+function buildSettlementCsv(data: Record<string, any>, lineItems: InvoiceLineItem[]): string {
   const headers = [
     'settlement_id', 'period_start', 'period_end', 'marketplace',
-    'net_amount', 'sales', 'refunds', 'reimbursements', 'seller_fees',
-    'fba_fees', 'storage_fees', 'advertising_costs', 'other_fees',
-    'promotional_discounts', 'bank_deposit', 'status'
+    'category', 'amount_ex_gst', 'gst_amount', 'amount_inc_gst',
+    'account_code', 'tax_type',
   ];
 
-  const row = [
-    data.settlement_id || '',
-    data.period_start || '',
-    data.period_end || '',
-    data.marketplace || '',
-    data.net_ex_gst ?? data.net_amount ?? '',
-    (data.sales_principal || 0) + (data.sales_shipping || 0),
-    data.refunds || 0,
-    data.reimbursements || 0,
-    data.seller_fees || 0,
-    data.fba_fees || 0,
-    data.storage_fees || 0,
-    data.advertising_costs || 0,
-    data.other_fees || 0,
-    data.promotional_discounts || 0,
-    data.bank_deposit || 0,
-    data.status || 'pushed',
-  ];
+  const sid = data.settlement_id || '';
+  const ps = data.period_start || '';
+  const pe = data.period_end || '';
+  const mp = data.marketplace || '';
 
-  return headers.join(',') + '\n' + row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',') + '\n';
+  const rows: string[] = [headers.join(',')];
+  let totalExGst = 0;
+  let totalGst = 0;
+
+  for (const li of lineItems) {
+    const exGst = Math.round(li.UnitAmount * 100) / 100;
+    const gstRate = li.TaxType === 'BASEXCLUDED' ? 0 : 0.1;
+    const gstAmount = Math.round(exGst * gstRate * 100) / 100;
+    const incGst = Math.round((exGst + gstAmount) * 100) / 100;
+
+    totalExGst += exGst;
+    totalGst += gstAmount;
+
+    rows.push(
+      [sid, ps, pe, mp, li.Description, exGst, gstAmount, incGst, li.AccountCode, li.TaxType]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    );
+  }
+
+  const totalInc = Math.round((totalExGst + totalGst) * 100) / 100;
+  rows.push(
+    [sid, ps, pe, mp, 'TOTAL', Math.round(totalExGst * 100) / 100, Math.round(totalGst * 100) / 100, totalInc, '', '']
+      .map(v => `"${String(v).replace(/"/g, '""')}"`)
+      .join(',')
+  );
+
+  return rows.join('\n') + '\n';
+}
+
+// Simple hash for CSV immutability verification
+function hashCsv(csv: string): string {
+  let hash = 5381;
+  for (let i = 0; i < csv.length; i++) {
+    hash = ((hash << 5) + hash + csv.charCodeAt(i)) & 0xFFFFFFFF;
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 async function attachSettlementToXero(
