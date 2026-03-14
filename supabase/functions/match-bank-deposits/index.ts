@@ -69,6 +69,19 @@ function narrationMatchesMarketplace(description: string, contactName: string, m
   return patterns.some(p => text.includes(p))
 }
 
+interface CandidateInfo {
+  transaction_id: string
+  amount: number
+  date: string | null
+  reference: string
+  narration: string
+  bank_account_name: string
+  confidence: string
+  score: number
+  amount_diff: number
+  reasons: string[]
+}
+
 interface MatchResult {
   matched: boolean
   settlement_id: string
@@ -84,7 +97,10 @@ interface MatchResult {
   confidence_score?: number
   difference?: number
   match_method?: string
+  match_reasons?: string[]
+  top_candidates?: CandidateInfo[]
   batch_settlement_ids?: string[]
+  no_match_reason?: string
 }
 
 Deno.serve(async (req) => {
@@ -193,7 +209,7 @@ Deno.serve(async (req) => {
         const currency = deriveCurrency(marketplace)
 
         if (depositAmount === 0) {
-          results.push({ matched: false, settlement_id: s.settlement_id, marketplace })
+          results.push({ matched: false, settlement_id: s.settlement_id, marketplace, no_match_reason: 'zero_deposit_amount' })
           continue
         }
 
@@ -233,25 +249,26 @@ Deno.serve(async (req) => {
           const txnRef = txn.reference || ''
           const bankAccountName = txn.bank_account_name || ''
 
-          // Score each candidate
+          // Score each candidate with reasons
           let score = 0
+          const reasons: string[] = []
           const nameMatch = narrationMatchesMarketplace(description, contactName, marketplace) ||
             description.includes(s.settlement_id) || txnRef.includes(s.settlement_id)
 
           // Amount scoring
-          if (amountDiff <= 0.05) score += 50
-          else if (amountDiff <= 0.50) score += 40
-          else if (amountDiff <= 1.00) score += 30
-          else if (amountDiff <= 10) score += 15
+          if (amountDiff <= 0.05) { score += 50; reasons.push(`amount_exact (±$${amountDiff.toFixed(2)})`) }
+          else if (amountDiff <= 0.50) { score += 40; reasons.push(`amount_close (±$${amountDiff.toFixed(2)})`) }
+          else if (amountDiff <= 1.00) { score += 30; reasons.push(`amount_near (±$${amountDiff.toFixed(2)})`) }
+          else if (amountDiff <= 10) { score += 15; reasons.push(`amount_loose (±$${amountDiff.toFixed(2)})`) }
 
           // Processor/narration match (+30)
-          if (nameMatch) score += 30
+          if (nameMatch) { score += 30; reasons.push('narration_match') }
 
           // Date proximity
           if (txnDate) {
             const daysDiff = Math.abs((new Date(txnDate).getTime() - new Date(periodEnd).getTime()) / (1000 * 60 * 60 * 24))
-            if (daysDiff <= 2) score += 20
-            else if (daysDiff <= 7) score += 10
+            if (daysDiff <= 2) { score += 20; reasons.push(`date_close (${daysDiff.toFixed(0)}d)`) }
+            else if (daysDiff <= 7) { score += 10; reasons.push(`date_week (${daysDiff.toFixed(0)}d)`) }
           }
 
           if (score >= 15) {
@@ -266,12 +283,16 @@ Deno.serve(async (req) => {
               confidence,
               score,
               amount_diff: amountDiff,
+              reasons,
             })
           }
         }
 
         // Sort candidates by score descending
         candidates.sort((a: any, b: any) => b.score - a.score)
+
+        // Top 3 evidence candidates for diagnostics
+        const top3 = candidates.slice(0, 3)
 
         if (candidates.length > 0 && candidates[0].score >= 90) {
           const best = candidates[0]
@@ -312,6 +333,8 @@ Deno.serve(async (req) => {
             settlement_id: s.settlement_id,
             marketplace,
             match_method: 'individual',
+            match_reasons: best.reasons,
+            top_candidates: top3,
             possible_match: {
               date: best.date,
               amount: best.amount,
@@ -331,6 +354,8 @@ Deno.serve(async (req) => {
             settlement_id: s.settlement_id,
             marketplace,
             match_method: 'individual',
+            match_reasons: best.reasons,
+            top_candidates: top3,
             possible_match: {
               date: best.date,
               amount: best.amount,
@@ -345,11 +370,18 @@ Deno.serve(async (req) => {
           unmatchedSettlements.push(s)
         } else {
           unmatchedSettlements.push(s)
-          results.push({ matched: false, settlement_id: s.settlement_id, marketplace })
+          results.push({
+            matched: false,
+            settlement_id: s.settlement_id,
+            marketplace,
+            no_match_reason: txns.length === 0
+              ? `no_${currency}_receive_txns_in_window_${fromDate}_to_${toDate}`
+              : `${txns.length}_txns_checked_none_scored_above_15`,
+          })
         }
       } catch (perSettlementErr: any) {
         console.error(`[bank-match] Error matching ${(settlement as any).settlement_id}:`, perSettlementErr.message)
-        results.push({ matched: false, settlement_id: (settlement as any).settlement_id, marketplace: (settlement as any).marketplace || 'unknown' })
+        results.push({ matched: false, settlement_id: (settlement as any).settlement_id, marketplace: (settlement as any).marketplace || 'unknown', no_match_reason: `error: ${perSettlementErr.message}` })
         unmatchedSettlements.push(settlement)
       }
     }
