@@ -820,9 +820,42 @@ Deno.serve(async (req) => {
       tolerance_used?: number | null;
     }
 
-    // ─── Canonical settlement net helper (single source of truth) ───
-    function getSettlementNet(s: any): number {
+    // ─── Invoice-basis anchor helpers (single source of truth) ───
+    // "Invoice-basis" = the number Xero AmountDue is expected to be.
+    // Non-split: AmountDue ≈ bank_deposit (rounding adjustment ensures parity).
+    // Split: AmountDue ≈ grossTotal per part (Xero adds GST via OUTPUT/INPUT tax types).
+    // Invariant: sum(grossTotal per part) = bank_deposit.
+
+    /** Non-split anchor: Xero AmountDue ≈ bank_deposit (the payout). */
+    function getInvoiceBasisNet(s: any): number {
       return Math.abs(s.bank_deposit ?? s.net_ex_gst ?? 0);
+    }
+
+    /** Split-part anchor: Xero AmountDue ≈ grossTotal for the given part. */
+    function getInvoiceBasisNetPart(settlement: any, part: number): number | null {
+      const rawSplitData = part === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
+      let splitData = rawSplitData;
+      if (typeof splitData === 'string') {
+        try { splitData = JSON.parse(splitData); } catch { return null; }
+      }
+      if (splitData && typeof splitData === 'object' && splitData.grossTotal !== undefined) {
+        return Math.abs(Number(splitData.grossTotal ?? 0));
+      }
+      return null; // Split data missing/invalid
+    }
+
+    /** Parse split data JSON safely. */
+    function parseSplitData(raw: any): any | null {
+      if (!raw) return null;
+      if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch { return null; }
+      }
+      return typeof raw === 'object' ? raw : null;
+    }
+
+    // Legacy alias kept for backward compat in fuzzy matching section
+    function getSettlementNet(s: any): number {
+      return getInvoiceBasisNet(s);
     }
 
     // ─── Canonical settlement_id resolver (alias-aware) ───
@@ -888,6 +921,7 @@ Deno.serve(async (req) => {
     }
 
     // ─── Helper: get anchor net and component values for a group (split-aware) ───
+    // Uses the invoice-basis helpers above to determine the correct anchor.
     function getGroupAnchor(settlement: any, part: number | null): {
       net: number;
       fees: number;
@@ -897,31 +931,27 @@ Deno.serve(async (req) => {
     } {
       // If this is a split sub-group with a known part, use split data as anchor
       if (settlement.is_split_month && part !== null) {
-        const rawSplitData = part === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
-        let splitData = rawSplitData;
-        if (typeof splitData === 'string') {
-          try { splitData = JSON.parse(splitData); } catch { splitData = null; }
-        }
-        if (splitData && typeof splitData === 'object' && splitData.grossTotal !== undefined) {
-          // Xero ACCREC invoices are GST-inclusive — AmountDue ≈ grossTotal, NOT netExGst.
-          // Proven: buildAmazonInvoiceLineItems uses OUTPUT/INPUT tax types, Xero adds GST.
-          // Verification: sum(grossTotal per part) = bank_deposit for the parent settlement.
+        const partNet = getInvoiceBasisNetPart(settlement, part);
+        if (partNet !== null) {
+          const splitData = parseSplitData(
+            part === 1 ? settlement.split_month_1_data : settlement.split_month_2_data
+          );
           return {
-            net: Math.abs(Number(splitData.grossTotal ?? 0)),
-            fees: Math.abs(Number(splitData.sellerFees ?? 0))
-              + Math.abs(Number(splitData.fbaFees ?? 0))
-              + Math.abs(Number(splitData.storageFees ?? 0))
-              + Math.abs(Number(splitData.otherFees ?? 0)),
-            refunds: Math.abs(Number(splitData.refunds ?? 0)),
-            gstOnIncome: Math.abs(Number(splitData.gstOnIncome ?? 0)),
-            gstOnExpenses: Math.abs(Number(splitData.gstOnExpenses ?? 0)),
+            net: partNet,
+            fees: Math.abs(Number(splitData?.sellerFees ?? 0))
+              + Math.abs(Number(splitData?.fbaFees ?? 0))
+              + Math.abs(Number(splitData?.storageFees ?? 0))
+              + Math.abs(Number(splitData?.otherFees ?? 0)),
+            refunds: Math.abs(Number(splitData?.refunds ?? 0)),
+            gstOnIncome: Math.abs(Number(splitData?.gstOnIncome ?? 0)),
+            gstOnExpenses: Math.abs(Number(splitData?.gstOnExpenses ?? 0)),
           };
         }
         // Split data missing/invalid — fall through to parent settlement anchor
       }
-      // Non-split or fallback: use parent settlement values with existing anchor logic
+      // Non-split or fallback: use parent settlement values with payout anchor
       return {
-        net: getSettlementNet(settlement),
+        net: getInvoiceBasisNet(settlement),
         fees: Math.abs(settlement.seller_fees ?? 0)
           + Math.abs(settlement.fba_fees ?? 0)
           + Math.abs(settlement.storage_fees ?? 0)
@@ -1385,6 +1415,27 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ─── Split consistency diagnostic ───
+    // For every is_split_month settlement, verify: abs(gross1 + gross2 - bank_deposit) <= 0.10
+    const splitDiagnostics: { settlement_id: string; bank_deposit: number; gross1: number | null; gross2: number | null; drift: number; ok: boolean }[] = [];
+    for (const s of allSettlements) {
+      if (!s.is_split_month) continue;
+      const gross1 = getInvoiceBasisNetPart(s, 1);
+      const gross2 = getInvoiceBasisNetPart(s, 2);
+      const bankDep = Math.abs(s.bank_deposit ?? 0);
+      if (gross1 !== null && gross2 !== null) {
+        const drift = Math.round(Math.abs((gross1 + gross2) - bankDep) * 100) / 100;
+        splitDiagnostics.push({
+          settlement_id: s.settlement_id,
+          bank_deposit: bankDep,
+          gross1,
+          gross2,
+          drift,
+          ok: drift <= 0.10,
+        });
+      }
+    }
+
     // ─── Structured diagnostics log ───
     const bankDates = bankTxns.map((t: any) => parseXeroDate(t.Date)).filter(Boolean).sort();
     const syncInfo = {
@@ -1422,6 +1473,9 @@ Deno.serve(async (req) => {
       bank_sync_last_success_at: bankSyncLastSuccessAt,
       bank_sync_cooldown_until: bankSyncCooldownUntil,
       bank_sync_cooldown_seconds_remaining: bankSyncCooldownSecondsRemaining,
+      // Split-month consistency diagnostics
+      split_settlement_checks: splitDiagnostics.length > 0 ? splitDiagnostics : undefined,
+      split_settlement_drift_detected: splitDiagnostics.some(d => !d.ok),
     };
 
     console.log(JSON.stringify({
