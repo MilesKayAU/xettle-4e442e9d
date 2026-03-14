@@ -56,10 +56,13 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
 }
 
 // ─── Paginated Xero invoice query with optional ModifiedAfter ───
+// GOVERNOR (P2): 0 retries on 429. On 429: set shared cooldown, stop immediately.
 async function queryXeroInvoicesPaginated(
   token: XeroToken,
   whereClause: string,
-  modifiedAfter?: string
+  modifiedAfter?: string,
+  supabaseAdmin?: any,
+  userId?: string,
 ): Promise<any[]> {
   const allInvoices: any[] = [];
   let page = 1;
@@ -76,19 +79,39 @@ async function queryXeroInvoicesPaginated(
       headers['If-Modified-Since'] = modifiedAfter;
     }
 
-    let resp: Response | null = null;
-    for (let attempt = 1; attempt <= 4; attempt++) {
-      resp = await fetch(url, { headers });
-      if (resp.status === 429 && attempt < 4) {
-        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
-        console.warn(`[queryXeroInvoicesPaginated] 429 on page ${page}, retrying in ${delayMs}ms (attempt ${attempt}/4)`);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        continue;
-      }
-      break;
+    const resp = await fetch(url, { headers });
+
+    // ── Audit log ──
+    if (supabaseAdmin && userId) {
+      await supabaseAdmin.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_api_call',
+        severity: resp.ok ? 'info' : (resp.status === 429 ? 'warning' : 'error'),
+        details: {
+          timestamp_utc: new Date().toISOString(),
+          function_name: 'sync-xero-status',
+          invoker: 'self',
+          endpoint: `Invoices (paginated page=${page})`,
+          attempt_number: 1,
+          governor_decision: 'allowed',
+          http_status: resp.status,
+        },
+      });
     }
 
-    if (!resp) break;
+    if (resp.status === 429) {
+      console.warn(`[queryXeroInvoicesPaginated] 429 on page ${page} — 0 retries, setting shared cooldown`);
+      if (supabaseAdmin && userId) {
+        const retryAfterSec = Math.max(60, Math.min(300, parseInt(resp.headers.get('Retry-After') || '90') || 90));
+        await supabaseAdmin.from('app_settings').upsert({
+          user_id: userId,
+          key: 'xero_api_cooldown_until',
+          value: new Date(Date.now() + retryAfterSec * 1000).toISOString(),
+        }, { onConflict: 'user_id,key' });
+      }
+      break; // Stop all pagination immediately
+    }
+
     if (resp.status === 304) break; // Not modified
     if (!resp.ok) {
       const errText = await resp.text();
