@@ -134,7 +134,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -142,6 +142,14 @@ export default function ActionCentre({
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('settlements')
+          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status')
+          .in('status', ['ingested', 'ready_to_push'])
+          .eq('is_hidden', false)
+          .eq('is_pre_boundary', false)
+          .is('duplicate_of_settlement_id', null)
+          .order('marketplace')
+          .order('period_start', { ascending: false }),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
