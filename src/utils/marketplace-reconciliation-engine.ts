@@ -401,6 +401,29 @@ export async function autoReconcileSettlement(
     } as any, { onConflict: 'user_id,marketplace_code,period_label' }).then(({ error: valErr }) => {
       if (valErr) console.error('[marketplace_validation] recon upsert error:', valErr);
     });
+
+    // ─── Auto-promote: ingested → ready_to_push when reconciliation is matched ───
+    if (result.status === 'matched') {
+      const { error: promoteErr } = await supabase
+        .from('settlements')
+        .update({
+          status: 'ready_to_push',
+          reconciliation_status: 'matched',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id)
+        .eq('settlement_id', settlementId)
+        .eq('status', 'ingested')           // Only promote from ingested (guard)
+        .eq('is_hidden', false)
+        .eq('is_pre_boundary', false)
+        .is('duplicate_of_settlement_id', null);
+
+      if (promoteErr) {
+        console.error('[autoReconcile] Failed to promote settlement to ready_to_push:', promoteErr);
+      } else {
+        console.log(`[autoReconcile] Settlement ${settlementId} promoted to ready_to_push`);
+      }
+    }
   } catch (err) {
     console.error('[autoReconcileSettlement] Error:', err);
   }
