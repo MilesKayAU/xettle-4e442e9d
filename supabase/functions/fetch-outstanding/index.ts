@@ -1079,6 +1079,7 @@ Deno.serve(async (req) => {
     }
 
     // Second pass: compare each group/sub-group to its anchor
+    // Now with invoice_model detection for dual-anchor support
     const settlementGroupResults = new Map<string, SettlementGroupResult>();
     let settlementLevelMatches = 0;
 
@@ -1089,7 +1090,6 @@ Deno.serve(async (req) => {
       ) / 100;
 
       if (!group.settlement) {
-        // No settlement found → no tolerance allowed
         const result: SettlementGroupResult = {
           matched: false,
           group_sum: groupSum,
@@ -1106,10 +1106,47 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const anchor = getGroupAnchor(group.settlement, group.part);
-      const net = anchor.net;
-      const diff = Math.round(Math.abs(groupSum - net) * 100) / 100;
+      // ─── Invoice model detection ───
+      const invoiceModel = detectGroupInvoiceModel(group.invoices);
 
+      // ─── Dual-anchor: select anchor based on invoice model ───
+      const anchor = getGroupAnchor(group.settlement, group.part);
+      let net = anchor.net;
+      let anchorBasis = anchor.basis;
+      let anchorComponents = anchor.components;
+      let anchorMethod = anchor.method;
+
+      // For external GST-inclusive invoices (LMB/A2X), the anchor is the
+      // payout grossed-up by the rail's GST rate. This is deterministic:
+      // bank_deposit + (bank_deposit / gst_rate) = payout * (1 + gst_rate/100)
+      // LMB treats the entire payout as GST-exclusive and adds OUTPUT tax.
+      if (invoiceModel === 'external_gst_inclusive') {
+        const marketplace = (group.settlement.marketplace || '').toLowerCase();
+        const gstRate = RAIL_GST_RATES[marketplace] ?? 10;
+        const bankDep = Math.abs(group.settlement.bank_deposit ?? group.settlement.net_ex_gst ?? 0);
+
+        if (group.part !== null && group.settlement.is_split_month) {
+          // For split parts: gross-up the part's grossTotal
+          const partGross = getInvoiceBasisNetPart(group.settlement, group.part);
+          if (partGross !== null) {
+            net = Math.round((partGross + partGross / gstRate) * 100) / 100;
+            anchorBasis = 'split_part_gross' as any;
+            anchorComponents = [`split_month_${group.part}_data.grossTotal`, `gst_gross_up_${gstRate}pct`];
+            anchorMethod = 'split_part_gst_gross_up';
+          }
+        } else {
+          net = Math.round((bankDep + bankDep / gstRate) * 100) / 100;
+          anchorBasis = 'gross' as any;
+          anchorComponents = ['bank_deposit', `gst_gross_up_${gstRate}pct`];
+          anchorMethod = 'payout_gst_gross_up';
+        }
+      }
+      // For 'unknown' model: try standard anchor first, then gross-up as fallback
+      else if (invoiceModel === 'unknown') {
+        // Will attempt gross-up below if standard anchor fails
+      }
+
+      const diff = Math.round(Math.abs(groupSum - net) * 100) / 100;
 
       let matched = false;
       let confidence: SettlementGroupResult['confidence'] = null;
@@ -1139,9 +1176,6 @@ Deno.serve(async (req) => {
         const { fees, refunds, gstOnIncome, gstOnExpenses } = anchor;
         const tax = gstOnIncome + gstOnExpenses;
 
-        // Candidates: [componentValue, label, matchTolerance]
-        // gst_on_income gets $2.00 tolerance (rounding across line items)
-        // All others keep strict $1.00
         const candidates: [number, string, number][] = [
           [fees, 'fees', 1.00],
           [refunds, 'refunds', 1.00],
