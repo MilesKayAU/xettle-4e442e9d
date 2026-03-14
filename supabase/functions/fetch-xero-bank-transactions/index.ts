@@ -26,7 +26,25 @@ const LOOKBACK_DAYS_SELF = 30;
 
 // formatXeroDateTime removed — no longer used after switching to If-Modified-Since header
 
-async function refreshXeroToken(supabase: any, userId: string, clientId: string, clientSecret: string) {
+type XeroRequestLedgerEntry = {
+  timestamp: string;
+  function_name: string;
+  invoker: string;
+  endpoint: string;
+  account_id: string | null;
+  response_code: number;
+  retry_number: number;
+  from_wrapper_retry_logic: boolean;
+};
+
+async function refreshXeroToken(
+  supabase: any,
+  userId: string,
+  clientId: string,
+  clientSecret: string,
+  trackRequest?: (entry: XeroRequestLedgerEntry) => void,
+  invoker: string = 'unknown',
+) {
   // Optimistic locking: re-read token immediately before refresh
   const { data: tokenRow, error } = await supabase
     .from('xero_tokens')
@@ -39,6 +57,7 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
   const expiresAt = new Date(tokenRow.expires_at);
   if (expiresAt > new Date(Date.now() + 60000)) return tokenRow;
 
+  const timestamp = new Date().toISOString();
   const res = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: {
@@ -49,6 +68,17 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
       grant_type: 'refresh_token',
       refresh_token: tokenRow.refresh_token,
     }),
+  });
+
+  trackRequest?.({
+    timestamp,
+    function_name: 'fetch-xero-bank-transactions',
+    invoker,
+    endpoint: 'identity.xero.com/connect/token',
+    account_id: null,
+    response_code: res.status,
+    retry_number: 0,
+    from_wrapper_retry_logic: false,
   });
 
   if (!res.ok) {
