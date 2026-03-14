@@ -1275,10 +1275,12 @@ export type Database = {
         Row: {
           advertising_costs: number | null
           commerce_gross_total: number | null
+          components_used: Json | null
           created_at: string | null
           currency: string
           fees_ex_tax: number | null
           fees_tax: number | null
+          formula_version: string | null
           gst_rate: number | null
           id: string
           marketplace_code: string
@@ -1305,10 +1307,12 @@ export type Database = {
         Insert: {
           advertising_costs?: number | null
           commerce_gross_total?: number | null
+          components_used?: Json | null
           created_at?: string | null
           currency?: string
           fees_ex_tax?: number | null
           fees_tax?: number | null
+          formula_version?: string | null
           gst_rate?: number | null
           id?: string
           marketplace_code: string
@@ -1335,10 +1339,12 @@ export type Database = {
         Update: {
           advertising_costs?: number | null
           commerce_gross_total?: number | null
+          components_used?: Json | null
           created_at?: string | null
           currency?: string
           fees_ex_tax?: number | null
           fees_tax?: number | null
+          formula_version?: string | null
           gst_rate?: number | null
           id?: string
           marketplace_code?: string

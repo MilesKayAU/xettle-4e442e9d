@@ -359,6 +359,7 @@ Deno.serve(async (req) => {
           due_date: parseXeroDate(inv.DueDate) || null,
           amount_due: inv.AmountDue || 0,
           total: inv.Total || 0,
+          sub_total: inv.SubTotal || 0,
           currency_code: inv.CurrencyCode || 'AUD',
           status: inv.Status || null,
           fetched_at: now,
@@ -398,6 +399,7 @@ Deno.serve(async (req) => {
             DueDate: c.due_date || null,
             AmountDue: Number(c.amount_due || 0),
             Total: Number(c.total || 0),
+            SubTotal: Number(c.sub_total || 0),
             CurrencyCode: c.currency_code || 'AUD',
             Status: c.status,
           }));
@@ -452,6 +454,7 @@ Deno.serve(async (req) => {
             DueDate: null,
             AmountDue: Math.abs(Number(m.matched_amount || 0)),
             Total: Math.abs(Number(m.matched_amount || 0)),
+            SubTotal: 0,
             CurrencyCode: 'AUD',
           }));
           console.log(`[fetch-outstanding] Last-resort fallback from xero_accounting_matches: ${allInvoices.length} invoices`);
@@ -474,6 +477,7 @@ Deno.serve(async (req) => {
           DueDate: c.due_date || null,
           AmountDue: Number(c.amount_due || 0),
           Total: Number(c.total || 0),
+          SubTotal: Number(c.sub_total || 0),
           CurrencyCode: c.currency_code || 'AUD',
           Status: c.status,
         }));
@@ -820,6 +824,8 @@ Deno.serve(async (req) => {
       tolerance_used?: number | null;
       anchor_basis?: 'gross' | 'net' | 'split_part_gross';
       anchor_components_used?: string[];
+      comparison_field?: string;
+      amount_due_total?: number;
     }
 
     // ─── Invoice model detection (deterministic, reference-based) ───
@@ -1097,58 +1103,120 @@ Deno.serve(async (req) => {
     }
     console.log(`[fetch-outstanding] Loaded ${componentsMap.size} settlement_components for ${componentSettlementIds.length} settlements`);
 
+    // ─── Backfill: auto-populate settlement_components for settlements missing them ───
+    const missingComponentIds = componentSettlementIds.filter(id => !componentsMap.has(id));
+    if (missingComponentIds.length > 0) {
+      const backfillRows: any[] = [];
+      for (const id of missingComponentIds) {
+        const s = settlementMap.get(id);
+        if (!s || !s.marketplace || !s.period_start || !s.period_end) continue;
+        const bankDep = Math.abs(s.bank_deposit ?? 0);
+        const gstInc = Math.abs(s.gst_on_income ?? 0);
+        const gstExp = s.gst_on_expenses ?? 0;
+        const salesGross = Math.abs(s.sales_principal ?? 0) + Math.abs(s.sales_shipping ?? 0);
+        backfillRows.push({
+          user_id: userId,
+          settlement_id: id,
+          marketplace_code: s.marketplace,
+          currency: 'AUD',
+          period_start: s.period_start,
+          period_end: s.period_end,
+          sales_ex_tax: Math.round((salesGross - gstInc) * 100) / 100,
+          sales_tax: gstInc,
+          fees_ex_tax: Math.round(((s.seller_fees ?? 0) + (s.fba_fees ?? 0) - gstExp) * 100) / 100,
+          fees_tax: gstExp,
+          refunds_ex_tax: s.refunds ?? 0,
+          storage_fees: s.storage_fees ?? 0,
+          reimbursements: s.reimbursements ?? 0,
+          other_adjustments: s.other_fees ?? 0,
+          payout_total: bankDep,
+          commerce_gross_total: bankDep, // Diagnostic only — matching uses Xero SubTotal
+          payout_gst_inclusive: Math.round((bankDep + gstInc + gstExp) * 100) / 100,
+          source: 'backfill_header',
+          formula_version: 'v2_subtotal',
+          components_used: JSON.stringify(['bank_deposit', 'gst_on_income', 'gst_on_expenses', 'sales_principal', 'seller_fees', 'fba_fees']),
+        });
+      }
+      if (backfillRows.length > 0) {
+        for (let i = 0; i < backfillRows.length; i += 100) {
+          await supabase.from('settlement_components').upsert(
+            backfillRows.slice(i, i + 100),
+            { onConflict: 'user_id,settlement_id,marketplace_code' }
+          );
+        }
+        console.log(`[fetch-outstanding] Backfilled ${backfillRows.length} settlement_components from header fields`);
+      }
+    }
+
     // Second pass: compare each group/sub-group to its anchor
-    // Now with invoice_model detection for dual-anchor support
+    // Uses Xero SubTotal for external invoices (deterministic, no heuristic).
+    // SubTotal = sum of ex-GST invoice lines. For Tax Exclusive invoices (LMB/A2X),
+    // SubTotal = net of all lines = bank_deposit. No *1.1, no formula.
     const settlementGroupResults = new Map<string, SettlementGroupResult>();
     let settlementLevelMatches = 0;
 
-
     for (const [groupKey, group] of finalGroups) {
-      const groupSum = Math.round(
+      // ─── Invoice model detection ───
+      const invoiceModel = group.settlement ? detectGroupInvoiceModel(group.invoices) : 'unknown';
+
+      // Always compute AmountDue sum (for display / evidence)
+      const groupAmountDue = Math.round(
         group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.AmountDue ?? inv.Total ?? 0), 0) * 100
       ) / 100;
+
+      // For external GST-inclusive invoices, use SubTotal for matching.
+      // SubTotal (from Xero API) = sum of ex-GST line amounts.
+      // For Tax Exclusive invoices created by LMB/A2X: SubTotal ≈ bank_deposit.
+      // This is deterministic — no formula, no gross-up.
+      let groupSum = groupAmountDue;
+      let comparisonField = 'AmountDue';
+
+      if (invoiceModel === 'external_gst_inclusive') {
+        const subTotalSum = Math.round(
+          group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.SubTotal ?? 0), 0) * 100
+        ) / 100;
+        if (subTotalSum > 0) {
+          groupSum = subTotalSum;
+          comparisonField = 'SubTotal';
+        } else {
+          // SubTotal not yet cached — will mismatch correctly.
+          // Next Xero sync will populate SubTotal and resolve.
+          comparisonField = 'AmountDue_no_subtotal';
+        }
+      }
 
       if (!group.settlement) {
         const result: SettlementGroupResult = {
           matched: false,
-          group_sum: groupSum,
+          group_sum: groupAmountDue,
           settlement_net: 0,
-          difference: groupSum,
+          difference: groupAmountDue,
           invoice_count: group.invoices.length,
           confidence: null,
           settlement_id: group.settlementId,
           invoice_ids: group.invoices.map((inv: any) => inv.InvoiceID),
           explanation: null,
           tolerance_used: null,
+          comparison_field: comparisonField,
+          amount_due_total: groupAmountDue,
         };
         settlementGroupResults.set(groupKey, result);
         continue;
       }
 
-      // ─── Invoice model detection ───
-      const invoiceModel = detectGroupInvoiceModel(group.invoices);
-
-      // ─── Dual-anchor: select anchor based on invoice model ───
+      // ─── Anchor: always payout (bank_deposit) ───
       const anchor = getGroupAnchor(group.settlement, group.part);
       let net = anchor.net;
       let anchorBasis = anchor.basis;
       let anchorComponents = anchor.components;
       let anchorMethod = anchor.method;
 
-      // For external GST-inclusive invoices (LMB/A2X), use commerce_gross_total
-      // from settlement_components (deterministic, computed from explicit breakdown).
-      // NO heuristic gross-up (*1.1) — only use stored component data.
       if (invoiceModel === 'external_gst_inclusive') {
-        const comp = componentsMap.get(group.settlementId);
-        if (comp?.commerce_gross_total && Number(comp.commerce_gross_total) > 0) {
-          net = Math.round(Math.abs(Number(comp.commerce_gross_total)) * 100) / 100;
-          anchorBasis = 'gross';
-          anchorComponents = ['settlement_components.commerce_gross_total'];
-          anchorMethod = 'commerce_gross_total';
+        if (comparisonField === 'SubTotal') {
+          anchorMethod = 'subtotal_vs_payout';
+          anchorComponents = ['invoice.SubTotal', 'bank_deposit'];
         } else {
-          // Components not yet populated — cannot match deterministically.
-          // Leave net as payout anchor; will show as mismatch with diagnostic.
-          anchorMethod = 'payout_no_components';
+          anchorMethod = 'payout_no_subtotal';
         }
       }
       // For 'unknown' model: use payout anchor only. Do NOT gross-up.
@@ -1222,6 +1290,8 @@ Deno.serve(async (req) => {
         tolerance_used: toleranceUsed,
         anchor_basis: anchorBasis,
         anchor_components_used: anchorComponents,
+        comparison_field: comparisonField,
+        amount_due_total: groupAmountDue,
       };
 
       settlementGroupResults.set(groupKey, result);
