@@ -61,6 +61,9 @@ interface ValidationSweepProps {
 
 type FilterStatus = 'all' | 'complete' | 'ready_to_push' | 'settlement_needed' | 'gap_detected';
 
+type SortKey = 'marketplace_code' | 'period_start' | 'orders_count' | 'settlement_net' | 'overall_status';
+type SortDir = 'asc' | 'desc';
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgClass: string; borderClass: string }> = {
   complete: { label: 'Complete', color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', borderClass: 'border-emerald-200 dark:border-emerald-800' },
   bank_matched: { label: 'Complete', color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', borderClass: 'border-emerald-200 dark:border-emerald-800' },
