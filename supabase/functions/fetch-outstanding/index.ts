@@ -822,45 +822,76 @@ Deno.serve(async (req) => {
       anchor_components_used?: string[];
     }
 
-    // ─── AU rail detection (basis-correct anchor selection) ───
-    // AU rails generate GST-inclusive invoices (OUTPUT/INPUT tax types).
-    // Xero AmountDue for these invoices = bank_deposit + gst_on_income.
-    // Non-AU rails (e.g. amazon_us, unknown) have AmountDue ≈ bank_deposit.
-    const NON_AU_RAILS = new Set(['amazon_us', 'unknown']);
-    function isAuRail(marketplace: string | null): boolean {
-      if (!marketplace) return false;
-      return !NON_AU_RAILS.has(marketplace.toLowerCase());
+    // ─── Per-rail tax model configuration (basis-correct anchor selection) ───
+    // Each rail declares its invoice_basis and deposit_basis explicitly.
+    // This determines whether GST needs to be added to the anchor.
+    //
+    // invoice_basis: 'gst_inclusive' = Xero invoices include GST in line items
+    //                'net'           = Xero invoices are net (no GST adjustment)
+    // deposit_basis: 'ex_gst'  = bank_deposit field is stored ex-GST
+    //                'gross'   = bank_deposit field already includes GST
+    //
+    // The invoice builder (amazon-xero-push.ts) forces AmountDue = bank_deposit
+    // via a rounding adjustment. GST is embedded in OUTPUT/INPUT line items but
+    // the invoice total equals bank_deposit. Therefore for all current AU rails:
+    //   invoice_basis = 'gst_inclusive', deposit_basis = 'gross'
+    //   → anchor = bank_deposit (no GST addition needed)
+    //
+    // If a future rail stores deposit ex-GST, set deposit_basis = 'ex_gst'
+    // and anchor will correctly become bank_deposit + gst_on_income.
+
+    interface RailTaxModel {
+      invoice_basis: 'gst_inclusive' | 'net';
+      deposit_basis: 'ex_gst' | 'gross';
     }
+
+    const RAIL_TAX_MODELS: Record<string, RailTaxModel> = {
+      // AU rails: invoice builder sets AmountDue = bank_deposit (gross deposit)
+      amazon_au:        { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+      shopify_payments: { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+      ebay:             { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+      bunnings:         { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+      catch:            { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+      kogan:            { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+      mydeal:           { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+      everyday_market:  { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+      paypal:           { invoice_basis: 'gst_inclusive', deposit_basis: 'gross' },
+    };
+
+    const DEFAULT_TAX_MODEL: RailTaxModel = { invoice_basis: 'net', deposit_basis: 'gross' };
 
     // ─── Invoice-basis anchor helpers (single source of truth) ───
     // "Invoice-basis" = the number Xero AmountDue is expected to be.
-    // For AU marketplaces with GST-inclusive invoices:
-    //   anchor = abs(bank_deposit) + abs(gst_on_income)  [gross]
-    // For non-AU or missing GST fields:
-    //   anchor = abs(bank_deposit ?? net_ex_gst ?? 0)    [net]
+    // Anchor logic is deterministic based on the rail's tax model:
+    //   gst_inclusive + ex_gst deposit → anchor = bank_deposit + gst_on_income
+    //   gst_inclusive + gross deposit  → anchor = bank_deposit (GST already in deposit)
+    //   net + any                      → anchor = bank_deposit
 
     /** Non-split anchor: Xero AmountDue for the settlement (basis-correct). */
-    function getInvoiceBasisNet(s: any): { anchor: number; method: string; basis: 'gross' | 'net'; components: string[] } {
+    function getInvoiceBasisNet(s: any): { anchor: number; method: string; basis: 'gross' | 'net'; components: string[]; rail_tax_model: RailTaxModel } {
       const bankDep = Math.abs(s.bank_deposit ?? s.net_ex_gst ?? 0);
       const gstOnIncome = Math.abs(s.gst_on_income ?? 0);
       const marketplace = (s.marketplace || '').toLowerCase();
+      const model = RAIL_TAX_MODELS[marketplace] || DEFAULT_TAX_MODEL;
 
-      // AU rails with non-zero gst_on_income: use gross anchor (bank_deposit + gst_on_income)
-      if (isAuRail(marketplace) && gstOnIncome > 0) {
+      // Only add GST when invoices are GST-inclusive AND deposit is stored ex-GST
+      if (model.invoice_basis === 'gst_inclusive' && model.deposit_basis === 'ex_gst' && gstOnIncome > 0) {
         return {
           anchor: bankDep + gstOnIncome,
           method: 'gross_bank_deposit_plus_gst',
           basis: 'gross',
           components: ['bank_deposit', 'gst_on_income'],
+          rail_tax_model: model,
         };
       }
 
-      // Non-AU or missing GST: net anchor
+      // Net anchor: deposit already gross, or no GST adjustment needed
       return {
         anchor: bankDep,
         method: s.bank_deposit != null ? 'bank_deposit' : 'fallback_net_ex_gst',
         basis: 'net',
         components: [s.bank_deposit != null ? 'bank_deposit' : 'net_ex_gst'],
+        rail_tax_model: model,
       };
     }
 
@@ -1369,6 +1400,9 @@ Deno.serve(async (req) => {
         readyToReconcile++;
       } else if (hasSettlement && hasBankDeposit) {
         matchStatus = `gap_${bankDifference?.toFixed(2)}`;
+      } else if (hasSettlement && !hasBankDeposit && settlementGroup && !isSettlementGroupMatched) {
+        // Settlement exists but group sum doesn't match anchor — needs review
+        matchStatus = 'settlement_mismatch';
       } else if (hasSettlement && !hasBankDeposit) {
         matchStatus = 'awaiting_confirmation';
       } else if (!hasSettlement && marketplace === 'amazon_us') {
@@ -1540,12 +1574,14 @@ Deno.serve(async (req) => {
       // Anchor basis diagnostics (bounded)
       anchor_basis_summary: (() => {
         let grossCount = 0, netCount = 0, splitCount = 0;
-        const mismatches: { settlement_id: string; basis: string; sum: number; anchor: number; diff: number; components: string[] }[] = [];
+        const mismatches: { settlement_id: string; basis: string; sum: number; anchor: number; diff: number; components: string[]; rail_tax_model?: RailTaxModel }[] = [];
         for (const [, result] of settlementGroupResults) {
           if (result.anchor_basis === 'gross') grossCount++;
           else if (result.anchor_basis === 'split_part_gross') splitCount++;
           else netCount++;
           if (!result.matched && mismatches.length < 10) {
+            const settlement = settlementMap.get(result.settlement_id);
+            const marketplace = (settlement?.marketplace || '').toLowerCase();
             mismatches.push({
               settlement_id: result.settlement_id,
               basis: result.anchor_basis || 'unknown',
@@ -1553,6 +1589,7 @@ Deno.serve(async (req) => {
               anchor: result.settlement_net,
               diff: result.difference,
               components: result.anchor_components_used || [],
+              rail_tax_model: RAIL_TAX_MODELS[marketplace] || DEFAULT_TAX_MODEL,
             });
           }
         }

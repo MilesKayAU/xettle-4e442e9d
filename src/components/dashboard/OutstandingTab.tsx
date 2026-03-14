@@ -1253,6 +1253,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'settlement_matched') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'confirmed_manual') return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
+    if (row.match_status === 'settlement_mismatch') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'awaiting_confirmation') return <Clock3 className="h-4 w-4 text-amber-500" />;
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'unsupported_marketplace') return <AlertTriangle className="h-4 w-4 text-muted-foreground" />;
@@ -1276,6 +1277,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
+    if (row.match_status === 'settlement_mismatch') {
+      const diff = row.settlement_group_diff;
+      return diff != null ? `Mismatch — $${diff.toFixed(2)}` : 'Mismatch — review';
+    }
     if (row.match_status === 'awaiting_confirmation') return 'Ready to confirm';
     if (row.match_status === 'suggestion_high') return 'Likely match found';
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
@@ -1295,6 +1300,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'settlement_matched') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
+    if (row.match_status === 'settlement_mismatch') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.match_status === 'awaiting_confirmation') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.match_status === 'unsupported_marketplace') return 'bg-muted/30';
