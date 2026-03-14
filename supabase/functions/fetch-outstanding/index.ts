@@ -813,9 +813,11 @@ Deno.serve(async (req) => {
       settlement_net: number;
       difference: number;
       invoice_count: number;
-      confidence: 'high' | 'medium' | null;
+      confidence: 'exact' | 'high' | 'grouped' | 'explainable' | null;
       settlement_id: string;
       invoice_ids: string[];
+      explanation?: string | null;
+      tolerance_used?: number | null;
     }
 
     // ─── Canonical settlement net helper (single source of truth) ───
