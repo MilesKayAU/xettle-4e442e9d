@@ -355,15 +355,31 @@ async function processSettlement(
 
   // Determine which categories have non-zero amounts and thus require mappings
   const contactName = MARKETPLACE_CONTACTS[marketplace] || marketplace;
+  // ══════════════════════════════════════════════════════════════
+  // 10-CATEGORY BREAKDOWN — Canonical source: src/utils/xero-posting-line-items.ts
+  // If you change this list, bump CANONICAL_VERSION above.
+  //
+  //   Sales (Principal)     sales_principal        OUTPUT        as_is
+  //   Shipping Revenue      sales_shipping         OUTPUT        as_is
+  //   Promotional Discounts promotional_discounts  OUTPUT        as_is
+  //   Refunds               refunds                OUTPUT        as_is
+  //   Reimbursements        reimbursements         BASEXCLUDED   as_is
+  //   Seller Fees           seller_fees            INPUT         negate_abs
+  //   FBA Fees              fba_fees               INPUT         negate_abs
+  //   Storage Fees          storage_fees           INPUT         negate_abs
+  //   Advertising           advertising_costs      INPUT         negate_abs
+  //   Other Fees            other_fees             INPUT         negate_abs
+  // ══════════════════════════════════════════════════════════════
   const categoryAmounts: Record<string, number> = {
-    'Sales': round2((settlement.sales_principal || 0) + (settlement.sales_shipping || 0)),
+    'Sales (Principal)': round2(settlement.sales_principal || 0),
+    'Shipping Revenue': round2(settlement.sales_shipping || 0),
     'Promotional Discounts': round2(settlement.promotional_discounts || 0),
     'Refunds': round2(settlement.refunds || 0),
     'Reimbursements': round2(settlement.reimbursements || 0),
     'Seller Fees': -Math.abs(round2(settlement.seller_fees || 0)),
     'FBA Fees': -Math.abs(round2(settlement.fba_fees || 0)),
     'Storage Fees': -Math.abs(round2(settlement.storage_fees || 0)),
-    'Advertising Costs': -Math.abs(round2(settlement.advertising_costs || 0)),
+    'Advertising': -Math.abs(round2(settlement.advertising_costs || 0)),
     'Other Fees': -Math.abs(round2(settlement.other_fees || 0)),
   };
 
