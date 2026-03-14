@@ -779,16 +779,9 @@ async function fetchBankTxnsForUser(
       const lastDate = pageTxnDates[pageTxnDates.length - 1] || null;
       const newestToOldest = !!firstDate && !!lastDate ? firstDate >= lastDate : null;
 
-      const allOlderThanFrom = pageTxnDates.length > 0 && pageTxnDates.every((d) => d < fetchFromDate);
-      const oldestOlderThanFromInNewestFirst = newestToOldest === true && !!lastDate && lastDate < fetchFromDate;
-
-      if (oldestOlderThanFromInNewestFirst || allOlderThanFrom) {
-        accountStopReason = 'past_fetch_from_boundary';
-        hasMore = false;
-      } else if (inRangeThisPage === 0) {
-        accountStopReason = 'no_in_range_rows';
-        hasMore = false;
-      } else if (page >= MAX_PAGES_PER_ACCOUNT) {
+      // With server-side date filtering, no need for client-side date boundary stops.
+      // Just paginate until empty or max pages.
+      if (page >= MAX_PAGES_PER_ACCOUNT) {
         accountStopReason = 'max_pages';
         hasMore = false;
       } else if (txns.length < 100) {
