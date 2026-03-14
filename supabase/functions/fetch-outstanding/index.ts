@@ -817,10 +817,6 @@ Deno.serve(async (req) => {
     const AMAZON_BATCH_TOLERANCE = 1.0;
     const AMAZON_GROUP_WINDOW_DAYS = 10;
     const AMAZON_MAX_GROUP_SIZE = 6;
-    // Nothing is marked as matched until user explicitly confirms.
-    // Auto-detection is always a SUGGESTION.
-    // Groups Amazon invoices by PAYOUT DATE WINDOW (not settlement period),
-    // because Amazon deposits often cross settlement period boundaries.
     interface BankCandidate {
       transaction_id: string;
       amount: number;
@@ -831,129 +827,66 @@ Deno.serve(async (req) => {
       confidence: 'high' | 'medium' | 'low';
       score: number;
       match_type: 'exact' | 'aggregate';
+      amount_delta?: number;
+      days_delta?: number;
+      transaction_type?: string;
+      transaction_status?: string | null;
+      excluded_type?: boolean;
     }
 
-    interface AggregateGroup {
+    interface AmazonBatchGroup {
       id: string;
-      invoiceIds: string[];
-      settlementIds: string[];
-      sum: number;
-      dates: string[];
-      centreDate: Date;
-      candidates: BankCandidate[];
+      settlement_ids: string[];
+      expected_sum: number;
+      period_end_min: string;
+      period_end_max: string;
     }
 
-    const amazonInvoices = invoices.filter((inv: any) => {
-      const contact = (inv.Contact?.Name || '').toLowerCase();
-      const ref = (inv.Reference || '').toLowerCase();
-      return ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon') || ref.startsWith('lmb-');
-    });
+    const dayMs = 24 * 60 * 60 * 1000;
+    const addDays = (dateStr: string, days: number) => {
+      const d = new Date(dateStr);
+      d.setDate(d.getDate() + days);
+      return d.toISOString().split('T')[0];
+    };
 
-    // Sort by date
-    const sortedAmazon = [...amazonInvoices].sort((a: any, b: any) => {
-      const da = parseXeroDate(a.Date) || '';
-      const db = parseXeroDate(b.Date) || '';
-      return da.localeCompare(db);
-    });
+    // Build Amazon multi-settlement batch groups (contiguous windows)
+    const amazonSettlementsForBatch = allSettlements
+      .filter((s: any) => toRailCode((s.marketplace || '').toLowerCase()) === 'amazon_au')
+      .map((s: any) => ({
+        settlement_id: s.settlement_id,
+        period_end: s.period_end,
+        amount: Math.abs(Number(s.bank_deposit || s.net_ex_gst || 0)),
+      }))
+      .filter((s: any) => !!s.period_end && s.amount > 0)
+      .sort((a: any, b: any) => new Date(a.period_end).getTime() - new Date(b.period_end).getTime());
 
-    // Group into 5-day payout windows
-    const aggregateGroups: AggregateGroup[] = [];
-    let currentGroup: AggregateGroup | null = null;
+    const amazonBatchGroupsBySettlement = new Map<string, AmazonBatchGroup[]>();
+    for (let i = 0; i < amazonSettlementsForBatch.length; i++) {
+      const first = amazonSettlementsForBatch[i];
+      let runningSum = 0;
+      const members: typeof amazonSettlementsForBatch = [];
+      for (let j = i; j < amazonSettlementsForBatch.length && members.length < AMAZON_MAX_GROUP_SIZE; j++) {
+        const curr = amazonSettlementsForBatch[j];
+        const spanDays = Math.abs(new Date(curr.period_end).getTime() - new Date(first.period_end).getTime()) / dayMs;
+        if (spanDays > AMAZON_GROUP_WINDOW_DAYS) break;
 
-    for (const inv of sortedAmazon) {
-      const invDate = parseXeroDate(inv.Date);
-      if (!invDate) continue;
-      const invDateMs = new Date(invDate).getTime();
-      const amount = inv.AmountDue || inv.Total || 0;
-      const ref = inv.Reference || '';
-      const extracted = extractSettlementId(ref);
+        members.push(curr);
+        runningSum += curr.amount;
 
-      if (!currentGroup || (invDateMs - currentGroup.centreDate.getTime()) > 5 * 24 * 60 * 60 * 1000) {
-        currentGroup = {
-          id: `agg_${invDate}_${aggregateGroups.length}`,
-          invoiceIds: [inv.InvoiceID],
-          settlementIds: extracted.id ? [extracted.id] : [],
-          sum: amount,
-          dates: [invDate],
-          centreDate: new Date(invDateMs),
-          candidates: [],
-        };
-        aggregateGroups.push(currentGroup);
-      } else {
-        currentGroup.invoiceIds.push(inv.InvoiceID);
-        if (extracted.id) currentGroup.settlementIds.push(extracted.id);
-        currentGroup.sum += amount;
-        currentGroup.dates.push(invDate);
-        const allMs = currentGroup.dates.map(d => new Date(d).getTime());
-        const avgMs = allMs.reduce((a, b) => a + b, 0) / allMs.length;
-        currentGroup.centreDate = new Date(avgMs);
-      }
-    }
+        if (members.length >= 2) {
+          const group: AmazonBatchGroup = {
+            id: `amazon_batch_${first.period_end}_${i}_${j}`,
+            settlement_ids: members.map((m) => m.settlement_id),
+            expected_sum: Math.round(runningSum * 100) / 100,
+            period_end_min: members[0].period_end,
+            period_end_max: members[members.length - 1].period_end,
+          };
 
-    // Score bank transaction candidates for each aggregate group
-    for (const group of aggregateGroups) {
-      // Single-invoice groups still scored — must meet score ≥ 70 for 'high' confidence
-      group.sum = Math.round(group.sum * 100) / 100;
-
-      // Determine group currency from the first invoice (Amazon AU = AUD)
-      const groupCurrency = 'AUD'; // Amazon AU invoices are always AUD
-
-      for (const txn of bankTxns) {
-        // Currency hard filter — prevent cross-currency false matches
-        if ((txn.CurrencyCode || 'AUD') !== groupCurrency) continue;
-
-        const txnAmount = Math.abs(txn.Total || 0);
-        const txnDate = parseXeroDate(txn.Date);
-        if (!txnDate) continue;
-
-        const amountDiff = Math.abs(txnAmount - group.sum);
-        if (amountDiff > 10) continue; // Wider net for candidates
-
-        const daysDiff = Math.abs(
-          (new Date(txnDate).getTime() - group.centreDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (daysDiff > 7) continue;
-
-        const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''} ${txn.Reference || ''}`.toLowerCase();
-        const narrationMatch = narration.includes('amazon') || narration.includes('amzn');
-
-        // Score: higher = better
-        let score = 0;
-        if (amountDiff <= 0.05) score += 50;       // Exact amount
-        else if (amountDiff <= 1.00) score += 30;   // Close amount
-        else score += 10;                           // Within $10
-        if (narrationMatch) score += 30;            // Narration bonus
-        if (daysDiff <= 2) score += 20;             // Close date
-        else if (daysDiff <= 5) score += 10;        // Within window
-
-        const confidence: 'high' | 'medium' | 'low' =
-          score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
-
-        // Nothing is marked as matched until user explicitly confirms.
-        // Auto-detection is always a SUGGESTION.
-        group.candidates.push({
-          transaction_id: txn.BankTransactionID,
-          amount: txnAmount,
-          date: txnDate,
-          reference: txn.Reference || '',
-          narration: txn.LineItems?.[0]?.Description || '',
-          bank_account_name: txn.BankAccount?.Name || '',
-          confidence,
-          score,
-          match_type: 'aggregate',
-        });
-      }
-
-      // Sort by score descending, keep top 3
-      group.candidates.sort((a, b) => b.score - a.score);
-      group.candidates = group.candidates.slice(0, 3);
-    }
-
-    // Build lookup: invoiceId → aggregate group
-    const aggregateLookup = new Map<string, AggregateGroup>();
-    for (const group of aggregateGroups) {
-      for (const invId of group.invoiceIds) {
-        aggregateLookup.set(invId, group);
+          for (const sid of group.settlement_ids) {
+            if (!amazonBatchGroupsBySettlement.has(sid)) amazonBatchGroupsBySettlement.set(sid, []);
+            amazonBatchGroupsBySettlement.get(sid)!.push(group);
+          }
+        }
       }
     }
 
