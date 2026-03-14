@@ -1879,7 +1879,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5">Date</th>
                 <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Amount</th>
                 <th className="text-center font-medium text-muted-foreground px-3 py-2.5">Settlement</th>
-                <th className="text-center font-medium text-muted-foreground px-3 py-2.5">Bank</th>
+                <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Match Diff</th>
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5">Status</th>
                 <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Action</th>
               </tr>
