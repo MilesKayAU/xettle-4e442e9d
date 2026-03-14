@@ -132,28 +132,8 @@ export default function MonthlyReconciliationStatus({
       // Skip if already has xero_journal_id (duplicate)
       if (s.xero_journal_id) { skipped++; continue; }
 
-      const std: StandardSettlement = {
-        marketplace: s.marketplace,
-        settlement_id: s.settlement_id,
-        period_start: s.period_start,
-        period_end: s.period_end,
-        sales_ex_gst: s.sales_principal || 0,
-        gst_on_sales: s.gst_on_income || 0,
-        fees_ex_gst: s.seller_fees || 0,
-        gst_on_fees: s.gst_on_expenses || 0,
-        net_payout: s.bank_deposit || 0,
-        source: 'csv_upload',
-        reconciles: true,
-        metadata: {
-          refundsExGst: s.refunds || 0,
-          shippingExGst: s.sales_shipping || 0,
-          subscriptionAmount: (s.other_fees && s.other_fees < 0) ? 0 : (s.other_fees || 0),
-          refundCommissionExGst: s.reimbursements || 0,
-        },
-      };
-
-      const lineItems = await buildSimpleInvoiceLines(std);
-      const result = await syncSettlementToXero(s.settlement_id, s.marketplace, { lineItems });
+      // syncSettlementToXero now builds canonical 10-category lines internally
+      const result = await syncSettlementToXero(s.settlement_id, s.marketplace);
       if (result.success) ok++;
       else fail++;
     }

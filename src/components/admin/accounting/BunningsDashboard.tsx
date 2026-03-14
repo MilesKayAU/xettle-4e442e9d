@@ -460,9 +460,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     }
 
     setPushing(true);
-    // Build proper invoice lines including refunds
-    const lineItems = dataToCheck ? await buildSimpleInvoiceLines(dataToCheck) : undefined;
-    const result = await syncSettlementToXero(targetId, 'bunnings', lineItems ? { lineItems } : undefined);
+    // syncSettlementToXero now builds canonical 10-category lines internally
+    const result = await syncSettlementToXero(targetId, 'bunnings');
     if (result.success) {
       clearParsedStorage();
       toast.success('Invoice created in Xero!');

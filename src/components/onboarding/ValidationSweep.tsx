@@ -235,37 +235,10 @@ export default function ValidationSweep({
       const row = rows.find(r => r.settlement_id === settlementId);
       if (row) setPushing(row.id);
       try {
-        const { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines } = await import('@/utils/settlement-engine');
+        const { syncSettlementToXero, syncXeroStatus } = await import('@/utils/settlement-engine');
         
-        const { data: settlement } = await supabase
-          .from('settlements')
-          .select('*')
-          .eq('settlement_id', settlementId)
-          .maybeSingle();
-
-        if (!settlement) throw new Error('Settlement not found');
-
-        const std = {
-          marketplace: settlement.marketplace || marketplace,
-          settlement_id: settlement.settlement_id,
-          period_start: settlement.period_start,
-          period_end: settlement.period_end,
-          sales_ex_gst: settlement.sales_principal || 0,
-          gst_on_sales: settlement.gst_on_income || 0,
-          fees_ex_gst: settlement.seller_fees || 0,
-          gst_on_fees: settlement.gst_on_expenses || 0,
-          net_payout: settlement.bank_deposit || 0,
-          source: 'csv_upload' as const,
-          reconciles: true,
-          metadata: {
-            refundsExGst: settlement.refunds || 0,
-            shippingExGst: settlement.sales_shipping || 0,
-            subscriptionAmount: (settlement.other_fees && settlement.other_fees < 0) ? 0 : (settlement.other_fees || 0),
-            refundCommissionExGst: settlement.reimbursements || 0,
-          },
-        };
-        const lineItems = await buildSimpleInvoiceLines(std);
-        const result = await syncSettlementToXero(settlement.settlement_id, settlement.marketplace || marketplace, { lineItems });
+        // syncSettlementToXero now builds canonical 10-category lines internally
+        const result = await syncSettlementToXero(settlementId, marketplace);
         
         if (result.success) {
           toast.success(`Pushed to Xero ✅`);
