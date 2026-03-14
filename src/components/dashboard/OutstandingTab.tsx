@@ -389,6 +389,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         explanation: firstRow.settlement_group_explanation ?? null,
         expected_parts: expectedParts as 1 | 2,
         unexpected_extras: unexpected,
+        anchor_basis: firstRow.settlement_group_anchor_basis ?? null,
+        anchor_components: firstRow.settlement_group_anchor_components ?? null,
       });
     }
 
