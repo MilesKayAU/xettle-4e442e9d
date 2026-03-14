@@ -1184,6 +1184,42 @@ export type Database = {
         }
         Relationships: []
       }
+      rail_posting_settings: {
+        Row: {
+          auto_post_enabled_at: string | null
+          auto_post_enabled_by: string | null
+          created_at: string
+          id: string
+          posting_mode: string
+          rail: string
+          require_bank_match: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_post_enabled_at?: string | null
+          auto_post_enabled_by?: string | null
+          created_at?: string
+          id?: string
+          posting_mode?: string
+          rail: string
+          require_bank_match?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_post_enabled_at?: string | null
+          auto_post_enabled_by?: string | null
+          created_at?: string
+          id?: string
+          posting_mode?: string
+          rail?: string
+          require_bank_match?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       reconciliation_checks: {
         Row: {
           actual_commission: number | null
@@ -1579,6 +1615,9 @@ export type Database = {
           parser_version: string | null
           period_end: string
           period_start: string
+          posted_at: string | null
+          posting_error: string | null
+          posting_state: string | null
           promotional_discounts: number | null
           push_retry_count: number
           raw_payload: Json | null
@@ -1639,6 +1678,9 @@ export type Database = {
           parser_version?: string | null
           period_end: string
           period_start: string
+          posted_at?: string | null
+          posting_error?: string | null
+          posting_state?: string | null
           promotional_discounts?: number | null
           push_retry_count?: number
           raw_payload?: Json | null
@@ -1699,6 +1741,9 @@ export type Database = {
           parser_version?: string | null
           period_end?: string
           period_start?: string
+          posted_at?: string | null
+          posting_error?: string | null
+          posting_state?: string | null
           promotional_discounts?: number | null
           push_retry_count?: number
           raw_payload?: Json | null
