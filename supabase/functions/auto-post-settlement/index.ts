@@ -62,7 +62,7 @@ const MARKETPLACE_CONTACTS: Record<string, string> = {
 
 /** Categories that MUST have explicit user mappings for auto-post */
 const REQUIRED_MAPPING_CATEGORIES = [
-  'Sales', 'Refunds', 'Seller Fees', 'FBA Fees', 'Other Fees',
+  'Sales (Principal)', 'Refunds', 'Seller Fees', 'FBA Fees', 'Other Fees',
 ];
 
 function round2(n: number): number {
