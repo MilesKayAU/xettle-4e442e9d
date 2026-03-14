@@ -485,10 +485,31 @@ export default function ValidationSweep({
         />
       </div>
 
+      {/* Marketplace filter */}
+      {uniqueMarketplaces.length > 1 && (
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
+            <SelectTrigger className="w-[200px] h-8 text-sm">
+              <SelectValue placeholder="All Marketplaces" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Marketplaces</SelectItem>
+              {uniqueMarketplaces.map(m => (
+                <SelectItem key={m.code} value={m.code}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {marketplaceFilter !== 'all' && (
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setMarketplaceFilter('all')}>
+              Clear
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Validation table */}
       <Card className="border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Marketplace</th>
