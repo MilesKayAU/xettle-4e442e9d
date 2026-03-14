@@ -946,10 +946,13 @@ Deno.serve(async (req) => {
     // Uses the invoice-basis helpers above to determine the correct anchor.
     function getGroupAnchor(settlement: any, part: number | null): {
       net: number;
+      method: string;
       fees: number;
       refunds: number;
       gstOnIncome: number;
       gstOnExpenses: number;
+      bankDeposit: number;
+      gstApplied: number;
     } {
       // If this is a split sub-group with a known part, use split data as anchor
       if (settlement.is_split_month && part !== null) {
@@ -960,6 +963,7 @@ Deno.serve(async (req) => {
           );
           return {
             net: partNet,
+            method: 'split_part_anchor',
             fees: Math.abs(Number(splitData?.sellerFees ?? 0))
               + Math.abs(Number(splitData?.fbaFees ?? 0))
               + Math.abs(Number(splitData?.storageFees ?? 0))
@@ -967,20 +971,27 @@ Deno.serve(async (req) => {
             refunds: Math.abs(Number(splitData?.refunds ?? 0)),
             gstOnIncome: Math.abs(Number(splitData?.gstOnIncome ?? 0)),
             gstOnExpenses: Math.abs(Number(splitData?.gstOnExpenses ?? 0)),
+            bankDeposit: Math.abs(settlement.bank_deposit ?? 0),
+            gstApplied: 0, // grossTotal already includes GST for split parts
           };
         }
         // Split data missing/invalid — fall through to parent settlement anchor
       }
       // Non-split or fallback: use parent settlement values with payout anchor
+      const basis = getInvoiceBasisNet(settlement);
+      const gstOnInc = Math.abs(settlement.gst_on_income ?? 0);
       return {
-        net: getInvoiceBasisNet(settlement),
+        net: basis.anchor,
+        method: basis.method,
         fees: Math.abs(settlement.seller_fees ?? 0)
           + Math.abs(settlement.fba_fees ?? 0)
           + Math.abs(settlement.storage_fees ?? 0)
           + Math.abs(settlement.other_fees ?? 0),
         refunds: Math.abs(settlement.refunds ?? 0),
-        gstOnIncome: Math.abs(settlement.gst_on_income ?? 0),
+        gstOnIncome: gstOnInc,
         gstOnExpenses: Math.abs(settlement.gst_on_expenses ?? 0),
+        bankDeposit: Math.abs(settlement.bank_deposit ?? settlement.net_ex_gst ?? 0),
+        gstApplied: basis.method === 'bank_deposit_plus_gst' ? gstOnInc : 0,
       };
     }
 
