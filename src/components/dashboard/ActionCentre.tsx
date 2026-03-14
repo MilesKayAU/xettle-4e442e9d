@@ -558,7 +558,7 @@ export default function ActionCentre({
                 </p>
                 <ul className="space-y-1">
                   {autoPostFailed.slice(0, 3).map(s => (
-                    <li key={s.id} className="text-xs flex items-center gap-1.5">
+                    <li key={s.id} className="text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5" onClick={() => { setDrawerSettlementId(s.settlement_id); setDrawerOpen(true); }}>
                       <span className="text-destructive">•</span>
                       {MARKETPLACE_LABELS[s.marketplace || ''] || s.marketplace} — {formatPeriodShort(s.period_start, s.period_end)}
                     </li>
