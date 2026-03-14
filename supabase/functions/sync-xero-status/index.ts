@@ -422,6 +422,7 @@ serve(async (req) => {
         }
       }
       console.log(`[step-2] ${cacheStatusChanged} status changes detected out of ${cacheVerified} verified`);
+      } // end else (not cooldown blocked)
     }
 
     // ════════════════════════════════════════════════════════════════════
