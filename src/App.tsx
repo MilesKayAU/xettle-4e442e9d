@@ -22,6 +22,7 @@ const AmazonCallback = lazy(() => import("@/pages/AmazonCallback"));
 const ShopifyCallback = lazy(() => import("@/pages/ShopifyCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const Setup = lazy(() => import("@/pages/Setup"));
+const XeroPostingAudit = lazy(() => import("@/pages/XeroPostingAudit"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
