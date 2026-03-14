@@ -976,7 +976,7 @@ async function fetchBankTxnsForUser(
     fetch_from: fetchFromDate,
     fetch_to: fetchToDate,
     date_range_source: dateRangeSource,
-    endpoint_used: 'BankTransactions?bankAccountID=... (If-Modified-Since DISABLED)',
+    endpoint_used: `BankTransactions?bankAccountID=...&where=${whereClause} (If-Modified-Since DISABLED)`,
     if_modified_since_used: false,
     if_modified_since_value: null,
     cached_bank_rows_total: finalBankRowsCount || 0,
