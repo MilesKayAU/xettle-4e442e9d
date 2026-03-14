@@ -792,6 +792,7 @@ async function fetchBankTxnsForUser(
           contact_name: txn.Contact?.Name || null,
           transaction_type: txnType,
           xero_status: txn.Status || null,
+          source: 'bank_transaction',
           fetched_at: new Date().toISOString(),
         });
       }
