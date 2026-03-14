@@ -188,8 +188,11 @@ export default function PushSafetyPreview({
           reconciliation_status: s.reconciliation_status,
         };
 
-        // Build line items for display
-        const lineItems = buildLineItemsFromSettlement(settlement);
+        // Build line items for display using canonical builder
+        const resolver = createAccountCodeResolver(userCodes);
+        const mpLabel = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
+        const xeroLines = buildPostingLineItems(settlement as SettlementForPosting, resolver, mpLabel);
+        const lineItems = toLineItemPreviews(xeroLines);
 
         // Build validation checks (now with CoA awareness)
         const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes);
