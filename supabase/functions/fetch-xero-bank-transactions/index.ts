@@ -792,6 +792,8 @@ async function fetchBankTxnsForUser(
       stopped_reason: 'unchanged_recent',
       xero_rate_limited: false,
       cooldown_applied: false,
+      cooldown_key_used: COOLDOWN_KEY,
+      cooldown_active: false,
       live_xero_call_attempted: false,
       live_xero_429_received: false,
       recent_success_guard_applied: true,
@@ -817,6 +819,7 @@ async function fetchBankTxnsForUser(
       if_modified_since_value: null,
       per_account_stats: perAccountStats,
       ...baseDiag,
+      ...buildRequestAudit(),
     };
   }
 
