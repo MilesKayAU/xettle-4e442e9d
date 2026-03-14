@@ -292,14 +292,27 @@ export default function ValidationSweep({
     return c;
   }, [actionableRows]);
 
+  const uniqueMarketplaces = useMemo(() => {
+    const codes = [...new Set(actionableRows.map(r => r.marketplace_code))];
+    return codes.sort().map(code => ({
+      code,
+      label: MARKETPLACE_LABELS[code] || code,
+    }));
+  }, [actionableRows]);
+
   const filteredRows = useMemo(() => {
-    if (filter === 'all') return actionableRows;
-    if (filter === 'complete') return actionableRows.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
-    if (filter === 'ready_to_push') return actionableRows.filter(r => r.overall_status === 'ready_to_push');
-    if (filter === 'settlement_needed') return actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-    if (filter === 'gap_detected') return actionableRows.filter(r => r.overall_status === 'gap_detected');
-    return actionableRows;
-  }, [actionableRows, filter]);
+    let result = actionableRows;
+    // Marketplace filter
+    if (marketplaceFilter !== 'all') {
+      result = result.filter(r => r.marketplace_code === marketplaceFilter);
+    }
+    // Status filter
+    if (filter === 'complete') return result.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
+    if (filter === 'ready_to_push') return result.filter(r => r.overall_status === 'ready_to_push');
+    if (filter === 'settlement_needed') return result.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+    if (filter === 'gap_detected') return result.filter(r => r.overall_status === 'gap_detected');
+    return result;
+  }, [actionableRows, filter, marketplaceFilter]);
 
   const [vsPage, setVsPage] = useState(1);
   const vsTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
