@@ -1171,24 +1171,36 @@ Deno.serve(async (req) => {
         group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.AmountDue ?? inv.Total ?? 0), 0) * 100
       ) / 100;
 
-      // For external GST-inclusive invoices, use SubTotal for matching.
-      // SubTotal (from Xero API) = sum of ex-GST line amounts.
-      // For Tax Exclusive invoices created by LMB/A2X: SubTotal ≈ bank_deposit.
-      // This is deterministic — no formula, no gross-up.
+      // For external GST-inclusive invoices, use SubTotal for matching ONLY
+      // when ALL invoices in the group are Tax Exclusive (LineAmountTypes === 'Exclusive').
+      // For Tax Exclusive invoices: SubTotal = sum of ex-GST line amounts ≈ bank_deposit.
+      // For Tax Inclusive invoices: SubTotal is derived differently and cannot be used as payout proxy.
+      // Tax Inclusive external invoices remain mismatch for manual review.
       let groupSum = groupAmountDue;
       let comparisonField = 'AmountDue';
 
       if (invoiceModel === 'external_gst_inclusive') {
-        const subTotalSum = Math.round(
-          group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.SubTotal ?? 0), 0) * 100
-        ) / 100;
-        if (subTotalSum > 0) {
-          groupSum = subTotalSum;
-          comparisonField = 'SubTotal';
+        // Check if ALL invoices in the group are Tax Exclusive
+        const allExclusive = group.invoices.every((inv: any) => inv.LineAmountTypes === 'Exclusive');
+        const anyLineAmountTypes = group.invoices.some((inv: any) => inv.LineAmountTypes);
+
+        if (allExclusive) {
+          const subTotalSum = Math.round(
+            group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.SubTotal ?? 0), 0) * 100
+          ) / 100;
+          if (subTotalSum > 0) {
+            groupSum = subTotalSum;
+            comparisonField = 'SubTotal';
+          } else {
+            comparisonField = 'AmountDue_no_subtotal';
+          }
+        } else if (!anyLineAmountTypes) {
+          // LineAmountTypes not yet cached (pre-migration data) — cannot determine tax basis.
+          // Next Xero sync will populate LineAmountTypes and resolve.
+          comparisonField = 'AmountDue_no_line_amount_types';
         } else {
-          // SubTotal not yet cached — will mismatch correctly.
-          // Next Xero sync will populate SubTotal and resolve.
-          comparisonField = 'AmountDue_no_subtotal';
+          // Tax Inclusive or mixed — do NOT use SubTotal. Stays as AmountDue mismatch.
+          comparisonField = 'AmountDue_tax_inclusive';
         }
       }
 
