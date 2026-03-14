@@ -820,9 +820,42 @@ Deno.serve(async (req) => {
       tolerance_used?: number | null;
     }
 
-    // ─── Canonical settlement net helper (single source of truth) ───
-    function getSettlementNet(s: any): number {
+    // ─── Invoice-basis anchor helpers (single source of truth) ───
+    // "Invoice-basis" = the number Xero AmountDue is expected to be.
+    // Non-split: AmountDue ≈ bank_deposit (rounding adjustment ensures parity).
+    // Split: AmountDue ≈ grossTotal per part (Xero adds GST via OUTPUT/INPUT tax types).
+    // Invariant: sum(grossTotal per part) = bank_deposit.
+
+    /** Non-split anchor: Xero AmountDue ≈ bank_deposit (the payout). */
+    function getInvoiceBasisNet(s: any): number {
       return Math.abs(s.bank_deposit ?? s.net_ex_gst ?? 0);
+    }
+
+    /** Split-part anchor: Xero AmountDue ≈ grossTotal for the given part. */
+    function getInvoiceBasisNetPart(settlement: any, part: number): number | null {
+      const rawSplitData = part === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
+      let splitData = rawSplitData;
+      if (typeof splitData === 'string') {
+        try { splitData = JSON.parse(splitData); } catch { return null; }
+      }
+      if (splitData && typeof splitData === 'object' && splitData.grossTotal !== undefined) {
+        return Math.abs(Number(splitData.grossTotal ?? 0));
+      }
+      return null; // Split data missing/invalid
+    }
+
+    /** Parse split data JSON safely. */
+    function parseSplitData(raw: any): any | null {
+      if (!raw) return null;
+      if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch { return null; }
+      }
+      return typeof raw === 'object' ? raw : null;
+    }
+
+    // Legacy alias kept for backward compat in fuzzy matching section
+    function getSettlementNet(s: any): number {
+      return getInvoiceBasisNet(s);
     }
 
     // ─── Canonical settlement_id resolver (alias-aware) ───
