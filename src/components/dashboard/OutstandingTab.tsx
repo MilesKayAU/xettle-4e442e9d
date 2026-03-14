@@ -1569,27 +1569,24 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
       {/* ─── PRIMARY: Settlement matching status banner ─── */}
       {data && data.invoice_count > 0 && (() => {
-        const totalInvoices = filteredRows.length;
-        const settlementLinked = filteredRows.filter(r => r.settlement_id).length;
-        const settlementMatched = filteredRows.filter(r => r.settlement_group_matched).length;
-        const missingSettlement = filteredRows.filter(r => !r.settlement_id && r.is_marketplace).length;
-        const mismatchCount = filteredRows.filter(r => r.settlement_id && r.settlement_group_matched === false).length;
+        const { totalGroups, matchedGroups, mismatchGroups, missingSettlement } = groupKpis;
+        const linkedPending = totalGroups - matchedGroups;
 
         return (
           <div className="p-4 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
               <p className="text-sm font-medium text-foreground">
-                Settlement matching — {totalInvoices} invoice{totalInvoices !== 1 ? 's' : ''}
+                Settlement matching — {totalGroups} settlement group{totalGroups !== 1 ? 's' : ''}, {ungroupedRows.length} ungrouped
               </p>
             </div>
             <div className="flex flex-wrap gap-3 ml-7 text-xs">
               <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                {settlementMatched} matched via settlement
+                {matchedGroups} matched
               </span>
-              {settlementLinked > settlementMatched && (
+              {linkedPending > 0 && (
                 <span className="text-amber-700 dark:text-amber-400 font-medium">
-                  {settlementLinked - settlementMatched} linked, pending match
+                  {linkedPending} pending match
                 </span>
               )}
               {missingSettlement > 0 && (
@@ -1597,9 +1594,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                   {missingSettlement} missing settlement
                 </span>
               )}
-              {mismatchCount > 0 && (
+              {mismatchGroups > 0 && (
                 <span className="text-amber-700 dark:text-amber-400 font-medium">
-                  {mismatchCount} mismatch
+                  {mismatchGroups} mismatch
                 </span>
               )}
             </div>
