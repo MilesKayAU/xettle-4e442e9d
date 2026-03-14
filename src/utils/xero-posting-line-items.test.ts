@@ -285,12 +285,19 @@ describe('xero-posting-line-items', () => {
   });
 
   describe('buildAuditCsvContent', () => {
-    it('should produce 10 category rows + 1 totals row + header', () => {
+    it('should produce comment row + header + 10 category rows + 1 totals row', () => {
       const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
       const csv = buildAuditCsvContent(GOLDEN_SETTLEMENT, lines);
       const rows = csv.trim().split('\n');
-      // 1 header + 10 category + 1 totals = 12
-      expect(rows).toHaveLength(12);
+      // 1 comment + 1 header + 10 category + 1 totals = 13
+      expect(rows).toHaveLength(13);
+    });
+
+    it('first row should be GST estimate disclaimer comment', () => {
+      const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
+      const csv = buildAuditCsvContent(GOLDEN_SETTLEMENT, lines);
+      const firstRow = csv.split('\n')[0];
+      expect(firstRow).toContain('GST values are estimates');
     });
 
     it('totals row should have category "TOTAL"', () => {
@@ -301,12 +308,22 @@ describe('xero-posting-line-items', () => {
       expect(lastRow).toContain('"TOTAL"');
     });
 
+    it('should use gst_estimate and amount_inc_gst_estimate headers (not gst_amount)', () => {
+      const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
+      const csv = buildAuditCsvContent(GOLDEN_SETTLEMENT, lines);
+      const headerRow = csv.split('\n')[1]; // second row (after comment)
+      expect(headerRow).toContain('gst_estimate');
+      expect(headerRow).toContain('amount_inc_gst_estimate');
+      expect(headerRow).not.toContain('gst_amount');
+      expect(headerRow).not.toMatch(/amount_inc_gst[^_]/); // should not have bare amount_inc_gst
+    });
+
     it('should include account_code and tax_type columns', () => {
       const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
       const csv = buildAuditCsvContent(GOLDEN_SETTLEMENT, lines);
-      const header = csv.split('\n')[0];
-      expect(header).toContain('account_code');
-      expect(header).toContain('tax_type');
+      const headerRow = csv.split('\n')[1];
+      expect(headerRow).toContain('account_code');
+      expect(headerRow).toContain('tax_type');
     });
 
     it('CSV sum of amount_ex_gst should match line items sum', () => {

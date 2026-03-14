@@ -70,12 +70,86 @@ interface InvoiceRequest {
 // ─── Canonical Version (must match src/utils/xero-posting-line-items.ts) ──
 const CANONICAL_VERSION = 'v2-10cat';
 
+// ─── Server-Side Line Item Builder (mirrors client-side buildPostingLineItems) ──
+// This ensures posted line items are deterministically derived from settlementData
+// on the server, eliminating client drift risk.
+
+interface PostingCategoryDef {
+  name: string;
+  field: string;
+  taxType: 'OUTPUT' | 'INPUT' | 'BASEXCLUDED';
+  defaultAccountCode: string;
+}
+
+const SERVER_POSTING_CATEGORIES: readonly PostingCategoryDef[] = [
+  { name: 'Sales (Principal)',     field: 'sales_principal',       taxType: 'OUTPUT',       defaultAccountCode: '200' },
+  { name: 'Shipping Revenue',     field: 'sales_shipping',        taxType: 'OUTPUT',       defaultAccountCode: '206' },
+  { name: 'Promotional Discounts',field: 'promotional_discounts', taxType: 'OUTPUT',       defaultAccountCode: '200' },
+  { name: 'Refunds',              field: 'refunds',               taxType: 'OUTPUT',       defaultAccountCode: '205' },
+  { name: 'Reimbursements',       field: 'reimbursements',        taxType: 'BASEXCLUDED',  defaultAccountCode: '271' },
+  { name: 'Seller Fees',          field: 'seller_fees',           taxType: 'INPUT',        defaultAccountCode: '407' },
+  { name: 'FBA Fees',             field: 'fba_fees',              taxType: 'INPUT',        defaultAccountCode: '408' },
+  { name: 'Storage Fees',         field: 'storage_fees',          taxType: 'INPUT',        defaultAccountCode: '409' },
+  { name: 'Advertising',          field: 'advertising_costs',     taxType: 'INPUT',        defaultAccountCode: '410' },
+  { name: 'Other Fees',           field: 'other_fees',            taxType: 'INPUT',        defaultAccountCode: '405' },
+];
+
+// Legacy category name mapping for account code resolution
+const LEGACY_ACCOUNT_KEY_MAP: Record<string, string> = {
+  'Sales (Principal)': 'Sales',
+  'Shipping Revenue': 'Shipping',
+  'Promotional Discounts': 'Promotional Discounts',
+  'Refunds': 'Refunds',
+  'Reimbursements': 'Reimbursements',
+  'Seller Fees': 'Seller Fees',
+  'FBA Fees': 'FBA Fees',
+  'Storage Fees': 'Storage Fees',
+  'Advertising': 'Advertising Costs',
+  'Other Fees': 'Other Fees',
+};
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Build line items server-side from settlementData using the canonical 10-category list.
+ * Uses stored DB values as-is (Option A — "Use Stored Sign").
+ */
+function buildServerLineItems(
+  settlementData: Record<string, any>,
+  getCode: (category: string, marketplace?: string) => string,
+  marketplace?: string,
+): InvoiceLineItem[] {
+  const lines: InvoiceLineItem[] = [];
+
+  for (const cat of SERVER_POSTING_CATEGORIES) {
+    const raw = settlementData[cat.field];
+    const value = typeof raw === 'number' ? raw : parseFloat(raw) || 0;
+    const amount = round2(value);
+
+    if (Math.abs(amount) < 0.01) continue;
+
+    const legacyKey = LEGACY_ACCOUNT_KEY_MAP[cat.name] || cat.name;
+
+    lines.push({
+      Description: cat.name,
+      AccountCode: getCode(legacyKey, marketplace),
+      TaxType: cat.taxType,
+      UnitAmount: amount,
+      Quantity: 1,
+    });
+  }
+
+  return lines;
+}
+
 // ─── Multi-Row Audit CSV Attachment Helper ──────────────────────────────
-// Mirrors buildAuditCsvContent from src/utils/xero-posting-line-items.ts
+// GST columns are estimates (10% flat rate), clearly labeled as such.
 function buildSettlementCsv(data: Record<string, any>, lineItems: InvoiceLineItem[]): string {
   const headers = [
     'settlement_id', 'period_start', 'period_end', 'marketplace',
-    'category', 'amount_ex_gst', 'gst_amount', 'amount_inc_gst',
+    'category', 'amount_ex_gst', 'gst_estimate', 'amount_inc_gst_estimate',
     'account_code', 'tax_type',
   ];
 
@@ -84,15 +158,18 @@ function buildSettlementCsv(data: Record<string, any>, lineItems: InvoiceLineIte
   const pe = data.period_end || '';
   const mp = data.marketplace || '';
 
-  const rows: string[] = [headers.join(',')];
+  const rows: string[] = [
+    '# GST values are estimates (10% flat rate). Refer to settlement source for authoritative GST.',
+    headers.join(','),
+  ];
   let totalExGst = 0;
   let totalGst = 0;
 
   for (const li of lineItems) {
-    const exGst = Math.round(li.UnitAmount * 100) / 100;
+    const exGst = round2(li.UnitAmount);
     const gstRate = li.TaxType === 'BASEXCLUDED' ? 0 : 0.1;
-    const gstAmount = Math.round(exGst * gstRate * 100) / 100;
-    const incGst = Math.round((exGst + gstAmount) * 100) / 100;
+    const gstAmount = round2(exGst * gstRate);
+    const incGst = round2(exGst + gstAmount);
 
     totalExGst += exGst;
     totalGst += gstAmount;
@@ -104,9 +181,9 @@ function buildSettlementCsv(data: Record<string, any>, lineItems: InvoiceLineIte
     );
   }
 
-  const totalInc = Math.round((totalExGst + totalGst) * 100) / 100;
+  const totalInc = round2(totalExGst + totalGst);
   rows.push(
-    [sid, ps, pe, mp, 'TOTAL', Math.round(totalExGst * 100) / 100, Math.round(totalGst * 100) / 100, totalInc, '', '']
+    [sid, ps, pe, mp, 'TOTAL', round2(totalExGst), round2(totalGst), totalInc, '', '']
       .map(v => `"${String(v).replace(/"/g, '""')}"`)
       .join(',')
   );
@@ -175,7 +252,6 @@ async function refreshXeroToken(supabase: any, token: XeroToken): Promise<XeroTo
 
   console.log('Token expired or expiring soon, checking for concurrent refresh...');
 
-  // Optimistic locking: re-read token to detect concurrent refresh
   const { data: freshTokens, error: rereadError } = await supabase
     .from('xero_tokens')
     .select('*')
@@ -245,7 +321,7 @@ function extractSettlementIdFromReference(reference: string): string | null {
 function getLegacyReferencePrefixes(settlementId: string): string[] {
   return [
     `AMZN-${settlementId}`,
-    `LMB-`,  // We'll use StartsWith for LMB since country code varies
+    `LMB-`,
   ];
 }
 
@@ -263,7 +339,6 @@ async function querySingleReference(token: XeroToken, whereClause: string): Prom
     if (!resp.ok) return null;
     const result = await resp.json();
     const invoices = result.Invoices || [];
-    // Filter out voided
     return invoices.find((inv: any) => inv.Status !== 'VOIDED') || null;
   } catch {
     return null;
@@ -274,27 +349,20 @@ async function querySingleReference(token: XeroToken, whereClause: string): Prom
 async function checkExistingInvoice(token: XeroToken, reference: string): Promise<{ exists: boolean; invoiceId?: string; status?: string; matchedReference?: string }> {
   console.log('Checking for existing invoice with reference:', reference);
 
-  // 1. Check exact reference (Xettle-{id})
   const exact = await querySingleReference(token, `Reference=="${reference}"`);
   if (exact) {
     console.log('Found existing invoice with exact reference:', exact.InvoiceID);
     return { exists: true, invoiceId: exact.InvoiceID, status: exact.Status, matchedReference: exact.Reference };
   }
 
-  // 2. Extract settlement ID and check legacy formats
   const settlementId = extractSettlementIdFromReference(reference);
   if (settlementId && /^\d+$/.test(settlementId)) {
-    // Check AMZN-{settlement_id}
     const amzn = await querySingleReference(token, `Reference=="AMZN-${settlementId}"`);
     if (amzn) {
       console.log('Found existing LEGACY invoice (AMZN format):', amzn.InvoiceID, amzn.Reference);
       return { exists: true, invoiceId: amzn.InvoiceID, status: amzn.Status, matchedReference: amzn.Reference };
     }
 
-    // Check LMB-*-{settlement_id}-* (query all LMB- invoices and filter)
-    const lmbInvoices = await querySingleReference(token, `Reference.StartsWith("LMB-")`);
-    // querySingleReference returns first non-voided, but we need to check all
-    // Re-query properly for LMB
     try {
       const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${encodeURIComponent('Reference.StartsWith("LMB-")')}&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID`;
       const resp = await fetch(url, {
@@ -330,7 +398,6 @@ async function voidInvoice(token: XeroToken, invoiceId: string): Promise<{ succe
   console.log('Voiding invoice in Xero:', invoiceId);
 
   try {
-    // First, get the invoice to check its current status
     const getResponse = await fetch(
       `https://api.xero.com/api.xro/2.0/Invoices/${invoiceId}`,
       {
@@ -361,7 +428,6 @@ async function voidInvoice(token: XeroToken, invoiceId: string): Promise<{ succe
       return { success: true };
     }
 
-    // Void the invoice
     const voidPayload = {
       Invoices: [{
         InvoiceID: invoiceId,
@@ -445,14 +511,12 @@ serve(async (req) => {
 
     const body: InvoiceRequest = await req.json();
     const { action = 'create' } = body;
-    // Use the authenticated user's ID, ignore any userId in body
     const userId = authenticatedUserId;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ─── ROLLBACK ACTION ─────────────────────────────────────────────
     if (action === 'rollback') {
-      // Support both 'invoiceIds' and legacy 'journalIds'
       const idsToVoid = body.invoiceIds || body.journalIds;
       const { settlementId, rollbackScope = 'all' } = body;
 
@@ -483,7 +547,6 @@ serve(async (req) => {
         throw new Error(`Failed to void some invoices: ${errorMsg}`);
       }
 
-      // Build update payload based on rollback scope
       const updatePayload: Record<string, any> = {};
 
       if (rollbackScope === 'all') {
@@ -539,7 +602,6 @@ serve(async (req) => {
         rollbackScope,
         settlementId,
         voidedInvoices: results,
-        // Legacy compat
         journalId: results[0]?.invoiceId,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -547,27 +609,23 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { description, date, dueDate, lineItems, country, contactName, netAmount } = body;
+    const { description, date, dueDate, country, contactName, netAmount } = body;
 
     // ─── SERVER-SIDE REFERENCE GENERATION ─────────────────────────────
-    // Rule: Reference MUST be generated server-side from settlementId.
-    // Client-provided reference is ignored when settlementId is present.
     const settlementId = body.settlementId || body.settlementData?.settlement_id;
     if (!settlementId) {
       throw new Error('Missing settlementId — reference is generated server-side and requires a settlement identifier');
     }
     const splitSuffix = body.splitPart ? `-P${body.splitPart}` : '';
     const reference = `Xettle-${settlementId}${splitSuffix}`;
-    // Cache key includes split suffix so P1 and P2 get separate entries
     const cacheSettlementKey = `${settlementId}${splitSuffix}`;
 
     // Determine if this is a negative (fee-only) settlement → create a Bill (ACCPAY)
     const isNegativeSettlement = typeof netAmount === 'number' && netAmount < 0;
     const invoiceType = isNegativeSettlement ? "ACCPAY" : "ACCREC";
 
-    console.log('Create request:', { userId, settlementId, reference, date, country, contactName, lineItemCount: lineItems?.length, netAmount, invoiceType });
+    console.log('Create request:', { userId, settlementId, reference, date, country, contactName, netAmount, invoiceType });
     if (!date) throw new Error('Missing date');
-    if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
 
     // ─── Fetch user account code overrides ──────────────────────────
     const DEFAULT_ACCOUNT_CODES: Record<string, string> = {
@@ -606,14 +664,33 @@ serve(async (req) => {
       return userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
     };
 
+    // ─── SERVER-SIDE LINE ITEM REBUILD ──────────────────────────────
+    // Deterministically rebuild line items from settlementData on the server.
+    // Client-provided lineItems are ignored to prevent drift.
+    let lineItems: InvoiceLineItem[];
+    let lineItemsSource: 'server_rebuilt' | 'client_provided';
+
+    if (body.settlementData && !isNegativeSettlement) {
+      lineItems = buildServerLineItems(body.settlementData, getCode, contactName);
+      lineItemsSource = 'server_rebuilt';
+      console.log(`[line-items] Rebuilt ${lineItems.length} line items server-side from settlementData`);
+    } else if (body.lineItems && body.lineItems.length > 0) {
+      // Fallback: use client lineItems (negative settlements or missing settlementData)
+      lineItems = body.lineItems;
+      lineItemsSource = 'client_provided';
+      console.warn(`[line-items] Using client-provided line items (source: ${isNegativeSettlement ? 'negative_settlement' : 'missing_settlementData'})`);
+    } else {
+      throw new Error('Missing line items — neither settlementData nor lineItems provided');
+    }
+
+    if (lineItems.length === 0) throw new Error('No non-zero line items to post');
+
     // ─── CoA VALIDATION: verify mapped codes exist and are correct type ──
-    // Revenue categories must map to REVENUE accounts; expense categories to EXPENSE
     const REVENUE_CATEGORIES = ['Sales', 'Shipping', 'Refunds', 'Reimbursements', 'Promotional Discounts'];
     const EXPENSE_CATEGORIES = ['Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees', 'Advertising Costs'];
     const REVENUE_ACCOUNT_TYPES = ['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS'];
     const EXPENSE_ACCOUNT_TYPES = ['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY'];
 
-    // Load user's cached Chart of Accounts
     const { data: coaAccounts } = await supabase
       .from('xero_chart_of_accounts')
       .select('account_code, account_name, account_type, is_active')
@@ -630,11 +707,9 @@ serve(async (req) => {
       }
     }
 
-    // Only validate if we have CoA data cached (skip if no CoA yet — backwards compat)
     if (coaMap.size > 0) {
       const validationErrors: string[] = [];
 
-      // Collect all account codes actually used in this push's line items
       const usedCodes = new Set<string>();
       if (!isNegativeSettlement && lineItems) {
         for (const item of lineItems) {
@@ -655,13 +730,12 @@ serve(async (req) => {
         }
       }
 
-      // Validate account type correctness for mapped categories
       const allCategories = [...REVENUE_CATEGORIES, ...EXPENSE_CATEGORIES];
       for (const cat of allCategories) {
         const code = getCode(cat);
-        if (!code || code === '400') continue; // Skip unmapped defaults
+        if (!code || code === '400') continue;
         const coaEntry = coaMap.get(code);
-        if (!coaEntry) continue; // Already caught above
+        if (!coaEntry) continue;
 
         const isRevenueCat = REVENUE_CATEGORIES.includes(cat);
         const validTypes = isRevenueCat ? REVENUE_ACCOUNT_TYPES : EXPENSE_ACCOUNT_TYPES;
@@ -675,7 +749,6 @@ serve(async (req) => {
       if (validationErrors.length > 0) {
         console.error('MAPPING_INVALID:', validationErrors);
 
-        // Update settlement status to mapping_error
         if (body.settlementData?.settlement_id) {
           await supabase
             .from('settlements')
@@ -684,7 +757,6 @@ serve(async (req) => {
             .eq('user_id', userId);
         }
 
-        // Log to system_events
         await supabase.from('system_events').insert({
           user_id: userId,
           event_type: 'xero_push_mapping_invalid',
@@ -719,7 +791,6 @@ serve(async (req) => {
         .maybeSingle();
 
       if (trackingSetting?.value === 'true' && contactName) {
-        // Resolve the marketplace display name for tracking
         const trackingOptionName = contactName;
         const cacheKey = `xero_tracking_sales_channel_${trackingOptionName.toLowerCase().replace(/\s+/g, '_')}`;
         
@@ -739,7 +810,6 @@ serve(async (req) => {
         }
 
         if (!trackingArray) {
-          // Call xero-auth get_or_create_tracking via internal fetch
           try {
             const trackingUrl = `${supabaseUrl}/functions/v1/xero-auth`;
             const trackingResp = await fetch(trackingUrl, {
@@ -777,7 +847,6 @@ serve(async (req) => {
     token = await refreshXeroToken(supabase, token);
 
     // ─── CACHE-FIRST DUPLICATE CHECK ─────────────────────────────────
-    // Uses cacheSettlementKey (includes split suffix) so P1/P2 are checked independently
     {
       const { data: cachedMatch } = await supabase
         .from('xero_accounting_matches')
@@ -799,7 +868,7 @@ serve(async (req) => {
       }
     }
 
-    // Fallback: Check Xero API directly (covers cases where cache is empty)
+    // Fallback: Check Xero API directly
     const existing = await checkExistingInvoice(token, reference);
     if (existing.exists) {
       const refInfo = existing.matchedReference && existing.matchedReference !== reference
@@ -825,8 +894,8 @@ serve(async (req) => {
         ? [{
             Description: `Fee-only period — ${contactName || 'Marketplace'} ${date}\nNo sales revenue. Platform fees charged.`,
             AccountCode: getCode('Other Fees'),
-            TaxType: "INPUT", // Fee-only negative settlements assumed domestic; intl/reimbursements not expected here
-            UnitAmount: Math.round(Math.abs(netAmount) * 100) / 100,
+            TaxType: "INPUT",
+            UnitAmount: round2(Math.abs(netAmount!)),
             Quantity: 1,
             ...(trackingArray ? { Tracking: trackingArray } : {}),
           }]
@@ -834,15 +903,13 @@ serve(async (req) => {
             Description: item.Description,
             AccountCode: item.AccountCode,
             TaxType: item.TaxType,
-            UnitAmount: Math.round(item.UnitAmount * 100) / 100,
+            UnitAmount: round2(item.UnitAmount),
             Quantity: item.Quantity || 1,
             ...(trackingArray ? { Tracking: trackingArray } : {}),
           }))
     };
 
-    // Add human-readable description if provided (Xettle-{id} reference format)
     if (description) {
-      // Xero doesn't have a top-level Description, but we prepend it to the first line item
       invoiceData.LineItems[0].Description = `${description}\n${invoiceData.LineItems[0].Description}`;
     }
 
@@ -907,63 +974,14 @@ serve(async (req) => {
     }
 
     // ─── Balance check: settlement vs Xero invoice total ──────────
-    const settlementTotal = typeof netAmount === 'number' ? Math.round(netAmount * 100) / 100 : null;
-    const xeroTotal = typeof xeroInvoiceTotal === 'number' ? Math.round(xeroInvoiceTotal * 100) / 100 : null;
-    // For bills (ACCPAY), Xero returns positive Total for what we sent as abs(negative)
+    const settlementTotal = typeof netAmount === 'number' ? round2(netAmount) : null;
+    const xeroTotal = typeof xeroInvoiceTotal === 'number' ? round2(xeroInvoiceTotal) : null;
     const comparableXeroTotal = isNegativeSettlement && xeroTotal !== null ? -xeroTotal : xeroTotal;
     const balanceDifference = settlementTotal !== null && comparableXeroTotal !== null
-      ? Math.round((settlementTotal - comparableXeroTotal) * 100) / 100
+      ? round2(settlementTotal - comparableXeroTotal)
       : null;
 
     console.log(`[balance-check] settlement_total=${settlementTotal}, xero_invoice_total=${xeroTotal} (comparable=${comparableXeroTotal}), difference=${balanceDifference}`);
-
-    // ─── D3: Write immutable xero_push_success event FIRST ──────────
-    // This payload snapshot is the proof that Xettle posted this invoice.
-    // It must be written BEFORE setting posted_at on the settlement.
-    const normalizedLineItems = (lineItems || []).slice(0, 200).map((li: any) => ({
-      description: li.Description || '',
-      account_code: li.AccountCode || '',
-      tax_type: li.TaxType || '',
-      amount: li.UnitAmount ?? 0,
-    }));
-    const pushEventDetails = {
-      posting_mode: 'manual',
-      xero_request_payload: {
-        lineItems: (lineItems || []).slice(0, 200),
-        contactName,
-        reference,
-        description,
-        date,
-        dueDate: dueDate || date,
-        netAmount,
-        invoiceType,
-      },
-      xero_response: {
-        invoice_id: invoiceId,
-        invoice_number: invoiceNumber,
-        xero_status: 'DRAFT',
-        xero_type: isNegativeSettlement ? 'bill' : 'invoice',
-      },
-      normalized: {
-        net_amount: netAmount,
-        currency: 'AUD',
-        contact_name: contactName,
-        line_items: normalizedLineItems,
-        truncated: (lineItems || []).length > 200,
-      },
-      settlement_total: settlementTotal,
-      xero_invoice_total: xeroTotal,
-      balance_difference: balanceDifference,
-    };
-
-    await supabase.from('system_events').insert({
-      user_id: userId,
-      event_type: 'xero_push_success',
-      severity: 'info',
-      settlement_id: body.settlementData?.settlement_id || reference?.replace('Xettle-', '') || null,
-      marketplace_code: body.settlementData?.marketplace || null,
-      details: pushEventDetails,
-    });
 
     // Log balance check to system_events for audit trail
     await supabase.from('system_events').insert({
@@ -983,6 +1001,46 @@ serve(async (req) => {
       },
     });
 
+    // ─── Build the authoritative push event payload ────────────────
+    // This is assembled ONCE and written ONCE after attachment succeeds.
+    const normalizedLineItems = lineItems.slice(0, 200).map((li: any) => ({
+      description: li.Description || '',
+      account_code: li.AccountCode || '',
+      tax_type: li.TaxType || '',
+      amount: li.UnitAmount ?? 0,
+    }));
+    const pushEventDetails: Record<string, any> = {
+      posting_mode: 'manual',
+      canonical_version: CANONICAL_VERSION,
+      line_items_source: lineItemsSource,
+      xero_request_payload: {
+        lineItems: lineItems.slice(0, 200),
+        contactName,
+        reference,
+        description,
+        date,
+        dueDate: dueDate || date,
+        netAmount,
+        invoiceType,
+      },
+      xero_response: {
+        invoice_id: invoiceId,
+        invoice_number: invoiceNumber,
+        xero_status: 'DRAFT',
+        xero_type: isNegativeSettlement ? 'bill' : 'invoice',
+      },
+      normalized: {
+        net_amount: netAmount,
+        currency: 'AUD',
+        contact_name: contactName,
+        line_items: normalizedLineItems,
+        truncated: lineItems.length > 200,
+      },
+      settlement_total: settlementTotal,
+      xero_invoice_total: xeroTotal,
+      balance_difference: balanceDifference,
+    };
+
     // ─── Attach audit CSV (REQUIRED — fail if missing or upload fails) ──
     // ORPHAN INVOICE PREVENTION (Option B — Recoverable State):
     // If attachment fails after invoice creation, we:
@@ -997,7 +1055,6 @@ serve(async (req) => {
       // Enforcement: settlementData is required for attachment
       console.error('Missing settlementData — attachment cannot be created');
 
-      // Mark settlement as failed with recoverable state
       if (settlementIdForDb) {
         await supabase.from('settlements').update({
           posting_state: 'failed',
@@ -1084,7 +1141,6 @@ serve(async (req) => {
       } catch (attachErr: any) {
         console.error('Attachment failed:', attachErr.message);
 
-        // Mark settlement as failed (recoverable)
         const sd = body.settlementData;
         if (sd?.settlement_id) {
           await supabase.from('settlements').update({
@@ -1123,33 +1179,36 @@ serve(async (req) => {
       }
     }
 
-    // Enrich xero_push_success event with csv_hash and attachment info
-    if (attachmentResult?.csvHash) {
-      await supabase.from('system_events').insert({
-        user_id: userId,
-        event_type: 'xero_push_success',
-        severity: 'info',
-        settlement_id: settlementIdForDb,
-        marketplace_code: body.settlementData?.marketplace || null,
-        details: {
-          ...pushEventDetails,
-          csv_hash: attachmentResult.csvHash,
-          attachment_filename: `xettle-${(body.settlementData?.marketplace || 'unknown').replace(/_/g, '-')}-${(body.settlementData?.period_start || '').slice(0, 7)}-${body.settlementData?.settlement_id || 'unknown'}.csv`,
-          canonical_version: CANONICAL_VERSION,
-        },
-      });
-    }
+    // ─── SINGLE authoritative xero_push_success event ───────────────
+    // Written ONCE after invoice + attachment both succeed.
+    // Contains full payload snapshot, csv_hash, attachment_filename, canonical_version.
+    const attachmentFilename = body.settlementData
+      ? `xettle-${(body.settlementData.marketplace || 'unknown').replace(/_/g, '-')}-${(body.settlementData.period_start || '').slice(0, 7)}-${body.settlementData.settlement_id || 'unknown'}.csv`
+      : null;
+
+    await supabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'xero_push_success',
+      severity: 'info',
+      settlement_id: settlementIdForDb,
+      marketplace_code: body.settlementData?.marketplace || null,
+      details: {
+        ...pushEventDetails,
+        csv_hash: attachmentResult?.csvHash || null,
+        attachment_filename: attachmentFilename,
+      },
+    });
 
     return new Response(JSON.stringify({
       success: true,
       invoiceId,
       invoiceNumber,
       xeroType: isNegativeSettlement ? 'bill' : 'invoice',
-      // Legacy compat — journalId maps to invoiceId
       journalId: invoiceId,
       reference,
       date,
       lineCount: lineItems.length,
+      lineItemsSource,
       attachmentSuccess: attachmentResult?.success ?? null,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
