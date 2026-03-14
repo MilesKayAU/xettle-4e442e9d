@@ -102,6 +102,9 @@ function categorize(row: SettlementRow): StatusCategory {
   return 'other';
 }
 
+// Import here to avoid circular deps — only used for badge display
+import { isBankMatchRequired } from '@/constants/settlement-rails';
+
 function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroStatus: string | null; syncOrigin?: string }) {
   // Fully reconciled (PAID in Xero)
   if (status === 'reconciled_in_xero' || status === 'bank_verified' || xeroStatus === 'PAID') {
