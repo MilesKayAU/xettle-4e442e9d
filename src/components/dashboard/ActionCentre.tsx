@@ -120,6 +120,11 @@ export default function ActionCentre({
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const [readySettlements, setReadySettlements] = useState<Array<{
+    id: string; marketplace: string | null; settlement_id: string;
+    period_start: string; period_end: string; bank_deposit: number | null;
+    status: string | null;
+  }>>([]);
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
