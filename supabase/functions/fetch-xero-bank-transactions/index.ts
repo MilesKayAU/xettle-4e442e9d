@@ -759,7 +759,7 @@ async function fetchBankTxnsForUser(
         totalTransactionsSeen++;
 
         const txnType = txn?.Type || 'RECEIVE';
-        if (txnType !== 'RECEIVE') continue;
+        // Ingest ALL types — matching layer filters to RECEIVE later
 
         const parsedDate = parseXeroTxnDate(txn.Date);
         if (parsedDate) pageTxnDates.push(parsedDate);
