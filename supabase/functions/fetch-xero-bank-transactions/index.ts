@@ -168,6 +168,7 @@ async function fetchBankTxnsForUser(
   guardMinutes: number,
   cacheFreshMinutes: number,
   fallbackLookbackDays: number,
+  invoker: string,
 ) {
   // ══════════════════════════════════════════════════════════════
   // STEP 1 — Gather facts for guard evaluation (single parallel batch)
