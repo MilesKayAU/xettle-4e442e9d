@@ -722,7 +722,7 @@ async function fetchBankTxnsForUser(
             fetch_from: fetchFromDate,
             fetch_to: fetchToDate,
             date_range_source: dateRangeSource,
-            endpoint_used: `BankTransactions?bankAccountID=...&where=${whereClause} (If-Modified-Since DISABLED)`,
+            endpoint_used: 'BankTransactions?bankAccountID=... (If-Modified-Since DISABLED)',
             if_modified_since_used: false,
             if_modified_since_value: null,
             cached_bank_rows_total: cachedBankRowsTotal,
@@ -785,13 +785,12 @@ async function fetchBankTxnsForUser(
           bank_account_id: txn.BankAccount?.AccountID || null,
           bank_account_name: txn.BankAccount?.Name || null,
           date: parsedDate,
-          amount: Number(txn.Total || 0),
+          amount: Math.abs(txn.Total || 0),
           currency: txn.CurrencyCode || 'AUD',
           description: txn.LineItems?.[0]?.Description || null,
           reference: txn.Reference || null,
           contact_name: txn.Contact?.Name || null,
           transaction_type: txnType,
-          xero_status: txn.Status || null,
           fetched_at: new Date().toISOString(),
         });
       }
@@ -809,6 +808,9 @@ async function fetchBankTxnsForUser(
         }
       }
 
+      const firstDate = pageTxnDates[0] || null;
+      const lastDate = pageTxnDates[pageTxnDates.length - 1] || null;
+      const newestToOldest = !!firstDate && !!lastDate ? firstDate >= lastDate : null;
 
       // With server-side date filtering, no need for client-side date boundary stops.
       // Just paginate until empty or max pages.
@@ -889,7 +891,7 @@ async function fetchBankTxnsForUser(
       fetch_from: fetchFromDate,
       fetch_to: fetchToDate,
       date_range_source: dateRangeSource,
-      endpoint_used: `BankTransactions?bankAccountID=...&where=${whereClause} (If-Modified-Since DISABLED)`,
+      endpoint_used: 'BankTransactions?bankAccountID=... (If-Modified-Since DISABLED)',
       if_modified_since_used: false,
       if_modified_since_value: null,
       per_account_stats: perAccountStats,
@@ -931,7 +933,7 @@ async function fetchBankTxnsForUser(
         bank_account_names_used: bankAccountNamesUsed,
         if_modified_since_used: false,
         if_modified_since_value: null,
-        endpoint_used: `BankTransactions?bankAccountID=...&where=${whereClause} (If-Modified-Since DISABLED)`,
+        endpoint_used: 'BankTransactions?bankAccountID=... (If-Modified-Since DISABLED)',
         per_account_stats: perAccountStats,
         fetch_from: fetchFromDate,
         fetch_to: fetchToDate || 'open',
@@ -976,7 +978,7 @@ async function fetchBankTxnsForUser(
     fetch_from: fetchFromDate,
     fetch_to: fetchToDate,
     date_range_source: dateRangeSource,
-    endpoint_used: `BankTransactions?bankAccountID=...&where=${whereClause} (If-Modified-Since DISABLED)`,
+    endpoint_used: 'BankTransactions?bankAccountID=... (If-Modified-Since DISABLED)',
     if_modified_since_used: false,
     if_modified_since_value: null,
     cached_bank_rows_total: finalBankRowsCount || 0,

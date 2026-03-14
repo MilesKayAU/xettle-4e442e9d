@@ -122,7 +122,6 @@ export type Database = {
           reference: string | null
           transaction_type: string | null
           user_id: string
-          xero_status: string | null
           xero_transaction_id: string
         }
         Insert: {
@@ -139,7 +138,6 @@ export type Database = {
           reference?: string | null
           transaction_type?: string | null
           user_id: string
-          xero_status?: string | null
           xero_transaction_id: string
         }
         Update: {
@@ -156,7 +154,6 @@ export type Database = {
           reference?: string | null
           transaction_type?: string | null
           user_id?: string
-          xero_status?: string | null
           xero_transaction_id?: string
         }
         Relationships: []
