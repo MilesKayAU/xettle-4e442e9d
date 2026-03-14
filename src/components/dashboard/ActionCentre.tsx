@@ -147,7 +147,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -156,7 +156,7 @@ export default function ActionCentre({
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('settlements')
-          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status')
+          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status, posting_state')
           .eq('status', 'ready_to_push')
           .eq('is_hidden', false)
           .eq('is_pre_boundary', false)
@@ -169,6 +169,14 @@ export default function ActionCentre({
           .eq('is_hidden', false)
           .eq('is_pre_boundary', false)
           .is('duplicate_of_settlement_id', null)
+          .order('period_start', { ascending: false }),
+        supabase.from('rail_posting_settings')
+          .select('rail')
+          .eq('posting_mode', 'auto'),
+        supabase.from('settlements')
+          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, posting_error')
+          .eq('posting_state', 'failed')
+          .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
       ]);
 
