@@ -8,8 +8,6 @@
  * Idempotent: checks posting_state + xero_invoice_id before acting.
  * Uses atomic compare-and-set to prevent duplicate posting.
  *
- * This does NOT bypass validation — it only removes the manual click.
- *
  * Safety checklist (all must pass before posting):
  *   ✅ status = ready_to_push
  *   ✅ not hidden
@@ -18,16 +16,13 @@
  *   ✅ no existing xero_invoice_id
  *   ✅ posting_state not already posting/posted
  *   ✅ rail configured for auto-post
- *   ✅ reconciliation_status is not 'alert' (mismatch)
- *   ✅ account mapping exists for at least one category
+ *   ✅ reconciliation_status = 'matched' (BLOCKER #1: explicit validated predicate)
+ *   ✅ account mapping exists for ALL required categories (BLOCKER #2: hard-fail, no fallback)
  *   ✅ Xero token exists for the user
  *   ✅ bank match exists if require_bank_match = true
  *   ✅ push_retry_count < 3 (prevents infinite retry loops)
- *
- * Table: rail_posting_settings
- *   Scoped by user_id (acting as org proxy — one user = one org).
- *   This is an org-level accounting workflow setting, not a personal preference.
- *   When multi-user orgs are added, user_id will be replaced with org_id.
+ *   ✅ CAS lock includes all eligibility predicates (BLOCKER #3)
+ *   ✅ Stale lock recovery via posting_claimed_at (BLOCKER #4)
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
@@ -41,6 +36,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const MAX_RETRY_COUNT = 3;
+const STALE_LOCK_MINUTES = 15;
 
 const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
@@ -57,6 +53,11 @@ const MARKETPLACE_CONTACTS: Record<string, string> = {
   everyday_market: 'Everyday Market',
   temu: 'Temu',
 };
+
+/** Categories that MUST have explicit user mappings for auto-post */
+const REQUIRED_MAPPING_CATEGORIES = [
+  'Sales', 'Refunds', 'Seller Fees', 'FBA Fees', 'Other Fees',
+];
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -106,6 +107,38 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Stale lock recovery (BLOCKER #4) ────────────────────────
+    // Reclaim any settlements stuck in 'posting' for > STALE_LOCK_MINUTES
+    const staleCutoff = new Date(Date.now() - STALE_LOCK_MINUTES * 60 * 1000).toISOString();
+    const { data: staleRows } = await supabase
+      .from('settlements')
+      .select('id, settlement_id, user_id, push_retry_count, marketplace')
+      .eq('posting_state', 'posting')
+      .lt('posting_claimed_at', staleCutoff);
+
+    if (staleRows && staleRows.length > 0) {
+      for (const stale of staleRows) {
+        const newRetry = (stale.push_retry_count || 0) + 1;
+        const failState = newRetry >= MAX_RETRY_COUNT ? 'push_failed_permanent' : 'failed';
+        await supabase.from('settlements').update({
+          posting_state: failState,
+          posting_error: 'Stale lock recovered — worker crashed or timed out',
+          push_retry_count: newRetry,
+          posting_claimed_at: null,
+        }).eq('id', stale.id).eq('posting_state', 'posting');
+
+        await supabase.from('system_events').insert({
+          user_id: stale.user_id,
+          event_type: 'auto_post_stale_lock_recovered',
+          severity: 'warning',
+          marketplace_code: stale.marketplace,
+          settlement_id: stale.settlement_id,
+          details: { recovered_at: new Date().toISOString(), new_retry_count: newRetry, result_state: failState },
+        });
+        console.warn(`[auto-post-settlement] Recovered stale lock for ${stale.settlement_id}, retry ${newRetry}`);
+      }
+    }
+
     const results: Array<{ settlement_id: string; result: string; error?: string }> = [];
 
     // ─── Single settlement mode ──────────────────────────────────
@@ -136,30 +169,31 @@ Deno.serve(async (req) => {
       for (const [userId, rails] of userRails) {
         const railCodes = rails.map(r => r.rail);
 
-        // Find ready_to_push settlements for auto-post rails (null posting_state OR failed with retry budget)
+        // BLOCKER #1: require reconciliation_status = 'matched'
         const { data: settlements } = await supabase
           .from('settlements')
-          .select('id, settlement_id, marketplace, status, posting_state, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id, push_retry_count, reconciliation_status, bank_verified')
+          .select('id, settlement_id, marketplace, status, posting_state, posting_claimed_at, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id, push_retry_count, reconciliation_status, bank_verified')
           .eq('user_id', userId)
           .eq('status', 'ready_to_push')
           .eq('is_hidden', false)
           .eq('is_pre_boundary', false)
           .is('duplicate_of_settlement_id', null)
           .is('xero_invoice_id', null)
+          .eq('reconciliation_status', 'matched')
           .in('marketplace', railCodes);
 
         if (!settlements || settlements.length === 0) continue;
 
         // Filter to only postable settlements
         const postable = settlements.filter(s => {
-          // Skip already posting/posted
-          if (s.posting_state === 'posting' || s.posting_state === 'posted') return false;
+          // Skip already posted
+          if (s.posting_state === 'posted') return false;
+          // Skip actively posting (unless stale — already recovered above)
+          if (s.posting_state === 'posting') return false;
           // Skip if over retry limit
           if (s.posting_state === 'failed' && (s.push_retry_count || 0) >= MAX_RETRY_COUNT) return false;
-          // Skip if null posting_state is fine, or failed with retry budget
+          // Only allow null or failed posting_state
           if (s.posting_state !== null && s.posting_state !== 'failed') return false;
-          // Skip if reconciliation has alert/mismatch
-          if (s.reconciliation_status === 'alert') return false;
           // Check bank match requirement
           const railConfig = rails.find(r => r.rail === s.marketplace);
           if (railConfig?.require_bank_match && !s.bank_verified) return false;
@@ -228,9 +262,19 @@ async function processSettlement(
   if ((settlement.push_retry_count || 0) >= MAX_RETRY_COUNT) {
     return { settlement_id: sid, result: 'skipped', error: `Exceeded max retry count (${MAX_RETRY_COUNT})` };
   }
-  // ─── Safety check 6: No reconciliation mismatch ───────────────
-  if (settlement.reconciliation_status === 'alert') {
-    return { settlement_id: sid, result: 'skipped', error: 'Reconciliation mismatch detected — manual review required' };
+
+  // ─── BLOCKER #1: Explicit validated predicate ─────────────────
+  if (settlement.reconciliation_status !== 'matched') {
+    // Log skip event for audit trail
+    await supabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'auto_post_skipped_not_validated',
+      severity: 'info',
+      marketplace_code: settlement.marketplace,
+      settlement_id: sid,
+      details: { reason: 'reconciliation_status is not matched', actual_status: settlement.reconciliation_status },
+    });
+    return { settlement_id: sid, result: 'skipped', error: `Not validated: reconciliation_status is '${settlement.reconciliation_status}', required 'matched'` };
   }
 
   // ─── Safety check 7: Rail posting setting ─────────────────────
@@ -262,102 +306,179 @@ async function processSettlement(
     return { settlement_id: sid, result: 'skipped', error: 'No Xero connection found' };
   }
 
-  // ─── Safety check 10: Account mapping exists ──────────────────
-  const { data: mappings } = await supabase
+  // ─── BLOCKER #2: Account mapping must exist — hard-fail, no fallback ──
+  const marketplace = settlement.marketplace || 'amazon_au';
+  const { data: mktMappings } = await supabase
     .from('marketplace_account_mapping')
-    .select('id')
+    .select('category, account_code')
     .eq('user_id', userId)
-    .eq('marketplace_code', settlement.marketplace)
-    .limit(1);
+    .eq('marketplace_code', marketplace);
 
-  // Log warning but don't block — sync-settlement-to-xero uses hardcoded defaults
-  if (!mappings || mappings.length === 0) {
-    console.warn(`[auto-post-settlement] No account mapping for ${settlement.marketplace}, using defaults`);
+  const mappingsByCategory: Record<string, string> = {};
+  if (mktMappings) {
+    for (const m of mktMappings) {
+      mappingsByCategory[m.category] = m.account_code;
+    }
   }
 
-  // ─── Atomic compare-and-set: claim this settlement ─────────────
-  const newRetryCount = (settlement.push_retry_count || 0) + (settlement.posting_state === 'failed' ? 1 : 0);
+  // Also check global account codes (user-configured, not hardcoded defaults)
+  const { data: accountSettings } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('user_id', userId)
+    .eq('key', 'accounting_xero_account_codes')
+    .limit(1);
 
+  let globalAccountCodes: Record<string, string> = {};
+  if (accountSettings?.[0]?.value) {
+    try { globalAccountCodes = JSON.parse(accountSettings[0].value); } catch {}
+  }
+
+  // Merge: marketplace-specific overrides global
+  const resolvedMappings: Record<string, string> = { ...globalAccountCodes, ...mappingsByCategory };
+
+  // Determine which categories have non-zero amounts and thus require mappings
+  const contactName = MARKETPLACE_CONTACTS[marketplace] || marketplace;
+  const categoryAmounts: Record<string, number> = {
+    'Sales': round2((settlement.sales_principal || 0) + (settlement.sales_shipping || 0)),
+    'Promotional Discounts': round2(settlement.promotional_discounts || 0),
+    'Refunds': round2(settlement.refunds || 0),
+    'Reimbursements': round2(settlement.reimbursements || 0),
+    'Seller Fees': -Math.abs(round2(settlement.seller_fees || 0)),
+    'FBA Fees': -Math.abs(round2(settlement.fba_fees || 0)),
+    'Storage Fees': -Math.abs(round2(settlement.storage_fees || 0)),
+    'Advertising Costs': -Math.abs(round2(settlement.advertising_costs || 0)),
+    'Other Fees': -Math.abs(round2(settlement.other_fees || 0)),
+  };
+
+  // Find categories with non-zero amounts that lack explicit mappings
+  const missingMappings: string[] = [];
+  for (const [cat, amount] of Object.entries(categoryAmounts)) {
+    if (Math.abs(amount) > 0.01 && !resolvedMappings[cat]) {
+      missingMappings.push(cat);
+    }
+  }
+
+  if (missingMappings.length > 0) {
+    const errMsg = `Missing account mappings for: ${missingMappings.join(', ')}`;
+    console.error(`[auto-post-settlement] ${sid}: ${errMsg}`);
+
+    await supabase.from('settlements').update({
+      posting_state: 'failed',
+      posting_error: `missing_mapping: ${missingMappings.join(', ')}`,
+    }).eq('id', settlementDbId);
+
+    await supabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'auto_post_failed_missing_mapping',
+      severity: 'warning',
+      marketplace_code: marketplace,
+      settlement_id: sid,
+      details: { missing_categories: missingMappings, resolved_mappings: resolvedMappings },
+    });
+
+    return { settlement_id: sid, result: 'failed', error: errMsg };
+  }
+
+  // ─── BLOCKER #3: Atomic CAS with full eligibility predicates ──
+  const newRetryCount = (settlement.push_retry_count || 0) + (settlement.posting_state === 'failed' ? 1 : 0);
+  const claimedAt = new Date().toISOString();
+
+  // Single atomic claim: try null first, then failed — both with full predicates
+  const eligibilityUpdate = {
+    posting_state: 'posting',
+    posting_claimed_at: claimedAt,
+    push_retry_count: newRetryCount,
+    posting_error: null,
+  };
+
+  // Attempt claim from null posting_state
   const { data: claimed } = await supabase
     .from('settlements')
-    .update({ posting_state: 'posting', push_retry_count: newRetryCount })
+    .update(eligibilityUpdate)
     .eq('id', settlementDbId)
     .eq('user_id', userId)
+    .eq('status', 'ready_to_push')
+    .eq('is_hidden', false)
+    .eq('is_pre_boundary', false)
+    .is('duplicate_of_settlement_id', null)
+    .is('xero_invoice_id', null)
+    .eq('reconciliation_status', 'matched')
     .is('posting_state', null)
     .select('id')
     .single();
 
-  // Also allow retry from 'failed' state
-  if (!claimed) {
+  let didClaim = !!claimed;
+
+  // Also allow retry from 'failed' state with same full predicates
+  if (!didClaim) {
     const { data: retryClaimed } = await supabase
       .from('settlements')
-      .update({ posting_state: 'posting', posting_error: null, push_retry_count: newRetryCount })
+      .update(eligibilityUpdate)
       .eq('id', settlementDbId)
       .eq('user_id', userId)
+      .eq('status', 'ready_to_push')
+      .eq('is_hidden', false)
+      .eq('is_pre_boundary', false)
+      .is('duplicate_of_settlement_id', null)
+      .is('xero_invoice_id', null)
+      .eq('reconciliation_status', 'matched')
       .eq('posting_state', 'failed')
       .select('id')
       .single();
 
-    if (!retryClaimed) {
-      return { settlement_id: sid, result: 'skipped', error: 'Could not acquire posting lock (another worker may be processing)' };
-    }
+    didClaim = !!retryClaimed;
   }
+
+  if (!didClaim) {
+    return { settlement_id: sid, result: 'skipped', error: 'Could not acquire posting lock — eligibility changed or another worker claimed it' };
+  }
+
+  // Log claim event
+  await supabase.from('system_events').insert({
+    user_id: userId,
+    event_type: 'auto_post_claimed',
+    severity: 'info',
+    marketplace_code: marketplace,
+    settlement_id: sid,
+    details: { claimed_at: claimedAt, retry_count: newRetryCount },
+  });
 
   // ─── Build and push to Xero via sync-settlement-to-xero ───────
   try {
-    const marketplace = settlement.marketplace || 'amazon_au';
-    const contactName = MARKETPLACE_CONTACTS[marketplace] || marketplace;
     const reference = `Xettle-${sid}`;
     const netAmount = settlement.bank_deposit || settlement.net_ex_gst || 0;
     const description = `${contactName} Settlement ${settlement.period_start} → ${settlement.period_end}`;
 
-    // Get account codes
-    const { data: accountSettings } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', userId)
-      .eq('key', 'accounting_xero_account_codes')
-      .limit(1);
+    // Build line items using ONLY user-configured mappings (no hardcoded fallbacks)
+    const categoryTaxTypes: Record<string, string> = {
+      'Sales': 'OUTPUT',
+      'Promotional Discounts': 'OUTPUT',
+      'Refunds': 'OUTPUT',
+      'Reimbursements': 'BASEXCLUDED',
+      'Seller Fees': 'INPUT',
+      'FBA Fees': 'INPUT',
+      'Storage Fees': 'INPUT',
+      'Advertising Costs': 'INPUT',
+      'Other Fees': 'INPUT',
+    };
 
-    let accountCodes: Record<string, string> = {};
-    if (accountSettings?.[0]?.value) {
-      try { accountCodes = JSON.parse(accountSettings[0].value); } catch {}
-    }
-
-    // Also check marketplace-specific mappings
-    const { data: mktMappings } = await supabase
-      .from('marketplace_account_mapping')
-      .select('category, account_code')
-      .eq('user_id', userId)
-      .eq('marketplace_code', marketplace);
-
-    if (mktMappings) {
-      for (const m of mktMappings) {
-        accountCodes[m.category] = m.account_code;
-      }
-    }
-
-    const getCode = (cat: string) => accountCodes[cat] || ({
-      'Sales': '200', 'Refunds': '205', 'Reimbursements': '271',
-      'Seller Fees': '407', 'FBA Fees': '408', 'Storage Fees': '409',
-      'Promotional Discounts': '200', 'Other Fees': '405',
-      'Advertising Costs': '410',
-    }[cat] || '405');
-
-    const lineItems = [
-      { Description: `${contactName} Sales`, AccountCode: getCode('Sales'), TaxType: 'OUTPUT', UnitAmount: round2((settlement.sales_principal || 0) + (settlement.sales_shipping || 0)), Quantity: 1 },
-      { Description: `${contactName} Promotional Discounts`, AccountCode: getCode('Promotional Discounts'), TaxType: 'OUTPUT', UnitAmount: round2(settlement.promotional_discounts || 0), Quantity: 1 },
-      { Description: `${contactName} Refunds`, AccountCode: getCode('Refunds'), TaxType: 'OUTPUT', UnitAmount: round2(settlement.refunds || 0), Quantity: 1 },
-      { Description: `${contactName} Reimbursements`, AccountCode: getCode('Reimbursements'), TaxType: 'BASEXCLUDED', UnitAmount: round2(settlement.reimbursements || 0), Quantity: 1 },
-      { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.seller_fees || 0)), Quantity: 1 },
-      { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.fba_fees || 0)), Quantity: 1 },
-      { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.storage_fees || 0)), Quantity: 1 },
-      { Description: `${contactName} Advertising Costs`, AccountCode: getCode('Advertising Costs'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.advertising_costs || 0)), Quantity: 1 },
-      { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.other_fees || 0)), Quantity: 1 },
-    ].filter(item => Math.abs(item.UnitAmount) > 0.01);
+    const lineItems = Object.entries(categoryAmounts)
+      .filter(([_, amount]) => Math.abs(amount) > 0.01)
+      .map(([cat, amount]) => ({
+        Description: `${contactName} ${cat}`,
+        AccountCode: resolvedMappings[cat],
+        TaxType: categoryTaxTypes[cat] || 'INPUT',
+        UnitAmount: amount,
+        Quantity: 1,
+      }));
 
     if (lineItems.length === 0) {
-      await supabase.from('settlements').update({ posting_state: 'failed', posting_error: 'No non-zero line items' }).eq('id', settlementDbId);
+      await supabase.from('settlements').update({
+        posting_state: 'failed',
+        posting_error: 'No non-zero line items',
+        posting_claimed_at: null,
+      }).eq('id', settlementDbId);
       return { settlement_id: sid, result: 'failed', error: 'No non-zero line items' };
     }
 
@@ -411,9 +532,9 @@ async function processSettlement(
       await supabase.from('settlements').update({
         posting_state: 'failed',
         posting_error: errMsg,
+        posting_claimed_at: null,
       }).eq('id', settlementDbId);
 
-      // Log to system_events
       await supabase.from('system_events').insert({
         user_id: userId,
         event_type: 'auto_post_failed',
@@ -430,6 +551,7 @@ async function processSettlement(
     await supabase.from('settlements').update({
       posting_state: 'posted',
       posting_error: null,
+      posting_claimed_at: null,
       posted_at: new Date().toISOString(),
       status: 'pushed_to_xero',
       xero_invoice_id: pushResult.invoiceId || null,
@@ -470,8 +592,10 @@ async function processSettlement(
         line_items: normalizedLineItems,
         truncated: lineItems.length > 200,
       },
+      resolved_mappings: resolvedMappings,
       retry_count: newRetryCount,
     };
+
     // Log success
     await supabase.from('system_events').insert({
       user_id: userId,
@@ -491,6 +615,7 @@ async function processSettlement(
     await supabase.from('settlements').update({
       posting_state: 'failed',
       posting_error: err.message,
+      posting_claimed_at: null,
     }).eq('id', settlementDbId);
 
     await supabase.from('system_events').insert({
