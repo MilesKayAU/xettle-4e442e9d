@@ -804,144 +804,81 @@ Deno.serve(async (req) => {
 
     console.log(`[fetch-outstanding] Bank cache: ${bankTxns.length} RECEIVE txns from ${bankLookbackStr}, empty=${bankFeedEmpty}`);
 
-    // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
-    // Nothing is marked as matched until user explicitly confirms.
-    // Auto-detection is always a SUGGESTION.
-    // Groups Amazon invoices by PAYOUT DATE WINDOW (not settlement period),
-    // because Amazon deposits often cross settlement period boundaries.
-    interface BankCandidate {
-      transaction_id: string;
-      amount: number;
-      date: string;
-      reference: string;
-      narration: string;
-      bank_account_name: string;
-      confidence: 'high' | 'medium' | 'low';
-      score: number;
-      match_type: 'exact' | 'aggregate';
+    // ─── Settlement-level grouping (replaces 5-day window grouping) ───
+    // Group ALL invoices by settlement_id, sum AmountDue, compare to settlement net.
+    // This is the correct model: Amazon pays per settlement, not per date window.
+    interface SettlementGroupResult {
+      matched: boolean;
+      group_sum: number;
+      settlement_net: number;
+      difference: number;
+      invoice_count: number;
+      confidence: 'high' | 'medium' | null;
+      settlement_id: string;
+      invoice_ids: string[];
     }
 
-    interface AggregateGroup {
-      id: string;
-      invoiceIds: string[];
-      settlementIds: string[];
-      sum: number;
-      dates: string[];
-      centreDate: Date;
-      candidates: BankCandidate[];
-    }
-
-    const amazonInvoices = invoices.filter((inv: any) => {
-      const contact = (inv.Contact?.Name || '').toLowerCase();
-      const ref = (inv.Reference || '').toLowerCase();
-      return ref.startsWith('amzn-') || ref.includes('amazon') || contact.includes('amazon') || ref.startsWith('lmb-');
-    });
-
-    // Sort by date
-    const sortedAmazon = [...amazonInvoices].sort((a: any, b: any) => {
-      const da = parseXeroDate(a.Date) || '';
-      const db = parseXeroDate(b.Date) || '';
-      return da.localeCompare(db);
-    });
-
-    // Group into 5-day payout windows
-    const aggregateGroups: AggregateGroup[] = [];
-    let currentGroup: AggregateGroup | null = null;
-
-    for (const inv of sortedAmazon) {
-      const invDate = parseXeroDate(inv.Date);
-      if (!invDate) continue;
-      const invDateMs = new Date(invDate).getTime();
-      const amount = inv.AmountDue || inv.Total || 0;
+    // First pass: extract settlement_id for every invoice and build groups
+    const invoiceSettlementMap = new Map<string, { id: string; invoices: any[] }>();
+    
+    for (const inv of invoices) {
       const ref = inv.Reference || '';
       const extracted = extractSettlementId(ref);
-
-      if (!currentGroup || (invDateMs - currentGroup.centreDate.getTime()) > 5 * 24 * 60 * 60 * 1000) {
-        currentGroup = {
-          id: `agg_${invDate}_${aggregateGroups.length}`,
-          invoiceIds: [inv.InvoiceID],
-          settlementIds: extracted.id ? [extracted.id] : [],
-          sum: amount,
-          dates: [invDate],
-          centreDate: new Date(invDateMs),
-          candidates: [],
-        };
-        aggregateGroups.push(currentGroup);
-      } else {
-        currentGroup.invoiceIds.push(inv.InvoiceID);
-        if (extracted.id) currentGroup.settlementIds.push(extracted.id);
-        currentGroup.sum += amount;
-        currentGroup.dates.push(invDate);
-        const allMs = currentGroup.dates.map(d => new Date(d).getTime());
-        const avgMs = allMs.reduce((a, b) => a + b, 0) / allMs.length;
-        currentGroup.centreDate = new Date(avgMs);
+      let sId = extracted.id;
+      
+      // Also resolve aliases
+      if (sId && !settlementMap.has(sId)) {
+        const canonical = aliasMap.get(sId);
+        if (canonical) sId = canonical;
       }
+      
+      if (!sId) continue;
+      
+      if (!invoiceSettlementMap.has(sId)) {
+        invoiceSettlementMap.set(sId, { id: sId, invoices: [] });
+      }
+      invoiceSettlementMap.get(sId)!.invoices.push(inv);
     }
 
-    // Score bank transaction candidates for each aggregate group
-    for (const group of aggregateGroups) {
-      // Single-invoice groups still scored — must meet score ≥ 70 for 'high' confidence
-      group.sum = Math.round(group.sum * 100) / 100;
+    // Second pass: compare each group to settlement net
+    const settlementGroupResults = new Map<string, SettlementGroupResult>();
+    let settlementLevelMatches = 0;
 
-      // Determine group currency from the first invoice (Amazon AU = AUD)
-      const groupCurrency = 'AUD'; // Amazon AU invoices are always AUD
+    for (const [sId, group] of invoiceSettlementMap) {
+      const groupSum = Math.round(
+        group.invoices.reduce((sum: number, inv: any) => sum + (inv.AmountDue || inv.Total || 0), 0) * 100
+      ) / 100;
 
-      for (const txn of bankTxns) {
-        // Currency hard filter — prevent cross-currency false matches
-        if ((txn.CurrencyCode || 'AUD') !== groupCurrency) continue;
+      const settlement = settlementMap.get(sId);
+      if (!settlement) continue;
 
-        const txnAmount = Math.abs(txn.Total || 0);
-        const txnDate = parseXeroDate(txn.Date);
-        if (!txnDate) continue;
+      const settlementNet = Math.abs(settlement.bank_deposit ?? settlement.net_ex_gst ?? 0);
+      const diff = Math.abs(groupSum - settlementNet);
+      const matched = diff <= 0.50;
+      const confidence: 'high' | 'medium' | null = matched
+        ? (diff <= 0.10 ? 'high' : 'medium')
+        : null;
 
-        const amountDiff = Math.abs(txnAmount - group.sum);
-        if (amountDiff > 10) continue; // Wider net for candidates
+      const result: SettlementGroupResult = {
+        matched,
+        group_sum: groupSum,
+        settlement_net: settlementNet,
+        difference: Math.round(diff * 100) / 100,
+        invoice_count: group.invoices.length,
+        confidence,
+        settlement_id: sId,
+        invoice_ids: group.invoices.map((inv: any) => inv.InvoiceID),
+      };
 
-        const daysDiff = Math.abs(
-          (new Date(txnDate).getTime() - group.centreDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (daysDiff > 7) continue;
-
-        const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''} ${txn.Reference || ''}`.toLowerCase();
-        const narrationMatch = narration.includes('amazon') || narration.includes('amzn');
-
-        // Score: higher = better
-        let score = 0;
-        if (amountDiff <= 0.05) score += 50;       // Exact amount
-        else if (amountDiff <= 1.00) score += 30;   // Close amount
-        else score += 10;                           // Within $10
-        if (narrationMatch) score += 30;            // Narration bonus
-        if (daysDiff <= 2) score += 20;             // Close date
-        else if (daysDiff <= 5) score += 10;        // Within window
-
-        const confidence: 'high' | 'medium' | 'low' =
-          score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
-
-        // Nothing is marked as matched until user explicitly confirms.
-        // Auto-detection is always a SUGGESTION.
-        group.candidates.push({
-          transaction_id: txn.BankTransactionID,
-          amount: txnAmount,
-          date: txnDate,
-          reference: txn.Reference || '',
-          narration: txn.LineItems?.[0]?.Description || '',
-          bank_account_name: txn.BankAccount?.Name || '',
-          confidence,
-          score,
-          match_type: 'aggregate',
-        });
-      }
-
-      // Sort by score descending, keep top 3
-      group.candidates.sort((a, b) => b.score - a.score);
-      group.candidates = group.candidates.slice(0, 3);
+      settlementGroupResults.set(sId, result);
+      if (matched) settlementLevelMatches++;
     }
 
-    // Build lookup: invoiceId → aggregate group
-    const aggregateLookup = new Map<string, AggregateGroup>();
-    for (const group of aggregateGroups) {
-      for (const invId of group.invoiceIds) {
-        aggregateLookup.set(invId, group);
+    // Build lookup: invoiceId → settlement group result
+    const invoiceToSettlementGroup = new Map<string, SettlementGroupResult>();
+    for (const [, result] of settlementGroupResults) {
+      for (const invId of result.invoice_ids) {
+        invoiceToSettlementGroup.set(invId, result);
       }
     }
 
