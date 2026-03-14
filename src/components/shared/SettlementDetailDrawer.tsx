@@ -62,15 +62,18 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSnapshot, setHasSnapshot] = useState(true);
+  const [externalCandidate, setExternalCandidate] = useState<any>(null);
+  const [dismissingCandidate, setDismissingCandidate] = useState(false);
 
   useEffect(() => {
     if (!open || !settlementId) return;
     setLoading(true);
     setSnapshot(null);
     setHasSnapshot(true);
+    setExternalCandidate(null);
 
     (async () => {
-      const [settRes, eventsRes] = await Promise.all([
+      const [settRes, eventsRes, candidateRes] = await Promise.all([
         supabase
           .from('settlements')
           .select('*')
@@ -81,12 +84,18 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
           .select('*')
           .eq('settlement_id', settlementId)
           .order('created_at', { ascending: true }),
+        supabase
+          .from('xero_accounting_matches')
+          .select('*')
+          .eq('settlement_id', settlementId)
+          .eq('match_method', 'external_candidate')
+          .maybeSingle(),
       ]);
 
       if (settRes.data) setSettlement(settRes.data);
+      if (candidateRes.data) setExternalCandidate(candidateRes.data);
       if (eventsRes.data) {
         setEvents(eventsRes.data as AuditEvent[]);
-        // Find the posting snapshot
         const postEvent = (eventsRes.data as AuditEvent[]).find(
           e => e.event_type === 'xero_push_success' || e.event_type === 'auto_post_success'
         );
@@ -101,6 +110,22 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
       setLoading(false);
     })();
   }, [open, settlementId]);
+
+  const handleDismissCandidate = useCallback(async () => {
+    if (!externalCandidate?.id) return;
+    setDismissingCandidate(true);
+    const { error } = await supabase
+      .from('xero_accounting_matches')
+      .delete()
+      .eq('id', externalCandidate.id);
+    if (error) {
+      toast.error('Failed to dismiss external match');
+    } else {
+      setExternalCandidate(null);
+      toast.success('External match dismissed');
+    }
+    setDismissingCandidate(false);
+  }, [externalCandidate]);
 
   // Build reconstructed line items from settlement row (fallback for pre-snapshot settlements)
   const reconstructedLines: NormalizedLineItem[] = settlement ? [
