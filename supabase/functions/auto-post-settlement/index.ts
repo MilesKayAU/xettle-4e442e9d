@@ -107,14 +107,26 @@ Deno.serve(async (req) => {
       }
     }
 
+    const results: Array<{ settlement_id: string; result: string; error?: string }> = [];
+
     // ─── Stale lock recovery (BLOCKER #4) ────────────────────────
-    // Reclaim any settlements stuck in 'posting' for > STALE_LOCK_MINUTES
+    // Reclaim settlements stuck in 'posting' for > STALE_LOCK_MINUTES.
+    // SCOPING:
+    //   - Single mode (UI retry): scoped to targetUserId only
+    //   - Batch mode (scheduled-sync via service-role): global scan across all users
     const staleCutoff = new Date(Date.now() - STALE_LOCK_MINUTES * 60 * 1000).toISOString();
-    const { data: staleRows } = await supabase
+    let staleQuery = supabase
       .from('settlements')
       .select('id, settlement_id, user_id, push_retry_count, marketplace')
       .eq('posting_state', 'posting')
       .lt('posting_claimed_at', staleCutoff);
+
+    // In single mode, scope recovery to the calling user only
+    if (targetSettlementId && targetUserId) {
+      staleQuery = staleQuery.eq('user_id', targetUserId);
+    }
+
+    const { data: staleRows } = await staleQuery;
 
     if (staleRows && staleRows.length > 0) {
       for (const stale of staleRows) {
@@ -138,8 +150,6 @@ Deno.serve(async (req) => {
         console.warn(`[auto-post-settlement] Recovered stale lock for ${stale.settlement_id}, retry ${newRetry}`);
       }
     }
-
-    const results: Array<{ settlement_id: string; result: string; error?: string }> = [];
 
     // ─── Single settlement mode ──────────────────────────────────
     if (targetSettlementId && targetUserId) {
