@@ -1196,20 +1196,46 @@ Deno.serve(async (req) => {
         }
       }
 
+      // ─── Fallback for 'unknown' invoice model: retry with gross-up anchor ───
+      if (!matched && invoiceModel === 'unknown' && group.settlement) {
+        const marketplace = (group.settlement.marketplace || '').toLowerCase();
+        const gstRate = RAIL_GST_RATES[marketplace] ?? 10;
+        const bankDep = Math.abs(group.settlement.bank_deposit ?? group.settlement.net_ex_gst ?? 0);
+        const grossUpNet = Math.round((bankDep + bankDep / gstRate) * 100) / 100;
+        const grossUpDiff = Math.round(Math.abs(groupSum - grossUpNet) * 100) / 100;
 
+        if (grossUpDiff <= 0.50) {
+          matched = true;
+          confidence = grossUpDiff <= 0.10 ? 'exact' : 'high';
+          toleranceUsed = grossUpDiff;
+          net = grossUpNet;
+          anchorBasis = 'gross' as any;
+          anchorComponents = ['bank_deposit', `gst_gross_up_${gstRate}pct`];
+          anchorMethod = 'payout_gst_gross_up_fallback';
+          explanation = 'external_gst_inclusive_detected';
+        } else if (grossUpDiff <= Math.min(grossUpNet * 0.02, 25.00)) {
+          matched = true; confidence = 'grouped'; toleranceUsed = grossUpDiff;
+          net = grossUpNet; anchorBasis = 'gross' as any;
+          anchorComponents = ['bank_deposit', `gst_gross_up_${gstRate}pct`];
+          anchorMethod = 'payout_gst_gross_up_fallback';
+          explanation = 'external_gst_inclusive_detected';
+        }
+      }
+
+      const finalDiff = Math.round(Math.abs(groupSum - net) * 100) / 100;
       const result: SettlementGroupResult = {
         matched,
         group_sum: groupSum,
         settlement_net: net,
-        difference: diff,
+        difference: finalDiff,
         invoice_count: group.invoices.length,
         confidence,
         settlement_id: group.settlementId,
         invoice_ids: group.invoices.map((inv: any) => inv.InvoiceID),
         explanation,
         tolerance_used: toleranceUsed,
-        anchor_basis: anchor.basis,
-        anchor_components_used: anchor.components,
+        anchor_basis: anchorBasis,
+        anchor_components_used: anchorComponents,
       };
 
       settlementGroupResults.set(groupKey, result);
