@@ -13,8 +13,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw,
   Upload, ArrowRight, Send, Search, PartyPopper, Clock, Filter,
+  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
@@ -59,6 +61,9 @@ interface ValidationSweepProps {
 
 type FilterStatus = 'all' | 'complete' | 'ready_to_push' | 'settlement_needed' | 'gap_detected';
 
+type SortKey = 'marketplace_code' | 'period_start' | 'orders_count' | 'settlement_net' | 'overall_status';
+type SortDir = 'asc' | 'desc';
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgClass: string; borderClass: string }> = {
   complete: { label: 'Complete', color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', borderClass: 'border-emerald-200 dark:border-emerald-800' },
   bank_matched: { label: 'Complete', color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-100 dark:bg-emerald-900/30', borderClass: 'border-emerald-200 dark:border-emerald-800' },
@@ -94,6 +99,10 @@ export default function ValidationSweep({
   const [sweepDuration, setSweepDuration] = useState<number | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [sortKey, setSortKey] = useState<SortKey>('period_start');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
   const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
@@ -306,13 +315,51 @@ export default function ValidationSweep({
     if (marketplaceFilter !== 'all') {
       result = result.filter(r => r.marketplace_code === marketplaceFilter);
     }
+    // Date range filter
+    if (dateFrom) {
+      result = result.filter(r => r.period_start >= dateFrom);
+    }
+    if (dateTo) {
+      result = result.filter(r => r.period_start <= dateTo);
+    }
     // Status filter
-    if (filter === 'complete') return result.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
-    if (filter === 'ready_to_push') return result.filter(r => r.overall_status === 'ready_to_push');
-    if (filter === 'settlement_needed') return result.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-    if (filter === 'gap_detected') return result.filter(r => r.overall_status === 'gap_detected');
+    if (filter === 'complete') result = result.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
+    else if (filter === 'ready_to_push') result = result.filter(r => r.overall_status === 'ready_to_push');
+    else if (filter === 'settlement_needed') result = result.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+    else if (filter === 'gap_detected') result = result.filter(r => r.overall_status === 'gap_detected');
+    // Sort
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'marketplace_code':
+          cmp = (MARKETPLACE_LABELS[a.marketplace_code] || a.marketplace_code).localeCompare(MARKETPLACE_LABELS[b.marketplace_code] || b.marketplace_code);
+          break;
+        case 'period_start':
+          cmp = a.period_start.localeCompare(b.period_start);
+          break;
+        case 'orders_count':
+          cmp = (a.orders_count || 0) - (b.orders_count || 0);
+          break;
+        case 'settlement_net':
+          cmp = (a.settlement_net || 0) - (b.settlement_net || 0);
+          break;
+        case 'overall_status':
+          cmp = (a.overall_status || '').localeCompare(b.overall_status || '');
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
     return result;
-  }, [actionableRows, filter, marketplaceFilter]);
+  }, [actionableRows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir]);
+
+  const toggleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  }, [sortKey]);
 
   const [vsPage, setVsPage] = useState(1);
   const vsTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
@@ -322,7 +369,7 @@ export default function ValidationSweep({
     const start = (safeVsPage - 1) * DEFAULT_PAGE_SIZE;
     return filteredRows.slice(start, start + DEFAULT_PAGE_SIZE);
   }, [filteredRows, safeVsPage, maxRows]);
-  useEffect(() => { setVsPage(1); }, [filter, marketplaceFilter]);
+  useEffect(() => { setVsPage(1); }, [filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir]);
 
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at)
@@ -485,42 +532,62 @@ export default function ValidationSweep({
         />
       </div>
 
-      {/* Marketplace filter */}
-      {uniqueMarketplaces.length > 1 && (
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
-            <SelectTrigger className="w-[200px] h-8 text-sm">
-              <SelectValue placeholder="All Marketplaces" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Marketplaces</SelectItem>
-              {uniqueMarketplaces.map(m => (
-                <SelectItem key={m.code} value={m.code}>{m.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {marketplaceFilter !== 'all' && (
-            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setMarketplaceFilter('all')}>
-              Clear
-            </Button>
-          )}
+      {/* Filters bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        {uniqueMarketplaces.length > 1 && (
+          <>
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
+              <SelectTrigger className="w-[200px] h-8 text-sm">
+                <SelectValue placeholder="All Marketplaces" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Marketplaces</SelectItem>
+                {uniqueMarketplaces.map(m => (
+                  <SelectItem key={m.code} value={m.code}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        <div className="flex items-center gap-1.5">
+          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="h-8 w-[140px] text-xs"
+            placeholder="From"
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="h-8 w-[140px] text-xs"
+            placeholder="To"
+          />
         </div>
-      )}
+        {(marketplaceFilter !== 'all' || dateFrom || dateTo) && (
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => { setMarketplaceFilter('all'); setDateFrom(''); setDateTo(''); }}>
+            Clear filters
+          </Button>
+        )}
+      </div>
 
       <Card className="border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Marketplace</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Period</th>
-                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Orders</th>
+                <SortableHeader label="Marketplace" sortKey="marketplace_code" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="left" />
+                <SortableHeader label="Period" sortKey="period_start" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="left" />
+                <SortableHeader label="Orders" sortKey="orders_count" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="center" />
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Settlement</th>
-                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Net Payout</th>
+                <SortableHeader label="Net Payout" sortKey="settlement_net" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="right" />
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Xero</th>
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Bank</th>
-                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                <SortableHeader label="Status" sortKey="overall_status" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="center" />
                 <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Action</th>
               </tr>
             </thead>
@@ -677,6 +744,29 @@ export default function ValidationSweep({
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────
+
+function SortableHeader({ label, sortKey: key, currentKey, currentDir, onSort, align = 'left' }: {
+  label: string; sortKey: SortKey; currentKey: SortKey; currentDir: SortDir;
+  onSort: (key: SortKey) => void; align?: 'left' | 'center' | 'right';
+}) {
+  const active = currentKey === key;
+  const alignClass = align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
+  return (
+    <th className={cn("px-4 py-2.5 font-medium text-xs uppercase tracking-wider", `text-${align}`)}>
+      <button
+        onClick={() => onSort(key)}
+        className={cn("inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer", active ? 'text-foreground' : 'text-muted-foreground', alignClass)}
+      >
+        {label}
+        {active ? (
+          currentDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </button>
+    </th>
+  );
+}
 
 function BankCell({ row, onConfirmMatch }: { row: ValidationRow; onConfirmMatch: (row: ValidationRow, txnId: string) => void }) {
   const [checking, setChecking] = React.useState(false);
