@@ -1247,6 +1247,10 @@ Deno.serve(async (req) => {
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,
         bank_match_confirmed_at: settlement?.bank_match_confirmed_at || null,
+        // Match diagnostics
+        no_match_reason: noMatchReason,
+        match_reasons: matchReasons.length > 0 ? matchReasons : undefined,
+        top_candidates: topCandidates.length > 0 ? topCandidates : undefined,
         // Routing diagnostics
         routing: (() => {
           const rail = toRailCode(marketplace);
