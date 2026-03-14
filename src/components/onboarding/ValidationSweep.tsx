@@ -508,8 +508,9 @@ export default function ValidationSweep({
         </div>
       )}
 
-      {/* Validation table */}
       <Card className="border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Marketplace</th>
