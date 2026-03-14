@@ -315,7 +315,14 @@ async function fetchBankTxnsForUser(
   // ══════════════════════════════════════════════════════════════
   let token: any;
   try {
-    token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
+    token = await refreshXeroToken(
+      adminSupabase,
+      userId,
+      clientId,
+      clientSecret,
+      (entry) => outboundRequestLedger.push(entry),
+      invoker,
+    );
   } catch (tokenErr: any) {
     console.error(`[fetch-bank-txns] Token refresh threw for ${userId}:`, tokenErr.message);
     token = null;
