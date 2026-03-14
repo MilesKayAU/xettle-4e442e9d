@@ -1165,15 +1165,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const getRowBgClass = (row: OutstandingRow) => {
     if (row.match_status === 'pending_enrichment') return '';
+    if (row.match_status === 'settlement_matched') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
+    if (row.match_status === 'awaiting_confirmation') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.match_status === 'unsupported_marketplace') return 'bg-muted/30';
     if (row.match_status === 'settlement_not_ingested') return 'bg-amber-50/30 dark:bg-amber-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status === 'awaiting_sync') return 'bg-blue-50/30 dark:bg-blue-950/10';
-    if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
-    if ((row.match_status || '').startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
+    if ((row.match_status || '').startsWith('gap_')) return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
   };
 
