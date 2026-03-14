@@ -9,7 +9,6 @@ import {
   syncSettlementToXero,
   syncXeroStatus,
   rollbackSettlementFromXero,
-  buildSimpleInvoiceLines,
   type StandardSettlement,
 } from '@/utils/settlement-engine';
 import { runUniversalReconciliation } from '@/utils/universal-reconciliation';
