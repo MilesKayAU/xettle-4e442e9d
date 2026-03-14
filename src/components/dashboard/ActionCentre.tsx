@@ -169,6 +169,9 @@ export default function ActionCentre({
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
+      if (readySettlementsRes.data) {
+        setReadySettlements(readySettlementsRes.data as any);
+      }
     } catch (err) {
       console.error('ActionCentre load error:', err);
     } finally {
