@@ -134,6 +134,10 @@ interface OutstandingRow {
     destination_account_name: string | null;
     mapping_source: string;
   };
+  // Match diagnostics from match-bank-deposits
+  no_match_reason?: string | null;
+  match_reasons?: string[];
+  top_candidates?: BankCandidate[];
   // Payment verification (Rule #11 — verification only, never accounting)
   payment_verifications?: PaymentVerificationState[];
 }
