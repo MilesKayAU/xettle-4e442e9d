@@ -499,12 +499,12 @@ async function fetchBankTxnsForUser(
     return new Date(ts).toISOString();
   };
 
-  // Server-side date + type filter so Xero only returns RECEIVE txns in range.
-  // Xero where syntax: Date >= DateTime(YYYY,MM,DD)
+  // Server-side date filter. No type filter — ingest all types, filter during matching.
+  // This ensures TRANSFER/SPEND payouts are captured in cache for broader matching.
   const fromYear = fromDate.getFullYear();
   const fromMonth = fromDate.getMonth() + 1;
   const fromDay = fromDate.getDate();
-  let whereClause = `Type=="RECEIVE" AND Date >= DateTime(${fromYear},${fromMonth},${fromDay})`;
+  let whereClause = `Date >= DateTime(${fromYear},${fromMonth},${fromDay})`;
   if (toDate) {
     const toYear = toDate.getFullYear();
     const toMonth = toDate.getMonth() + 1;
