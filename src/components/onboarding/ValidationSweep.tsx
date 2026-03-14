@@ -322,7 +322,7 @@ export default function ValidationSweep({
     const start = (safeVsPage - 1) * DEFAULT_PAGE_SIZE;
     return filteredRows.slice(start, start + DEFAULT_PAGE_SIZE);
   }, [filteredRows, safeVsPage, maxRows]);
-  useEffect(() => { setVsPage(1); }, [filter]);
+  useEffect(() => { setVsPage(1); }, [filter, marketplaceFilter]);
 
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at)
