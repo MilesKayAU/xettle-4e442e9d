@@ -1069,6 +1069,11 @@ Deno.serve(async (req) => {
         everyday_market: ['woolworths', 'everyday', 'edm'],
       };
 
+      // ─── Inline scored matcher with diagnostics ───
+      let noMatchReason: string | null = null;
+      const matchReasons: string[] = [];
+      const topCandidates: any[] = [];
+
       if (!bankMatch && !isConfirmed && hasAnyMapping) {
         // Gate: only attempt bank matching when payout mappings exist
         const mappedAccount = getDestinationAccount(toRailCode(marketplace));
@@ -1076,6 +1081,7 @@ Deno.serve(async (req) => {
         let bestCandidate: any = null;
         let bestScore = 0;
         let bestDiff = Infinity;
+        const allScored: any[] = [];
 
         // Derive expected currency from invoice or marketplace
         const expectedCurrency = (inv as any).CurrencyCode || 'AUD';
@@ -1100,19 +1106,33 @@ Deno.serve(async (req) => {
 
           // Score: higher = better
           let score = 0;
-          if (amountDiff <= 0.05) score += 50;       // Exact amount
-          else if (amountDiff <= 1.00) score += 35;   // Very close
-          else if (amountDiff <= 5) score += 20;      // Close
-          else score += 10;                           // Within $10
+          const reasons: string[] = [];
+          if (amountDiff <= 0.05) { score += 50; reasons.push(`amount_exact (±$${amountDiff.toFixed(2)})`); }
+          else if (amountDiff <= 1.00) { score += 35; reasons.push(`amount_close (±$${amountDiff.toFixed(2)})`); }
+          else if (amountDiff <= 5) { score += 20; reasons.push(`amount_near (±$${amountDiff.toFixed(2)})`); }
+          else { score += 10; reasons.push(`amount_loose (±$${amountDiff.toFixed(2)})`); }
 
           // Narration keyword scoring
           const narration = `${txn.LineItems?.[0]?.Description || ''} ${txn.Contact?.Name || ''} ${txn.Reference || ''}`.toLowerCase();
           const patterns = marketplacePatterns[marketplace] || [];
-          if (patterns.some(p => narration.includes(p))) score += 30;
+          if (patterns.some(p => narration.includes(p))) { score += 30; reasons.push('narration_match'); }
 
           // Date proximity scoring
-          if (daysDiff <= 2) score += 20;
-          else if (daysDiff <= 5) score += 10;
+          if (daysDiff <= 2) { score += 20; reasons.push(`date_close (${daysDiff.toFixed(0)}d)`); }
+          else if (daysDiff <= 5) { score += 10; reasons.push(`date_week (${daysDiff.toFixed(0)}d)`); }
+
+          allScored.push({
+            transaction_id: txn.BankTransactionID,
+            amount: txnAmount,
+            date: txnDate,
+            reference: txn.Reference || '',
+            narration: txn.LineItems?.[0]?.Description || '',
+            bank_account_name: txn.BankAccount?.Name || '',
+            confidence: score >= 90 ? 'high' : score >= 70 ? 'medium' : 'low',
+            score,
+            amount_diff: amountDiff,
+            reasons,
+          });
 
           if (score > bestScore) {
             bestScore = score;
@@ -1120,6 +1140,10 @@ Deno.serve(async (req) => {
             bestCandidate = txn;
           }
         }
+
+        // Sort and take top 3
+        allScored.sort((a: any, b: any) => b.score - a.score);
+        topCandidates.push(...allScored.slice(0, 3));
 
         // Only populate bankMatch when score ≥ 70 (high confidence)
         if (bestCandidate && bestScore >= 70) {
@@ -1134,7 +1158,18 @@ Deno.serve(async (req) => {
             score: bestScore,
           };
           bankDifference = bestDiff;
+          if (allScored.length > 0) {
+            matchReasons.push(...allScored[0].reasons);
+          }
+        } else if (allScored.length > 0) {
+          noMatchReason = `best_score_${bestScore}_below_threshold_70`;
+        } else if (bankTxns.length === 0) {
+          noMatchReason = 'bank_cache_empty';
+        } else {
+          noMatchReason = `no_candidates_within_tolerance`;
         }
+      } else if (!bankMatch && !isConfirmed && !hasAnyMapping) {
+        noMatchReason = 'no_payout_mapping_configured';
       }
 
       const hasBankDeposit = !!bankMatch;
@@ -1212,6 +1247,10 @@ Deno.serve(async (req) => {
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,
         bank_match_confirmed_at: settlement?.bank_match_confirmed_at || null,
+        // Match diagnostics
+        no_match_reason: noMatchReason,
+        match_reasons: matchReasons.length > 0 ? matchReasons : undefined,
+        top_candidates: topCandidates.length > 0 ? topCandidates : undefined,
         // Routing diagnostics
         routing: (() => {
           const rail = toRailCode(marketplace);

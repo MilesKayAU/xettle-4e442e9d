@@ -134,6 +134,10 @@ interface OutstandingRow {
     destination_account_name: string | null;
     mapping_source: string;
   };
+  // Match diagnostics from match-bank-deposits
+  no_match_reason?: string | null;
+  match_reasons?: string[];
+  top_candidates?: BankCandidate[];
   // Payment verification (Rule #11 — verification only, never accounting)
   payment_verifications?: PaymentVerificationState[];
 }
@@ -2371,6 +2375,73 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                 )}
                               </div>
                             </div>
+
+                            {/* ─── No-match reason ─── */}
+                            {row.no_match_reason && !row.has_bank_deposit && (
+                              <div className="flex items-center gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs">
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                <div>
+                                  <span className="font-medium text-amber-800 dark:text-amber-300">No match reason: </span>
+                                  <span className="text-amber-700 dark:text-amber-400 font-mono">{row.no_match_reason.replace(/_/g, ' ')}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ─── Match scoring reasons ─── */}
+                            {row.match_reasons && row.match_reasons.length > 0 && (
+                              <div className="flex items-center gap-2 p-2 rounded-md bg-muted/30 border border-border text-xs">
+                                <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <div>
+                                  <span className="font-medium text-foreground">Scoring signals: </span>
+                                  <span className="text-muted-foreground">{row.match_reasons.join(' · ')}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ─── Top 3 closest bank candidates ─── */}
+                            {row.top_candidates && row.top_candidates.length > 0 && (
+                              <div className="space-y-1.5">
+                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <Search className="h-3 w-3" /> Closest Bank Candidates ({row.top_candidates.length})
+                                </p>
+                                <div className="border rounded-md overflow-hidden">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="bg-muted/50">
+                                        <th className="text-left font-medium text-muted-foreground px-3 py-1.5">Date</th>
+                                        <th className="text-right font-medium text-muted-foreground px-3 py-1.5">Amount</th>
+                                        <th className="text-right font-medium text-muted-foreground px-3 py-1.5">Diff</th>
+                                        <th className="text-left font-medium text-muted-foreground px-3 py-1.5">Narration</th>
+                                        <th className="text-left font-medium text-muted-foreground px-3 py-1.5">Account</th>
+                                        <th className="text-center font-medium text-muted-foreground px-3 py-1.5">Score</th>
+                                        <th className="text-left font-medium text-muted-foreground px-3 py-1.5">Signals</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {row.top_candidates.map((c, i) => (
+                                        <tr key={c.transaction_id} className={`border-t border-muted/30 ${i === 0 ? 'bg-primary/5' : ''}`}>
+                                          <td className="px-3 py-1.5 text-muted-foreground">{formatDate(c.date)}</td>
+                                          <td className="px-3 py-1.5 text-right font-mono font-bold text-foreground">{formatAUD(c.amount)}</td>
+                                          <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">
+                                            {c.amount_diff != null ? `±${formatAUD(c.amount_diff)}` : '—'}
+                                          </td>
+                                          <td className="px-3 py-1.5 text-muted-foreground truncate max-w-[200px]">{c.narration || c.reference || '—'}</td>
+                                          <td className="px-3 py-1.5 text-muted-foreground text-[10px]">{c.bank_account_name || '—'}</td>
+                                          <td className="px-3 py-1.5 text-center">
+                                            <Badge variant={c.confidence === 'high' ? 'default' : 'outline'} className="text-[10px] px-1.5 py-0">
+                                              {c.score}pts
+                                            </Badge>
+                                          </td>
+                                          <td className="px-3 py-1.5 text-[10px] text-muted-foreground">
+                                            {c.reasons?.join(', ') || '—'}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
