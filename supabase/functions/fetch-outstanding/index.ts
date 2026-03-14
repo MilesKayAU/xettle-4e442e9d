@@ -297,7 +297,42 @@ Deno.serve(async (req) => {
 
     const shouldHitXero = forceRefresh || !cacheIsFresh;
 
+    // ─── GOVERNOR: Check shared cooldown before ANY Xero call (P1 priority) ───
+    let governorBlocked = false;
     if (shouldHitXero) {
+      const { data: sharedCooldownRow } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', userId)
+        .eq('key', 'xero_api_cooldown_until')
+        .maybeSingle();
+      if (sharedCooldownRow?.value) {
+        const cooldownMs = new Date(sharedCooldownRow.value).getTime();
+        if (!isNaN(cooldownMs) && cooldownMs > Date.now()) {
+          const secsRemaining = Math.ceil((cooldownMs - Date.now()) / 1000);
+          console.log(`[fetch-outstanding] GOVERNOR: shared cooldown active (${secsRemaining}s remaining) — serving from cache`);
+          governorBlocked = true;
+          // Log denied call
+          await supabase.from('system_events').insert({
+            user_id: userId,
+            event_type: 'xero_api_call',
+            severity: 'info',
+            details: {
+              timestamp_utc: new Date().toISOString(),
+              function_name: 'fetch-outstanding',
+              invoker: 'self',
+              endpoint: 'Invoices (outstanding)',
+              attempt_number: 0,
+              governor_decision: 'denied_cooldown',
+              cooldown_until: sharedCooldownRow.value,
+              http_status: null,
+            },
+          });
+        }
+      }
+    }
+
+    if (shouldHitXero && !governorBlocked) {
       // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
       const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
       const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC&summaryOnly=true`;
@@ -306,7 +341,7 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${token.access_token}`,
         'Accept': 'application/json',
         'Xero-tenant-id': token.tenant_id,
-      });
+      }, supabase, userId);
 
       if (xeroResult.ok) {
         allInvoices = xeroResult.data.Invoices || [];
