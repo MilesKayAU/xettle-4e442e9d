@@ -1056,25 +1056,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Track if GST anchor helped (diff_before > 0.50 AND diff_after <= 0.50, or GST path used)
-      if (usedGstAnchor && matched && diffWithoutGst > 0.50) {
-        gstAnchorHelpedCount++;
-      }
-      // Emit bounded diagnostics for GST anchor groups
-      if (usedGstAnchor && gstAnchorDiagnostics.length < GST_DIAG_LIMIT) {
-        gstAnchorDiagnostics.push({
-          settlement_id: group.settlementId,
-          marketplace: group.settlement.marketplace,
-          anchor_used: anchor.method,
-          bank_deposit: anchor.bankDeposit,
-          gst_on_income: anchor.gstApplied,
-          effective_anchor: net,
-          group_sum: groupSum,
-          diff_before: diffWithoutGst,
-          diff_after: diff,
-          matched,
-        });
-      }
 
       const result: SettlementGroupResult = {
         matched,
