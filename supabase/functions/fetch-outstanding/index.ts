@@ -826,30 +826,11 @@ Deno.serve(async (req) => {
     // Xero AmountDue = bank_deposit + gst_on_income (GST-inclusive).
     // For non-AU or non-GST settlements, AmountDue ≈ bank_deposit.
 
-    // ─── GST-inclusive invoice model: explicit marketplace check ───
-    // Rule: Only AU marketplaces use GST-inclusive invoices (OUTPUT/INPUT tax types).
-    // This is a static property of the invoice generator path, not inferred from amounts.
-    const GST_INCLUSIVE_RAILS = new Set([
-      'amazon_au', 'shopify_payments', 'ebay', 'ebay_au', 'bunnings',
-      'catch', 'kogan', 'mydeal', 'everyday_market', 'bigw',
-    ]);
-
-    /** Check if a settlement uses GST-inclusive invoices (AU model). */
-    function isGstInclusiveInvoiceModel(settlement: any): boolean {
-      const rail = toRailCode((settlement.marketplace || '').toLowerCase());
-      return GST_INCLUSIVE_RAILS.has(rail);
-    }
-
     /** Non-split anchor: Xero AmountDue for the settlement.
-     *  AU GST-inclusive: bank_deposit + abs(gst_on_income)
-     *  Otherwise: bank_deposit (fallback net_ex_gst) */
+     *  Always uses bank_deposit (or fallback net_ex_gst).
+     *  GST differences are handled via the explainable tier, not the anchor. */
     function getInvoiceBasisNet(s: any): { anchor: number; method: string } {
       const bankDep = Math.abs(s.bank_deposit ?? s.net_ex_gst ?? 0);
-      const gstOnIncome = Math.abs(s.gst_on_income ?? 0);
-
-      if (isGstInclusiveInvoiceModel(s) && gstOnIncome > 0.0001) {
-        return { anchor: bankDep + gstOnIncome, method: 'bank_deposit_plus_gst' };
-      }
       return { anchor: bankDep, method: s.bank_deposit != null ? 'bank_deposit' : 'fallback_net_ex_gst' };
     }
 
