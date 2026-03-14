@@ -822,13 +822,35 @@ Deno.serve(async (req) => {
 
     // ─── Invoice-basis anchor helpers (single source of truth) ───
     // "Invoice-basis" = the number Xero AmountDue is expected to be.
-    // Non-split: AmountDue ≈ bank_deposit (rounding adjustment ensures parity).
-    // Split: AmountDue ≈ grossTotal per part (Xero adds GST via OUTPUT/INPUT tax types).
-    // Invariant: sum(grossTotal per part) = bank_deposit.
+    // For AU marketplaces with GST-inclusive invoices (OUTPUT/INPUT tax types),
+    // Xero AmountDue = bank_deposit + gst_on_income (GST-inclusive).
+    // For non-AU or non-GST settlements, AmountDue ≈ bank_deposit.
 
-    /** Non-split anchor: Xero AmountDue ≈ bank_deposit (the payout). */
-    function getInvoiceBasisNet(s: any): number {
-      return Math.abs(s.bank_deposit ?? s.net_ex_gst ?? 0);
+    // ─── GST-inclusive invoice model: explicit marketplace check ───
+    // Rule: Only AU marketplaces use GST-inclusive invoices (OUTPUT/INPUT tax types).
+    // This is a static property of the invoice generator path, not inferred from amounts.
+    const GST_INCLUSIVE_RAILS = new Set([
+      'amazon_au', 'shopify_payments', 'ebay', 'ebay_au', 'bunnings',
+      'catch', 'kogan', 'mydeal', 'everyday_market', 'bigw',
+    ]);
+
+    /** Check if a settlement uses GST-inclusive invoices (AU model). */
+    function isGstInclusiveInvoiceModel(settlement: any): boolean {
+      const rail = toRailCode((settlement.marketplace || '').toLowerCase());
+      return GST_INCLUSIVE_RAILS.has(rail);
+    }
+
+    /** Non-split anchor: Xero AmountDue for the settlement.
+     *  AU GST-inclusive: bank_deposit + abs(gst_on_income)
+     *  Otherwise: bank_deposit (fallback net_ex_gst) */
+    function getInvoiceBasisNet(s: any): { anchor: number; method: string } {
+      const bankDep = Math.abs(s.bank_deposit ?? s.net_ex_gst ?? 0);
+      const gstOnIncome = Math.abs(s.gst_on_income ?? 0);
+
+      if (isGstInclusiveInvoiceModel(s) && gstOnIncome > 0.0001) {
+        return { anchor: bankDep + gstOnIncome, method: 'bank_deposit_plus_gst' };
+      }
+      return { anchor: bankDep, method: s.bank_deposit != null ? 'bank_deposit' : 'fallback_net_ex_gst' };
     }
 
     /** Split-part anchor: Xero AmountDue ≈ grossTotal for the given part. */
@@ -855,7 +877,7 @@ Deno.serve(async (req) => {
 
     // Legacy alias kept for backward compat in fuzzy matching section
     function getSettlementNet(s: any): number {
-      return getInvoiceBasisNet(s);
+      return getInvoiceBasisNet(s).anchor;
     }
 
     // ─── Canonical settlement_id resolver (alias-aware) ───
@@ -924,10 +946,13 @@ Deno.serve(async (req) => {
     // Uses the invoice-basis helpers above to determine the correct anchor.
     function getGroupAnchor(settlement: any, part: number | null): {
       net: number;
+      method: string;
       fees: number;
       refunds: number;
       gstOnIncome: number;
       gstOnExpenses: number;
+      bankDeposit: number;
+      gstApplied: number;
     } {
       // If this is a split sub-group with a known part, use split data as anchor
       if (settlement.is_split_month && part !== null) {
@@ -938,6 +963,7 @@ Deno.serve(async (req) => {
           );
           return {
             net: partNet,
+            method: 'split_part_anchor',
             fees: Math.abs(Number(splitData?.sellerFees ?? 0))
               + Math.abs(Number(splitData?.fbaFees ?? 0))
               + Math.abs(Number(splitData?.storageFees ?? 0))
@@ -945,26 +971,39 @@ Deno.serve(async (req) => {
             refunds: Math.abs(Number(splitData?.refunds ?? 0)),
             gstOnIncome: Math.abs(Number(splitData?.gstOnIncome ?? 0)),
             gstOnExpenses: Math.abs(Number(splitData?.gstOnExpenses ?? 0)),
+            bankDeposit: Math.abs(settlement.bank_deposit ?? 0),
+            gstApplied: 0, // grossTotal already includes GST for split parts
           };
         }
         // Split data missing/invalid — fall through to parent settlement anchor
       }
       // Non-split or fallback: use parent settlement values with payout anchor
+      const basis = getInvoiceBasisNet(settlement);
+      const gstOnInc = Math.abs(settlement.gst_on_income ?? 0);
       return {
-        net: getInvoiceBasisNet(settlement),
+        net: basis.anchor,
+        method: basis.method,
         fees: Math.abs(settlement.seller_fees ?? 0)
           + Math.abs(settlement.fba_fees ?? 0)
           + Math.abs(settlement.storage_fees ?? 0)
           + Math.abs(settlement.other_fees ?? 0),
         refunds: Math.abs(settlement.refunds ?? 0),
-        gstOnIncome: Math.abs(settlement.gst_on_income ?? 0),
+        gstOnIncome: gstOnInc,
         gstOnExpenses: Math.abs(settlement.gst_on_expenses ?? 0),
+        bankDeposit: Math.abs(settlement.bank_deposit ?? settlement.net_ex_gst ?? 0),
+        gstApplied: basis.method === 'bank_deposit_plus_gst' ? gstOnInc : 0,
       };
     }
 
     // Second pass: compare each group/sub-group to its anchor
     const settlementGroupResults = new Map<string, SettlementGroupResult>();
     let settlementLevelMatches = 0;
+
+    // ─── GST anchor diagnostics (bounded) ───
+    let gstAnchorAppliedCount = 0;
+    let gstAnchorHelpedCount = 0;
+    const GST_DIAG_LIMIT = 20;
+    const gstAnchorDiagnostics: any[] = [];
 
     for (const [groupKey, group] of finalGroups) {
       const groupSum = Math.round(
@@ -992,6 +1031,15 @@ Deno.serve(async (req) => {
       const anchor = getGroupAnchor(group.settlement, group.part);
       const net = anchor.net;
       const diff = Math.round(Math.abs(groupSum - net) * 100) / 100;
+
+      // Track GST anchor usage for diagnostics
+      const usedGstAnchor = anchor.method === 'bank_deposit_plus_gst';
+      // Compute what diff would have been WITHOUT GST adjustment
+      const diffWithoutGst = usedGstAnchor
+        ? Math.round(Math.abs(groupSum - anchor.bankDeposit) * 100) / 100
+        : diff;
+
+      if (usedGstAnchor) gstAnchorAppliedCount++;
 
       let matched = false;
       let confidence: SettlementGroupResult['confidence'] = null;
@@ -1042,6 +1090,26 @@ Deno.serve(async (req) => {
             break;
           }
         }
+      }
+
+      // Track if GST anchor helped (diff_before > 0.50 AND diff_after <= 0.50, or GST path used)
+      if (usedGstAnchor && matched && diffWithoutGst > 0.50) {
+        gstAnchorHelpedCount++;
+      }
+      // Emit bounded diagnostics for GST anchor groups
+      if (usedGstAnchor && gstAnchorDiagnostics.length < GST_DIAG_LIMIT) {
+        gstAnchorDiagnostics.push({
+          settlement_id: group.settlementId,
+          marketplace: group.settlement.marketplace,
+          anchor_used: anchor.method,
+          bank_deposit: anchor.bankDeposit,
+          gst_on_income: anchor.gstApplied,
+          effective_anchor: net,
+          group_sum: groupSum,
+          diff_before: diffWithoutGst,
+          diff_after: diff,
+          matched,
+        });
       }
 
       const result: SettlementGroupResult = {
@@ -1484,6 +1552,10 @@ Deno.serve(async (req) => {
       split_settlement_drift_detected: splitChecksFailed > 0,
       split_failed_details: failedChecks.length > 0 ? failedChecks : undefined,
       split_ok_sample: sampledOkChecks.length > 0 ? sampledOkChecks : undefined,
+      // GST-inclusive anchor diagnostics (bounded)
+      gst_anchor_applied_count: gstAnchorAppliedCount,
+      gst_anchor_helped_count: gstAnchorHelpedCount,
+      gst_anchor_diagnostics: gstAnchorDiagnostics.length > 0 ? gstAnchorDiagnostics : undefined,
     };
 
     console.log(JSON.stringify({
