@@ -573,8 +573,9 @@ export default function Dashboard() {
               { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
               { key: 'outstanding' as DashboardView, label: 'Outstanding', icon: ClipboardList, badgeCount: outstandingCount },
               { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
-              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText },
+              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, badgeCount: readyToPushCount },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
+              { key: 'settings' as DashboardView, label: 'Settings', icon: Settings },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
