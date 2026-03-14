@@ -1994,7 +1994,274 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               </tr>
             </thead>
             <tbody>
-              {paginatedRows.map(row => {
+              {/* ─── Settlement groups ─── */}
+              {paginatedGroups.map(group => {
+                const isCollapsed = collapsedGroups.has(group.settlement_id);
+                const truncatedId = group.settlement_id.length > 12
+                  ? group.settlement_id.slice(0, 12) + '…'
+                  : group.settlement_id;
+                const isSplit = group.expected_parts === 2;
+                const partLabel = isSplit
+                  ? `P1+P2`
+                  : `${group.rows.length} inv`;
+
+                return (
+                  <Fragment key={`group-${group.settlement_id}`}>
+                    {/* Settlement group header row */}
+                    <tr
+                      className={`border-b border-border cursor-pointer transition-colors ${
+                        group.matched
+                          ? 'bg-emerald-50/60 dark:bg-emerald-950/15 hover:bg-emerald-50 dark:hover:bg-emerald-950/25'
+                          : 'bg-amber-50/40 dark:bg-amber-950/10 hover:bg-amber-50/60 dark:hover:bg-amber-950/20'
+                      }`}
+                      onClick={() => toggleGroupCollapse(group.settlement_id)}
+                    >
+                      <td className="px-3 py-2.5">
+                        {isCollapsed ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
+                      </td>
+                      <td className="px-3 py-2.5" colSpan={2}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-muted-foreground">{truncatedId}</span>
+                          <Badge variant="outline" className="text-[10px]">{partLabel}</Badge>
+                          {group.unexpected_extras.length > 0 && (
+                            <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400">
+                              {group.unexpected_extras.length} unexpected
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5"></td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="font-mono font-medium text-foreground">{formatAUD(group.group_sum)}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {group.matched ? (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 inline" />
+                        ) : (
+                          <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {group.matched && group.group_diff < 0.50 ? (
+                          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓</span>
+                        ) : (
+                          <span className="text-xs font-mono font-medium text-amber-600 dark:text-amber-400">
+                            {formatAUD(group.group_diff)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          {group.matched ? (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                                Matched{isSplit ? ' (split: P1+P2)' : ''}
+                                {group.confidence && group.confidence !== 'exact' ? ` · ${group.confidence}` : ''}
+                                {group.explanation ? ` (${group.explanation})` : ''}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="h-4 w-4 text-amber-600" />
+                              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Mismatch</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5"></td>
+                    </tr>
+
+                    {/* Child invoice rows (visible when not collapsed) */}
+                    {!isCollapsed && group.rows.map(row => {
+                      const isExpanded = expandedRow === row.xero_invoice_id;
+                      const isApplying = applying.has(row.xero_invoice_id);
+                      const isBalanced = row.match_status === 'balanced' || row.match_status === 'confirmed';
+                      const hasSuggestion = row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple' || row.match_status === 'settlement_matched' || row.match_status === 'awaiting_confirmation';
+                      const isUnexpected = group.unexpected_extras.includes(row);
+
+                      return (
+                        <Fragment key={row.xero_invoice_id}>
+                          <tr className={`border-b border-border/50 ${getRowBgClass(row)} hover:bg-muted/30 transition-colors`}>
+                            <td className="px-3 py-2 pl-8">
+                              {isBalanced && (
+                                <Checkbox
+                                  checked={selected.has(row.xero_invoice_id)}
+                                  onCheckedChange={() => toggleSelect(row.xero_invoice_id)}
+                                />
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-1.5">
+                                <div>
+                                  <p className="font-medium text-foreground">{row.xero_invoice_number}</p>
+                                  <p className="text-xs text-muted-foreground font-mono truncate max-w-[180px]">
+                                    {row.xero_reference || '—'}
+                                  </p>
+                                </div>
+                                {row.settlement_evidence?.split_part && (
+                                  <Badge variant="outline" className="text-[10px]">P{row.settlement_evidence.split_part}</Badge>
+                                )}
+                                {isUnexpected && (
+                                  <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400">
+                                    Unexpected — review
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <Badge variant="secondary" className="text-xs">
+                                {MARKETPLACE_LABELS[row.marketplace] || row.marketplace}
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="text-xs">
+                                <p>{formatDate(row.invoice_date)}</p>
+                                {row.overdue_days != null && row.overdue_days > 0 && (
+                                  <p className="text-destructive font-medium">{row.overdue_days}d overdue</p>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="font-mono font-medium text-foreground">{formatAUD(row.amount)}</span>
+                                {row.currency_code && row.currency_code !== 'AUD' && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-semibold border-amber-300 text-amber-700 dark:text-amber-400">
+                                    {row.currency_code}
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 inline" />
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {/* Individual diff not shown for grouped rows — group header has it */}
+                              <span className="text-xs text-muted-foreground">—</span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-1.5">
+                                {getStatusIcon(row)}
+                                <span className="text-xs font-medium">{getStatusLabel(row)}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center gap-1.5 justify-end">
+                                {isBalanced && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => applyPayment(row)}
+                                    disabled={isApplying}
+                                    className="gap-1 text-xs h-7"
+                                  >
+                                    {isApplying ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <CreditCard className="h-3 w-3" />
+                                    )}
+                                    Mark Paid
+                                  </Button>
+                                )}
+                                {row.match_status !== 'no_settlement' && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setExpandedRow(isExpanded ? null : row.xero_invoice_id)}
+                                    className="gap-1 text-xs h-7"
+                                  >
+                                    <FileText className="h-3 w-3" />
+                                    Evidence
+                                    {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Expanded evidence panel */}
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={9} className="px-6 py-4 bg-muted/20 border-b border-border">
+                                <div className="space-y-3">
+                                  <h4 className="text-sm font-semibold text-foreground">Match Evidence</h4>
+
+                                  {/* Routing diagnostics */}
+                                  {row.routing && row.is_marketplace && (
+                                    <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground p-2 rounded bg-muted/30 border border-border">
+                                      <span>Rail: <span className="font-mono font-medium text-foreground">{row.routing.rail_code}</span></span>
+                                      <span className="text-border">·</span>
+                                      <span>Destination: <span className="font-medium text-foreground">{row.routing.destination_account_name || row.routing.destination_account_id || '—'}</span></span>
+                                      <span className="text-border">·</span>
+                                      <Badge variant="outline" className="text-[10px]">{row.routing.mapping_source}</Badge>
+                                    </div>
+                                  )}
+
+                                  {/* Bank match action panel */}
+                                  {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || row.match_status === 'settlement_matched' || row.match_status === 'awaiting_confirmation') && (
+                                    <div className="mb-3">
+                                      {renderBankMatchPanel(row)}
+                                    </div>
+                                  )}
+
+                                  {/* Settlement evidence */}
+                                  {row.has_settlement && row.settlement_evidence && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                                      <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
+                                        <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                                          <ExternalLink className="h-3 w-3" /> Xero Invoice
+                                        </p>
+                                        <p className="font-medium">{row.xero_invoice_number} — {row.contact_name}</p>
+                                        <p>Ref: <span className="font-mono">{row.xero_reference || '—'}</span></p>
+                                        <p>Amount: <span className="font-bold">{formatAUD(row.amount)}</span></p>
+                                      </div>
+                                      <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
+                                        <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                                          <FileText className="h-3 w-3" /> Settlement Data
+                                        </p>
+                                        <p className="font-mono text-[10px] text-muted-foreground">{row.settlement_evidence.settlement_id}</p>
+                                        <p>Period: {row.settlement_evidence.period_start} → {row.settlement_evidence.period_end}</p>
+                                        {row.settlement_evidence.is_split_month && (
+                                          <Badge variant="outline" className="text-[10px]">
+                                            Split-month Part {row.settlement_evidence.split_part}
+                                          </Badge>
+                                        )}
+                                        <div className="border-t border-border pt-1.5 mt-1.5 space-y-0.5">
+                                          <p>Sales: <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatAUD(Math.abs(row.settlement_evidence.sales_principal))}</span></p>
+                                          <p>Fees: <span className="font-medium text-destructive">{formatAUD(Math.abs(row.settlement_evidence.seller_fees + row.settlement_evidence.fba_fees))}</span></p>
+                                          <p>Refunds: <span className="font-medium text-orange-600 dark:text-orange-400">{formatAUD(Math.abs(row.settlement_evidence.refunds))}</span></p>
+                                          <p>Bank deposit: <span className="font-bold text-foreground">{formatAUD(row.settlement_evidence.bank_deposit)}</span></p>
+                                        </div>
+                                      </div>
+                                      <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
+                                        <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                                          <Banknote className="h-3 w-3" /> Bank Deposit (Xero)
+                                        </p>
+                                        {row.has_bank_deposit && row.bank_match ? (
+                                          <>
+                                            <p className="flex items-center gap-1">
+                                              <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                              <span className="font-bold">{formatAUD(row.bank_match.amount)}</span> on {row.bank_match.date || '—'}
+                                            </p>
+                                          </>
+                                        ) : (
+                                          <p className="text-muted-foreground">No matching deposit</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
+
+              {/* ─── Ungrouped invoices (no settlement_id) ─── */}
+              {paginatedUngrouped.map(row => {
                 const isExpanded = expandedRow === row.xero_invoice_id;
                 const isApplying = applying.has(row.xero_invoice_id);
                 const isBalanced = row.match_status === 'balanced' || row.match_status === 'confirmed';
@@ -2045,8 +2312,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                       <td className="px-3 py-2 text-center">
                         {row.match_status === 'pending_enrichment' ? (
                           <span className="text-muted-foreground">—</span>
-                        ) : row.has_settlement ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
                         ) : row.is_pre_boundary ? (
                           <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
                         ) : (
@@ -2054,26 +2319,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {row.match_status === 'pending_enrichment' ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : row.settlement_group_matched && (row.settlement_group_diff == null || row.settlement_group_diff < 0.50) ? (
-                          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓</span>
-                        ) : row.settlement_group_diff != null && row.settlement_group_diff >= 0.50 ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="text-xs font-mono font-medium text-amber-600 dark:text-amber-400">
-                                {formatAUD(row.settlement_group_diff)}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="text-xs">
-                              Settlement total: {formatAUD(row.settlement_group_net || 0)} · Invoices: {formatAUD(row.settlement_group_sum || 0)}
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : row.has_settlement ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+                        <span className="text-xs text-muted-foreground">—</span>
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1.5">
@@ -2083,21 +2329,6 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex items-center gap-1.5 justify-end">
-                          {isBalanced && (
-                            <Button
-                              size="sm"
-                              onClick={() => applyPayment(row)}
-                              disabled={isApplying}
-                              className="gap-1 text-xs h-7"
-                            >
-                              {isApplying ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <CreditCard className="h-3 w-3" />
-                              )}
-                              Mark Paid
-                            </Button>
-                          )}
                           {row.match_status === 'no_settlement' && row.is_pre_boundary && (
                             <Button
                               size="sm"
@@ -2120,348 +2351,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               Upload
                             </Button>
                           )}
-                          {row.match_status !== 'no_settlement' && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setExpandedRow(isExpanded ? null : row.xero_invoice_id)}
-                              className="gap-1 text-xs h-7"
-                            >
-                              <FileText className="h-3 w-3" />
-                              {row.has_settlement ? 'Evidence' : 'Details'}
-                              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            </Button>
-                          )}
                         </div>
                       </td>
                     </tr>
-
-                    {/* Expanded evidence panel */}
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={9} className="px-6 py-4 bg-muted/20 border-b border-border">
-                          <div className="space-y-3">
-                            <h4 className="text-sm font-semibold text-foreground">Match Evidence</h4>
-
-                            {/* Routing diagnostics */}
-                            {row.routing && row.is_marketplace && (
-                              <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground p-2 rounded bg-muted/30 border border-border">
-                                <span>Rail: <span className="font-mono font-medium text-foreground">{row.routing.rail_code}</span></span>
-                                <span className="text-border">·</span>
-                                <span>Destination: <span className="font-medium text-foreground">{row.routing.destination_account_name || row.routing.destination_account_id || '—'}</span></span>
-                                <span className="text-border">·</span>
-                                <Badge variant="outline" className="text-[10px]">{row.routing.mapping_source}</Badge>
-                              </div>
-                            )}
-
-                            {/* Bank match action panel (5 states) */}
-                            {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || row.match_status === 'settlement_matched' || row.match_status === 'awaiting_confirmation') && (
-                              <div className="mb-3">
-                                {renderBankMatchPanel(row)}
-                              </div>
-                            )}
-
-                            {/* Payment verification badges (Rule #11 — verification only) */}
-                            {Object.keys(paymentVerifications).length > 0 && row.settlement_id && (
-                              <div className="mb-3 p-3 rounded-lg bg-muted/30 border border-border">
-                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-2">
-                                  <Shield className="h-3 w-3" /> Payment Verification
-                                </p>
-                                {renderPaymentVerificationBadges(row)}
-                              </div>
-                            )}
-
-                            {/* Deposit Coverage Panel — shows which settlements a deposit covers */}
-                            {row.settlement_id && depositCoverage[row.settlement_id] && depositCoverage[row.settlement_id].siblings.length > 1 && (() => {
-                              const coverage = depositCoverage[row.settlement_id!];
-                              const settlementTotal = coverage.siblings.reduce((sum, s) => sum + Math.abs((s as any).bank_deposit || 0), 0);
-                              const difference = Math.abs(coverage.depositAmount - settlementTotal);
-                              const hasDifference = difference > 0.05;
-
-                              return (
-                                <div className="mb-3 p-3 rounded-lg bg-muted/20 border border-border space-y-2">
-                                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                                    <Banknote className="h-3 w-3" /> Deposit Coverage
-                                  </p>
-                                  <div className="flex items-baseline gap-2 flex-wrap">
-                                    <span className="text-sm font-bold text-foreground">
-                                      {formatAUD(coverage.depositAmount)}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      detected {coverage.depositDate ? `on ${formatDate(coverage.depositDate)}` : ''}
-                                    </span>
-                                    <Badge variant="outline" className="text-[10px]">
-                                      {coverage.matchMethod === 'batch_sum' ? 'Batch payout' : 'Single match'}
-                                    </Badge>
-                                    <Badge variant="outline" className="text-[10px]">
-                                      {coverage.confidence}% confidence
-                                    </Badge>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">
-                                    Covers {coverage.siblings.length} settlements:
-                                  </p>
-                                  <div className="space-y-1">
-                                    {coverage.siblings.map(s => (
-                                      <div key={s.settlement_id} className="flex items-center gap-2 text-xs">
-                                        <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                        <span className="font-medium text-foreground">
-                                          {MARKETPLACE_LABELS[(s.marketplace || 'unknown')] || s.marketplace || 'Settlement'}
-                                        </span>
-                                        <span className="text-muted-foreground">
-                                          {s.period_start && s.period_end
-                                            ? `${formatDate(s.period_start)} – ${formatDate(s.period_end)}`
-                                            : s.settlement_id}
-                                        </span>
-                                        <span className="font-mono font-bold text-foreground ml-auto">
-                                          {formatAUD(Math.abs((s as any).bank_deposit || 0))}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div className="border-t border-border pt-2 mt-2 flex items-center gap-4 text-xs flex-wrap">
-                                    <div>
-                                      <span className="text-muted-foreground">Total settlements: </span>
-                                      <span className="font-mono font-bold text-foreground">{formatAUD(settlementTotal)}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground">Deposit amount: </span>
-                                      <span className="font-mono font-bold text-foreground">{formatAUD(coverage.depositAmount)}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground">Difference: </span>
-                                      <span className={`font-mono font-bold ${hasDifference ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                        {formatAUD(difference)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {hasDifference && (
-                                    <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-1.5">
-                                      <AlertTriangle className="h-3 w-3 text-amber-600" />
-                                      <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                                        Deposit amount differs from settlement total
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-
-                            {/* Deposit verification drill-down panel */}
-                            {row.has_settlement && row.settlement_evidence && (
-                              <div className="mb-3 p-3 rounded-lg bg-muted/20 border border-border space-y-2">
-                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                                  <Banknote className="h-3 w-3" /> Payout Verification
-                                </p>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                  <div>
-                                    <p className="text-muted-foreground">Expected payout</p>
-                                    <p className="font-mono font-bold text-foreground">{formatAUD(row.settlement_evidence.bank_deposit)}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground">Search window</p>
-                                    <p className="font-medium text-foreground">
-                                      {formatDate(row.settlement_evidence.period_end)} – {formatDate(
-                                        new Date(new Date(row.settlement_evidence.period_end).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
-                                      )}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground">Detected deposit</p>
-                                    {row.has_bank_deposit && row.bank_match ? (
-                                      <p className="font-mono font-bold text-foreground">
-                                        {formatAUD(row.bank_match.amount)} on {formatDate(row.bank_match.date)}
-                                      </p>
-                                    ) : (
-                                      <p className="text-muted-foreground italic">No matching deposit</p>
-                                    )}
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground">Status</p>
-                                    {row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
-                                      <p className="font-medium text-emerald-600 dark:text-emerald-400">Verified ✓</p>
-                                    ) : row.match_status === 'suggestion_high' ? (
-                                      <p className="font-medium text-primary">Deposit matched</p>
-                                    ) : row.match_status === 'confirmed_manual' ? (
-                                      <p className="font-medium text-primary">Manually confirmed</p>
-                    ) : row.match_status === 'settlement_matched' ? (
-                      <p className="font-medium text-emerald-600 dark:text-emerald-400">Settlement matched ✓</p>
-                    ) : (
-                      <p className="font-medium text-muted-foreground">Missing settlement</p>
-                    )}
-                                  </div>
-                                </div>
-                                {row.has_bank_deposit && row.bank_match && row.bank_difference != null && row.bank_difference > 0.05 && (
-                                  <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-md px-3 py-1.5">
-                                    <AlertTriangle className="h-3 w-3 text-amber-600" />
-                                    <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                                      Difference: {formatAUD(row.bank_difference)}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                              {/* Xero Invoice */}
-                              <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
-                                <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
-                                  <ExternalLink className="h-3 w-3" /> Xero Invoice
-                                </p>
-                                <p className="font-medium">{row.xero_invoice_number} — {row.contact_name}</p>
-                                <p>Ref: <span className="font-mono">{row.xero_reference || '—'}</span></p>
-                                <p>Amount: <span className="font-bold">{formatAUD(row.amount)}</span></p>
-                                <p>Date: {row.invoice_date || '—'}</p>
-                              </div>
-
-                              {/* Settlement Evidence */}
-                              <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
-                                <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
-                                  <FileText className="h-3 w-3" /> Settlement Data
-                                </p>
-                                {row.settlement_evidence ? (
-                                  <>
-                                    <p className="flex items-center gap-1">
-                                      <CheckCircle2 className="h-3 w-3 text-green-600" />
-                                      <span className="font-medium">
-                                        {row.settlement_evidence.source === 'api' ? '🔗 Amazon API' :
-                                         row.settlement_evidence.source === 'csv' ? '📄 Uploaded CSV' : '✏️ Manual'}
-                                      </span>
-                                    </p>
-                                    <p className="font-mono text-[10px] text-muted-foreground">{row.settlement_evidence.settlement_id}</p>
-                                    <p>Period: {row.settlement_evidence.period_start} → {row.settlement_evidence.period_end}</p>
-                                    {row.settlement_evidence.is_split_month && (
-                                      <Badge variant="outline" className="text-[10px]">
-                                        Split-month Part {row.settlement_evidence.split_part}
-                                      </Badge>
-                                    )}
-                                    <div className="border-t border-border pt-1.5 mt-1.5 space-y-0.5">
-                                      <p>Sales: <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatAUD(Math.abs(row.settlement_evidence.sales_principal))}</span></p>
-                                      <p>Fees: <span className="font-medium text-destructive">{formatAUD(Math.abs(row.settlement_evidence.seller_fees + row.settlement_evidence.fba_fees))}</span></p>
-                                      <p>Refunds: <span className="font-medium text-orange-600 dark:text-orange-400">{formatAUD(Math.abs(row.settlement_evidence.refunds))}</span></p>
-                                      <p>Net ex GST: <span className="font-bold text-foreground">{formatAUD(row.settlement_evidence.split_net ?? row.settlement_evidence.net_ex_gst)}</span></p>
-                                      <p>Bank deposit: <span className="font-bold text-foreground">{formatAUD(row.settlement_evidence.bank_deposit)}</span></p>
-                                    </div>
-                                    {row.settlement_evidence.bank_verified && (
-                                      <p className="flex items-center gap-1 text-green-600 mt-1">
-                                        <Banknote className="h-3 w-3" /> Bank verified ✓
-                                      </p>
-                                    )}
-                                  </>
-                                ) : (
-                                  <p className="flex items-center gap-1 text-destructive">
-                                    <XCircle className="h-3 w-3" />
-                                    Not in system — upload settlement file
-                                  </p>
-                                )}
-                              </div>
-
-                              {/* Bank Deposit */}
-                              <div className="space-y-1.5 p-3 rounded-lg bg-background border border-border">
-                                <p className="font-semibold text-muted-foreground flex items-center gap-1.5">
-                                  <Banknote className="h-3 w-3" /> Bank Deposit (Xero)
-                                </p>
-                                {row.has_bank_deposit && row.bank_match ? (
-                                  <>
-                                    <p className="flex items-center gap-1">
-                                      {row.bank_match.fuzzy ? (
-                                        <AlertTriangle className="h-3 w-3 text-amber-600" />
-                                      ) : (
-                                        <CheckCircle2 className="h-3 w-3 text-green-600" />
-                                      )}
-                                      <span className="font-bold">{formatAUD(row.bank_match.amount)}</span> on {row.bank_match.date || '—'}
-                                    </p>
-                                    {row.bank_match.fuzzy && (
-                                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">Fuzzy match</Badge>
-                                    )}
-                                    {row.bank_match.confirmed && (
-                                      <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">User confirmed</Badge>
-                                    )}
-                                    {row.bank_match.narration && (
-                                      <p className="text-muted-foreground">Narration: {row.bank_match.narration}</p>
-                                    )}
-                                    {row.bank_difference != null && row.bank_difference > 0.05 && (
-                                      <p className="text-amber-600 font-medium">Difference: {formatAUD(row.bank_difference)}</p>
-                                    )}
-                                  </>
-                                ) : (
-                                  <p className="flex items-center gap-1 text-muted-foreground">
-                                    <Clock3 className="h-3 w-3" />
-                                    {isAmazon(row) ? 'Amazon batches deposits — check suggestions above' : 'No matching bank deposit found in Xero'}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* ─── No-match reason ─── */}
-                            {row.no_match_reason && !row.has_bank_deposit && (
-                              <div className="flex items-center gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs">
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                                <div>
-                                  <span className="font-medium text-amber-800 dark:text-amber-300">No match reason: </span>
-                                  <span className="text-amber-700 dark:text-amber-400 font-mono">{row.no_match_reason.replace(/_/g, ' ')}</span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* ─── Match scoring reasons ─── */}
-                            {row.match_reasons && row.match_reasons.length > 0 && (
-                              <div className="flex items-center gap-2 p-2 rounded-md bg-muted/30 border border-border text-xs">
-                                <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                <div>
-                                  <span className="font-medium text-foreground">Scoring signals: </span>
-                                  <span className="text-muted-foreground">{row.match_reasons.join(' · ')}</span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* ─── Top 3 closest bank candidates ─── */}
-                            {row.top_candidates && row.top_candidates.length > 0 && (
-                              <div className="space-y-1.5">
-                                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                                  <Search className="h-3 w-3" /> Closest Bank Candidates ({row.top_candidates.length})
-                                </p>
-                                <div className="border rounded-md overflow-hidden">
-                                  <table className="w-full text-xs">
-                                    <thead>
-                                      <tr className="bg-muted/50">
-                                        <th className="text-left font-medium text-muted-foreground px-3 py-1.5">Date</th>
-                                        <th className="text-right font-medium text-muted-foreground px-3 py-1.5">Amount</th>
-                                        <th className="text-right font-medium text-muted-foreground px-3 py-1.5">Diff</th>
-                                        <th className="text-left font-medium text-muted-foreground px-3 py-1.5">Narration</th>
-                                        <th className="text-left font-medium text-muted-foreground px-3 py-1.5">Account</th>
-                                        <th className="text-center font-medium text-muted-foreground px-3 py-1.5">Score</th>
-                                        <th className="text-left font-medium text-muted-foreground px-3 py-1.5">Signals</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {row.top_candidates.map((c, i) => (
-                                        <tr key={c.transaction_id} className={`border-t border-muted/30 ${i === 0 ? 'bg-primary/5' : ''}`}>
-                                          <td className="px-3 py-1.5 text-muted-foreground">{formatDate(c.date)}</td>
-                                          <td className="px-3 py-1.5 text-right font-mono font-bold text-foreground">{formatAUD(c.amount)}</td>
-                                          <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">
-                                            {c.amount_diff != null ? `±${formatAUD(c.amount_diff)}` : '—'}
-                                          </td>
-                                          <td className="px-3 py-1.5 text-muted-foreground truncate max-w-[200px]">{c.narration || c.reference || '—'}</td>
-                                          <td className="px-3 py-1.5 text-muted-foreground text-[10px]">{c.bank_account_name || '—'}</td>
-                                          <td className="px-3 py-1.5 text-center">
-                                            <Badge variant={c.confidence === 'high' ? 'default' : 'outline'} className="text-[10px] px-1.5 py-0">
-                                              {c.score}pts
-                                            </Badge>
-                                          </td>
-                                          <td className="px-3 py-1.5 text-[10px] text-muted-foreground">
-                                            {c.reasons?.join(', ') || '—'}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
                   </Fragment>
                 );
               })}
@@ -2471,7 +2363,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         <TablePaginationBar
           page={safeOutPage}
           totalPages={outTotalPages}
-          totalItems={filteredRows.length}
+          totalItems={totalPaginationItems}
           pageSize={DEFAULT_PAGE_SIZE}
           onPageChange={setOutPage}
         />
