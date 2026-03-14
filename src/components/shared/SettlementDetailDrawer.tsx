@@ -16,9 +16,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
-import { cn } from '@/lib/utils';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
