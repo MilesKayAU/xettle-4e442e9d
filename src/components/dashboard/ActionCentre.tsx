@@ -125,6 +125,10 @@ export default function ActionCentre({
     period_start: string; period_end: string; bank_deposit: number | null;
     status: string | null;
   }>>([]);
+  const [ingestedSettlements, setIngestedSettlements] = useState<Array<{
+    id: string; marketplace: string | null; settlement_id: string;
+    period_start: string; period_end: string; bank_deposit: number | null;
+  }>>([]);
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
