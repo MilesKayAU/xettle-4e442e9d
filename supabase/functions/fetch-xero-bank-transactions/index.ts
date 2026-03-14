@@ -982,7 +982,16 @@ Deno.serve(async (req) => {
 
       let result: any;
       try {
-        result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF, CACHE_FRESH_MINUTES_SELF, LOOKBACK_DAYS_SELF);
+        result = await fetchBankTxnsForUser(
+          adminSupabase,
+          userId,
+          clientId,
+          clientSecret,
+          GUARD_MINUTES_SELF,
+          CACHE_FRESH_MINUTES_SELF,
+          LOOKBACK_DAYS_SELF,
+          invoker,
+        );
       } finally {
         await adminSupabase.rpc('release_sync_lock', {
           p_user_id: userId,
