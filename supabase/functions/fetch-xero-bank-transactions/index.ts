@@ -858,6 +858,161 @@ async function fetchBankTxnsForUser(
       .upsert(accountSettingsUpserts, { onConflict: 'user_id,key' });
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // STEP 5B — BankStatementsPlus (Finance API) — unreconciled statement lines
+  // Same accounts, same date range, same governor/cooldown/lock.
+  // Writes into bank_transactions with source='statement_line'.
+  // ══════════════════════════════════════════════════════════════
+  let statementLinesUpserted = 0;
+  let statementLinesSeen = 0;
+  let statementLinesSkipped = false;
+  let statementLinesError: string | null = null;
+
+  // Only fetch if we performed a real Xero fetch in Step 5 (not all skipped)
+  // and we haven't hit a rate limit
+  if (performedRealXeroFetch) {
+    try {
+      // BankStatementsPlus constraints: max 12 months, no future ToDate
+      const stmtToDate = new Date(Math.min(toDate.getTime(), Date.now()));
+      const MAX_STMT_RANGE_MS = 365 * 86400000; // 12 months
+      let stmtFromDate = new Date(fromDate);
+      if (stmtToDate.getTime() - stmtFromDate.getTime() > MAX_STMT_RANGE_MS) {
+        stmtFromDate = new Date(stmtToDate.getTime() - MAX_STMT_RANGE_MS);
+      }
+      const stmtFromStr = stmtFromDate.toISOString().split('T')[0];
+      const stmtToStr = stmtToDate.toISOString().split('T')[0];
+
+      for (const accountId of accountIds) {
+        // Skip accounts that were skipped by change detection in Step 5
+        if (perAccountStats[accountId]?.skipped_by_change_detection) continue;
+
+        const stmtUrl = `https://api.xero.com/finance.xro/1.0/bankstatementsplus/statements?BankAccountID=${accountId}&FromDate=${stmtFromStr}&ToDate=${stmtToStr}&SummaryOnly=true`;
+        const stmtRequestTimestamp = new Date().toISOString();
+        const stmtEndpointLabel = `finance/BankStatementsPlus?bankAccountID=${accountId}`;
+
+        const stmtRes = await fetch(stmtUrl, {
+          headers: {
+            'Authorization': `Bearer ${token.access_token}`,
+            'Xero-Tenant-Id': token.tenant_id,
+            'Accept': 'application/json',
+          },
+        });
+
+        outboundRequestLedger.push({
+          timestamp: stmtRequestTimestamp,
+          function_name: 'fetch-xero-bank-transactions',
+          invoker,
+          endpoint: stmtEndpointLabel,
+          account_id: accountId,
+          response_code: stmtRes.status,
+          retry_number: 0,
+          from_wrapper_retry_logic: false,
+        });
+
+        await adminSupabase.from('system_events').insert({
+          user_id: userId,
+          event_type: 'xero_api_call',
+          severity: stmtRes.ok ? 'info' : (stmtRes.status === 429 ? 'warning' : 'error'),
+          details: {
+            timestamp_utc: stmtRequestTimestamp,
+            function_name: 'fetch-xero-bank-transactions',
+            invoker,
+            endpoint: stmtEndpointLabel,
+            attempt_number: 1,
+            governor_decision: 'allowed',
+            http_status: stmtRes.status,
+          },
+        });
+
+        if (stmtRes.status === 429) {
+          const rawRetryAfter = stmtRes.headers.get('Retry-After');
+          const retryAfterSec = parseRetryAfterSeconds(rawRetryAfter);
+          const newCooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
+          await Promise.all([
+            adminSupabase.from('app_settings').upsert({ user_id: userId, key: COOLDOWN_KEY, value: newCooldownUntil }, { onConflict: 'user_id,key' }),
+            adminSupabase.from('app_settings').upsert({ user_id: userId, key: 'xero_api_cooldown_until', value: newCooldownUntil }, { onConflict: 'user_id,key' }),
+          ]);
+          statementLinesError = `rate_limited_429`;
+          console.log(`[fetch-bank-txns] BankStatementsPlus 429 for account ${accountId}`);
+          break; // Stop processing further accounts
+        }
+
+        if (!stmtRes.ok) {
+          const errText = await stmtRes.text().catch(() => '');
+          console.error(`[fetch-bank-txns] BankStatementsPlus error [${stmtRes.status}] account=${accountId}:`, errText.substring(0, 300));
+          // 403 likely means scope not granted — log but continue with other accounts
+          if (stmtRes.status === 403) {
+            statementLinesError = 'scope_not_granted';
+            statementLinesSkipped = true;
+            break; // No point trying other accounts if scope is missing
+          }
+          continue;
+        }
+
+        const stmtData = await stmtRes.json();
+        const bankAccountName = stmtData?.bankAccountName || bankAccountNamesUsed[accountId] || null;
+        const currency = stmtData?.bankAccountCurrencyCode || 'AUD';
+        const statements = stmtData?.statements || [];
+
+        const stmtRows: any[] = [];
+        for (const stmt of statements) {
+          const lines = stmt?.statementLines || [];
+          for (const line of lines) {
+            statementLinesSeen++;
+            // Skip deleted/duplicate lines
+            if (line.isDeleted || line.isDuplicate) continue;
+            // Skip already-reconciled lines — those are covered by BankTransactions API
+            if (line.isReconciled) continue;
+
+            const lineDate = line.postedDate || line.transactionDate || null;
+            if (!lineDate) continue;
+
+            // Determine type from Debit/Credit
+            const lineType = line.type === 'Credit' ? 'RECEIVE' : (line.type === 'Debit' ? 'SPEND' : 'UNKNOWN');
+            const lineStatus = line.isReconciled ? 'RECONCILED' : 'UNRECONCILED';
+
+            stmtRows.push({
+              user_id: userId,
+              xero_transaction_id: `stmt_${line.statementLineId}`,
+              bank_account_id: accountId,
+              bank_account_name: bankAccountName,
+              date: lineDate,
+              amount: Math.abs(line.amount || 0),
+              currency,
+              description: line.notes || null,
+              reference: line.reference || null,
+              contact_name: line.payee || null,
+              transaction_type: lineType,
+              xero_status: lineStatus,
+              source: 'statement_line',
+              fetched_at: new Date().toISOString(),
+            });
+          }
+        }
+
+        if (stmtRows.length > 0) {
+          const { error: stmtUpsertErr } = await adminSupabase
+            .from('bank_transactions')
+            .upsert(stmtRows, { onConflict: 'user_id,xero_transaction_id' });
+
+          if (stmtUpsertErr) {
+            console.error(`[fetch-bank-txns] Statement lines upsert error:`, stmtUpsertErr.message);
+          } else {
+            statementLinesUpserted += stmtRows.length;
+            totalUpserted += stmtRows.length;
+          }
+        }
+
+        console.log(`[fetch-bank-txns] BankStatementsPlus account=${accountId}: ${statementLinesSeen} lines seen, ${stmtRows.length} unreconciled cached`);
+      }
+    } catch (stmtErr: any) {
+      console.error(`[fetch-bank-txns] BankStatementsPlus error:`, stmtErr.message);
+      statementLinesError = stmtErr.message;
+    }
+  } else {
+    statementLinesSkipped = true;
+  }
+
   const uniqueStopReasons = [...new Set(Object.values(stoppedReasonsByAccount))];
   const stoppedReason = uniqueStopReasons.length === 1
     ? uniqueStopReasons[0]
