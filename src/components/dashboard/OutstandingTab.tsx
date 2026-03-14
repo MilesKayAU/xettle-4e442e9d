@@ -1763,7 +1763,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         ).length;
 
         return (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Total outstanding</p>
@@ -1794,47 +1794,31 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <p className="text-xs text-muted-foreground">of {filteredRows.length}</p>
             </CardContent>
           </Card>
+          {(() => {
+            const mismatchCount = filteredRows.filter(r => r.settlement_id && r.settlement_group_matched === false).length;
+            const missingCount = filteredRows.filter(r => !r.settlement_id && r.is_marketplace && r.match_status !== 'pending_enrichment').length;
+            return (
+              <Card className={mismatchCount > 0 ? 'border-amber-200 dark:border-amber-800' : ''}>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Needs attention</p>
+                  <p className={`text-xl font-bold ${mismatchCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                    {mismatchCount + missingCount}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {mismatchCount > 0 ? `${mismatchCount} mismatch` : ''}
+                    {mismatchCount > 0 && missingCount > 0 ? ' · ' : ''}
+                    {missingCount > 0 ? `${missingCount} missing` : ''}
+                    {mismatchCount === 0 && missingCount === 0 ? 'all clear' : ''}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })()}
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Ready to reconcile</p>
+              <p className="text-xs text-muted-foreground">Ready to push</p>
               <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{data.ready_to_reconcile}</p>
               <p className="text-xs text-muted-foreground">balanced</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Verified payouts</p>
-                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                      {verifiedCount}
-                    </p>
-                    <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[220px] text-center">
-                  Settlements with confirmed bank deposits
-                </TooltipContent>
-              </Tooltip>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Awaiting payment</p>
-                    <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
-                      {data.invoice_count - data.ready_to_reconcile}
-                    </p>
-                    <p className="text-xs text-muted-foreground">to action</p>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[220px] text-center">
-                  Xero invoices awaiting payment — approve and reconcile these in Xero
-                </TooltipContent>
-              </Tooltip>
             </CardContent>
           </Card>
         </div>
@@ -1895,7 +1879,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5">Date</th>
                 <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Amount</th>
                 <th className="text-center font-medium text-muted-foreground px-3 py-2.5">Settlement</th>
-                <th className="text-center font-medium text-muted-foreground px-3 py-2.5">Bank</th>
+                <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Match Diff</th>
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5">Status</th>
                 <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Action</th>
               </tr>
@@ -1960,30 +1944,26 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                           <XCircle className="h-4 w-4 text-destructive inline" />
                         )}
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-2 text-right">
                         {row.match_status === 'pending_enrichment' ? (
                           <span className="text-muted-foreground">—</span>
-                        ) : row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
-                        ) : row.match_status === 'confirmed_manual' ? (
-                          <CheckCircle2 className="h-4 w-4 text-blue-600 inline" />
-                        ) : hasSuggestion ? (
+                        ) : row.settlement_group_matched && (row.settlement_group_diff == null || row.settlement_group_diff < 0.50) ? (
+                          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓</span>
+                        ) : row.settlement_group_diff != null && row.settlement_group_diff >= 0.50 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
+                              <span className="text-xs font-mono font-medium text-amber-600 dark:text-amber-400">
+                                {formatAUD(row.settlement_group_diff)}
+                              </span>
                             </TooltipTrigger>
-                            <TooltipContent className="text-xs">Suggested match — needs your confirmation</TooltipContent>
+                            <TooltipContent className="text-xs">
+                              Settlement total: {formatAUD(row.settlement_group_net || 0)} · Invoices: {formatAUD(row.settlement_group_sum || 0)}
+                            </TooltipContent>
                           </Tooltip>
-                        ) : row.has_bank_deposit ? (
-                          row.bank_match?.fuzzy ? (
-                            <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
-                          )
-                        ) : row.is_pre_boundary ? (
-                          <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
+                        ) : row.has_settlement ? (
+                          <span className="text-xs text-muted-foreground">—</span>
                         ) : (
-                          <XCircle className="h-4 w-4 text-destructive inline" />
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
