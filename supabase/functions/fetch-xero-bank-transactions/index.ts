@@ -931,7 +931,7 @@ async function fetchBankTxnsForUser(
         bank_account_names_used: bankAccountNamesUsed,
         if_modified_since_used: false,
         if_modified_since_value: null,
-        endpoint_used: 'BankTransactions?bankAccountID=... (If-Modified-Since DISABLED)',
+        endpoint_used: `BankTransactions?bankAccountID=...&where=${whereClause} (If-Modified-Since DISABLED)`,
         per_account_stats: perAccountStats,
         fetch_from: fetchFromDate,
         fetch_to: fetchToDate || 'open',
