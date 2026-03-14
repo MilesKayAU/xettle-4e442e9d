@@ -15,8 +15,8 @@ const corsHeaders = {
 }
 
 // ── Keys ──
-const COOLDOWN_KEY = 'xero_api_cooldown_until';          // Set ONLY on 429
-const LAST_SUCCESS_KEY = 'bank_feed_last_success_at';     // Set ONLY after real Xero fetch completes (no 429)
+const COOLDOWN_KEY = 'xero_bank_api_cooldown_until';      // Bank feed cooldown only (set on BankTransactions 429)
+const LAST_SUCCESS_KEY = 'bank_feed_last_success_at';      // Set ONLY after real Xero fetch completes (no 429)
 const GUARD_MINUTES_BATCH = 30;
 const GUARD_MINUTES_SELF = 2;
 const CACHE_FRESH_MINUTES_BATCH = 60;
