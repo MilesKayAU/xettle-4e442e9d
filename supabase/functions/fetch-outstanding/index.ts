@@ -921,6 +921,7 @@ Deno.serve(async (req) => {
     }
 
     // ─── Helper: get anchor net and component values for a group (split-aware) ───
+    // Uses the invoice-basis helpers above to determine the correct anchor.
     function getGroupAnchor(settlement: any, part: number | null): {
       net: number;
       fees: number;
@@ -930,31 +931,27 @@ Deno.serve(async (req) => {
     } {
       // If this is a split sub-group with a known part, use split data as anchor
       if (settlement.is_split_month && part !== null) {
-        const rawSplitData = part === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
-        let splitData = rawSplitData;
-        if (typeof splitData === 'string') {
-          try { splitData = JSON.parse(splitData); } catch { splitData = null; }
-        }
-        if (splitData && typeof splitData === 'object' && splitData.grossTotal !== undefined) {
-          // Xero ACCREC invoices are GST-inclusive — AmountDue ≈ grossTotal, NOT netExGst.
-          // Proven: buildAmazonInvoiceLineItems uses OUTPUT/INPUT tax types, Xero adds GST.
-          // Verification: sum(grossTotal per part) = bank_deposit for the parent settlement.
+        const partNet = getInvoiceBasisNetPart(settlement, part);
+        if (partNet !== null) {
+          const splitData = parseSplitData(
+            part === 1 ? settlement.split_month_1_data : settlement.split_month_2_data
+          );
           return {
-            net: Math.abs(Number(splitData.grossTotal ?? 0)),
-            fees: Math.abs(Number(splitData.sellerFees ?? 0))
-              + Math.abs(Number(splitData.fbaFees ?? 0))
-              + Math.abs(Number(splitData.storageFees ?? 0))
-              + Math.abs(Number(splitData.otherFees ?? 0)),
-            refunds: Math.abs(Number(splitData.refunds ?? 0)),
-            gstOnIncome: Math.abs(Number(splitData.gstOnIncome ?? 0)),
-            gstOnExpenses: Math.abs(Number(splitData.gstOnExpenses ?? 0)),
+            net: partNet,
+            fees: Math.abs(Number(splitData?.sellerFees ?? 0))
+              + Math.abs(Number(splitData?.fbaFees ?? 0))
+              + Math.abs(Number(splitData?.storageFees ?? 0))
+              + Math.abs(Number(splitData?.otherFees ?? 0)),
+            refunds: Math.abs(Number(splitData?.refunds ?? 0)),
+            gstOnIncome: Math.abs(Number(splitData?.gstOnIncome ?? 0)),
+            gstOnExpenses: Math.abs(Number(splitData?.gstOnExpenses ?? 0)),
           };
         }
         // Split data missing/invalid — fall through to parent settlement anchor
       }
-      // Non-split or fallback: use parent settlement values with existing anchor logic
+      // Non-split or fallback: use parent settlement values with payout anchor
       return {
-        net: getSettlementNet(settlement),
+        net: getInvoiceBasisNet(settlement),
         fees: Math.abs(settlement.seller_fees ?? 0)
           + Math.abs(settlement.fba_fees ?? 0)
           + Math.abs(settlement.storage_fees ?? 0)
