@@ -571,14 +571,14 @@ export default function ValidationSweep({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Marketplace</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Period</th>
-                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Orders</th>
+                <SortableHeader label="Marketplace" sortKey="marketplace_code" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="left" />
+                <SortableHeader label="Period" sortKey="period_start" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="left" />
+                <SortableHeader label="Orders" sortKey="orders_count" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="center" />
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Settlement</th>
-                <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Net Payout</th>
+                <SortableHeader label="Net Payout" sortKey="settlement_net" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="right" />
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Xero</th>
                 <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Bank</th>
-                <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                <SortableHeader label="Status" sortKey="overall_status" currentKey={sortKey} currentDir={sortDir} onSort={toggleSort} align="center" />
                 <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Action</th>
               </tr>
             </thead>
