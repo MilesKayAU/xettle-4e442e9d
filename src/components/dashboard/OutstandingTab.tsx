@@ -119,11 +119,13 @@ interface OutstandingRow {
   } | null;
   bank_difference: number | null;
   match_status: string;
-  // Aggregate / suggestion fields
-  aggregate_group_id?: string | null;
-  aggregate_sum?: number | null;
-  aggregate_settlement_count?: number | null;
-  aggregate_candidates?: BankCandidate[];
+  // Settlement group fields
+  settlement_group_matched?: boolean;
+  settlement_group_sum?: number | null;
+  settlement_group_net?: number | null;
+  settlement_group_diff?: number | null;
+  settlement_group_invoice_count?: number | null;
+  settlement_group_confidence?: 'high' | 'medium' | null;
   bank_match_method?: string | null;
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
@@ -1005,7 +1007,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         ...prev,
         rows: prev.rows.map(r =>
           r.xero_invoice_id === row.xero_invoice_id
-            ? { ...r, match_status: 'no_bank_deposit', aggregate_candidates: [] }
+            ? { ...r, match_status: 'no_settlement' }
             : r
         ),
       };
@@ -1085,7 +1087,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const handleBulkApply = useCallback(async () => {
     if (!data) return;
     const balancedSelected = data.rows.filter(
-      r => selected.has(r.xero_invoice_id) && (r.match_status === 'balanced' || r.match_status === 'confirmed')
+      r => selected.has(r.xero_invoice_id) && (r.match_status === 'balanced' || r.match_status === 'confirmed' || r.match_status === 'settlement_matched')
     );
     if (balancedSelected.length === 0) {
       toast.error('No balanced invoices selected');
@@ -1115,7 +1117,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const toggleSelectAll = () => {
     if (!data) return;
-    const balancedIds = data.rows.filter(r => r.match_status === 'balanced' || r.match_status === 'confirmed').map(r => r.xero_invoice_id);
+    const balancedIds = data.rows.filter(r => r.match_status === 'balanced' || r.match_status === 'confirmed' || r.match_status === 'settlement_matched').map(r => r.xero_invoice_id);
     const allSelected = balancedIds.every(id => selected.has(id));
     setSelected(allSelected ? new Set() : new Set(balancedIds));
   };
@@ -1125,25 +1127,29 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   // ─── Status rendering helpers ───
   const getStatusIcon = (row: OutstandingRow) => {
     if (row.match_status === 'pending_enrichment') return <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />;
+    if (row.match_status === 'settlement_matched') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'confirmed_manual') return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
+    if (row.match_status === 'awaiting_confirmation') return <Clock3 className="h-4 w-4 text-amber-500" />;
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'unsupported_marketplace') return <AlertTriangle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status === 'settlement_not_ingested') return <Clock3 className="h-4 w-4 text-amber-500" />;
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     if (row.match_status === 'awaiting_sync') return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
     if ((row.match_status || '').startsWith('gap_')) return <AlertTriangle className="h-4 w-4 text-amber-600" />;
-    if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      return <Clock3 className="h-4 w-4 text-muted-foreground" />;
-    }
     return <XCircle className="h-4 w-4 text-destructive" />;
   };
 
    const getStatusLabel = (row: OutstandingRow) => {
     if (row.match_status === 'pending_enrichment') return 'Loading matches…';
+    if (row.match_status === 'settlement_matched') {
+      const conf = row.settlement_group_confidence === 'high' ? '' : ' (approx)';
+      return `Settlement matched${conf}`;
+    }
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
+    if (row.match_status === 'awaiting_confirmation') return 'Ready to confirm';
     if (row.match_status === 'suggestion_high') return 'Likely match found';
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
     if (row.match_status === 'unsupported_marketplace') return `${MARKETPLACE_LABELS[row.marketplace] || row.marketplace} not connected`;
@@ -1154,24 +1160,21 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       const gap = row.match_status.replace('gap_', '');
       return `Gap: $${gap}`;
     }
-    if (row.match_status === 'no_bank_deposit' && row.has_settlement) {
-      return 'Awaiting deposit';
-    }
-    if (row.match_status === 'no_bank_deposit') return 'No deposit found';
     return 'No settlement';
   };
 
   const getRowBgClass = (row: OutstandingRow) => {
     if (row.match_status === 'pending_enrichment') return '';
+    if (row.match_status === 'settlement_matched') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return 'bg-green-50/50 dark:bg-green-950/10';
     if (row.match_status === 'confirmed_manual') return 'bg-blue-50/50 dark:bg-blue-950/10';
+    if (row.match_status === 'awaiting_confirmation') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return 'bg-amber-50/50 dark:bg-amber-950/10';
     if (row.match_status === 'unsupported_marketplace') return 'bg-muted/30';
     if (row.match_status === 'settlement_not_ingested') return 'bg-amber-50/30 dark:bg-amber-950/10';
     if (row.is_pre_boundary && row.match_status === 'no_settlement') return '';
     if (row.match_status === 'awaiting_sync') return 'bg-blue-50/30 dark:bg-blue-950/10';
-    if (row.match_status === 'no_bank_deposit' && isAmazon(row)) return '';
-    if ((row.match_status || '').startsWith('gap_') || row.match_status === 'no_bank_deposit') return 'bg-amber-50/50 dark:bg-amber-950/10';
+    if ((row.match_status || '').startsWith('gap_')) return 'bg-amber-50/50 dark:bg-amber-950/10';
     return 'bg-red-50/50 dark:bg-red-950/10';
   };
 
@@ -1207,91 +1210,38 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       );
     }
 
-    // STATE 1: High confidence suggestion
-    if (row.match_status === 'suggestion_high' && row.aggregate_candidates?.length) {
-      const best = row.aggregate_candidates[0];
+    // Settlement-level match: show settlement group summary
+    if (row.match_status === 'settlement_matched' && row.settlement_group_matched) {
       return (
-        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2">
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-            We found a likely deposit match based on amount and date.
-          </p>
-          <div className="flex items-center gap-4 text-xs bg-background rounded p-2 border border-border">
-            <span className="min-w-[60px]">{formatDate(best.date)}</span>
-            <span className="font-mono font-bold">{formatAUD(best.amount)}</span>
-            <span className="text-muted-foreground truncate flex-1">{best.narration || best.reference || '—'}</span>
-            {best.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{best.bank_account_name}</span>}
-            <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">{best.confidence} confidence</Badge>
-          </div>
-          {best.reasons && best.reasons.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Signals: {best.reasons.join(' · ')}
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+          <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-green-800 dark:text-green-300">
+              Settlement matched — {row.settlement_group_invoice_count} invoice{(row.settlement_group_invoice_count || 0) > 1 ? 's' : ''} total {formatAUD(row.settlement_group_sum || 0)}
             </p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Batched deposit across {row.aggregate_settlement_count} settlements totalling {formatAUD(row.aggregate_sum || 0)}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => confirmBankMatch(row, best.transaction_id, best.amount, 'suggested', best.confidence)}
-              disabled={isConfirmingRow}
-              className="gap-1.5 text-xs h-7"
-            >
-              {isConfirmingRow ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-              Confirm match
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => rejectSuggestion(row)}
-              className="gap-1.5 text-xs h-7"
-            >
-              <XCircle className="h-3 w-3" />
-              Not this one
-            </Button>
+            <p className="text-xs text-green-700 dark:text-green-400">
+              Settlement net: {formatAUD(row.settlement_group_net || 0)}
+              {(row.settlement_group_diff || 0) > 0 && ` · Diff: $${row.settlement_group_diff?.toFixed(2)}`}
+              {row.settlement_group_confidence && <Badge variant="outline" className="ml-2 text-[10px] border-green-300 text-green-700">{row.settlement_group_confidence} confidence</Badge>}
+            </p>
           </div>
         </div>
       );
     }
 
-    // STATE 2: Multiple candidates
-    if (row.match_status === 'suggestion_multiple' && row.aggregate_candidates?.length) {
+    // Awaiting confirmation: settlement exists but no group-level match yet
+    if (row.match_status === 'awaiting_confirmation' && row.has_settlement) {
       return (
-        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-2">
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-            We found possible deposit matches
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Select the correct deposit for this batch of {row.aggregate_settlement_count} settlements ({formatAUD(row.aggregate_sum || 0)})
-          </p>
-          <div className="space-y-1.5">
-            {row.aggregate_candidates.map((c, i) => (
-              <div key={c.transaction_id} className="flex items-center gap-3 text-xs bg-background rounded p-2 border border-border hover:border-primary/50 transition-colors">
-                <span className="min-w-[60px]">{formatDate(c.date)}</span>
-                <span className="font-mono font-bold min-w-[80px]">{formatAUD(c.amount)}</span>
-                <span className="text-muted-foreground truncate flex-1">{c.narration || c.reference || '—'}</span>
-                {c.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{c.bank_account_name}</span>}
-                <Badge variant="outline" className="text-[10px] shrink-0">{c.confidence}</Badge>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => confirmBankMatch(row, c.transaction_id, c.amount, 'suggested', c.confidence)}
-                  disabled={isConfirmingRow}
-                  className="text-xs h-6 px-2"
-                >
-                  {isConfirmingRow ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Select'}
-                </Button>
-              </div>
-            ))}
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+          <Clock3 className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Settlement found — ready to confirm
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Settlement {row.settlement_id} · Net {formatAUD(Math.abs(row.settlement_evidence?.bank_deposit || row.settlement_evidence?.net_ex_gst || 0))}
+            </p>
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => rejectSuggestion(row)}
-            className="text-xs h-7 text-muted-foreground"
-          >
-            None of these are correct
-          </Button>
         </div>
       );
     }
@@ -1980,7 +1930,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 const isExpanded = expandedRow === row.xero_invoice_id;
                 const isApplying = applying.has(row.xero_invoice_id);
                 const isBalanced = row.match_status === 'balanced' || row.match_status === 'confirmed';
-                const hasSuggestion = row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple';
+                const hasSuggestion = row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple' || row.match_status === 'settlement_matched' || row.match_status === 'awaiting_confirmation';
 
                 return (
                   <Fragment key={row.xero_invoice_id}>
@@ -2141,7 +2091,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                             )}
 
                             {/* Bank match action panel (5 states) */}
-                            {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || (row.match_status === 'no_bank_deposit' && isAmazon(row))) && (
+                            {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || row.match_status === 'settlement_matched' || row.match_status === 'awaiting_confirmation') && (
                               <div className="mb-3">
                                 {renderBankMatchPanel(row)}
                               </div>
