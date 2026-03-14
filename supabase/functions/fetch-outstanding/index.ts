@@ -822,6 +822,45 @@ Deno.serve(async (req) => {
       anchor_components_used?: string[];
     }
 
+    // ─── Invoice model detection (deterministic, reference-based) ───
+    // Classifies each invoice's origin to select the correct anchor basis.
+    // 'xettle'                 → Xettle-built invoice, AmountDue = bank_deposit
+    // 'external_gst_inclusive' → LMB/A2X-built invoice, AmountDue = bank_deposit * (1 + gst_rate/100)
+    // 'unknown'                → Cannot determine, try both anchors
+    type InvoiceModel = 'xettle' | 'external_gst_inclusive' | 'unknown';
+
+    function detectInvoiceModel(reference: string): InvoiceModel {
+      if (!reference) return 'unknown';
+      const ref = reference.trim();
+      if (ref.startsWith('Xettle-')) return 'xettle';
+      // LMB references: 4PZN-, LMB-, or "Amazon AU Settlement" pattern
+      if (ref.startsWith('4PZN-') || ref.startsWith('LMB-') || ref.startsWith('lmb-')) return 'external_gst_inclusive';
+      // A2X references
+      if (ref.startsWith('A2X-') || ref.startsWith('a2x-')) return 'external_gst_inclusive';
+      // "Amazon AU Settlement" or "Amazon Settlement" patterns (common in LMB/A2X)
+      if (/^Amazon.*Settlement/i.test(ref)) return 'external_gst_inclusive';
+      return 'unknown';
+    }
+
+    /** Detect invoice model for a group of invoices (majority wins) */
+    function detectGroupInvoiceModel(invoices: any[]): InvoiceModel {
+      let xettle = 0, external = 0;
+      for (const inv of invoices) {
+        const model = detectInvoiceModel(inv.Reference || '');
+        if (model === 'xettle') xettle++;
+        else if (model === 'external_gst_inclusive') external++;
+      }
+      if (external > 0 && external >= xettle) return 'external_gst_inclusive';
+      if (xettle > 0) return 'xettle';
+      return 'unknown';
+    }
+
+    // ─── Per-rail GST rate for gross-up computation ───
+    const RAIL_GST_RATES: Record<string, number> = {
+      amazon_au: 10, shopify_payments: 10, ebay: 10, bunnings: 10,
+      catch: 10, kogan: 10, mydeal: 10, everyday_market: 10, paypal: 10,
+    };
+
     // ─── Per-rail tax model configuration (basis-correct anchor selection) ───
     // Each rail declares its invoice_basis and deposit_basis explicitly.
     // This determines whether GST needs to be added to the anchor.
