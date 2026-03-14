@@ -818,23 +818,53 @@ Deno.serve(async (req) => {
       invoice_ids: string[];
       explanation?: string | null;
       tolerance_used?: number | null;
+      anchor_basis?: 'gross' | 'net' | 'split_part_gross';
+      anchor_components_used?: string[];
+    }
+
+    // ─── AU rail detection (basis-correct anchor selection) ───
+    // AU rails generate GST-inclusive invoices (OUTPUT/INPUT tax types).
+    // Xero AmountDue for these invoices = bank_deposit + gst_on_income.
+    // Non-AU rails (e.g. amazon_us, unknown) have AmountDue ≈ bank_deposit.
+    const NON_AU_RAILS = new Set(['amazon_us', 'unknown']);
+    function isAuRail(marketplace: string | null): boolean {
+      if (!marketplace) return false;
+      return !NON_AU_RAILS.has(marketplace.toLowerCase());
     }
 
     // ─── Invoice-basis anchor helpers (single source of truth) ───
     // "Invoice-basis" = the number Xero AmountDue is expected to be.
-    // For AU marketplaces with GST-inclusive invoices (OUTPUT/INPUT tax types),
-    // Xero AmountDue = bank_deposit + gst_on_income (GST-inclusive).
-    // For non-AU or non-GST settlements, AmountDue ≈ bank_deposit.
+    // For AU marketplaces with GST-inclusive invoices:
+    //   anchor = abs(bank_deposit) + abs(gst_on_income)  [gross]
+    // For non-AU or missing GST fields:
+    //   anchor = abs(bank_deposit ?? net_ex_gst ?? 0)    [net]
 
-    /** Non-split anchor: Xero AmountDue for the settlement.
-     *  Always uses bank_deposit (or fallback net_ex_gst).
-     *  GST differences are handled via the explainable tier, not the anchor. */
-    function getInvoiceBasisNet(s: any): { anchor: number; method: string } {
+    /** Non-split anchor: Xero AmountDue for the settlement (basis-correct). */
+    function getInvoiceBasisNet(s: any): { anchor: number; method: string; basis: 'gross' | 'net'; components: string[] } {
       const bankDep = Math.abs(s.bank_deposit ?? s.net_ex_gst ?? 0);
-      return { anchor: bankDep, method: s.bank_deposit != null ? 'bank_deposit' : 'fallback_net_ex_gst' };
+      const gstOnIncome = Math.abs(s.gst_on_income ?? 0);
+      const marketplace = (s.marketplace || '').toLowerCase();
+
+      // AU rails with non-zero gst_on_income: use gross anchor (bank_deposit + gst_on_income)
+      if (isAuRail(marketplace) && gstOnIncome > 0) {
+        return {
+          anchor: bankDep + gstOnIncome,
+          method: 'gross_bank_deposit_plus_gst',
+          basis: 'gross',
+          components: ['bank_deposit', 'gst_on_income'],
+        };
+      }
+
+      // Non-AU or missing GST: net anchor
+      return {
+        anchor: bankDep,
+        method: s.bank_deposit != null ? 'bank_deposit' : 'fallback_net_ex_gst',
+        basis: 'net',
+        components: [s.bank_deposit != null ? 'bank_deposit' : 'net_ex_gst'],
+      };
     }
 
-    /** Split-part anchor: Xero AmountDue ≈ grossTotal for the given part. */
+    /** Split-part anchor: Xero AmountDue ≈ grossTotal for the given part (already GST-inclusive). */
     function getInvoiceBasisNetPart(settlement: any, part: number): number | null {
       const rawSplitData = part === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
       let splitData = rawSplitData;
