@@ -295,7 +295,9 @@ function deriveStatus(inv: any): { status: string; syncOrigin: string } {
       default: return { status: 'pushed_to_xero', syncOrigin: 'xettle' };
     }
   }
-  return { status: 'pushed_to_xero', syncOrigin: 'external' };
+  // ─── SAFETY INVARIANT: External invoices must NEVER appear as "posted by Xettle" ───
+  // They get 'already_recorded' status and 'external' origin.
+  return { status: 'already_recorded', syncOrigin: 'external' };
 }
 
 serve(async (req) => {
