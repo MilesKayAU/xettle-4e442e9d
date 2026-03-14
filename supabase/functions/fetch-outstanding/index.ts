@@ -1112,36 +1112,34 @@ Deno.serve(async (req) => {
       const hasBankDeposit = !!bankMatch;
       if (hasBankDeposit) bankDepositFound++;
 
-      // ─── Aggregate candidates for Amazon (suggestions, not matches) ───
-      const aggGroup = aggregateLookup.get(inv.InvoiceID);
-      const hasCandidates = aggGroup && aggGroup.candidates.length > 0;
+      // ─── Settlement-level group match check ───
+      const settlementGroup = invoiceToSettlementGroup.get(inv.InvoiceID);
+      const isSettlementGroupMatched = settlementGroup?.matched === true;
 
-      // Determine match status
+      // Determine match status — settlement-level match takes priority
       let matchStatus: string;
       if (isConfirmed) {
         matchStatus = settlement.bank_match_method === 'manual' ? 'confirmed_manual' : 'confirmed';
         bankDepositFound++;
+        readyToReconcile++;
+      } else if (isSettlementGroupMatched) {
+        // Settlement-level match: invoices grouped by settlement_id sum to settlement net
+        matchStatus = 'settlement_matched';
         readyToReconcile++;
       } else if (hasSettlement && hasBankDeposit && (bankDifference || 0) <= 0.05) {
         matchStatus = 'balanced';
         readyToReconcile++;
       } else if (hasSettlement && hasBankDeposit) {
         matchStatus = `gap_${bankDifference?.toFixed(2)}`;
-      } else if (hasSettlement && hasCandidates) {
-        matchStatus = aggGroup!.candidates.length === 1 && aggGroup!.candidates[0].confidence === 'high'
-          ? 'suggestion_high' : 'suggestion_multiple';
       } else if (hasSettlement && !hasBankDeposit) {
-        matchStatus = 'no_bank_deposit';
+        matchStatus = 'awaiting_confirmation';
       } else if (!hasSettlement && marketplace === 'amazon_us') {
-        // Amazon US invoices — marketplace not connected/supported
         matchStatus = 'unsupported_marketplace';
       } else if (!hasSettlement && hasBankDeposit) {
         matchStatus = 'no_settlement';
       } else if (!hasSettlement && settlementId && preSeededSet.has(settlementId)) {
-        // Pre-seeded by sync-xero-status — settlement data is expected from API sync
         matchStatus = 'awaiting_sync';
       } else if (!hasSettlement && settlementId) {
-        // Settlement ID extracted from reference but not found in DB — needs backfill
         matchStatus = 'settlement_not_ingested';
         if (!missingSettlementIds.includes(settlementId)) {
           missingSettlementIds.push(settlementId);
