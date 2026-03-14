@@ -910,6 +910,51 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
         continue;
       }
 
+      // ─── Compute and persist settlement_components (deterministic anchors) ───
+      {
+        const gstDivisor = 11; // AU 10%
+        const salesGross = Math.abs(summary.salesPrincipal) + Math.abs(summary.salesShipping);
+        const salesExTax = round2(salesGross - Math.abs(summary.gstOnIncome));
+        const salesTax = round2(Math.abs(summary.gstOnIncome));
+        const feesGross = Math.abs(summary.sellerFees) + Math.abs(summary.fbaFees);
+        const feesExTax = round2(feesGross - Math.abs(summary.gstOnExpenses));
+        const feesTax = round2(Math.abs(summary.gstOnExpenses));
+        const refundsGross = Math.abs(summary.refunds);
+        const refundsExTax = round2(refundsGross - refundsGross / gstDivisor);
+        const refundsTax = round2(refundsGross / gstDivisor);
+        const payoutTotal = round2(summary.bankDeposit);
+        // commerce_gross_total = payout + output GST + input GST credits
+        const commerceGrossTotal = round2(payoutTotal + Math.abs(summary.gstOnIncome) + summary.gstOnExpenses);
+
+        await supabase.from('settlement_components').upsert({
+          user_id: userId,
+          settlement_id: header.settlementId,
+          marketplace_code: 'amazon_au',
+          currency: 'AUD',
+          period_start: header.periodStart,
+          period_end: header.periodEnd,
+          sales_ex_tax: salesExTax,
+          sales_tax: salesTax,
+          refunds_ex_tax: -refundsExTax,
+          refunds_tax: -refundsTax,
+          fees_ex_tax: -feesExTax,
+          fees_tax: -feesTax,
+          reimbursements: summary.reimbursements,
+          other_adjustments: summary.otherFees,
+          promotional_discounts: summary.promotionalDiscounts,
+          advertising_costs: summary.advertisingCosts,
+          storage_fees: summary.storageFees,
+          tax_collected_by_platform: 0,
+          payout_total: payoutTotal,
+          payout_gst_inclusive: commerceGrossTotal,
+          commerce_gross_total: commerceGrossTotal,
+          gst_rate: 10,
+          payout_vs_deposit_diff: 0,
+          reconciled: true,
+          source: 'api',
+        } as any, { onConflict: 'user_id,settlement_id,marketplace_code' });
+      }
+
       // ─── Auto-link to pre-cached Xero invoice (from Outstanding) ───
       const { data: preMatch } = await supabase
         .from('xero_accounting_matches')
