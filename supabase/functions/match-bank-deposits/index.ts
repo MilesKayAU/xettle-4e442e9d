@@ -69,6 +69,19 @@ function narrationMatchesMarketplace(description: string, contactName: string, m
   return patterns.some(p => text.includes(p))
 }
 
+interface CandidateInfo {
+  transaction_id: string
+  amount: number
+  date: string | null
+  reference: string
+  narration: string
+  bank_account_name: string
+  confidence: string
+  score: number
+  amount_diff: number
+  reasons: string[]
+}
+
 interface MatchResult {
   matched: boolean
   settlement_id: string
@@ -84,7 +97,10 @@ interface MatchResult {
   confidence_score?: number
   difference?: number
   match_method?: string
+  match_reasons?: string[]
+  top_candidates?: CandidateInfo[]
   batch_settlement_ids?: string[]
+  no_match_reason?: string
 }
 
 Deno.serve(async (req) => {
