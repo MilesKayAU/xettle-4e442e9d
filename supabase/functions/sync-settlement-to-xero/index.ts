@@ -984,23 +984,52 @@ serve(async (req) => {
     });
 
     // ─── Attach audit CSV (REQUIRED — fail if missing or upload fails) ──
+    // ORPHAN INVOICE PREVENTION (Option B — Recoverable State):
+    // If attachment fails after invoice creation, we:
+    //   1. Set posting_state='failed', posting_error='xero_attachment_failed'
+    //   2. Store xero_invoice_id in system_events for retry
+    //   3. Return error with invoiceId so caller can surface "Retry attachment"
+    // We do NOT delete the draft invoice (avoiding Xero API permission issues).
     let attachmentResult: { success: boolean; error?: string; csvHash?: string } | null = null;
+    const settlementIdForDb = body.settlementData?.settlement_id || reference?.replace('Xettle-', '') || null;
+
     if (!body.settlementData) {
       // Enforcement: settlementData is required for attachment
       console.error('Missing settlementData — attachment cannot be created');
-      // We already created the invoice, so we log the error but still return success
-      // with a warning. The invoice exists in Xero but without attachment.
+
+      // Mark settlement as failed with recoverable state
+      if (settlementIdForDb) {
+        await supabase.from('settlements').update({
+          posting_state: 'failed',
+          posting_error: 'missing_attachment_data',
+          xero_invoice_id: invoiceId,
+        }).eq('settlement_id', settlementIdForDb).eq('user_id', userId);
+      }
+
       await supabase.from('system_events').insert({
         user_id: userId,
-        event_type: 'xero_csv_attachment',
-        severity: 'warning',
-        settlement_id: body.settlementData?.settlement_id || reference?.replace('Xettle-', '') || null,
-        marketplace_code: body.settlementData?.marketplace || null,
+        event_type: 'xero_attachment_failed',
+        severity: 'error',
+        settlement_id: settlementIdForDb,
+        marketplace_code: null,
         details: {
           xero_invoice_id: invoiceId,
+          xero_invoice_number: invoiceNumber,
           error: 'missing_attachment_data',
           canonical_version: CANONICAL_VERSION,
+          recoverable: true,
         },
+      });
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'missing_attachment_data',
+        invoiceId,
+        invoiceNumber,
+        message: 'Invoice created in Xero but settlementData was missing — no CSV attachment. Settlement marked as failed for retry.',
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } else if (invoiceId) {
       try {
@@ -1014,28 +1043,39 @@ serve(async (req) => {
         // Log attachment result to system_events
         await supabase.from('system_events').insert({
           user_id: userId,
-          event_type: 'xero_csv_attachment',
+          event_type: attachmentResult.success ? 'xero_csv_attachment' : 'xero_attachment_failed',
           severity: attachmentResult.success ? 'info' : 'error',
           settlement_id: sd.settlement_id || null,
           marketplace_code: sd.marketplace || null,
           details: {
             xero_invoice_id: invoiceId,
+            xero_invoice_number: invoiceNumber,
             filename,
             success: attachmentResult.success,
             error: attachmentResult.error || null,
             csv_hash: attachmentResult.csvHash || null,
             canonical_version: CANONICAL_VERSION,
+            recoverable: !attachmentResult.success,
           },
         });
 
-        // If attachment upload failed, return error (invoice exists but attachment missing)
+        // If attachment upload failed, mark settlement as failed (recoverable)
         if (!attachmentResult.success) {
+          if (sd.settlement_id) {
+            await supabase.from('settlements').update({
+              posting_state: 'failed',
+              posting_error: 'xero_attachment_failed',
+              xero_invoice_id: invoiceId,
+              xero_invoice_number: invoiceNumber,
+            }).eq('settlement_id', sd.settlement_id).eq('user_id', userId);
+          }
+
           return new Response(JSON.stringify({
             success: false,
             error: 'xero_attachment_failed',
             invoiceId,
             invoiceNumber,
-            message: `Invoice created in Xero but CSV attachment upload failed: ${attachmentResult.error}`,
+            message: `Invoice created in Xero but CSV attachment upload failed: ${attachmentResult.error}. Settlement marked as failed for retry.`,
           }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1043,12 +1083,39 @@ serve(async (req) => {
         }
       } catch (attachErr: any) {
         console.error('Attachment failed:', attachErr.message);
+
+        // Mark settlement as failed (recoverable)
+        const sd = body.settlementData;
+        if (sd?.settlement_id) {
+          await supabase.from('settlements').update({
+            posting_state: 'failed',
+            posting_error: 'xero_attachment_failed',
+            xero_invoice_id: invoiceId,
+            xero_invoice_number: invoiceNumber,
+          }).eq('settlement_id', sd.settlement_id).eq('user_id', userId);
+        }
+
+        await supabase.from('system_events').insert({
+          user_id: userId,
+          event_type: 'xero_attachment_failed',
+          severity: 'error',
+          settlement_id: sd?.settlement_id || null,
+          marketplace_code: sd?.marketplace || null,
+          details: {
+            xero_invoice_id: invoiceId,
+            xero_invoice_number: invoiceNumber,
+            error: attachErr.message,
+            canonical_version: CANONICAL_VERSION,
+            recoverable: true,
+          },
+        });
+
         return new Response(JSON.stringify({
           success: false,
           error: 'xero_attachment_failed',
           invoiceId,
           invoiceNumber,
-          message: `Invoice created but attachment failed: ${attachErr.message}`,
+          message: `Invoice created but attachment failed: ${attachErr.message}. Settlement marked as failed for retry.`,
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1056,15 +1123,13 @@ serve(async (req) => {
       }
     }
 
-    // Update xero_push_success event with csv_hash and attachment info
-    // (The event was already written above, so we update it)
+    // Enrich xero_push_success event with csv_hash and attachment info
     if (attachmentResult?.csvHash) {
-      // Re-insert a supplementary event with CSV hash
       await supabase.from('system_events').insert({
         user_id: userId,
         event_type: 'xero_push_success',
         severity: 'info',
-        settlement_id: body.settlementData?.settlement_id || reference?.replace('Xettle-', '') || null,
+        settlement_id: settlementIdForDb,
         marketplace_code: body.settlementData?.marketplace || null,
         details: {
           ...pushEventDetails,

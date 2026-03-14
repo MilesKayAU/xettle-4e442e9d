@@ -9,6 +9,40 @@
  *
  * IMPORTANT: If you change the category list, tax types, or field mapping,
  * you MUST bump CANONICAL_VERSION and update auto-post-settlement to match.
+ *
+ * ═══════════════════════════════════════════════════════════════
+ * SIGN CONVENTION (Option A — "Use Stored Sign")
+ * ═══════════════════════════════════════════════════════════════
+ * All settlement DB fields are stored with their accounting sign:
+ *   - Income fields (sales_principal, sales_shipping): POSITIVE
+ *   - Reduction fields (refunds, promotional_discounts): NEGATIVE
+ *   - Expense fields (seller_fees, fba_fees, etc.): NEGATIVE
+ *   - Recovery fields (reimbursements): POSITIVE
+ *
+ * The builder passes DB values through WITHOUT sign manipulation.
+ * No abs(), no -abs(), no sign flipping. The DB value IS the posted value.
+ * This prevents double-negation bugs across parser→DB→builder→Xero.
+ *
+ * If a parser stores fees as positive magnitudes, that parser is wrong
+ * and must be fixed at ingestion — NOT compensated here.
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * ═══════════════════════════════════════════════════════════════
+ * TAX TYPE MAPPING (AU GST Model — Amazon AU)
+ * ═══════════════════════════════════════════════════════════════
+ * Category                Tax Type       Rationale
+ * ────────────────────    ────────       ──────────────────────────────
+ * Sales (Principal)       OUTPUT         GST-inclusive revenue, seller collects GST
+ * Shipping Revenue        OUTPUT         Shipping charged to buyer includes GST
+ * Promotional Discounts   OUTPUT         Reduces OUTPUT-taxed revenue (contra-revenue)
+ * Refunds                 OUTPUT         Reversal of OUTPUT-taxed sale
+ * Reimbursements          BASEXCLUDED    Not a taxable supply; Amazon reimbursement
+ * Seller Fees             INPUT          GST-inclusive fee, seller claims input credit
+ * FBA Fees                INPUT          GST-inclusive fee, seller claims input credit
+ * Storage Fees            INPUT          GST-inclusive fee, seller claims input credit
+ * Advertising             INPUT          GST-inclusive fee, seller claims input credit
+ * Other Fees              INPUT          GST-inclusive fee, seller claims input credit
+ * ═══════════════════════════════════════════════════════════════
  */
 
 export const CANONICAL_VERSION = 'v2-10cat';
@@ -20,10 +54,20 @@ export interface PostingCategoryDef {
   name: string;
   /** Field on the settlement DB row */
   field: string;
-  /** Xero tax type */
+  /**
+   * Xero tax type for AU GST:
+   * - OUTPUT: GST on sales (seller collects)
+   * - INPUT: GST on purchases/fees (seller claims credit)
+   * - BASEXCLUDED: Not subject to GST
+   */
   taxType: 'OUTPUT' | 'INPUT' | 'BASEXCLUDED';
-  /** How to derive the sign: 'as_is' keeps DB value, 'negate_abs' forces negative */
-  sign: 'as_is' | 'negate_abs';
+  /**
+   * Expected sign direction in DB (for documentation/validation only).
+   * The builder does NOT manipulate signs — it uses the stored value as-is.
+   * - 'positive': income/recovery (sales, shipping, reimbursements)
+   * - 'negative': expenses/reductions (fees, refunds, discounts)
+   */
+  expectedSign: 'positive' | 'negative';
   /** Default account code (fallback when user has no mapping) */
   defaultAccountCode: string;
 }
@@ -33,16 +77,16 @@ export interface PostingCategoryDef {
  * Category names are constants — changing them requires bumping CANONICAL_VERSION.
  */
 export const POSTING_CATEGORIES: readonly PostingCategoryDef[] = [
-  { name: 'Sales (Principal)',     field: 'sales_principal',       taxType: 'OUTPUT',       sign: 'as_is',      defaultAccountCode: '200' },
-  { name: 'Shipping Revenue',     field: 'sales_shipping',        taxType: 'OUTPUT',       sign: 'as_is',      defaultAccountCode: '206' },
-  { name: 'Promotional Discounts',field: 'promotional_discounts', taxType: 'OUTPUT',       sign: 'as_is',      defaultAccountCode: '200' },
-  { name: 'Refunds',              field: 'refunds',               taxType: 'OUTPUT',       sign: 'as_is',      defaultAccountCode: '205' },
-  { name: 'Reimbursements',       field: 'reimbursements',        taxType: 'BASEXCLUDED',  sign: 'as_is',      defaultAccountCode: '271' },
-  { name: 'Seller Fees',          field: 'seller_fees',           taxType: 'INPUT',        sign: 'negate_abs',  defaultAccountCode: '407' },
-  { name: 'FBA Fees',             field: 'fba_fees',              taxType: 'INPUT',        sign: 'negate_abs',  defaultAccountCode: '408' },
-  { name: 'Storage Fees',         field: 'storage_fees',          taxType: 'INPUT',        sign: 'negate_abs',  defaultAccountCode: '409' },
-  { name: 'Advertising',          field: 'advertising_costs',     taxType: 'INPUT',        sign: 'negate_abs',  defaultAccountCode: '410' },
-  { name: 'Other Fees',           field: 'other_fees',            taxType: 'INPUT',        sign: 'negate_abs',  defaultAccountCode: '405' },
+  { name: 'Sales (Principal)',     field: 'sales_principal',       taxType: 'OUTPUT',       expectedSign: 'positive',  defaultAccountCode: '200' },
+  { name: 'Shipping Revenue',     field: 'sales_shipping',        taxType: 'OUTPUT',       expectedSign: 'positive',  defaultAccountCode: '206' },
+  { name: 'Promotional Discounts',field: 'promotional_discounts', taxType: 'OUTPUT',       expectedSign: 'negative',  defaultAccountCode: '200' },
+  { name: 'Refunds',              field: 'refunds',               taxType: 'OUTPUT',       expectedSign: 'negative',  defaultAccountCode: '205' },
+  { name: 'Reimbursements',       field: 'reimbursements',        taxType: 'BASEXCLUDED',  expectedSign: 'positive',  defaultAccountCode: '271' },
+  { name: 'Seller Fees',          field: 'seller_fees',           taxType: 'INPUT',        expectedSign: 'negative',  defaultAccountCode: '407' },
+  { name: 'FBA Fees',             field: 'fba_fees',              taxType: 'INPUT',        expectedSign: 'negative',  defaultAccountCode: '408' },
+  { name: 'Storage Fees',         field: 'storage_fees',          taxType: 'INPUT',        expectedSign: 'negative',  defaultAccountCode: '409' },
+  { name: 'Advertising',          field: 'advertising_costs',     taxType: 'INPUT',        expectedSign: 'negative',  defaultAccountCode: '410' },
+  { name: 'Other Fees',           field: 'other_fees',            taxType: 'INPUT',        expectedSign: 'negative',  defaultAccountCode: '405' },
 ] as const;
 
 // ─── Legacy category name mapping (for account code resolution) ─────
@@ -145,6 +189,10 @@ export function createAccountCodeResolver(
  * Build Xero posting line items from a settlement row.
  * Returns only non-zero lines. Uses settlement DB columns directly.
  *
+ * SIGN CONVENTION: Uses stored DB values as-is. No sign manipulation.
+ * DB fields are expected to be stored with correct accounting signs
+ * (positive for income, negative for expenses/reductions).
+ *
  * @param settlement - Settlement DB row (or object with same fields)
  * @param getCode    - Account code resolver (use createAccountCodeResolver)
  * @param marketplace - Optional marketplace label for per-channel account resolution
@@ -161,7 +209,8 @@ export function buildPostingLineItems(
   for (const cat of POSTING_CATEGORIES) {
     const raw = (settlement as any)[cat.field];
     const value = typeof raw === 'number' ? raw : parseFloat(raw) || 0;
-    const amount = cat.sign === 'negate_abs' ? -Math.abs(round2(value)) : round2(value);
+    // Use stored sign as-is — NO sign manipulation (Option A)
+    const amount = round2(value);
 
     if (Math.abs(amount) < 0.01) continue;
 
