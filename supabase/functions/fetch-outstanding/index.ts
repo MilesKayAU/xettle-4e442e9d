@@ -334,8 +334,9 @@ Deno.serve(async (req) => {
 
     if (shouldHitXero && !governorBlocked) {
       // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
+      // Remove summaryOnly to get LineAmountTypes, TotalTax for tax-basis gating
       const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
-      const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC&summaryOnly=true`;
+      const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
 
       const xeroResult = await fetchXeroWithRetry(url, {
         'Authorization': `Bearer ${token.access_token}`,
@@ -360,6 +361,8 @@ Deno.serve(async (req) => {
           amount_due: inv.AmountDue || 0,
           total: inv.Total || 0,
           sub_total: inv.SubTotal || 0,
+          total_tax: inv.TotalTax || 0,
+          line_amount_types: inv.LineAmountTypes || null,
           currency_code: inv.CurrencyCode || 'AUD',
           status: inv.Status || null,
           fetched_at: now,
@@ -400,6 +403,8 @@ Deno.serve(async (req) => {
             AmountDue: Number(c.amount_due || 0),
             Total: Number(c.total || 0),
             SubTotal: Number(c.sub_total || 0),
+            TotalTax: Number(c.total_tax || 0),
+            LineAmountTypes: c.line_amount_types || null,
             CurrencyCode: c.currency_code || 'AUD',
             Status: c.status,
           }));
@@ -478,6 +483,8 @@ Deno.serve(async (req) => {
           AmountDue: Number(c.amount_due || 0),
           Total: Number(c.total || 0),
           SubTotal: Number(c.sub_total || 0),
+          TotalTax: Number(c.total_tax || 0),
+          LineAmountTypes: c.line_amount_types || null,
           CurrencyCode: c.currency_code || 'AUD',
           Status: c.status,
         }));
@@ -1164,24 +1171,36 @@ Deno.serve(async (req) => {
         group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.AmountDue ?? inv.Total ?? 0), 0) * 100
       ) / 100;
 
-      // For external GST-inclusive invoices, use SubTotal for matching.
-      // SubTotal (from Xero API) = sum of ex-GST line amounts.
-      // For Tax Exclusive invoices created by LMB/A2X: SubTotal ≈ bank_deposit.
-      // This is deterministic — no formula, no gross-up.
+      // For external GST-inclusive invoices, use SubTotal for matching ONLY
+      // when ALL invoices in the group are Tax Exclusive (LineAmountTypes === 'Exclusive').
+      // For Tax Exclusive invoices: SubTotal = sum of ex-GST line amounts ≈ bank_deposit.
+      // For Tax Inclusive invoices: SubTotal is derived differently and cannot be used as payout proxy.
+      // Tax Inclusive external invoices remain mismatch for manual review.
       let groupSum = groupAmountDue;
       let comparisonField = 'AmountDue';
 
       if (invoiceModel === 'external_gst_inclusive') {
-        const subTotalSum = Math.round(
-          group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.SubTotal ?? 0), 0) * 100
-        ) / 100;
-        if (subTotalSum > 0) {
-          groupSum = subTotalSum;
-          comparisonField = 'SubTotal';
+        // Check if ALL invoices in the group are Tax Exclusive
+        const allExclusive = group.invoices.every((inv: any) => inv.LineAmountTypes === 'Exclusive');
+        const anyLineAmountTypes = group.invoices.some((inv: any) => inv.LineAmountTypes);
+
+        if (allExclusive) {
+          const subTotalSum = Math.round(
+            group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.SubTotal ?? 0), 0) * 100
+          ) / 100;
+          if (subTotalSum > 0) {
+            groupSum = subTotalSum;
+            comparisonField = 'SubTotal';
+          } else {
+            comparisonField = 'AmountDue_no_subtotal';
+          }
+        } else if (!anyLineAmountTypes) {
+          // LineAmountTypes not yet cached (pre-migration data) — cannot determine tax basis.
+          // Next Xero sync will populate LineAmountTypes and resolve.
+          comparisonField = 'AmountDue_no_line_amount_types';
         } else {
-          // SubTotal not yet cached — will mismatch correctly.
-          // Next Xero sync will populate SubTotal and resolve.
-          comparisonField = 'AmountDue_no_subtotal';
+          // Tax Inclusive or mixed — do NOT use SubTotal. Stays as AmountDue mismatch.
+          comparisonField = 'AmountDue_tax_inclusive';
         }
       }
 
@@ -1589,6 +1608,9 @@ Deno.serve(async (req) => {
         invoice_date: invoiceDate,
         due_date: dueDate,
         amount,
+        sub_total: inv.SubTotal ?? null,
+        total_tax: inv.TotalTax ?? null,
+        line_amount_types: inv.LineAmountTypes ?? null,
         currency_code: currencyCode,
         is_pre_boundary: !!isPreBoundary,
         overdue_days: dueDate ? Math.max(0, Math.floor((Date.now() - new Date(dueDate).getTime()) / (1000 * 60 * 60 * 24))) : null,
@@ -1611,6 +1633,8 @@ Deno.serve(async (req) => {
         settlement_group_tolerance_used: settlementGroup?.tolerance_used ?? null,
         settlement_group_anchor_basis: settlementGroup?.anchor_basis ?? null,
         settlement_group_anchor_components: settlementGroup?.anchor_components_used ?? null,
+        settlement_group_comparison_field: settlementGroup?.comparison_field ?? null,
+        settlement_group_amount_due_total: settlementGroup?.amount_due_total ?? null,
         // Confirmed match audit trail
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,

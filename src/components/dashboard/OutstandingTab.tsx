@@ -130,6 +130,12 @@ interface OutstandingRow {
   settlement_group_tolerance_used?: number | null;
   settlement_group_anchor_basis?: 'gross' | 'net' | 'split_part_gross' | null;
   settlement_group_anchor_components?: string[] | null;
+  settlement_group_comparison_field?: string | null;
+  settlement_group_amount_due_total?: number | null;
+  // Per-invoice tax fields (from Xero)
+  sub_total?: number | null;
+  total_tax?: number | null;
+  line_amount_types?: string | null;
   bank_match_method?: string | null;
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
@@ -328,6 +334,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     unexpected_extras: OutstandingRow[];
     anchor_basis: string | null;
     anchor_components: string[] | null;
+    comparison_field: string | null;
+    amount_due_total: number | null;
   }
 
   const { settlementGroups, ungroupedRows } = useMemo(() => {
@@ -391,6 +399,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         unexpected_extras: unexpected,
         anchor_basis: firstRow.settlement_group_anchor_basis ?? null,
         anchor_components: firstRow.settlement_group_anchor_components ?? null,
+        comparison_field: firstRow.settlement_group_comparison_field ?? null,
+        amount_due_total: firstRow.settlement_group_amount_due_total ?? null,
       });
     }
 
@@ -2089,9 +2099,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               {group.anchor_components && (
                                 <p><strong>Components:</strong> {group.anchor_components.join(' + ')}</p>
                               )}
-                              <p><strong>Invoice sum:</strong> {formatAUD(group.group_sum)}</p>
+                              {group.comparison_field && (
+                                <p><strong>Comparison field:</strong> {group.comparison_field}</p>
+                              )}
+                              <p><strong>Invoice sum ({group.comparison_field === 'SubTotal' ? 'SubTotal' : 'AmountDue'}):</strong> {formatAUD(group.group_sum)}</p>
+                              {group.amount_due_total != null && group.comparison_field === 'SubTotal' && (
+                                <p><strong>AmountDue total:</strong> {formatAUD(group.amount_due_total)}</p>
+                              )}
                               <p><strong>Settlement anchor:</strong> {formatAUD(group.group_net)}</p>
                               <p><strong>Diff:</strong> {formatAUD(group.group_diff)}</p>
+                              {group.rows[0]?.line_amount_types && (
+                                <p><strong>Tax type:</strong> {group.rows[0].line_amount_types}</p>
+                              )}
                             </div>
                           </TooltipContent>
                         </Tooltip>
