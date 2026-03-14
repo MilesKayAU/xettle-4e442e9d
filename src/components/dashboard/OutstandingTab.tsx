@@ -1117,7 +1117,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
   const toggleSelectAll = () => {
     if (!data) return;
-    const balancedIds = data.rows.filter(r => r.match_status === 'balanced' || r.match_status === 'confirmed').map(r => r.xero_invoice_id);
+    const balancedIds = data.rows.filter(r => r.match_status === 'balanced' || r.match_status === 'confirmed' || r.match_status === 'settlement_matched').map(r => r.xero_invoice_id);
     const allSelected = balancedIds.every(id => selected.has(id));
     setSelected(allSelected ? new Set() : new Set(balancedIds));
   };
