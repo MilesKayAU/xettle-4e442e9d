@@ -12,8 +12,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw,
-  Upload, ArrowRight, Send, Search, PartyPopper, Clock,
+  Upload, ArrowRight, Send, Search, PartyPopper, Clock, Filter,
 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
