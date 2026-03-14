@@ -824,6 +824,8 @@ Deno.serve(async (req) => {
       tolerance_used?: number | null;
       anchor_basis?: 'gross' | 'net' | 'split_part_gross';
       anchor_components_used?: string[];
+      comparison_field?: string;
+      amount_due_total?: number;
     }
 
     // ─── Invoice model detection (deterministic, reference-based) ───
