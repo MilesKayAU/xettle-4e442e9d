@@ -858,6 +858,13 @@ export default function ActionCentre({
           <Plus className="h-3.5 w-3.5" /> Upload settlement
         </Button>
       </div>
+
+      {/* Settlement Detail Drawer */}
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+      />
     </div>
   );
 }
