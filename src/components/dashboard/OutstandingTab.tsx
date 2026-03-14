@@ -1007,7 +1007,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         ...prev,
         rows: prev.rows.map(r =>
           r.xero_invoice_id === row.xero_invoice_id
-            ? { ...r, match_status: 'no_bank_deposit', aggregate_candidates: [] }
+            ? { ...r, match_status: 'no_settlement' }
             : r
         ),
       };
