@@ -282,24 +282,34 @@ export default function ActionCentre({
     return periodEnd < now; // only show if period already ended
   });
   // Settlement-native "Send to Xero" — one row per real payout from settlements table
+  // Filter out settlements on auto-post rails (they post automatically)
   const readyToPush = useMemo(() => {
-    return readySettlements.map(s => ({
-      id: s.id,
-      marketplace_code: MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown',
-      period_label: `${s.period_start} to ${s.period_end}`,
-      period_start: s.period_start,
-      period_end: s.period_end,
-      orders_found: false,
-      settlement_uploaded: true,
-      settlement_id: s.settlement_id,
-      settlement_net: s.bank_deposit || 0,
-      reconciliation_status: 'matched',
-      xero_pushed: false,
-      bank_matched: false,
-      overall_status: 'ready_to_push',
-      last_checked_at: null,
-    } as ValidationRow));
-  }, [readySettlements]);
+    return readySettlements
+      .filter(s => {
+        const code = MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown';
+        // Exclude auto-post rails from manual "Send to Xero" card
+        if (autoPostRails.has(code) || autoPostRails.has(s.marketplace || '')) return false;
+        // Exclude settlements already queued/posting
+        if (s.posting_state === 'posting' || s.posting_state === 'posted' || s.posting_state === 'queued') return false;
+        return true;
+      })
+      .map(s => ({
+        id: s.id,
+        marketplace_code: MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown',
+        period_label: `${s.period_start} to ${s.period_end}`,
+        period_start: s.period_start,
+        period_end: s.period_end,
+        orders_found: false,
+        settlement_uploaded: true,
+        settlement_id: s.settlement_id,
+        settlement_net: s.bank_deposit || 0,
+        reconciliation_status: 'matched',
+        xero_pushed: false,
+        bank_matched: false,
+        overall_status: 'ready_to_push',
+        last_checked_at: null,
+      } as ValidationRow));
+  }, [readySettlements, autoPostRails]);
   // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
   // Rail payout mode: rails with bank_match_required=false skip "waiting for payout"
   const postedRows = normalisedRows.filter(r =>
