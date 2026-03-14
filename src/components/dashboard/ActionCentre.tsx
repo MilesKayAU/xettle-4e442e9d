@@ -183,6 +183,9 @@ export default function ActionCentre({
       if (readySettlementsRes.data) {
         setReadySettlements(readySettlementsRes.data as any);
       }
+      if (ingestedRes.data) {
+        setIngestedSettlements(ingestedRes.data as any);
+      }
     } catch (err) {
       console.error('ActionCentre load error:', err);
     } finally {
