@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
         const currency = deriveCurrency(marketplace)
 
         if (depositAmount === 0) {
-          results.push({ matched: false, settlement_id: s.settlement_id, marketplace })
+          results.push({ matched: false, settlement_id: s.settlement_id, marketplace, no_match_reason: 'zero_deposit_amount' })
           continue
         }
 
