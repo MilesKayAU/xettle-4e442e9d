@@ -482,16 +482,17 @@ async function processSettlement(
     const netAmount = settlement.bank_deposit || settlement.net_ex_gst || 0;
     const description = `${contactName} Settlement ${settlement.period_start} → ${settlement.period_end}`;
 
-    // Build line items using ONLY user-configured mappings (no hardcoded fallbacks)
+    // Tax types per category — mirrors POSTING_CATEGORIES from canonical source
     const categoryTaxTypes: Record<string, string> = {
-      'Sales': 'OUTPUT',
+      'Sales (Principal)': 'OUTPUT',
+      'Shipping Revenue': 'OUTPUT',
       'Promotional Discounts': 'OUTPUT',
       'Refunds': 'OUTPUT',
       'Reimbursements': 'BASEXCLUDED',
       'Seller Fees': 'INPUT',
       'FBA Fees': 'INPUT',
       'Storage Fees': 'INPUT',
-      'Advertising Costs': 'INPUT',
+      'Advertising': 'INPUT',
       'Other Fees': 'INPUT',
     };
 
