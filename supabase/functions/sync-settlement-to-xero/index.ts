@@ -1068,6 +1068,8 @@ serve(async (req) => {
       settlement_total: settlementTotal,
       xero_invoice_total: xeroTotal,
       balance_difference: balanceDifference,
+      line_items_hash: hashLineItems(finalLineItems),
+      settlement_data_hash: hashSettlementData(body.settlementData),
     };
 
     // ─── Attach audit CSV (REQUIRED — fail if missing or upload fails) ──
