@@ -132,13 +132,11 @@ export default function SystemStatusStrip({
   }
 
   if (showAiMapper && onReviewMapping && !dismissed) {
-    // If bank mapping is also missing, elevate to amber (mapping blocks payout verification)
-    const mapperSeverity: 'amber' | 'info' = showBankMappingNudge ? 'amber' : 'info';
     actions.push({
       id: 'ai-mapper',
-      severity: mapperSeverity,
+      severity: 'info',
       label: showBankMappingNudge
-        ? 'Account mapping incomplete — blocking payout verification'
+        ? 'Account mapping incomplete — required before pushing to Xero'
         : 'Xero accounts auto-mapped — review and confirm',
       actionLabel: showBankMappingNudge ? 'Fix mapping' : 'Review mapping',
       onAction: onReviewMapping,
@@ -148,8 +146,8 @@ export default function SystemStatusStrip({
   if (showBankMappingNudge && xeroConnected && onMapBankAccounts) {
     actions.push({
       id: 'bank-mapping',
-      severity: 'amber',
-      label: 'Map destination accounts for payout matching',
+      severity: 'info',
+      label: 'Map destination accounts for optional bank verification',
       actionLabel: 'Map accounts',
       onAction: onMapBankAccounts,
     });
