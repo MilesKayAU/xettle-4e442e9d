@@ -120,6 +120,11 @@ export default function ActionCentre({
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const [readySettlements, setReadySettlements] = useState<Array<{
+    id: string; marketplace: string | null; settlement_id: string;
+    period_start: string; period_end: string; bank_deposit: number | null;
+    status: string | null;
+  }>>([]);
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -129,7 +134,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -137,6 +142,14 @@ export default function ActionCentre({
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('settlements')
+          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status')
+          .in('status', ['ingested', 'ready_to_push'])
+          .eq('is_hidden', false)
+          .eq('is_pre_boundary', false)
+          .is('duplicate_of_settlement_id', null)
+          .order('marketplace')
+          .order('period_start', { ascending: false }),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -155,6 +168,9 @@ export default function ActionCentre({
       }
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
+      }
+      if (readySettlementsRes.data) {
+        setReadySettlements(readySettlementsRes.data as any);
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
@@ -178,6 +194,7 @@ export default function ActionCentre({
     const channel = supabase
       .channel('action-centre-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation' }, () => debouncedLoadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => debouncedLoadData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_events' }, () => debouncedLoadData())
       .subscribe();
     return () => {
@@ -227,7 +244,25 @@ export default function ActionCentre({
     const periodEnd = new Date(r.period_end);
     return periodEnd < now; // only show if period already ended
   });
-  const readyToPush = normalisedRows.filter(r => r.overall_status === 'ready_to_push');
+  // Settlement-native "Send to Xero" — one row per real payout from settlements table
+  const readyToPush = useMemo(() => {
+    return readySettlements.map(s => ({
+      id: s.id,
+      marketplace_code: MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown',
+      period_label: `${s.period_start} to ${s.period_end}`,
+      period_start: s.period_start,
+      period_end: s.period_end,
+      orders_found: false,
+      settlement_uploaded: true,
+      settlement_id: s.settlement_id,
+      settlement_net: s.bank_deposit || 0,
+      reconciliation_status: 'matched',
+      xero_pushed: false,
+      bank_matched: false,
+      overall_status: 'ready_to_push',
+      last_checked_at: null,
+    } as ValidationRow));
+  }, [readySettlements]);
   // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
   const awaitingBank = normalisedRows.filter(r =>
     r.settlement_id &&
