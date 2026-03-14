@@ -355,28 +355,61 @@ async function fetchBankTxnsForUser(
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STEP 4 — Compute date range (invoice-range or fallback)
+  // STEP 4 — Compute date range: deterministic seed vs incremental
+  // Seed mode (cache empty): fixed 90-day window regardless of invoice cache
+  // Incremental mode (cache seeded): max(date) - 7 days overlap → today + 21 days
   // ══════════════════════════════════════════════════════════════
-  const dynamicRange = await computeDateRangeFromCache(adminSupabase, userId, 5);
+  const SEED_LOOKBACK_DAYS = 90;
+  const INCREMENTAL_OVERLAP_DAYS = 7;
+  const INCREMENTAL_FORWARD_DAYS = 21;
+
   let fromDate: Date;
-  let toDate: Date | null = null;
+  let toDate: Date;
   let dateRangeSource: string;
   let effectiveDays: number;
   let usedInvoiceRange = false;
+  let syncMode: 'seed' | 'incremental';
 
-  if (dynamicRange) {
-    fromDate = dynamicRange.fromDate;
-    toDate = dynamicRange.toDate;
+  if (cachedBankRowsTotal === 0) {
+    // ── SEED MODE: cache is empty, fetch a wide deterministic window ──
+    syncMode = 'seed';
+    // Try invoice-driven range first for smarter coverage
+    const dynamicRange = await computeDateRangeFromCache(adminSupabase, userId, 5);
+    if (dynamicRange) {
+      fromDate = dynamicRange.fromDate;
+      toDate = dynamicRange.toDate;
+      usedInvoiceRange = true;
+      dateRangeSource = `seed_invoice (${dynamicRange.invoiceCount} invoices)`;
+    } else {
+      fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - SEED_LOOKBACK_DAYS);
+      toDate = new Date(Date.now() + INCREMENTAL_FORWARD_DAYS * 86400000);
+      dateRangeSource = `seed_fallback (${SEED_LOOKBACK_DAYS} days)`;
+    }
     effectiveDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000);
-    dateRangeSource = `dynamic (${dynamicRange.invoiceCount} invoices, ${effectiveDays} days)`;
-    usedInvoiceRange = true;
-    console.log(`[fetch-bank-txns] Dynamic range for ${userId}: ${fromDate.toISOString().split('T')[0]} → ${toDate.toISOString().split('T')[0]} (${effectiveDays} days from ${dynamicRange.invoiceCount} invoices)`);
+    console.log(`[fetch-bank-txns] SEED mode for ${userId}: ${fromDate.toISOString().split('T')[0]} → ${toDate.toISOString().split('T')[0]} (${effectiveDays} days, ${dateRangeSource})`);
   } else {
-    fromDate = new Date();
-    fromDate.setDate(fromDate.getDate() - fallbackLookbackDays);
-    effectiveDays = fallbackLookbackDays;
-    dateRangeSource = `fallback (${fallbackLookbackDays} days)`;
-    console.log(`[fetch-bank-txns] No outstanding cache for ${userId}, falling back to ${fallbackLookbackDays}-day lookback`);
+    // ── INCREMENTAL MODE: start from max(date) - overlap ──
+    syncMode = 'incremental';
+    const { data: maxDateRow } = await adminSupabase
+      .from('bank_transactions')
+      .select('date')
+      .eq('user_id', userId)
+      .order('date', { ascending: false })
+      .limit(1)
+      .single();
+
+    const maxCachedDate = maxDateRow?.date ? new Date(maxDateRow.date) : null;
+    if (maxCachedDate && !isNaN(maxCachedDate.getTime())) {
+      fromDate = new Date(maxCachedDate.getTime() - INCREMENTAL_OVERLAP_DAYS * 86400000);
+    } else {
+      fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - fallbackLookbackDays);
+    }
+    toDate = new Date(Date.now() + INCREMENTAL_FORWARD_DAYS * 86400000);
+    effectiveDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000);
+    dateRangeSource = `incremental (from max_date - ${INCREMENTAL_OVERLAP_DAYS}d)`;
+    console.log(`[fetch-bank-txns] INCREMENTAL mode for ${userId}: ${fromDate.toISOString().split('T')[0]} → ${toDate.toISOString().split('T')[0]} (${effectiveDays} days)`);
   }
 
   // Destination account mappings were loaded in Step 1 (for accurate cooldown diagnostics).
