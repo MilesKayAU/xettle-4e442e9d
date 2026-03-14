@@ -1004,14 +1004,6 @@ Deno.serve(async (req) => {
       const net = anchor.net;
       const diff = Math.round(Math.abs(groupSum - net) * 100) / 100;
 
-      // Track GST anchor usage for diagnostics
-      const usedGstAnchor = anchor.method === 'bank_deposit_plus_gst';
-      // Compute what diff would have been WITHOUT GST adjustment
-      const diffWithoutGst = usedGstAnchor
-        ? Math.round(Math.abs(groupSum - anchor.bankDeposit) * 100) / 100
-        : diff;
-
-      if (usedGstAnchor) gstAnchorAppliedCount++;
 
       let matched = false;
       let confidence: SettlementGroupResult['confidence'] = null;
