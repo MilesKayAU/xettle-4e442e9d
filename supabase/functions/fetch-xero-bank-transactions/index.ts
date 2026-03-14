@@ -466,8 +466,18 @@ async function fetchBankTxnsForUser(
     return new Date(ts).toISOString();
   };
 
-  // Keep only RECEIVE filter in where clause.
-  const whereClause = `Type=="RECEIVE"`;
+  // Server-side date + type filter so Xero only returns RECEIVE txns in range.
+  // Xero where syntax: Date >= DateTime(YYYY,MM,DD)
+  const fromYear = fromDate.getFullYear();
+  const fromMonth = fromDate.getMonth() + 1;
+  const fromDay = fromDate.getDate();
+  let whereClause = `Type=="RECEIVE" AND Date >= DateTime(${fromYear},${fromMonth},${fromDay})`;
+  if (toDate) {
+    const toYear = toDate.getFullYear();
+    const toMonth = toDate.getMonth() + 1;
+    const toDay = toDate.getDate();
+    whereClause += ` AND Date <= DateTime(${toYear},${toMonth},${toDay})`;
+  }
 
   let totalUpserted = 0;
   let totalPagesFetched = 0;
@@ -769,16 +779,9 @@ async function fetchBankTxnsForUser(
       const lastDate = pageTxnDates[pageTxnDates.length - 1] || null;
       const newestToOldest = !!firstDate && !!lastDate ? firstDate >= lastDate : null;
 
-      const allOlderThanFrom = pageTxnDates.length > 0 && pageTxnDates.every((d) => d < fetchFromDate);
-      const oldestOlderThanFromInNewestFirst = newestToOldest === true && !!lastDate && lastDate < fetchFromDate;
-
-      if (oldestOlderThanFromInNewestFirst || allOlderThanFrom) {
-        accountStopReason = 'past_fetch_from_boundary';
-        hasMore = false;
-      } else if (inRangeThisPage === 0) {
-        accountStopReason = 'no_in_range_rows';
-        hasMore = false;
-      } else if (page >= MAX_PAGES_PER_ACCOUNT) {
+      // With server-side date filtering, no need for client-side date boundary stops.
+      // Just paginate until empty or max pages.
+      if (page >= MAX_PAGES_PER_ACCOUNT) {
         accountStopReason = 'max_pages';
         hasMore = false;
       } else if (txns.length < 100) {
