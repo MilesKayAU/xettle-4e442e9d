@@ -890,9 +890,10 @@ Deno.serve(async (req) => {
       }
     }
 
+    const aggregateLookup = new Map<string, { id: string; sum: number; invoiceIds: string[]; candidates: BankCandidate[] }>();
+
     // ─── Build result rows ───
     const rows: any[] = [];
-    let totalOutstanding = 0;
     let matchedWithSettlement = 0;
     let bankDepositFound = 0;
     let readyToReconcile = 0;
