@@ -902,9 +902,12 @@ Deno.serve(async (req) => {
         if (typeof splitData === 'string') {
           try { splitData = JSON.parse(splitData); } catch { splitData = null; }
         }
-        if (splitData && typeof splitData === 'object' && splitData.netExGst !== undefined) {
+        if (splitData && typeof splitData === 'object' && splitData.grossTotal !== undefined) {
+          // Xero ACCREC invoices are GST-inclusive — AmountDue ≈ grossTotal, NOT netExGst.
+          // Proven: buildAmazonInvoiceLineItems uses OUTPUT/INPUT tax types, Xero adds GST.
+          // Verification: sum(grossTotal per part) = bank_deposit for the parent settlement.
           return {
-            net: Math.abs(Number(splitData.netExGst ?? 0)),
+            net: Math.abs(Number(splitData.grossTotal ?? 0)),
             fees: Math.abs(Number(splitData.sellerFees ?? 0))
               + Math.abs(Number(splitData.fbaFees ?? 0))
               + Math.abs(Number(splitData.storageFees ?? 0))
