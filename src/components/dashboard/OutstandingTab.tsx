@@ -2258,9 +2258,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                       <p className="font-medium text-primary">Deposit matched</p>
                                     ) : row.match_status === 'confirmed_manual' ? (
                                       <p className="font-medium text-primary">Manually confirmed</p>
-                                    ) : (
-                                      <p className="font-medium text-muted-foreground">Awaiting deposit</p>
-                                    )}
+                    ) : row.match_status === 'settlement_matched' ? (
+                      <p className="font-medium text-emerald-600 dark:text-emerald-400">Settlement matched ✓</p>
+                    ) : (
+                      <p className="font-medium text-muted-foreground">Missing settlement</p>
+                    )}
                                   </div>
                                 </div>
                                 {row.has_bank_deposit && row.bank_match && row.bank_difference != null && row.bank_difference > 0.05 && (
