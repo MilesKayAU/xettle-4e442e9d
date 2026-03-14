@@ -1633,6 +1633,8 @@ Deno.serve(async (req) => {
         settlement_group_tolerance_used: settlementGroup?.tolerance_used ?? null,
         settlement_group_anchor_basis: settlementGroup?.anchor_basis ?? null,
         settlement_group_anchor_components: settlementGroup?.anchor_components_used ?? null,
+        settlement_group_comparison_field: settlementGroup?.comparison_field ?? null,
+        settlement_group_amount_due_total: settlementGroup?.amount_due_total ?? null,
         // Confirmed match audit trail
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,
