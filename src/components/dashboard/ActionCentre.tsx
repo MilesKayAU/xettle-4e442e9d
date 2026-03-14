@@ -203,6 +203,12 @@ export default function ActionCentre({
       if (ingestedRes.data) {
         setIngestedSettlements(ingestedRes.data as any);
       }
+      if (autoPostRailsRes.data) {
+        setAutoPostRails(new Set(autoPostRailsRes.data.map((r: any) => r.rail)));
+      }
+      if (autoPostFailedRes.data) {
+        setAutoPostFailed(autoPostFailedRes.data as any);
+      }
     } catch (err) {
       console.error('ActionCentre load error:', err);
     } finally {
