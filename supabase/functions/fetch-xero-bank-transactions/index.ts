@@ -335,6 +335,8 @@ async function fetchBankTxnsForUser(
       stopped_reason: 'token_refresh_failed',
       xero_rate_limited: false,
       cooldown_applied: false,
+      cooldown_key_used: COOLDOWN_KEY,
+      cooldown_active: false,
       live_xero_call_attempted: false,
       live_xero_429_received: false,
       recent_success_guard_applied: false,
@@ -348,6 +350,7 @@ async function fetchBankTxnsForUser(
       invoice_range_days: null,
       mapped_account_ids_count: 0,
       ...baseDiag,
+      ...buildRequestAudit(),
     };
   }
 
