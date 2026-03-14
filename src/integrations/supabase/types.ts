@@ -996,10 +996,12 @@ export type Database = {
           fetched_at: string | null
           id: string
           invoice_number: string | null
+          line_amount_types: string | null
           reference: string | null
           status: string | null
           sub_total: number | null
           total: number | null
+          total_tax: number | null
           user_id: string
           xero_invoice_id: string
           xero_tenant_id: string | null
@@ -1013,10 +1015,12 @@ export type Database = {
           fetched_at?: string | null
           id?: string
           invoice_number?: string | null
+          line_amount_types?: string | null
           reference?: string | null
           status?: string | null
           sub_total?: number | null
           total?: number | null
+          total_tax?: number | null
           user_id: string
           xero_invoice_id: string
           xero_tenant_id?: string | null
@@ -1030,10 +1034,12 @@ export type Database = {
           fetched_at?: string | null
           id?: string
           invoice_number?: string | null
+          line_amount_types?: string | null
           reference?: string | null
           status?: string | null
           sub_total?: number | null
           total?: number | null
+          total_tax?: number | null
           user_id?: string
           xero_invoice_id?: string
           xero_tenant_id?: string | null
