@@ -652,6 +652,32 @@ serve(async (req) => {
         console.log(`[step-4] Skipping unclassified contact "${contactName}" for settlement ${settlementId}`);
         continue;
       }
+
+      // ─── SAFETY INVARIANT: Only auto-link Xettle-created invoices ─────────
+      // External invoices are stored as candidates for user review, not auto-linked.
+      if (!isXettleFormat) {
+        const refHash = ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null;
+        await supabase.from('xero_accounting_matches').upsert({
+          user_id: userId,
+          settlement_id: settlementId,
+          marketplace_code: detectedMarketplace,
+          xero_invoice_id: inv.InvoiceID,
+          xero_invoice_number: inv.InvoiceNumber || null,
+          xero_status: inv.Status || null,
+          xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
+          match_method: 'external_candidate',
+          confidence: 0.0,
+          matched_amount: inv.Total || null,
+          matched_date: parseXeroDate(inv.Date),
+          matched_contact: contactName,
+          matched_reference: ref,
+          reference_hash: refHash,
+          notes: 'External invoice detected — requires user review before linking',
+        }, { onConflict: 'user_id,settlement_id' });
+        console.log(`[step-4] External invoice ${inv.InvoiceNumber || inv.InvoiceID} stored as candidate for settlement ${settlementId}`);
+        continue;
+      }
+
       const derivedSt = deriveStatus(inv);
 
       const updatePayload: Record<string, any> = {
@@ -673,10 +699,7 @@ serve(async (req) => {
 
       if (!error) {
         updated++;
-        // Generate reference_hash for fast future lookups
-        const refHash = ref ? await generateSettlementStyleFingerprint(
-          detectedMarketplace, '', '', 0
-        ).then(() => ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase()) : null;
+        const refHash = ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null;
 
         await supabase.from('xero_accounting_matches').upsert({
           user_id: userId,
@@ -686,7 +709,7 @@ serve(async (req) => {
           xero_invoice_number: inv.InvoiceNumber || null,
           xero_status: inv.Status || null,
           xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
-          match_method: isXettleFormat ? 'reference' : 'legacy_reference',
+          match_method: 'reference',
           confidence: 1.0,
           matched_amount: inv.Total || null,
           matched_date: parseXeroDate(inv.Date),
