@@ -14,6 +14,7 @@ import {
   ArrowRight, Clock, PartyPopper, Loader2, Search,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS, GATEWAY_CODES, MARKETPLACE_ALIASES } from '@/utils/settlement-engine';
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
@@ -123,6 +124,8 @@ export default function ActionCentre({
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [readySettlements, setReadySettlements] = useState<Array<{
     id: string; marketplace: string | null; settlement_id: string;
     period_start: string; period_end: string; bank_deposit: number | null;
@@ -502,7 +505,7 @@ export default function ActionCentre({
                 </div>
                 <ul className="space-y-1">
                   {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
-                    <li key={r.id} className="text-xs flex items-center gap-1.5">
+                    <li key={r.id} className="text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5" onClick={() => { setDrawerSettlementId(r.settlement_id); setDrawerOpen(true); }}>
                       <span className="text-blue-400">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start, r.period_end)}
                       {r.settlement_net ? ` — ${formatAUD(r.settlement_net)}` : ''}
@@ -555,7 +558,7 @@ export default function ActionCentre({
                 </p>
                 <ul className="space-y-1">
                   {autoPostFailed.slice(0, 3).map(s => (
-                    <li key={s.id} className="text-xs flex items-center gap-1.5">
+                    <li key={s.id} className="text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5" onClick={() => { setDrawerSettlementId(s.settlement_id); setDrawerOpen(true); }}>
                       <span className="text-destructive">•</span>
                       {MARKETPLACE_LABELS[s.marketplace || ''] || s.marketplace} — {formatPeriodShort(s.period_start, s.period_end)}
                     </li>
@@ -855,6 +858,13 @@ export default function ActionCentre({
           <Plus className="h-3.5 w-3.5" /> Upload settlement
         </Button>
       </div>
+
+      {/* Settlement Detail Drawer */}
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+      />
     </div>
   );
 }

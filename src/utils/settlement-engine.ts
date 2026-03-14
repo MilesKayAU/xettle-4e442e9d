@@ -907,12 +907,44 @@ export async function syncSettlementToXero(
     triggerBankMatch(settlementId);
 
     // Fire-and-forget: log Xero push event
+    // Build immutable snapshot of what was posted to Xero
+    const normalizedLineItems = (lineItems || []).slice(0, 200).map((li: any) => ({
+      description: li.Description || li.description || '',
+      account_code: li.AccountCode || li.account_code || '',
+      tax_type: li.TaxType || li.tax_type || '',
+      amount: li.UnitAmount ?? li.unit_amount ?? 0,
+    }));
+    const snapshotDetails = {
+      posting_mode: 'manual',
+      xero_request_payload: {
+        lineItems: (lineItems || []).slice(0, 200),
+        contactName,
+        reference: `Xettle-${settlementId}`,
+        description,
+        date: s.period_end,
+        dueDate: s.period_end,
+        netAmount,
+      },
+      xero_response: {
+        invoice_id: result.invoiceId,
+        invoice_number: result.invoiceNumber,
+        xero_status: 'AUTHORISED',
+        xero_type: result.xeroType || 'invoice',
+      },
+      normalized: {
+        net_amount: netAmount,
+        currency: 'AUD',
+        contact_name: contactName,
+        line_items: normalizedLineItems,
+        truncated: (lineItems || []).length > 200,
+      },
+    };
     supabase.from('system_events' as any).insert({
       user_id: user.id,
       event_type: 'xero_push_success',
       marketplace_code: marketplace,
       settlement_id: settlementId,
-      details: { invoice_id: result.invoiceId, invoice_number: result.invoiceNumber },
+      details: snapshotDetails,
       severity: 'info',
     } as any).then(({ error: evErr }) => {
       if (evErr) console.error('[system_events] xero push log error:', evErr);
