@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
+import DailyTaskStrip from '@/components/dashboard/DailyTaskStrip';
 import DestinationAccountMapper from '@/components/settings/DestinationAccountMapper';
 import AccountMapperCard from '@/components/settings/AccountMapperCard';
 import PaymentVerificationSettings from '@/components/settings/PaymentVerificationSettings';
@@ -225,6 +226,7 @@ export default function Dashboard() {
   const [pendingChannelAlerts, setPendingChannelAlerts] = useState(0);
   const [outstandingCount, setOutstandingCount] = useState(0);
   const [settlementCounts, setSettlementCounts] = useState<Record<string, number>>({});
+  const [readyToPushCount, setReadyToPushCount] = useState(0);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -320,17 +322,20 @@ export default function Dashboard() {
     })();
   }, [user]);
 
-  // Fetch outstanding (Awaiting Payment) count for badge
+  // Fetch outstanding (Awaiting Payment) count + ready_to_push count for badges
   useEffect(() => {
     if (!user) return;
-    async function fetchOutstandingCount() {
-      const { count } = await supabase
-        .from('settlements')
-        .select('id', { count: 'exact', head: true })
-        .eq('xero_status', 'authorised_in_xero');
-      setOutstandingCount(count ?? 0);
+    async function fetchBadgeCounts() {
+      const [outstanding, ready] = await Promise.all([
+        supabase.from('settlements').select('id', { count: 'exact', head: true })
+          .eq('xero_status', 'authorised_in_xero'),
+        supabase.from('settlements').select('id', { count: 'exact', head: true })
+          .eq('status', 'ready_to_push').eq('is_hidden', false).eq('is_pre_boundary', false),
+      ]);
+      setOutstandingCount(outstanding.count ?? 0);
+      setReadyToPushCount(ready.count ?? 0);
     }
-    fetchOutstandingCount();
+    fetchBadgeCounts();
   }, [user]);
 
   const loadMarketplaces = useCallback(async () => {
@@ -568,8 +573,9 @@ export default function Dashboard() {
               { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
               { key: 'outstanding' as DashboardView, label: 'Outstanding', icon: ClipboardList, badgeCount: outstandingCount },
               { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
-              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText },
+              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, badgeCount: readyToPushCount },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
+              { key: 'settings' as DashboardView, label: 'Settings', icon: Settings },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
@@ -647,6 +653,13 @@ export default function Dashboard() {
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              {/* Today's Tasks — what needs doing right now */}
+              <DailyTaskStrip
+                onNavigate={(view, subTab) => {
+                  switchView(view as DashboardView);
+                  if (subTab) switchSettlementsSubTab(subTab as SettlementsSubTab);
+                }}
+              />
               {/* Post-setup scan banner — triggers adaptive sync on first load */}
               <PostSetupBanner
                 onSwitchToUpload={() => switchView('smart_upload')}
