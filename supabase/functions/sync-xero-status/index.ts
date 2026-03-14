@@ -295,7 +295,9 @@ function deriveStatus(inv: any): { status: string; syncOrigin: string } {
       default: return { status: 'pushed_to_xero', syncOrigin: 'xettle' };
     }
   }
-  return { status: 'pushed_to_xero', syncOrigin: 'external' };
+  // ─── SAFETY INVARIANT: External invoices must NEVER appear as "posted by Xettle" ───
+  // They get 'already_recorded' status and 'external' origin.
+  return { status: 'already_recorded', syncOrigin: 'external' };
 }
 
 serve(async (req) => {
@@ -396,7 +398,8 @@ serve(async (req) => {
               default: derivedStatus = 'pushed_to_xero'; break;
             }
           } else {
-            derivedStatus = 'pushed_to_xero';
+            // ─── SAFETY: External invoices never get 'pushed_to_xero' ───
+            derivedStatus = 'already_recorded';
             syncOrigin = 'external';
           }
 
@@ -650,6 +653,32 @@ serve(async (req) => {
         console.log(`[step-4] Skipping unclassified contact "${contactName}" for settlement ${settlementId}`);
         continue;
       }
+
+      // ─── SAFETY INVARIANT: Only auto-link Xettle-created invoices ─────────
+      // External invoices are stored as candidates for user review, not auto-linked.
+      if (!isXettleFormat) {
+        const refHash = ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null;
+        await supabase.from('xero_accounting_matches').upsert({
+          user_id: userId,
+          settlement_id: settlementId,
+          marketplace_code: detectedMarketplace,
+          xero_invoice_id: inv.InvoiceID,
+          xero_invoice_number: inv.InvoiceNumber || null,
+          xero_status: inv.Status || null,
+          xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
+          match_method: 'external_candidate',
+          confidence: 0.0,
+          matched_amount: inv.Total || null,
+          matched_date: parseXeroDate(inv.Date),
+          matched_contact: contactName,
+          matched_reference: ref,
+          reference_hash: refHash,
+          notes: 'External invoice detected — requires user review before linking',
+        }, { onConflict: 'user_id,settlement_id' });
+        console.log(`[step-4] External invoice ${inv.InvoiceNumber || inv.InvoiceID} stored as candidate for settlement ${settlementId}`);
+        continue;
+      }
+
       const derivedSt = deriveStatus(inv);
 
       const updatePayload: Record<string, any> = {
@@ -671,10 +700,7 @@ serve(async (req) => {
 
       if (!error) {
         updated++;
-        // Generate reference_hash for fast future lookups
-        const refHash = ref ? await generateSettlementStyleFingerprint(
-          detectedMarketplace, '', '', 0
-        ).then(() => ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase()) : null;
+        const refHash = ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null;
 
         await supabase.from('xero_accounting_matches').upsert({
           user_id: userId,
@@ -684,7 +710,7 @@ serve(async (req) => {
           xero_invoice_number: inv.InvoiceNumber || null,
           xero_status: inv.Status || null,
           xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
-          match_method: isXettleFormat ? 'reference' : 'legacy_reference',
+          match_method: 'reference',
           confidence: 1.0,
           matched_amount: inv.Total || null,
           matched_date: parseXeroDate(inv.Date),

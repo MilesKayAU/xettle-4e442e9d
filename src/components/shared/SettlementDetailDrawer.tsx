@@ -397,8 +397,8 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
 function formatEventType(type: string): string {
   const labels: Record<string, string> = {
     settlement_saved: 'Ingested',
-    xero_push_success: 'Pushed to Xero',
-    auto_post_success: 'Auto-posted to Xero',
+    xero_push_success: 'Pushed to Xero (verified)',
+    auto_post_success: 'Auto-posted to Xero (verified)',
     auto_post_failed: 'Auto-post failed',
     xero_push_failed: 'Xero push failed',
     bank_match_confirmed: 'Bank deposit matched',
@@ -408,6 +408,8 @@ function formatEventType(type: string): string {
     reconciliation_mismatch: 'Reconciliation gap detected',
     validation_sweep_complete: 'Validation sweep',
     xero_api_call: 'Xero API call',
+    external_link_removed: 'External link removed (cleanup)',
+    external_xero_detected: 'External Xero invoice detected',
   };
   return labels[type] || type.replace(/_/g, ' ');
 }

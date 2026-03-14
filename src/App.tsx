@@ -22,6 +22,7 @@ const AmazonCallback = lazy(() => import("@/pages/AmazonCallback"));
 const ShopifyCallback = lazy(() => import("@/pages/ShopifyCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const Setup = lazy(() => import("@/pages/Setup"));
+const XeroPostingAudit = lazy(() => import("@/pages/XeroPostingAudit"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -60,6 +61,7 @@ function App() {
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/setup" element={<Setup />} />
                     <Route path="/admin" element={<Admin />} />
+                    <Route path="/audit/xero-posting" element={<XeroPostingAudit />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
                 </Routes>

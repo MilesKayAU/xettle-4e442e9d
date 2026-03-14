@@ -890,7 +890,55 @@ serve(async (req) => {
 
     console.log(`[balance-check] settlement_total=${settlementTotal}, xero_invoice_total=${xeroTotal} (comparable=${comparableXeroTotal}), difference=${balanceDifference}`);
 
-    // Log to system_events for audit trail
+    // ─── D3: Write immutable xero_push_success event FIRST ──────────
+    // This payload snapshot is the proof that Xettle posted this invoice.
+    // It must be written BEFORE setting posted_at on the settlement.
+    const normalizedLineItems = (lineItems || []).slice(0, 200).map((li: any) => ({
+      description: li.Description || '',
+      account_code: li.AccountCode || '',
+      tax_type: li.TaxType || '',
+      amount: li.UnitAmount ?? 0,
+    }));
+    const pushEventDetails = {
+      posting_mode: 'manual',
+      xero_request_payload: {
+        lineItems: (lineItems || []).slice(0, 200),
+        contactName,
+        reference,
+        description,
+        date,
+        dueDate: dueDate || date,
+        netAmount,
+        invoiceType,
+      },
+      xero_response: {
+        invoice_id: invoiceId,
+        invoice_number: invoiceNumber,
+        xero_status: 'DRAFT',
+        xero_type: isNegativeSettlement ? 'bill' : 'invoice',
+      },
+      normalized: {
+        net_amount: netAmount,
+        currency: 'AUD',
+        contact_name: contactName,
+        line_items: normalizedLineItems,
+        truncated: (lineItems || []).length > 200,
+      },
+      settlement_total: settlementTotal,
+      xero_invoice_total: xeroTotal,
+      balance_difference: balanceDifference,
+    };
+
+    await supabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'xero_push_success',
+      severity: 'info',
+      settlement_id: body.settlementData?.settlement_id || reference?.replace('Xettle-', '') || null,
+      marketplace_code: body.settlementData?.marketplace || null,
+      details: pushEventDetails,
+    });
+
+    // Log balance check to system_events for audit trail
     await supabase.from('system_events').insert({
       user_id: userId,
       event_type: 'xero_push_balance_check',
