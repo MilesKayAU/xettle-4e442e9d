@@ -134,13 +134,6 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: 
           </Badge>
         );
       }
-        return (
-          <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Posted ✓
-          </Badge>
-        );
-      }
       return (
         <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
           <Clock className="h-3 w-3 mr-1" />
