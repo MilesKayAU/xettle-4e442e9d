@@ -153,28 +153,50 @@ export default function SettlementsOverview({
   const handlePushAll = async (code: string) => {
     setPushingCode(code);
     try {
+      // Only ready_to_push — never parsed (must be validated first)
       const { data: unsent, error } = await supabase
         .from('settlements')
-        .select('*')
+        .select('settlement_id, marketplace')
         .eq('marketplace', code)
-        .in('status', ['ready_to_push', 'parsed'])
+        .eq('status', 'ready_to_push')
+        .eq('is_hidden', false)
+        .eq('is_pre_boundary', false)
+        .is('duplicate_of_settlement_id', null)
         .order('period_end');
 
       if (error) throw error;
       if (!unsent || unsent.length === 0) {
-        toast.info('No unsent settlements found');
+        toast.info('No settlements ready to push');
         setPushingCode(null);
         return;
       }
 
+      // Open PushSafetyPreview for the batch — Golden Rule enforced
+      setBatchSettlements(unsent.map(s => ({
+        settlementId: s.settlement_id,
+        marketplace: s.marketplace || code,
+      })));
+      setPendingBatchCode(code);
+      setBatchPreviewOpen(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to load settlements');
+    } finally {
+      setPushingCode(null);
+    }
+  };
+
+  const handleBatchConfirm = async () => {
+    const code = pendingBatchCode;
+    setBatchPreviewOpen(false);
+    if (!code) return;
+    setPushingCode(code);
+    try {
       let ok = 0, fail = 0;
-      for (const s of unsent) {
-        // syncSettlementToXero now builds canonical 10-category lines internally
-        const result = await syncSettlementToXero(s.settlement_id, s.marketplace || code);
+      for (const s of batchSettlements) {
+        const result = await syncSettlementToXero(s.settlementId, s.marketplace);
         if (result.success) ok++;
         else fail++;
       }
-
       toast.success(`✅ ${ok} pushed${fail > 0 ? ` · ❌ ${fail} failed` : ''}`);
       await syncXeroStatus();
       loadData();
@@ -182,6 +204,8 @@ export default function SettlementsOverview({
       toast.error(err.message || 'Push failed');
     } finally {
       setPushingCode(null);
+      setBatchSettlements([]);
+      setPendingBatchCode(null);
     }
   };
 

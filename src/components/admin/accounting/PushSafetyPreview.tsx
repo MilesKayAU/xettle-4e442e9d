@@ -468,8 +468,16 @@ function buildValidationChecks(
   lineItems: LineItemPreview[],
   coaMap?: Map<string, { name: string; type: string; active: boolean }>,
   userCodes?: Record<string, string>,
+  alreadyInXeroCheck?: ValidationCheck | null,
 ): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
+
+  // 0. Already in Xero — must be first (blocks push)
+  if (alreadyInXeroCheck) {
+    checks.push(alreadyInXeroCheck);
+  } else {
+    checks.push({ label: 'No existing invoice found in Xero ✓', status: 'green' });
+  }
 
   // 1. Line items sum to settlement net
   const lineSum = lineItems.reduce((sum, li) => sum + li.amount, 0);
