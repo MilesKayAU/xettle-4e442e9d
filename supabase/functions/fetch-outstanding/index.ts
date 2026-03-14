@@ -976,11 +976,6 @@ Deno.serve(async (req) => {
     const settlementGroupResults = new Map<string, SettlementGroupResult>();
     let settlementLevelMatches = 0;
 
-    // ─── GST anchor diagnostics (bounded) ───
-    let gstAnchorAppliedCount = 0;
-    let gstAnchorHelpedCount = 0;
-    const GST_DIAG_LIMIT = 20;
-    const gstAnchorDiagnostics: any[] = [];
 
     for (const [groupKey, group] of finalGroups) {
       const groupSum = Math.round(
