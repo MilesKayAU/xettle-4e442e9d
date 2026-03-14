@@ -682,23 +682,26 @@ serve(async (req) => {
       return userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
     };
 
-    // ─── SERVER-SIDE LINE ITEM REBUILD ──────────────────────────────
-    // Deterministically rebuild line items from settlementData on the server.
-    // Client-provided lineItems are ignored to prevent drift.
-    let lineItems: InvoiceLineItem[];
-    let lineItemsSource: 'server_rebuilt' | 'client_provided';
+    // ─── SERVER-SIDE LINE ITEM REBUILD (MANDATORY) ────────────────────
+    // ALL line items are deterministically rebuilt from settlementData on the server.
+    // Client-provided lineItems are NEVER used — eliminates drift/tampering risk.
+    if (!body.settlementData) {
+      throw new Error('Missing settlementData — server-side line item rebuild is mandatory for all pushes');
+    }
 
-    if (body.settlementData && !isNegativeSettlement) {
-      lineItems = buildServerLineItems(body.settlementData, getCode, contactName);
-      lineItemsSource = 'server_rebuilt';
-      console.log(`[line-items] Rebuilt ${lineItems.length} line items server-side from settlementData`);
-    } else if (body.lineItems && body.lineItems.length > 0) {
-      // Fallback: use client lineItems (negative settlements or missing settlementData)
-      lineItems = body.lineItems;
-      lineItemsSource = 'client_provided';
-      console.warn(`[line-items] Using client-provided line items (source: ${isNegativeSettlement ? 'negative_settlement' : 'missing_settlementData'})`);
-    } else {
-      throw new Error('Missing line items — neither settlementData nor lineItems provided');
+    let lineItems: InvoiceLineItem[];
+    const lineItemsSource: 'server_rebuilt' = 'server_rebuilt';
+
+    lineItems = buildServerLineItems(body.settlementData, getCode, contactName);
+    console.log(`[line-items] Rebuilt ${lineItems.length} line items server-side from settlementData (net=${isNegativeSettlement ? 'negative' : 'positive'})`);
+
+    // If client also provided lineItems, compare hashes for mismatch detection
+    if (body.lineItems && body.lineItems.length > 0) {
+      const clientHash = hashLineItems(body.lineItems);
+      const serverHash = hashLineItems(lineItems);
+      if (clientHash !== serverHash) {
+        console.warn(`[line-items] Client/server mismatch detected: client=${clientHash}, server=${serverHash}. Using server-rebuilt items.`);
+      }
     }
 
     if (lineItems.length === 0) throw new Error('No non-zero line items to post');
