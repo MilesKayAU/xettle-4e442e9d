@@ -1930,7 +1930,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                 const isExpanded = expandedRow === row.xero_invoice_id;
                 const isApplying = applying.has(row.xero_invoice_id);
                 const isBalanced = row.match_status === 'balanced' || row.match_status === 'confirmed';
-                const hasSuggestion = row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple';
+                const hasSuggestion = row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple' || row.match_status === 'settlement_matched' || row.match_status === 'awaiting_confirmation';
 
                 return (
                   <Fragment key={row.xero_invoice_id}>
