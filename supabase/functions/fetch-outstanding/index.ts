@@ -80,32 +80,88 @@ function extractSettlementId(reference: string): { id: string | null; part: numb
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function fetchXeroWithRetry(url: string, headers: Record<string, string>, maxAttempts = 4) {
-  let lastStatus = 0;
-  let lastBody = '';
+// ═══ XERO RATE GOVERNOR (P1 — Outstanding/Invoices) ═══
+// Priority P1: 0 retries on 429, 1 retry on transient 5xx only.
+// On 429: immediately set shared cooldown and return failure.
+async function fetchXeroWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  supabaseAdmin?: any,
+  userId?: string,
+) {
+  const functionName = 'fetch-outstanding';
+  const timestamp = new Date().toISOString();
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const resp = await fetch(url, { headers });
+  const resp = await fetch(url, { headers });
 
-    if (resp.ok) {
-      return { ok: true as const, data: await resp.json() };
+  // ── Audit log every Xero call ──
+  if (supabaseAdmin && userId) {
+    await supabaseAdmin.from('system_events').insert({
+      user_id: userId,
+      event_type: 'xero_api_call',
+      severity: resp.ok ? 'info' : (resp.status === 429 ? 'warning' : 'error'),
+      marketplace_code: null,
+      details: {
+        timestamp_utc: timestamp,
+        function_name: functionName,
+        invoker: 'self',
+        endpoint: 'Invoices (outstanding)',
+        attempt_number: 1,
+        governor_decision: 'allowed',
+        http_status: resp.status,
+        xero_retry_after_seconds: resp.status === 429
+          ? (parseInt(resp.headers.get('Retry-After') || '60') || 60)
+          : null,
+      },
+    });
+  }
+
+  if (resp.ok) {
+    return { ok: true as const, data: await resp.json() };
+  }
+
+  const lastStatus = resp.status;
+  const lastBody = await resp.text();
+
+  // ── 429: set shared cooldown, NO retry ──
+  if (lastStatus === 429) {
+    const retryAfterHeader = resp.headers.get('Retry-After');
+    const retryAfterSec = Math.max(60, Math.min(300, parseInt(retryAfterHeader || '90') || 90));
+    console.warn(`[fetch-outstanding] Xero 429 — setting ${retryAfterSec}s shared cooldown, 0 retries`);
+    if (supabaseAdmin && userId) {
+      const cooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
+      await supabaseAdmin.from('app_settings').upsert({
+        user_id: userId,
+        key: 'xero_api_cooldown_until',
+        value: cooldownUntil,
+      }, { onConflict: 'user_id,key' });
     }
-
-    lastStatus = resp.status;
-    lastBody = await resp.text();
-
-    if (resp.status === 429 && attempt < maxAttempts) {
-      const retryAfterHeader = resp.headers.get('Retry-After');
-      const retryAfterSec = retryAfterHeader ? parseInt(retryAfterHeader) : NaN;
-      const delayMs = !isNaN(retryAfterSec) && retryAfterSec > 0 && retryAfterSec <= 120
-        ? retryAfterSec * 1000
-        : Math.min(2000 * Math.pow(2, attempt - 1), 16000);
-      console.warn(`Xero rate limited (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs}ms`);
-      await sleep(delayMs);
-      continue;
-    }
-
     return { ok: false as const, status: lastStatus, body: lastBody };
+  }
+
+  // ── 5xx: single retry after 2s ──
+  if (lastStatus >= 500 && lastStatus < 600) {
+    console.warn(`[fetch-outstanding] Xero ${lastStatus}, single retry after 2s`);
+    await sleep(2000);
+    const retry = await fetch(url, { headers });
+    if (supabaseAdmin && userId) {
+      await supabaseAdmin.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_api_call',
+        severity: retry.ok ? 'info' : 'error',
+        details: {
+          timestamp_utc: new Date().toISOString(),
+          function_name: functionName,
+          invoker: 'self',
+          endpoint: 'Invoices (outstanding)',
+          attempt_number: 2,
+          governor_decision: 'allowed',
+          http_status: retry.status,
+        },
+      },);
+    }
+    if (retry.ok) return { ok: true as const, data: await retry.json() };
+    return { ok: false as const, status: retry.status, body: await retry.text() };
   }
 
   return { ok: false as const, status: lastStatus, body: lastBody };
