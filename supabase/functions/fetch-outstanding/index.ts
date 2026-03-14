@@ -1537,10 +1537,27 @@ Deno.serve(async (req) => {
       split_settlement_drift_detected: splitChecksFailed > 0,
       split_failed_details: failedChecks.length > 0 ? failedChecks : undefined,
       split_ok_sample: sampledOkChecks.length > 0 ? sampledOkChecks : undefined,
-      // GST-inclusive anchor diagnostics (bounded)
-      gst_anchor_applied_count: gstAnchorAppliedCount,
-      gst_anchor_helped_count: gstAnchorHelpedCount,
-      gst_anchor_diagnostics: gstAnchorDiagnostics.length > 0 ? gstAnchorDiagnostics : undefined,
+      // Anchor basis diagnostics (bounded)
+      anchor_basis_summary: (() => {
+        let grossCount = 0, netCount = 0, splitCount = 0;
+        const mismatches: { settlement_id: string; basis: string; sum: number; anchor: number; diff: number; components: string[] }[] = [];
+        for (const [, result] of settlementGroupResults) {
+          if (result.anchor_basis === 'gross') grossCount++;
+          else if (result.anchor_basis === 'split_part_gross') splitCount++;
+          else netCount++;
+          if (!result.matched && mismatches.length < 10) {
+            mismatches.push({
+              settlement_id: result.settlement_id,
+              basis: result.anchor_basis || 'unknown',
+              sum: result.group_sum,
+              anchor: result.settlement_net,
+              diff: result.difference,
+              components: result.anchor_components_used || [],
+            });
+          }
+        }
+        return { gross_anchor_count: grossCount, net_anchor_count: netCount, split_part_anchor_count: splitCount, mismatch_sample: mismatches.length > 0 ? mismatches : undefined };
+      })(),
     };
 
     console.log(JSON.stringify({
