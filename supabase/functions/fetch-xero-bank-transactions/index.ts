@@ -252,7 +252,7 @@ async function fetchBankTxnsForUser(
       xero_endpoints_hit: [...new Set(outboundRequestLedger.map((entry) => entry.endpoint))],
       retry_attempts: outboundRequestLedger.filter((entry) => entry.from_wrapper_retry_logic).length,
       xero_wrapper_retry_attempts: outboundRequestLedger.filter((entry) => entry.from_wrapper_retry_logic).length,
-      _429_received_on_request_number: idx429 >= 0 ? idx429 + 1 : null,
+      '429_received_on_request_number': idx429 >= 0 ? idx429 + 1 : null,
       outbound_request_ledger: outboundRequestLedger,
     };
   };
