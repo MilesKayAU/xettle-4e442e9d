@@ -1277,6 +1277,10 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'balanced') return 'Balanced';
     if (row.match_status === 'confirmed') return 'Deposit confirmed ✓';
     if (row.match_status === 'confirmed_manual') return 'Confirmed manually ✓';
+    if (row.match_status === 'settlement_mismatch') {
+      const diff = row.settlement_group_diff;
+      return diff != null ? `Mismatch — $${diff.toFixed(2)}` : 'Mismatch — review';
+    }
     if (row.match_status === 'awaiting_confirmation') return 'Ready to confirm';
     if (row.match_status === 'suggestion_high') return 'Likely match found';
     if (row.match_status === 'suggestion_multiple') return 'Possible matches';
