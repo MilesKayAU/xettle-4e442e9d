@@ -99,6 +99,10 @@ export default function ValidationSweep({
   const [sweepDuration, setSweepDuration] = useState<number | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [sortKey, setSortKey] = useState<SortKey>('period_start');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
   const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
