@@ -93,6 +93,7 @@ export default function ValidationSweep({
   const [sweepStartTime, setSweepStartTime] = useState<number | null>(null);
   const [sweepDuration, setSweepDuration] = useState<number | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
+  const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
   const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
