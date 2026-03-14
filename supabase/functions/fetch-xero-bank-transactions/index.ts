@@ -557,6 +557,8 @@ async function fetchBankTxnsForUser(
       performedRealXeroFetch = true;
 
       const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}`;
+      const requestTimestamp = new Date().toISOString();
+      const endpointLabel = `BankTransactions?bankAccountID=${accountId}&page=${page}`;
       const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token.access_token}`,
@@ -565,6 +567,17 @@ async function fetchBankTxnsForUser(
           // If-Modified-Since DISABLED for testing — uncomment to re-enable
           // 'If-Modified-Since': ifModifiedSinceValue,
         },
+      });
+
+      outboundRequestLedger.push({
+        timestamp: requestTimestamp,
+        function_name: 'fetch-xero-bank-transactions',
+        invoker,
+        endpoint: endpointLabel,
+        account_id: accountId,
+        response_code: res.status,
+        retry_number: 0,
+        from_wrapper_retry_logic: false,
       });
 
       totalPagesFetched++;
