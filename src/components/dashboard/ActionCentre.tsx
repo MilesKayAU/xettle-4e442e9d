@@ -243,7 +243,25 @@ export default function ActionCentre({
     const periodEnd = new Date(r.period_end);
     return periodEnd < now; // only show if period already ended
   });
-  const readyToPush = normalisedRows.filter(r => r.overall_status === 'ready_to_push');
+  // Settlement-native "Send to Xero" — one row per real payout from settlements table
+  const readyToPush = useMemo(() => {
+    return readySettlements.map(s => ({
+      id: s.id,
+      marketplace_code: MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown',
+      period_label: `${s.period_start} to ${s.period_end}`,
+      period_start: s.period_start,
+      period_end: s.period_end,
+      orders_found: false,
+      settlement_uploaded: true,
+      settlement_id: s.settlement_id,
+      settlement_net: s.bank_deposit || 0,
+      reconciliation_status: 'matched',
+      xero_pushed: false,
+      bank_matched: false,
+      overall_status: 'ready_to_push',
+      last_checked_at: null,
+    } as ValidationRow));
+  }, [readySettlements]);
   // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
   const awaitingBank = normalisedRows.filter(r =>
     r.settlement_id &&
