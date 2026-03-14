@@ -1552,6 +1552,10 @@ Deno.serve(async (req) => {
       split_settlement_drift_detected: splitChecksFailed > 0,
       split_failed_details: failedChecks.length > 0 ? failedChecks : undefined,
       split_ok_sample: sampledOkChecks.length > 0 ? sampledOkChecks : undefined,
+      // GST-inclusive anchor diagnostics (bounded)
+      gst_anchor_applied_count: gstAnchorAppliedCount,
+      gst_anchor_helped_count: gstAnchorHelpedCount,
+      gst_anchor_diagnostics: gstAnchorDiagnostics.length > 0 ? gstAnchorDiagnostics : undefined,
     };
 
     console.log(JSON.stringify({
