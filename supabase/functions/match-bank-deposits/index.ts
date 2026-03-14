@@ -291,6 +291,9 @@ Deno.serve(async (req) => {
         // Sort candidates by score descending
         candidates.sort((a: any, b: any) => b.score - a.score)
 
+        // Top 3 evidence candidates for diagnostics
+        const top3 = candidates.slice(0, 3)
+
         if (candidates.length > 0 && candidates[0].score >= 90) {
           const best = candidates[0]
 
@@ -330,6 +333,8 @@ Deno.serve(async (req) => {
             settlement_id: s.settlement_id,
             marketplace,
             match_method: 'individual',
+            match_reasons: best.reasons,
+            top_candidates: top3,
             possible_match: {
               date: best.date,
               amount: best.amount,
@@ -349,6 +354,8 @@ Deno.serve(async (req) => {
             settlement_id: s.settlement_id,
             marketplace,
             match_method: 'individual',
+            match_reasons: best.reasons,
+            top_candidates: top3,
             possible_match: {
               date: best.date,
               amount: best.amount,
@@ -363,11 +370,18 @@ Deno.serve(async (req) => {
           unmatchedSettlements.push(s)
         } else {
           unmatchedSettlements.push(s)
-          results.push({ matched: false, settlement_id: s.settlement_id, marketplace })
+          results.push({
+            matched: false,
+            settlement_id: s.settlement_id,
+            marketplace,
+            no_match_reason: txns.length === 0
+              ? `no_${currency}_receive_txns_in_window_${fromDate}_to_${toDate}`
+              : `${txns.length}_txns_checked_none_scored_above_15`,
+          })
         }
       } catch (perSettlementErr: any) {
         console.error(`[bank-match] Error matching ${(settlement as any).settlement_id}:`, perSettlementErr.message)
-        results.push({ matched: false, settlement_id: (settlement as any).settlement_id, marketplace: (settlement as any).marketplace || 'unknown' })
+        results.push({ matched: false, settlement_id: (settlement as any).settlement_id, marketplace: (settlement as any).marketplace || 'unknown', no_match_reason: `error: ${perSettlementErr.message}` })
         unmatchedSettlements.push(settlement)
       }
     }
