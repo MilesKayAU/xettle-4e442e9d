@@ -484,6 +484,24 @@ export default function ActionCentre({
             );
           })()}
 
+          {/* Card 2b — Uploaded, needs review */}
+          {ingestedSettlements.length > 0 && (
+            <Card className="border-muted bg-muted/30">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block" />
+                  <h3 className="font-semibold text-sm">Uploaded — needs review</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {ingestedSettlements.length} settlement{ingestedSettlements.length > 1 ? 's' : ''} uploaded but not yet validated for posting.
+                </p>
+                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
+                  <Search className="h-3 w-3" /> Review in Settlement Matching
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Card 3 — Posted — Awaiting Deposit */}
           {awaitingBank.length > 0 && (() => {
             const grouped = groupByMarketplaceMonth(awaitingBank);
