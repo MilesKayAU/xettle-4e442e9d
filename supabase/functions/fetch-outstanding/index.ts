@@ -790,21 +790,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Map cached rows to the shape downstream code expects (Xero BankTransaction format)
+    // Map cached rows to shape expected by matcher
     const bankTxns = (cachedBankTxns || []).map((t: any) => ({
       BankTransactionID: t.xero_transaction_id,
-      Total: t.amount,
-      Date: t.date, // Already ISO date string from cache
+      Total: Number(t.amount || 0),
+      Date: t.date,
       Reference: t.reference || '',
       Contact: { Name: t.contact_name || '' },
       LineItems: [{ Description: t.description || '' }],
       BankAccount: { Name: t.bank_account_name || '', AccountID: t.bank_account_id || '' },
       CurrencyCode: t.currency || 'AUD',
+      Type: t.transaction_type || 'UNKNOWN',
+      Status: t.xero_status || null,
     }));
 
-    console.log(`[fetch-outstanding] Bank cache: ${bankTxns.length} RECEIVE txns from ${bankLookbackStr}, empty=${bankFeedEmpty}`);
+    const bankTypeCounts = bankTxns.reduce((acc: Record<string, number>, txn: any) => {
+      const key = txn.Type || 'UNKNOWN';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
 
-    // ─── Amazon aggregate deposit detection (SUGGESTION mode) ───
+    console.log(`[fetch-outstanding] Bank cache: ${bankTxns.length} txns (all types) from ${bankLookbackStr}, empty=${bankFeedEmpty}, type_counts=${JSON.stringify(bankTypeCounts)}`);
+
+    const MATCHABLE_TYPES = new Set(['RECEIVE', 'TRANSFER']);
+    const ONE_TO_ONE_DATE_WINDOW_DAYS = 45;
+    const AMAZON_BATCH_TOLERANCE = 1.0;
+    const AMAZON_GROUP_WINDOW_DAYS = 10;
+    const AMAZON_MAX_GROUP_SIZE = 6;
     // Nothing is marked as matched until user explicitly confirms.
     // Auto-detection is always a SUGGESTION.
     // Groups Amazon invoices by PAYOUT DATE WINDOW (not settlement period),
