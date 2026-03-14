@@ -105,7 +105,7 @@ function categorize(row: SettlementRow): StatusCategory {
 // Import here to avoid circular deps — only used for badge display
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 
-function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroStatus: string | null; syncOrigin?: string }) {
+function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null }) {
   // Fully reconciled (PAID in Xero)
   if (status === 'reconciled_in_xero' || status === 'bank_verified' || xeroStatus === 'PAID') {
     return (
@@ -127,8 +127,14 @@ function StatusBadge({ status, xeroStatus, syncOrigin }: { status: string; xeroS
     }
     if (xeroStatus === 'AUTHORISED') {
       // Rail payout mode: settlement-confirmed rails show "Posted ✓" not "Waiting"
-      const marketplace = (arguments[0] as any)?.marketplace;
       if (marketplace && !isBankMatchRequired(marketplace)) {
+        return (
+          <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Posted ✓
+          </Badge>
+        );
+      }
         return (
           <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
             <CheckCircle2 className="h-3 w-3 mr-1" />
