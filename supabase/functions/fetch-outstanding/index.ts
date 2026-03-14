@@ -1400,6 +1400,9 @@ Deno.serve(async (req) => {
         readyToReconcile++;
       } else if (hasSettlement && hasBankDeposit) {
         matchStatus = `gap_${bankDifference?.toFixed(2)}`;
+      } else if (hasSettlement && !hasBankDeposit && settlementGroup && !isSettlementGroupMatched) {
+        // Settlement exists but group sum doesn't match anchor — needs review
+        matchStatus = 'settlement_mismatch';
       } else if (hasSettlement && !hasBankDeposit) {
         matchStatus = 'awaiting_confirmation';
       } else if (!hasSettlement && marketplace === 'amazon_us') {
