@@ -732,12 +732,8 @@ serve(async (req) => {
       const validationErrors: string[] = [];
 
       const usedCodes = new Set<string>();
-      if (!isNegativeSettlement && lineItems) {
-        for (const item of lineItems) {
-          usedCodes.add(item.AccountCode);
-        }
-      } else {
-        usedCodes.add(getCode('Other Fees'));
+      for (const item of lineItems) {
+        usedCodes.add(item.AccountCode);
       }
 
       for (const code of usedCodes) {
