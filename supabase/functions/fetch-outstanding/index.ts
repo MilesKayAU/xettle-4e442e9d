@@ -837,7 +837,8 @@ Deno.serve(async (req) => {
     }
 
     // First pass: extract settlement_id for every invoice and build groups
-    const invoiceSettlementMap = new Map<string, { id: string; invoices: any[] }>();
+    // Store part alongside each invoice for split-aware sub-grouping
+    const invoiceSettlementMap = new Map<string, { id: string; invoices: { inv: any; part: number | null }[] }>();
     
     for (const inv of invoices) {
       const ref = inv.Reference || '';
@@ -849,21 +850,96 @@ Deno.serve(async (req) => {
       if (!invoiceSettlementMap.has(sId)) {
         invoiceSettlementMap.set(sId, { id: sId, invoices: [] });
       }
-      invoiceSettlementMap.get(sId)!.invoices.push(inv);
+      invoiceSettlementMap.get(sId)!.invoices.push({ inv, part: extracted.part });
     }
 
-    // Second pass: compare each group to settlement net
+    // ─── Split-aware sub-grouping ───
+    // If a settlement has is_split_month=true AND invoices carry distinct part numbers,
+    // split the group into sub-groups keyed by settlementId_P1 / settlementId_P2.
+    // Each sub-group is compared against the respective split_month_N_data anchor.
+    // No heuristic anchor switching — only proven split parts from reference parsing.
+    const finalGroups = new Map<string, { settlementId: string; part: number | null; invoices: any[]; settlement: any | null }>();
+
+    for (const [sId, group] of invoiceSettlementMap) {
+      const settlement = settlementMap.get(sId);
+      const hasSplitInvoices = group.invoices.some(i => i.part !== null);
+
+      if (settlement?.is_split_month && hasSplitInvoices) {
+        // Sub-group by part number (only when reference explicitly contains part)
+        const partBuckets = new Map<number | null, any[]>();
+        for (const item of group.invoices) {
+          const key = item.part;
+          if (!partBuckets.has(key)) partBuckets.set(key, []);
+          partBuckets.get(key)!.push(item.inv);
+        }
+        for (const [part, invs] of partBuckets) {
+          const subKey = part !== null ? `${sId}_P${part}` : sId;
+          finalGroups.set(subKey, { settlementId: sId, part, invoices: invs, settlement });
+        }
+      } else {
+        // Non-split: keep as single group
+        finalGroups.set(sId, {
+          settlementId: sId,
+          part: null,
+          invoices: group.invoices.map(i => i.inv),
+          settlement,
+        });
+      }
+    }
+
+    // ─── Helper: get anchor net and component values for a group (split-aware) ───
+    function getGroupAnchor(settlement: any, part: number | null): {
+      net: number;
+      fees: number;
+      refunds: number;
+      gstOnIncome: number;
+      gstOnExpenses: number;
+    } {
+      // If this is a split sub-group with a known part, use split data as anchor
+      if (settlement.is_split_month && part !== null) {
+        const rawSplitData = part === 1 ? settlement.split_month_1_data : settlement.split_month_2_data;
+        let splitData = rawSplitData;
+        if (typeof splitData === 'string') {
+          try { splitData = JSON.parse(splitData); } catch { splitData = null; }
+        }
+        if (splitData && typeof splitData === 'object' && splitData.netExGst !== undefined) {
+          return {
+            net: Math.abs(Number(splitData.netExGst ?? 0)),
+            fees: Math.abs(Number(splitData.sellerFees ?? 0))
+              + Math.abs(Number(splitData.fbaFees ?? 0))
+              + Math.abs(Number(splitData.storageFees ?? 0))
+              + Math.abs(Number(splitData.otherFees ?? 0)),
+            refunds: Math.abs(Number(splitData.refunds ?? 0)),
+            gstOnIncome: Math.abs(Number(splitData.gstOnIncome ?? 0)),
+            gstOnExpenses: Math.abs(Number(splitData.gstOnExpenses ?? 0)),
+          };
+        }
+        // Split data missing/invalid — fall through to parent settlement anchor
+      }
+      // Non-split or fallback: use parent settlement values with existing anchor logic
+      return {
+        net: getSettlementNet(settlement),
+        fees: Math.abs(settlement.seller_fees ?? 0)
+          + Math.abs(settlement.fba_fees ?? 0)
+          + Math.abs(settlement.storage_fees ?? 0)
+          + Math.abs(settlement.other_fees ?? 0),
+        refunds: Math.abs(settlement.refunds ?? 0),
+        gstOnIncome: Math.abs(settlement.gst_on_income ?? 0),
+        gstOnExpenses: Math.abs(settlement.gst_on_expenses ?? 0),
+      };
+    }
+
+    // Second pass: compare each group/sub-group to its anchor
     const settlementGroupResults = new Map<string, SettlementGroupResult>();
     let settlementLevelMatches = 0;
 
-    for (const [sId, group] of invoiceSettlementMap) {
+    for (const [groupKey, group] of finalGroups) {
       const groupSum = Math.round(
         group.invoices.reduce((sum: number, inv: any) => sum + Math.abs(inv.AmountDue ?? inv.Total ?? 0), 0) * 100
       ) / 100;
 
-      const settlement = settlementMap.get(sId);
-      if (!settlement) {
-        // No settlement_id → no tolerance allowed
+      if (!group.settlement) {
+        // No settlement found → no tolerance allowed
         const result: SettlementGroupResult = {
           matched: false,
           group_sum: groupSum,
@@ -871,16 +947,17 @@ Deno.serve(async (req) => {
           difference: groupSum,
           invoice_count: group.invoices.length,
           confidence: null,
-          settlement_id: sId,
+          settlement_id: group.settlementId,
           invoice_ids: group.invoices.map((inv: any) => inv.InvoiceID),
           explanation: null,
           tolerance_used: null,
         };
-        settlementGroupResults.set(sId, result);
+        settlementGroupResults.set(groupKey, result);
         continue;
       }
 
-      const net = getSettlementNet(settlement);
+      const anchor = getGroupAnchor(group.settlement, group.part);
+      const net = anchor.net;
       const diff = Math.round(Math.abs(groupSum - net) * 100) / 100;
 
       let matched = false;
@@ -906,26 +983,25 @@ Deno.serve(async (req) => {
         confidence = 'grouped';
         toleranceUsed = diff;
       }
-      // Step 5 — explainable match (fees / refunds / tax components)
+      // Step 5 — explainable match (fees / refunds / tax / gst_on_income components)
       else if (diff <= Math.min(net * 0.10, 100.00)) {
-        const fees = Math.abs(settlement.seller_fees ?? 0)
-          + Math.abs(settlement.fba_fees ?? 0)
-          + Math.abs(settlement.storage_fees ?? 0)
-          + Math.abs(settlement.other_fees ?? 0);
-        const refunds = Math.abs(settlement.refunds ?? 0);
-        const tax = Math.abs(settlement.gst_on_income ?? 0)
-          + Math.abs(settlement.gst_on_expenses ?? 0);
+        const { fees, refunds, gstOnIncome, gstOnExpenses } = anchor;
+        const tax = gstOnIncome + gstOnExpenses;
 
-        const candidates: [number, string][] = [
-          [fees, 'fees'],
-          [refunds, 'refunds'],
-          [tax, 'tax'],
-          [fees + tax, 'fees+tax'],
-          [fees + refunds, 'fees+refunds'],
+        // Candidates: [componentValue, label, matchTolerance]
+        // gst_on_income gets $2.00 tolerance (rounding across line items)
+        // All others keep strict $1.00
+        const candidates: [number, string, number][] = [
+          [fees, 'fees', 1.00],
+          [refunds, 'refunds', 1.00],
+          [tax, 'tax', 1.00],
+          [gstOnIncome, 'gst_on_income', 2.00],
+          [fees + tax, 'fees+tax', 1.00],
+          [fees + refunds, 'fees+refunds', 1.00],
         ];
 
-        for (const [componentValue, label] of candidates) {
-          if (componentValue > 0 && Math.abs(diff - componentValue) <= 1.00) {
+        for (const [componentValue, label, tolerance] of candidates) {
+          if (componentValue > 0 && Math.abs(diff - componentValue) <= tolerance) {
             matched = true;
             confidence = 'explainable';
             explanation = label;
@@ -942,13 +1018,13 @@ Deno.serve(async (req) => {
         difference: diff,
         invoice_count: group.invoices.length,
         confidence,
-        settlement_id: sId,
+        settlement_id: group.settlementId,
         invoice_ids: group.invoices.map((inv: any) => inv.InvoiceID),
         explanation,
         tolerance_used: toleranceUsed,
       };
 
-      settlementGroupResults.set(sId, result);
+      settlementGroupResults.set(groupKey, result);
       if (matched) settlementLevelMatches++;
     }
 
