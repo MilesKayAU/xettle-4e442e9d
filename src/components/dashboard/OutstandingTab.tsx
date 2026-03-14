@@ -1889,54 +1889,45 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <p className="text-xs text-muted-foreground">{filteredRows.length} invoices</p>
             </CardContent>
           </Card>
-          <Card className={data.matched_with_settlement === data.invoice_count ? 'border-emerald-200 dark:border-emerald-800' : ''}>
+          <Card className={groupKpis.totalGroups > 0 && groupKpis.totalGroups === groupKpis.matchedGroups ? 'border-emerald-200 dark:border-emerald-800' : ''}>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Settlement found</p>
-              <p className={`text-xl font-bold ${data.matched_with_settlement === data.invoice_count ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
-                {data.matched_with_settlement}
+              <p className={`text-xl font-bold ${groupKpis.totalGroups > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
+                {groupKpis.totalGroups}
               </p>
-              <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
+              <p className="text-xs text-muted-foreground">groups</p>
             </CardContent>
           </Card>
-          <Card className={(() => {
-            const matched = filteredRows.filter(r => r.settlement_group_matched).length;
-            return matched > 0 ? 'border-emerald-200 dark:border-emerald-800' : '';
-          })()}>
+          <Card className={groupKpis.matchedGroups > 0 ? 'border-emerald-200 dark:border-emerald-800' : ''}>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Settlement matched</p>
               <p className={`text-xl font-bold ${
-                filteredRows.filter(r => r.settlement_group_matched).length > 0
+                groupKpis.matchedGroups > 0
                   ? 'text-emerald-600 dark:text-emerald-400'
                   : 'text-muted-foreground'
-              }`}>{filteredRows.filter(r => r.settlement_group_matched).length}</p>
-              <p className="text-xs text-muted-foreground">of {filteredRows.length}</p>
+              }`}>{groupKpis.matchedGroups}</p>
+              <p className="text-xs text-muted-foreground">of {groupKpis.totalGroups}</p>
             </CardContent>
           </Card>
-          {(() => {
-            const mismatchCount = filteredRows.filter(r => r.settlement_id && r.settlement_group_matched === false).length;
-            const missingCount = filteredRows.filter(r => !r.settlement_id && r.is_marketplace && r.match_status !== 'pending_enrichment').length;
-            return (
-              <Card className={mismatchCount > 0 ? 'border-amber-200 dark:border-amber-800' : ''}>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground">Needs attention</p>
-                  <p className={`text-xl font-bold ${mismatchCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
-                    {mismatchCount + missingCount}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {mismatchCount > 0 ? `${mismatchCount} mismatch` : ''}
-                    {mismatchCount > 0 && missingCount > 0 ? ' · ' : ''}
-                    {missingCount > 0 ? `${missingCount} missing` : ''}
-                    {mismatchCount === 0 && missingCount === 0 ? 'all clear' : ''}
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          })()}
+          <Card className={groupKpis.mismatchGroups > 0 ? 'border-amber-200 dark:border-amber-800' : ''}>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Needs attention</p>
+              <p className={`text-xl font-bold ${groupKpis.mismatchGroups + groupKpis.missingSettlement > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                {groupKpis.mismatchGroups + groupKpis.missingSettlement}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {groupKpis.mismatchGroups > 0 ? `${groupKpis.mismatchGroups} mismatch` : ''}
+                {groupKpis.mismatchGroups > 0 && groupKpis.missingSettlement > 0 ? ' · ' : ''}
+                {groupKpis.missingSettlement > 0 ? `${groupKpis.missingSettlement} missing` : ''}
+                {groupKpis.mismatchGroups === 0 && groupKpis.missingSettlement === 0 ? 'all clear' : ''}
+              </p>
+            </CardContent>
+          </Card>
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Ready to push</p>
-              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{data.ready_to_reconcile}</p>
-              <p className="text-xs text-muted-foreground">balanced</p>
+              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{groupKpis.matchedGroups}</p>
+              <p className="text-xs text-muted-foreground">matched groups</p>
             </CardContent>
           </Card>
         </div>
