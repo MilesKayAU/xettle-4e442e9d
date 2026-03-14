@@ -1,0 +1,1 @@
+ALTER TABLE public.settlements ADD COLUMN IF NOT EXISTS posting_claimed_at timestamptz DEFAULT NULL;
