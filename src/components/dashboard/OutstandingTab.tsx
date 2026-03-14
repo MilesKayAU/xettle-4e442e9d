@@ -1218,6 +1218,11 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             {best.bank_account_name && <span className="text-muted-foreground text-[10px] shrink-0">{best.bank_account_name}</span>}
             <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">{best.confidence} confidence</Badge>
           </div>
+          {best.reasons && best.reasons.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Signals: {best.reasons.join(' · ')}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             Batched deposit across {row.aggregate_settlement_count} settlements totalling {formatAUD(row.aggregate_sum || 0)}
           </p>
