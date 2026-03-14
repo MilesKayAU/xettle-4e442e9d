@@ -128,6 +128,8 @@ interface OutstandingRow {
   settlement_group_confidence?: 'exact' | 'high' | 'grouped' | 'explainable' | null;
   settlement_group_explanation?: string | null;
   settlement_group_tolerance_used?: number | null;
+  settlement_group_anchor_basis?: 'gross' | 'net' | 'split_part_gross' | null;
+  settlement_group_anchor_components?: string[] | null;
   bank_match_method?: string | null;
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
