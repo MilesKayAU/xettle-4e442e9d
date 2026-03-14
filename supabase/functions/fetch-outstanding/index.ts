@@ -359,6 +359,7 @@ Deno.serve(async (req) => {
           due_date: parseXeroDate(inv.DueDate) || null,
           amount_due: inv.AmountDue || 0,
           total: inv.Total || 0,
+          sub_total: inv.SubTotal || 0,
           currency_code: inv.CurrencyCode || 'AUD',
           status: inv.Status || null,
           fetched_at: now,
