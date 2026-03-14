@@ -1055,7 +1055,16 @@ Deno.serve(async (req) => {
           continue;
         }
         try {
-          const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, CACHE_FRESH_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
+          const result = await fetchBankTxnsForUser(
+            adminSupabase,
+            userId,
+            clientId,
+            clientSecret,
+            GUARD_MINUTES_BATCH,
+            CACHE_FRESH_MINUTES_BATCH,
+            LOOKBACK_DAYS_BATCH,
+            'batch',
+          );
           results.push({ ...result, invoker: 'batch', lock_acquired: true });
         } finally {
           await adminSupabase.rpc('release_sync_lock', {
