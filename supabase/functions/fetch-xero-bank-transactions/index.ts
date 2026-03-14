@@ -241,8 +241,8 @@ async function fetchBankTxnsForUser(
         fetch_from: null,
         fetch_to: null,
         invoice_range_days: null,
-        mapped_account_ids_count: 0,
-        ...baseDiag,
+        mapped_account_ids_count: mappedAccountIds.size,
+        has_any_mapping: hasAnyMapping,
       };
     }
   }
