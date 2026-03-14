@@ -315,13 +315,42 @@ export default function ValidationSweep({
     if (marketplaceFilter !== 'all') {
       result = result.filter(r => r.marketplace_code === marketplaceFilter);
     }
+    // Date range filter
+    if (dateFrom) {
+      result = result.filter(r => r.period_start >= dateFrom);
+    }
+    if (dateTo) {
+      result = result.filter(r => r.period_start <= dateTo);
+    }
     // Status filter
-    if (filter === 'complete') return result.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
-    if (filter === 'ready_to_push') return result.filter(r => r.overall_status === 'ready_to_push');
-    if (filter === 'settlement_needed') return result.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-    if (filter === 'gap_detected') return result.filter(r => r.overall_status === 'gap_detected');
+    if (filter === 'complete') result = result.filter(r => r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external');
+    else if (filter === 'ready_to_push') result = result.filter(r => r.overall_status === 'ready_to_push');
+    else if (filter === 'settlement_needed') result = result.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+    else if (filter === 'gap_detected') result = result.filter(r => r.overall_status === 'gap_detected');
+    // Sort
+    result = [...result].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'marketplace_code':
+          cmp = (MARKETPLACE_LABELS[a.marketplace_code] || a.marketplace_code).localeCompare(MARKETPLACE_LABELS[b.marketplace_code] || b.marketplace_code);
+          break;
+        case 'period_start':
+          cmp = a.period_start.localeCompare(b.period_start);
+          break;
+        case 'orders_count':
+          cmp = (a.orders_count || 0) - (b.orders_count || 0);
+          break;
+        case 'settlement_net':
+          cmp = (a.settlement_net || 0) - (b.settlement_net || 0);
+          break;
+        case 'overall_status':
+          cmp = (a.overall_status || '').localeCompare(b.overall_status || '');
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
     return result;
-  }, [actionableRows, filter, marketplaceFilter]);
+  }, [actionableRows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir]);
 
   const [vsPage, setVsPage] = useState(1);
   const vsTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
