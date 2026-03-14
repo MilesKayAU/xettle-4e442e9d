@@ -32,9 +32,11 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import {
   formatAUD, MARKETPLACE_LABELS, MARKETPLACE_CONTACTS,
-  buildSimpleInvoiceLines, type XeroLineItem,
 } from '@/utils/settlement-engine';
-import { XERO_ACCOUNT_MAP } from '@/utils/settlement-parser';
+import {
+  buildPostingLineItems, toLineItemPreviews, createAccountCodeResolver,
+  type SettlementForPosting,
+} from '@/utils/xero-posting-line-items';
 import { cn } from '@/lib/utils';
 
 // ─── Types ──────────────────────────────────────────────────────────
