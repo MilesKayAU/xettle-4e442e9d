@@ -1107,7 +1107,7 @@ async function fetchBankTxnsForUser(
       // counts_by_type
       const { data: allCached } = await adminSupabase
         .from('bank_transactions')
-        .select('transaction_type, xero_status, contact_name, reference, amount, date')
+        .select('transaction_type, xero_status, contact_name, reference, amount, date, source')
         .eq('user_id', userId)
         .limit(2000);
 
