@@ -942,6 +942,77 @@ async function fetchBankTxnsForUser(
     });
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // STEP 6B — Post-fetch diagnostics: type/status/contact breakdown
+  // ══════════════════════════════════════════════════════════════
+  let fetchDiagnostics: any = null;
+  if (performedRealXeroFetch && totalUpserted > 0) {
+    try {
+      // counts_by_type
+      const { data: allCached } = await adminSupabase
+        .from('bank_transactions')
+        .select('transaction_type, xero_status, contact_name, reference, amount, date')
+        .eq('user_id', userId)
+        .limit(2000);
+
+      if (allCached && allCached.length > 0) {
+        const countsByType: Record<string, number> = {};
+        const countsByStatus: Record<string, number> = {};
+        const contactsByType: Record<string, Record<string, number>> = {};
+        const amazonSamples: any[] = [];
+
+        for (const row of allCached) {
+          const t = row.transaction_type || 'UNKNOWN';
+          const s = row.xero_status || 'UNKNOWN';
+          countsByType[t] = (countsByType[t] || 0) + 1;
+          countsByStatus[s] = (countsByStatus[s] || 0) + 1;
+
+          // Track contacts per type
+          const contactKey = row.contact_name || row.reference || '(none)';
+          if (!contactsByType[t]) contactsByType[t] = {};
+          contactsByType[t][contactKey] = (contactsByType[t][contactKey] || 0) + 1;
+
+          // Amazon samples
+          const contactLower = (row.contact_name || '').toLowerCase();
+          const refLower = (row.reference || '').toLowerCase();
+          if ((contactLower.includes('amazon') || contactLower.includes('amzn') ||
+               refLower.includes('amazon') || refLower.includes('amzn')) &&
+              amazonSamples.length < 3) {
+            amazonSamples.push({
+              type: t,
+              status: s,
+              contact: row.contact_name,
+              reference: row.reference,
+              amount: row.amount,
+              date: row.date,
+            });
+          }
+        }
+
+        // top 5 contacts per type
+        const topContactsByType: Record<string, Array<{ contact: string; count: number }>> = {};
+        for (const [type, contacts] of Object.entries(contactsByType)) {
+          topContactsByType[type] = Object.entries(contacts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([contact, count]) => ({ contact, count }));
+        }
+
+        fetchDiagnostics = {
+          total_cached_rows: allCached.length,
+          counts_by_type: countsByType,
+          counts_by_status: countsByStatus,
+          top_contacts_by_type: topContactsByType,
+          amazon_samples: amazonSamples,
+          amazon_rows_found: amazonSamples.length,
+        };
+      }
+    } catch (diagErr: any) {
+      console.error(`[fetch-bank-txns] Diagnostics error:`, diagErr.message);
+      fetchDiagnostics = { error: diagErr.message };
+    }
+  }
+
   // Final cache row count for diagnostics
   const { count: finalBankRowsCount } = await adminSupabase
     .from('bank_transactions')
