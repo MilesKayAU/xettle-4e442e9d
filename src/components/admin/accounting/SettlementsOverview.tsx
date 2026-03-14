@@ -11,7 +11,7 @@ import { Upload, Send, Loader2, CheckCircle2, AlertTriangle, Clock, Circle } fro
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import type { UserMarketplace } from './MarketplaceSwitcher';
-import { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
+import { syncSettlementToXero, syncXeroStatus, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 
 interface SettlementsOverviewProps {
