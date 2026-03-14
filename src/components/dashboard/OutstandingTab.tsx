@@ -130,6 +130,12 @@ interface OutstandingRow {
   settlement_group_tolerance_used?: number | null;
   settlement_group_anchor_basis?: 'gross' | 'net' | 'split_part_gross' | null;
   settlement_group_anchor_components?: string[] | null;
+  settlement_group_comparison_field?: string | null;
+  settlement_group_amount_due_total?: number | null;
+  // Per-invoice tax fields (from Xero)
+  sub_total?: number | null;
+  total_tax?: number | null;
+  line_amount_types?: string | null;
   bank_match_method?: string | null;
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
