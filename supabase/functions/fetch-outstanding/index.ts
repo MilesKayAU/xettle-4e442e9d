@@ -361,6 +361,8 @@ Deno.serve(async (req) => {
           amount_due: inv.AmountDue || 0,
           total: inv.Total || 0,
           sub_total: inv.SubTotal || 0,
+          total_tax: inv.TotalTax || 0,
+          line_amount_types: inv.LineAmountTypes || null,
           currency_code: inv.CurrencyCode || 'AUD',
           status: inv.Status || null,
           fetched_at: now,
