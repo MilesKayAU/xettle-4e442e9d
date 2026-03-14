@@ -128,6 +128,8 @@ interface OutstandingRow {
   settlement_group_confidence?: 'exact' | 'high' | 'grouped' | 'explainable' | null;
   settlement_group_explanation?: string | null;
   settlement_group_tolerance_used?: number | null;
+  settlement_group_anchor_basis?: 'gross' | 'net' | 'split_part_gross' | null;
+  settlement_group_anchor_components?: string[] | null;
   bank_match_method?: string | null;
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
@@ -324,6 +326,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     explanation: string | null;
     expected_parts: 1 | 2;
     unexpected_extras: OutstandingRow[];
+    anchor_basis: string | null;
+    anchor_components: string[] | null;
   }
 
   const { settlementGroups, ungroupedRows } = useMemo(() => {
@@ -385,6 +389,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         explanation: firstRow.settlement_group_explanation ?? null,
         expected_parts: expectedParts as 1 | 2,
         unexpected_extras: unexpected,
+        anchor_basis: firstRow.settlement_group_anchor_basis ?? null,
+        anchor_components: firstRow.settlement_group_anchor_components ?? null,
       });
     }
 
@@ -2051,23 +2057,38 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          {group.matched ? (
-                            <>
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                                Matched{isSplit ? ' (split: P1+P2)' : ''}
-                                {group.confidence && group.confidence !== 'exact' ? ` · ${group.confidence}` : ''}
-                                {group.explanation ? ` (${group.explanation})` : ''}
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <AlertTriangle className="h-4 w-4 text-amber-600" />
-                              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Mismatch</span>
-                            </>
-                          )}
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1.5 cursor-help">
+                              {group.matched ? (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                                    Matched{isSplit ? ' (split: P1+P2)' : ''}
+                                    {group.confidence && group.confidence !== 'exact' ? ` · ${group.confidence}` : ''}
+                                    {group.explanation ? ` (${group.explanation})` : ''}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Mismatch</span>
+                                </>
+                              )}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-xs">
+                            <div className="text-xs space-y-1">
+                              <p><strong>Anchor basis:</strong> {group.anchor_basis || 'unknown'}</p>
+                              {group.anchor_components && (
+                                <p><strong>Components:</strong> {group.anchor_components.join(' + ')}</p>
+                              )}
+                              <p><strong>Invoice sum:</strong> {formatAUD(group.group_sum)}</p>
+                              <p><strong>Settlement anchor:</strong> {formatAUD(group.group_net)}</p>
+                              <p><strong>Diff:</strong> {formatAUD(group.group_diff)}</p>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
                       </td>
                       <td className="px-3 py-2.5"></td>
                     </tr>
