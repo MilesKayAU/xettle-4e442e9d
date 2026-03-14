@@ -38,6 +38,12 @@ const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MAX_RETRY_COUNT = 3;
 const STALE_LOCK_MINUTES = 15;
 
+// ══════════════════════════════════════════════════════════════
+// CANONICAL VERSION — must match src/utils/xero-posting-line-items.ts
+// If you change the category list below, bump this version.
+// ══════════════════════════════════════════════════════════════
+const CANONICAL_VERSION = 'v2-10cat';
+
 const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
   amazon_us: 'Amazon.com',
