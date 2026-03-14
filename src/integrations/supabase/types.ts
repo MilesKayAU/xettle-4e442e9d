@@ -120,6 +120,7 @@ export type Database = {
           fetched_at: string | null
           id: string
           reference: string | null
+          source: string
           transaction_type: string | null
           user_id: string
           xero_status: string | null
@@ -137,6 +138,7 @@ export type Database = {
           fetched_at?: string | null
           id?: string
           reference?: string | null
+          source?: string
           transaction_type?: string | null
           user_id: string
           xero_status?: string | null
@@ -154,6 +156,7 @@ export type Database = {
           fetched_at?: string | null
           id?: string
           reference?: string | null
+          source?: string
           transaction_type?: string | null
           user_id?: string
           xero_status?: string | null
