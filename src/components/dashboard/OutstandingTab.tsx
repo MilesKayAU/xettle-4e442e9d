@@ -399,6 +399,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         unexpected_extras: unexpected,
         anchor_basis: firstRow.settlement_group_anchor_basis ?? null,
         anchor_components: firstRow.settlement_group_anchor_components ?? null,
+        comparison_field: firstRow.settlement_group_comparison_field ?? null,
+        amount_due_total: firstRow.settlement_group_amount_due_total ?? null,
       });
     }
 
