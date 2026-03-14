@@ -56,10 +56,13 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
 }
 
 // ─── Paginated Xero invoice query with optional ModifiedAfter ───
+// GOVERNOR (P2): 0 retries on 429. On 429: set shared cooldown, stop immediately.
 async function queryXeroInvoicesPaginated(
   token: XeroToken,
   whereClause: string,
-  modifiedAfter?: string
+  modifiedAfter?: string,
+  supabaseAdmin?: any,
+  userId?: string,
 ): Promise<any[]> {
   const allInvoices: any[] = [];
   let page = 1;
@@ -76,19 +79,39 @@ async function queryXeroInvoicesPaginated(
       headers['If-Modified-Since'] = modifiedAfter;
     }
 
-    let resp: Response | null = null;
-    for (let attempt = 1; attempt <= 4; attempt++) {
-      resp = await fetch(url, { headers });
-      if (resp.status === 429 && attempt < 4) {
-        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
-        console.warn(`[queryXeroInvoicesPaginated] 429 on page ${page}, retrying in ${delayMs}ms (attempt ${attempt}/4)`);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        continue;
-      }
-      break;
+    const resp = await fetch(url, { headers });
+
+    // ── Audit log ──
+    if (supabaseAdmin && userId) {
+      await supabaseAdmin.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_api_call',
+        severity: resp.ok ? 'info' : (resp.status === 429 ? 'warning' : 'error'),
+        details: {
+          timestamp_utc: new Date().toISOString(),
+          function_name: 'sync-xero-status',
+          invoker: 'self',
+          endpoint: `Invoices (paginated page=${page})`,
+          attempt_number: 1,
+          governor_decision: 'allowed',
+          http_status: resp.status,
+        },
+      });
     }
 
-    if (!resp) break;
+    if (resp.status === 429) {
+      console.warn(`[queryXeroInvoicesPaginated] 429 on page ${page} — 0 retries, setting shared cooldown`);
+      if (supabaseAdmin && userId) {
+        const retryAfterSec = Math.max(60, Math.min(300, parseInt(resp.headers.get('Retry-After') || '90') || 90));
+        await supabaseAdmin.from('app_settings').upsert({
+          user_id: userId,
+          key: 'xero_api_cooldown_until',
+          value: new Date(Date.now() + retryAfterSec * 1000).toISOString(),
+        }, { onConflict: 'user_id,key' });
+      }
+      break; // Stop all pagination immediately
+    }
+
     if (resp.status === 304) break; // Not modified
     if (!resp.ok) {
       const errText = await resp.text();
@@ -105,16 +128,30 @@ async function queryXeroInvoicesPaginated(
 }
 
 // ─── Batch status check: fetch multiple invoices by ID in one call ───
+// GOVERNOR (P2): 0 retries on 429. Stop immediately on rate limit.
 async function batchVerifyInvoiceStatuses(
   token: XeroToken,
-  invoiceIds: string[]
+  invoiceIds: string[],
+  supabaseAdmin?: any,
+  userId?: string,
 ): Promise<Map<string, { status: string; total: number }>> {
   const results = new Map<string, { status: string; total: number }>();
   if (invoiceIds.length === 0) return results;
 
-  // Xero supports fetching by IDs comma-separated (max ~50 per call)
   const batchSize = 50;
   for (let i = 0; i < invoiceIds.length; i += batchSize) {
+    // ── Check shared cooldown before each batch ──
+    if (supabaseAdmin && userId) {
+      const { data: cdRow } = await supabaseAdmin
+        .from('app_settings').select('value')
+        .eq('user_id', userId).eq('key', 'xero_api_cooldown_until')
+        .maybeSingle();
+      if (cdRow?.value && new Date(cdRow.value).getTime() > Date.now()) {
+        console.log(`[batchVerifyInvoiceStatuses] GOVERNOR: cooldown active — stopping batch verify`);
+        break;
+      }
+    }
+
     const batch = invoiceIds.slice(i, i + batchSize);
     const idsParam = batch.join(',');
     const url = `https://api.xero.com/api.xro/2.0/Invoices?IDs=${idsParam}`;
@@ -126,13 +163,45 @@ async function batchVerifyInvoiceStatuses(
           'Xero-tenant-id': token.tenant_id,
         },
       });
+
+      // ── Audit log ──
+      if (supabaseAdmin && userId) {
+        await supabaseAdmin.from('system_events').insert({
+          user_id: userId,
+          event_type: 'xero_api_call',
+          severity: resp.ok ? 'info' : (resp.status === 429 ? 'warning' : 'error'),
+          details: {
+            timestamp_utc: new Date().toISOString(),
+            function_name: 'sync-xero-status',
+            invoker: 'self',
+            endpoint: `Invoices (batch verify, ${batch.length} IDs)`,
+            attempt_number: 1,
+            governor_decision: 'allowed',
+            http_status: resp.status,
+          },
+        });
+      }
+
+      if (resp.status === 429) {
+        console.warn(`[batchVerifyInvoiceStatuses] 429 — 0 retries, setting shared cooldown`);
+        if (supabaseAdmin && userId) {
+          const retryAfterSec = Math.max(60, Math.min(300, parseInt(resp.headers.get('Retry-After') || '90') || 90));
+          await supabaseAdmin.from('app_settings').upsert({
+            user_id: userId,
+            key: 'xero_api_cooldown_until',
+            value: new Date(Date.now() + retryAfterSec * 1000).toISOString(),
+          }, { onConflict: 'user_id,key' });
+        }
+        break; // Stop all batches
+      }
+
       if (resp.ok) {
         const data = await resp.json();
         for (const inv of (data.Invoices || [])) {
           results.set(inv.InvoiceID, { status: inv.Status, total: inv.Total || 0 });
         }
       } else {
-        console.error(`Batch verify failed (${resp.status}), falling back to individual`);
+        console.error(`Batch verify failed (${resp.status})`);
       }
     } catch (e) {
       console.error('Batch verify error:', e);
@@ -287,12 +356,25 @@ serve(async (req) => {
 
     // ════════════════════════════════════════════════════════════════════
     // STEP 2: Batch-verify status of all cached invoices (1-2 API calls)
+    // GOVERNOR: Check cooldown before batch verify (P2 priority)
     // ════════════════════════════════════════════════════════════════════
     let cacheVerified = 0;
     let cacheStatusChanged = 0;
+    let step2Skipped = false;
     if (cachedInvoiceIds.length > 0) {
-      const freshStatuses = await batchVerifyInvoiceStatuses(token, cachedInvoiceIds);
-      console.log(`[step-2] Batch-verified ${freshStatuses.size}/${cachedInvoiceIds.length} invoices`);
+      // Check shared cooldown first
+      const { data: cdRow } = await supabase
+        .from('app_settings').select('value')
+        .eq('user_id', userId).eq('key', 'xero_api_cooldown_until')
+        .maybeSingle();
+      const cdActive = cdRow?.value && new Date(cdRow.value).getTime() > Date.now();
+
+      if (cdActive) {
+        console.log(`[step-2] GOVERNOR: cooldown active — skipping batch verify to preserve quota for bank sync`);
+        step2Skipped = true;
+      } else {
+        const freshStatuses = await batchVerifyInvoiceStatuses(token, cachedInvoiceIds, supabase, userId);
+        console.log(`[step-2] Batch-verified ${freshStatuses.size}/${cachedInvoiceIds.length} invoices`);
 
       for (const [settlementId, cached] of cacheBySettlement.entries()) {
         if (!cached.xero_invoice_id) continue;
@@ -340,6 +422,7 @@ serve(async (req) => {
         }
       }
       console.log(`[step-2] ${cacheStatusChanged} status changes detected out of ${cacheVerified} verified`);
+      } // end else (not cooldown blocked)
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -384,18 +467,10 @@ serve(async (req) => {
 
         let outstandingInvoices: any[] = [];
         try {
-          outstandingInvoices = await queryXeroInvoicesPaginated(token, 'Type=="ACCREC"', modifiedAfter);
+          outstandingInvoices = await queryXeroInvoicesPaginated(token, 'Type=="ACCREC"', modifiedAfter, supabase, userId);
         } catch (e: any) {
-          // If rate limited, set 90-second cooldown and continue with cached data
-          if (e?.message?.includes('429') || e?.status === 429) {
-            console.warn('[step-3b] Xero 429 detected, setting 90s cooldown');
-            const cooldownExpiry = new Date(Date.now() + 90_000).toISOString();
-            await supabase.from('app_settings').upsert({
-              user_id: userId,
-              key: 'xero_api_cooldown_until',
-              value: cooldownExpiry,
-            }, { onConflict: 'user_id,key' });
-          }
+          // queryXeroInvoicesPaginated now handles 429 internally (sets cooldown, 0 retries)
+          console.warn('[step-3b] Invoice query threw:', e?.message);
         }
 
         // Also set cooldown if we got 0 invoices (likely silent 429/failure)

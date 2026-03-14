@@ -580,6 +580,22 @@ async function fetchBankTxnsForUser(
         from_wrapper_retry_logic: false,
       });
 
+      // ── Audit log to system_events ──
+      await adminSupabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_api_call',
+        severity: res.ok ? 'info' : (res.status === 429 ? 'warning' : 'error'),
+        details: {
+          timestamp_utc: requestTimestamp,
+          function_name: 'fetch-xero-bank-transactions',
+          invoker,
+          endpoint: endpointLabel,
+          attempt_number: 1,
+          governor_decision: 'allowed',
+          http_status: res.status,
+        },
+      });
+
       totalPagesFetched++;
       accountPagesFetched++;
 
@@ -592,11 +608,36 @@ async function fetchBankTxnsForUser(
           const retryAfterSec = parseRetryAfterSeconds(rawRetryAfter);
           const newCooldownUntil = new Date(Date.now() + retryAfterSec * 1000).toISOString();
 
-          await adminSupabase.from('app_settings').upsert({
-            user_id: userId,
-            key: COOLDOWN_KEY,
-            value: newCooldownUntil,
-          }, { onConflict: 'user_id,key' });
+          // Set BOTH bank-specific AND shared cooldown so ALL functions respect it
+          await Promise.all([
+            adminSupabase.from('app_settings').upsert({
+              user_id: userId,
+              key: COOLDOWN_KEY,
+              value: newCooldownUntil,
+            }, { onConflict: 'user_id,key' }),
+            adminSupabase.from('app_settings').upsert({
+              user_id: userId,
+              key: 'xero_api_cooldown_until',
+              value: newCooldownUntil,
+            }, { onConflict: 'user_id,key' }),
+            // Audit log
+            adminSupabase.from('system_events').insert({
+              user_id: userId,
+              event_type: 'xero_api_call',
+              severity: 'warning',
+              details: {
+                timestamp_utc: requestTimestamp,
+                function_name: 'fetch-xero-bank-transactions',
+                invoker,
+                endpoint: endpointLabel,
+                attempt_number: 1,
+                governor_decision: 'rate_limited',
+                http_status: 429,
+                xero_retry_after_seconds: retryAfterSec,
+                cooldown_until: newCooldownUntil,
+              },
+            }),
+          ]);
 
           // Persist any per-account checkpoints accumulated from prior accounts
           if (accountSettingsUpserts.length > 0) {
