@@ -312,13 +312,128 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     return filteredRows.reduce((sum, r) => sum + r.amount, 0);
   }, [filteredRows]);
 
+  // ─── Settlement group building (client-side) ───
+  interface SettlementGroup {
+    settlement_id: string;
+    rows: OutstandingRow[];
+    matched: boolean;
+    group_sum: number;
+    group_net: number;
+    group_diff: number;
+    confidence: string | null;
+    explanation: string | null;
+    expected_parts: 1 | 2;
+    unexpected_extras: OutstandingRow[];
+  }
+
+  const { settlementGroups, ungroupedRows } = useMemo(() => {
+    const groups = new Map<string, OutstandingRow[]>();
+    const ungrouped: OutstandingRow[] = [];
+
+    for (const row of filteredRows) {
+      if (row.settlement_id) {
+        if (!groups.has(row.settlement_id)) groups.set(row.settlement_id, []);
+        groups.get(row.settlement_id)!.push(row);
+      } else {
+        ungrouped.push(row);
+      }
+    }
+
+    const settlementGroups: SettlementGroup[] = [];
+    for (const [sid, rows] of groups) {
+      const firstRow = rows[0];
+      const isSplit = rows.some(r => r.settlement_evidence?.is_split_month);
+      const expectedParts = isSplit ? 2 : 1;
+
+      // Detect unexpected extras
+      const unexpected: OutstandingRow[] = [];
+      if (isSplit) {
+        // For splits: expect at most 2 invoices with distinct split_part values
+        const partsSeen = new Map<number | null, OutstandingRow[]>();
+        for (const r of rows) {
+          const part = r.settlement_evidence?.split_part ?? null;
+          if (!partsSeen.has(part)) partsSeen.set(part, []);
+          partsSeen.get(part)!.push(r);
+        }
+        // Flag duplicate parts or invoices beyond 2
+        for (const [part, partRows] of partsSeen) {
+          if (partRows.length > 1) {
+            unexpected.push(...partRows.slice(1));
+          }
+        }
+        if (rows.length > 2) {
+          // If more than 2 rows total and not already flagged
+          for (const r of rows.slice(2)) {
+            if (!unexpected.includes(r)) unexpected.push(r);
+          }
+        }
+      } else {
+        // Non-split: expect exactly 1 invoice
+        if (rows.length > 1) {
+          unexpected.push(...rows.slice(1));
+        }
+      }
+
+      settlementGroups.push({
+        settlement_id: sid,
+        rows,
+        matched: firstRow.settlement_group_matched === true,
+        group_sum: firstRow.settlement_group_sum ?? rows.reduce((s, r) => s + r.amount, 0),
+        group_net: firstRow.settlement_group_net ?? 0,
+        group_diff: firstRow.settlement_group_diff ?? 0,
+        confidence: firstRow.settlement_group_confidence ?? null,
+        explanation: firstRow.settlement_group_explanation ?? null,
+        expected_parts: expectedParts as 1 | 2,
+        unexpected_extras: unexpected,
+      });
+    }
+
+    return { settlementGroups, ungroupedRows: ungrouped };
+  }, [filteredRows]);
+
+  // ─── Group-level KPI counts ───
+  const groupKpis = useMemo(() => {
+    const totalGroups = settlementGroups.length;
+    const matchedGroups = settlementGroups.filter(g => g.matched).length;
+    const mismatchGroups = settlementGroups.filter(g => !g.matched).length;
+    const missingSettlement = ungroupedRows.filter(r => r.is_marketplace && r.match_status !== 'pending_enrichment').length;
+    return { totalGroups, matchedGroups, mismatchGroups, missingSettlement };
+  }, [settlementGroups, ungroupedRows]);
+
+  // ─── Pagination at group level ───
+  // Each group = 1 item, each ungrouped row = 1 item
+  const totalPaginationItems = settlementGroups.length + ungroupedRows.length;
   const [outPage, setOutPage] = useState(1);
-  const outTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
+  const outTotalPages = Math.max(1, Math.ceil(totalPaginationItems / DEFAULT_PAGE_SIZE));
   const safeOutPage = Math.min(outPage, outTotalPages);
-  const paginatedRows = useMemo(() => {
+
+  const { paginatedGroups, paginatedUngrouped } = useMemo(() => {
     const start = (safeOutPage - 1) * DEFAULT_PAGE_SIZE;
-    return filteredRows.slice(start, start + DEFAULT_PAGE_SIZE);
-  }, [filteredRows, safeOutPage]);
+    const end = start + DEFAULT_PAGE_SIZE;
+
+    // Interleave: groups first, then ungrouped
+    const allItems: Array<{ type: 'group'; group: SettlementGroup } | { type: 'row'; row: OutstandingRow }> = [
+      ...settlementGroups.map(g => ({ type: 'group' as const, group: g })),
+      ...ungroupedRows.map(r => ({ type: 'row' as const, row: r })),
+    ];
+
+    const pageSlice = allItems.slice(start, end);
+    const groups = pageSlice.filter(i => i.type === 'group').map(i => (i as { type: 'group'; group: SettlementGroup }).group);
+    const rows = pageSlice.filter(i => i.type === 'row').map(i => (i as { type: 'row'; row: OutstandingRow }).row);
+    return { paginatedGroups: groups, paginatedUngrouped: rows };
+  }, [settlementGroups, ungroupedRows, safeOutPage]);
+
+  // Collapsed state for settlement groups
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const toggleGroupCollapse = (sid: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(sid)) next.delete(sid);
+      else next.add(sid);
+      return next;
+    });
+  };
+
   useEffect(() => { setOutPage(1); }, [showNonMarketplace]);
 
   const [noXeroConnection, setNoXeroConnection] = useState(false);
