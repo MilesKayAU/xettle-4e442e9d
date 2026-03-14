@@ -379,16 +379,7 @@ Deno.serve(async (req) => {
         console.error('Xero invoice fetch failed:', xeroResult.status, xeroResult.body);
 
         xeroWasRateLimited = xeroResult.status === 429;
-
-        // Set cooldown on 429
-        if (xeroResult.status === 429) {
-          const cooldownUntil = new Date(Date.now() + 90 * 1000).toISOString();
-          await supabase.from('app_settings').upsert({
-            user_id: userId,
-            key: 'xero_api_cooldown_until',
-            value: cooldownUntil,
-          }, { onConflict: 'user_id,key' });
-        }
+        // Cooldown already set inside fetchXeroWithRetry on 429 — no duplicate here
 
         // Fall back to outstanding_invoices_cache
         const { data: cachedInvoices } = await supabase
