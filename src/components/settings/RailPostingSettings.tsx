@@ -1,5 +1,10 @@
 /**
  * RailPostingSettings — Per-rail auto-post configuration UI.
+ *
+ * Scoped by user_id (acting as org proxy — one user = one org).
+ * This is an org-level accounting workflow setting, not a personal preference.
+ * When multi-user orgs are added, this will be scoped by org_id.
+ *
  * Shows each connected marketplace rail with manual/auto toggle + bank match checkbox.
  */
 
@@ -19,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Zap, Shield, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Zap, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { PHASE_1_RAILS, isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
@@ -135,8 +140,8 @@ export default function RailPostingSettings() {
         rail,
         posting_mode: newSetting.posting_mode,
         require_bank_match: newSetting.require_bank_match,
-        auto_post_enabled_at: updates.auto_post_enabled_at || current.auto_post_enabled_at,
-        auto_post_enabled_by: updates.posting_mode === 'auto' ? userData.user.id : undefined,
+        auto_post_enabled_at: updates.auto_post_enabled_at || current.auto_post_enabled_at || null,
+        auto_post_enabled_by: updates.posting_mode === 'auto' ? userData.user.id : null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id,rail' });
 
@@ -162,15 +167,10 @@ export default function RailPostingSettings() {
   const handleRetry = async (settlementId: string) => {
     setRetrying(prev => new Set(prev).add(settlementId));
     try {
-      // Reset posting_state to null so it can be picked up again
-      await supabase
-        .from('settlements')
-        .update({ posting_state: null, posting_error: null })
-        .eq('id', settlementId);
-
-      // Trigger auto-post for this settlement
       const { data: userData } = await supabase.auth.getUser();
       if (userData?.user) {
+        // Don't reset posting_state client-side — let the edge function handle the CAS
+        // from 'failed' state directly, avoiding race conditions with batch mode
         await supabase.functions.invoke('auto-post-settlement', {
           body: { settlement_id: settlementId, user_id: userData.user.id },
         });
@@ -203,11 +203,12 @@ export default function RailPostingSettings() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
-            Rail Posting Mode
+            Organisation Posting Mode
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
             Configure how settlements are posted to Xero per marketplace rail.
             Auto-post sends validated settlements automatically — it never bypasses validation.
+            These settings apply to all users in your organisation.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -340,7 +341,7 @@ export default function RailPostingSettings() {
                 Only enable after confirming your account mappings and tax settings are correct.
               </p>
               <p className="text-xs">
-                Auto-post does not bypass any validation checks. It only removes the manual "Send to Xero" click.
+                This setting applies to your entire organisation. Auto-post does not bypass any validation checks — it only removes the manual "Send to Xero" click.
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
