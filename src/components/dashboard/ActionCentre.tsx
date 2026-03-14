@@ -194,6 +194,7 @@ export default function ActionCentre({
     const channel = supabase
       .channel('action-centre-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_validation' }, () => debouncedLoadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements' }, () => debouncedLoadData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_events' }, () => debouncedLoadData())
       .subscribe();
     return () => {
