@@ -2091,7 +2091,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                             )}
 
                             {/* Bank match action panel (5 states) */}
-                            {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || (row.match_status === 'no_bank_deposit' && isAmazon(row))) && (
+                            {(hasSuggestion || row.match_status === 'confirmed' || row.match_status === 'confirmed_manual' || row.match_status === 'settlement_matched' || row.match_status === 'awaiting_confirmation') && (
                               <div className="mb-3">
                                 {renderBankMatchPanel(row)}
                               </div>
