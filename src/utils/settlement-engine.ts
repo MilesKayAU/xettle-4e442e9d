@@ -591,6 +591,31 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
     if (!error) {
       registerAliases(settlement.settlement_id, user.id, settlement.source, meta.sourceReference);
       postInsertDuplicateCheck(settlement.settlement_id, settlement.marketplace, user.id);
+
+      // Compute and persist settlement components (deterministic anchors)
+      import('@/utils/settlement-components').then(({ upsertSettlementComponents }) => {
+        upsertSettlementComponents({
+          userId: user.id,
+          settlementId: settlement.settlement_id,
+          marketplaceCode: settlement.marketplace,
+          periodStart: settlement.period_start,
+          periodEnd: settlement.period_end,
+          salesPrincipal: settlement.sales_ex_gst,
+          salesShipping: meta.shippingExGst || 0,
+          promotionalDiscounts: 0,
+          sellerFees: Math.abs(settlement.fees_ex_gst),
+          fbaFees: 0,
+          storageFees: 0,
+          refunds: meta.refundsExGst || 0,
+          reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
+          advertisingCosts: 0,
+          otherFees: (meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0),
+          gstOnIncome: settlement.gst_on_sales,
+          gstOnExpenses: settlement.gst_on_fees,
+          bankDeposit: settlement.net_payout,
+          source: settlement.source,
+        }).catch(console.error);
+      });
     }
 
     if (error) return { success: false, error: error.message };

@@ -162,6 +162,31 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
   } as any);
   if (settError) throw settError;
 
+  // Compute and persist settlement components (deterministic anchors for matching)
+  import('@/utils/settlement-components').then(({ upsertSettlementComponents }) => {
+    upsertSettlementComponents({
+      userId: user.id,
+      settlementId: header.settlementId,
+      marketplaceCode: marketplace,
+      periodStart: header.periodStart,
+      periodEnd: header.periodEnd,
+      salesPrincipal: summary.salesPrincipal,
+      salesShipping: summary.salesShipping,
+      promotionalDiscounts: summary.promotionalDiscounts,
+      sellerFees: summary.sellerFees,
+      fbaFees: summary.fbaFees,
+      storageFees: summary.storageFees,
+      refunds: summary.refunds,
+      reimbursements: summary.reimbursements,
+      advertisingCosts: summary.advertisingCosts,
+      otherFees: summary.otherFees,
+      gstOnIncome: summary.gstOnIncome,
+      gstOnExpenses: summary.gstOnExpenses,
+      bankDeposit: summary.bankDeposit,
+      source: 'csv_upload',
+    }).catch(console.error);
+  });
+
   // Register aliases + post-insert safety check
   registerAliases(header.settlementId, user.id, 'csv_upload');
   postInsertDuplicateCheck(header.settlementId, marketplace, user.id);
