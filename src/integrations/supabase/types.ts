@@ -998,6 +998,7 @@ export type Database = {
           invoice_number: string | null
           reference: string | null
           status: string | null
+          sub_total: number | null
           total: number | null
           user_id: string
           xero_invoice_id: string
@@ -1014,6 +1015,7 @@ export type Database = {
           invoice_number?: string | null
           reference?: string | null
           status?: string | null
+          sub_total?: number | null
           total?: number | null
           user_id: string
           xero_invoice_id: string
@@ -1030,6 +1032,7 @@ export type Database = {
           invoice_number?: string | null
           reference?: string | null
           status?: string | null
+          sub_total?: number | null
           total?: number | null
           user_id?: string
           xero_invoice_id?: string
@@ -1264,6 +1267,99 @@ export type Database = {
           note?: string
           resolved?: boolean | null
           resolved_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      settlement_components: {
+        Row: {
+          advertising_costs: number | null
+          commerce_gross_total: number | null
+          created_at: string | null
+          currency: string
+          fees_ex_tax: number | null
+          fees_tax: number | null
+          gst_rate: number | null
+          id: string
+          marketplace_code: string
+          other_adjustments: number | null
+          payout_gst_inclusive: number | null
+          payout_total: number | null
+          payout_vs_deposit_diff: number | null
+          period_end: string
+          period_start: string
+          promotional_discounts: number | null
+          reconciled: boolean | null
+          refunds_ex_tax: number | null
+          refunds_tax: number | null
+          reimbursements: number | null
+          sales_ex_tax: number | null
+          sales_tax: number | null
+          settlement_id: string
+          source: string | null
+          storage_fees: number | null
+          tax_collected_by_platform: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          advertising_costs?: number | null
+          commerce_gross_total?: number | null
+          created_at?: string | null
+          currency?: string
+          fees_ex_tax?: number | null
+          fees_tax?: number | null
+          gst_rate?: number | null
+          id?: string
+          marketplace_code: string
+          other_adjustments?: number | null
+          payout_gst_inclusive?: number | null
+          payout_total?: number | null
+          payout_vs_deposit_diff?: number | null
+          period_end: string
+          period_start: string
+          promotional_discounts?: number | null
+          reconciled?: boolean | null
+          refunds_ex_tax?: number | null
+          refunds_tax?: number | null
+          reimbursements?: number | null
+          sales_ex_tax?: number | null
+          sales_tax?: number | null
+          settlement_id: string
+          source?: string | null
+          storage_fees?: number | null
+          tax_collected_by_platform?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          advertising_costs?: number | null
+          commerce_gross_total?: number | null
+          created_at?: string | null
+          currency?: string
+          fees_ex_tax?: number | null
+          fees_tax?: number | null
+          gst_rate?: number | null
+          id?: string
+          marketplace_code?: string
+          other_adjustments?: number | null
+          payout_gst_inclusive?: number | null
+          payout_total?: number | null
+          payout_vs_deposit_diff?: number | null
+          period_end?: string
+          period_start?: string
+          promotional_discounts?: number | null
+          reconciled?: boolean | null
+          refunds_ex_tax?: number | null
+          refunds_tax?: number | null
+          reimbursements?: number | null
+          sales_ex_tax?: number | null
+          sales_tax?: number | null
+          settlement_id?: string
+          source?: string | null
+          storage_fees?: number | null
+          tax_collected_by_platform?: number | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
