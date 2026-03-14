@@ -162,6 +162,31 @@ async function loadUserAccountCodes(): Promise<(category: string, marketplace?: 
 }
 
 /**
+ * Load raw user account codes as a flat Record<string, string>.
+ * Used by the canonical builder's createAccountCodeResolver.
+ */
+async function loadUserAccountCodesRaw(): Promise<Record<string, string> | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data: acSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', user.id)
+      .eq('key', 'accounting_xero_account_codes')
+      .maybeSingle();
+
+    if (acSetting?.value) {
+      return JSON.parse(acSetting.value);
+    }
+  } catch (e) {
+    console.error('Failed to load user account codes raw:', e);
+  }
+  return null;
+}
+
+/**
  * Build standard 2-line Xero invoice from a StandardSettlement.
  * Line 1: Marketplace Sales (Account 200, GST on Income)
  * Line 2: Marketplace Fees (Account 407, GST on Expenses)
@@ -804,30 +829,15 @@ export async function syncSettlementToXero(
     const label = MARKETPLACE_LABELS[marketplace] || marketplace;
     const description = `${label} Settlement ${periodLabel}`;
 
-    // Build line items (use provided or default 2-line with user account code overrides)
-    let lineItems = options?.lineItems;
-    if (!lineItems) {
-      const getCode = await loadUserAccountCodes();
-      lineItems = [
-        {
-          Description: 'Marketplace Sales',
-          AccountCode: getCode('Sales'),
-          TaxType: 'OUTPUT',
-          UnitAmount: Math.round(s.sales_principal * 100) / 100,
-          Quantity: 1,
-        },
-        {
-          Description: 'Marketplace Commission',
-          AccountCode: getCode('Seller Fees'),
-          TaxType: 'INPUT',
-          UnitAmount: -Math.abs(Math.round(s.seller_fees * 100) / 100),
-          Quantity: 1,
-        },
-      ];
-    }
+    // Build line items using canonical 10-category builder (always, ignoring options.lineItems)
+    const { buildPostingLineItems, createAccountCodeResolver, buildAuditCsvContent, hashCsvContent, CANONICAL_VERSION } = await import('@/utils/xero-posting-line-items');
+    const getCode = await loadUserAccountCodes();
+    const resolver = createAccountCodeResolver(await loadUserAccountCodesRaw());
+    const mpLabel = MARKETPLACE_LABELS[marketplace] || marketplace;
+    let lineItems = buildPostingLineItems(s, resolver, mpLabel);
 
     // Zero-amount guard: filter out lines with UnitAmount === 0
-    lineItems = lineItems.filter((li: XeroLineItem) => Math.round(li.UnitAmount * 100) !== 0);
+    lineItems = lineItems.filter((li) => Math.round(li.UnitAmount * 100) !== 0);
 
     // If all lines are zero, skip the push and log event
     if (lineItems.length === 0) {
@@ -845,6 +855,27 @@ export async function syncSettlementToXero(
     // Calculate net amount for negative settlement detection (ACCPAY vs ACCREC)
     const netAmount = (s.bank_deposit || 0);
 
+    // Build settlementData for CSV attachment (always pass it)
+    const settlementData = {
+      settlement_id: s.settlement_id,
+      period_start: s.period_start,
+      period_end: s.period_end,
+      marketplace: s.marketplace || marketplace,
+      net_ex_gst: s.net_ex_gst,
+      sales_principal: s.sales_principal || 0,
+      sales_shipping: s.sales_shipping || 0,
+      refunds: s.refunds || 0,
+      reimbursements: s.reimbursements || 0,
+      seller_fees: s.seller_fees || 0,
+      fba_fees: s.fba_fees || 0,
+      storage_fees: s.storage_fees || 0,
+      advertising_costs: s.advertising_costs || 0,
+      other_fees: s.other_fees || 0,
+      promotional_discounts: s.promotional_discounts || 0,
+      bank_deposit: s.bank_deposit || 0,
+      status: s.status || 'pushed',
+    };
+
     const { data: result, error: fnErr } = await supabase.functions.invoke('sync-settlement-to-xero', {
       body: {
         userId: user.id,
@@ -856,6 +887,7 @@ export async function syncSettlementToXero(
         lineItems,
         contactName,
         netAmount,
+        settlementData,
       },
     });
 

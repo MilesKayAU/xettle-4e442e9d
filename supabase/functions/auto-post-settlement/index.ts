@@ -38,6 +38,12 @@ const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MAX_RETRY_COUNT = 3;
 const STALE_LOCK_MINUTES = 15;
 
+// ══════════════════════════════════════════════════════════════
+// CANONICAL VERSION — must match src/utils/xero-posting-line-items.ts
+// If you change the category list below, bump this version.
+// ══════════════════════════════════════════════════════════════
+const CANONICAL_VERSION = 'v2-10cat';
+
 const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
   amazon_us: 'Amazon.com',
@@ -56,7 +62,7 @@ const MARKETPLACE_CONTACTS: Record<string, string> = {
 
 /** Categories that MUST have explicit user mappings for auto-post */
 const REQUIRED_MAPPING_CATEGORIES = [
-  'Sales', 'Refunds', 'Seller Fees', 'FBA Fees', 'Other Fees',
+  'Sales (Principal)', 'Refunds', 'Seller Fees', 'FBA Fees', 'Other Fees',
 ];
 
 function round2(n: number): number {
@@ -349,15 +355,31 @@ async function processSettlement(
 
   // Determine which categories have non-zero amounts and thus require mappings
   const contactName = MARKETPLACE_CONTACTS[marketplace] || marketplace;
+  // ══════════════════════════════════════════════════════════════
+  // 10-CATEGORY BREAKDOWN — Canonical source: src/utils/xero-posting-line-items.ts
+  // If you change this list, bump CANONICAL_VERSION above.
+  //
+  //   Sales (Principal)     sales_principal        OUTPUT        as_is
+  //   Shipping Revenue      sales_shipping         OUTPUT        as_is
+  //   Promotional Discounts promotional_discounts  OUTPUT        as_is
+  //   Refunds               refunds                OUTPUT        as_is
+  //   Reimbursements        reimbursements         BASEXCLUDED   as_is
+  //   Seller Fees           seller_fees            INPUT         negate_abs
+  //   FBA Fees              fba_fees               INPUT         negate_abs
+  //   Storage Fees          storage_fees           INPUT         negate_abs
+  //   Advertising           advertising_costs      INPUT         negate_abs
+  //   Other Fees            other_fees             INPUT         negate_abs
+  // ══════════════════════════════════════════════════════════════
   const categoryAmounts: Record<string, number> = {
-    'Sales': round2((settlement.sales_principal || 0) + (settlement.sales_shipping || 0)),
+    'Sales (Principal)': round2(settlement.sales_principal || 0),
+    'Shipping Revenue': round2(settlement.sales_shipping || 0),
     'Promotional Discounts': round2(settlement.promotional_discounts || 0),
     'Refunds': round2(settlement.refunds || 0),
     'Reimbursements': round2(settlement.reimbursements || 0),
     'Seller Fees': -Math.abs(round2(settlement.seller_fees || 0)),
     'FBA Fees': -Math.abs(round2(settlement.fba_fees || 0)),
     'Storage Fees': -Math.abs(round2(settlement.storage_fees || 0)),
-    'Advertising Costs': -Math.abs(round2(settlement.advertising_costs || 0)),
+    'Advertising': -Math.abs(round2(settlement.advertising_costs || 0)),
     'Other Fees': -Math.abs(round2(settlement.other_fees || 0)),
   };
 
@@ -460,16 +482,17 @@ async function processSettlement(
     const netAmount = settlement.bank_deposit || settlement.net_ex_gst || 0;
     const description = `${contactName} Settlement ${settlement.period_start} → ${settlement.period_end}`;
 
-    // Build line items using ONLY user-configured mappings (no hardcoded fallbacks)
+    // Tax types per category — mirrors POSTING_CATEGORIES from canonical source
     const categoryTaxTypes: Record<string, string> = {
-      'Sales': 'OUTPUT',
+      'Sales (Principal)': 'OUTPUT',
+      'Shipping Revenue': 'OUTPUT',
       'Promotional Discounts': 'OUTPUT',
       'Refunds': 'OUTPUT',
       'Reimbursements': 'BASEXCLUDED',
       'Seller Fees': 'INPUT',
       'FBA Fees': 'INPUT',
       'Storage Fees': 'INPUT',
-      'Advertising Costs': 'INPUT',
+      'Advertising': 'INPUT',
       'Other Fees': 'INPUT',
     };
 
@@ -604,6 +627,7 @@ async function processSettlement(
       },
       resolved_mappings: resolvedMappings,
       retry_count: newRetryCount,
+      canonical_version: CANONICAL_VERSION,
     };
 
     // Log success

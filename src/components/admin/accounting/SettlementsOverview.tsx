@@ -11,7 +11,7 @@ import { Upload, Send, Loader2, CheckCircle2, AlertTriangle, Clock, Circle } fro
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import type { UserMarketplace } from './MarketplaceSwitcher';
-import { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
+import { syncSettlementToXero, syncXeroStatus, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 
 interface SettlementsOverviewProps {
@@ -165,27 +165,8 @@ export default function SettlementsOverview({
 
       let ok = 0, fail = 0;
       for (const s of unsent) {
-        const std: StandardSettlement = {
-          marketplace: s.marketplace || code,
-          settlement_id: s.settlement_id,
-          period_start: s.period_start,
-          period_end: s.period_end,
-          sales_ex_gst: s.sales_principal || 0,
-          gst_on_sales: s.gst_on_income || 0,
-          fees_ex_gst: s.seller_fees || 0,
-          gst_on_fees: s.gst_on_expenses || 0,
-          net_payout: s.bank_deposit || 0,
-          source: 'csv_upload',
-          reconciles: true,
-          metadata: {
-            refundsExGst: s.refunds || 0,
-            shippingExGst: s.sales_shipping || 0,
-            subscriptionAmount: (s.other_fees && s.other_fees < 0) ? 0 : (s.other_fees || 0),
-            refundCommissionExGst: s.reimbursements || 0,
-          },
-        };
-        const lineItems = await buildSimpleInvoiceLines(std);
-        const result = await syncSettlementToXero(s.settlement_id, s.marketplace || code, { lineItems });
+        // syncSettlementToXero now builds canonical 10-category lines internally
+        const result = await syncSettlementToXero(s.settlement_id, s.marketplace || code);
         if (result.success) ok++;
         else fail++;
       }

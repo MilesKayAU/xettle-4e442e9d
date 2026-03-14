@@ -32,9 +32,11 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import {
   formatAUD, MARKETPLACE_LABELS, MARKETPLACE_CONTACTS,
-  buildSimpleInvoiceLines, type XeroLineItem,
 } from '@/utils/settlement-engine';
-import { XERO_ACCOUNT_MAP } from '@/utils/settlement-parser';
+import {
+  buildPostingLineItems, toLineItemPreviews, createAccountCodeResolver,
+  type SettlementForPosting,
+} from '@/utils/xero-posting-line-items';
 import { cn } from '@/lib/utils';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -186,8 +188,11 @@ export default function PushSafetyPreview({
           reconciliation_status: s.reconciliation_status,
         };
 
-        // Build line items for display
-        const lineItems = buildLineItemsFromSettlement(settlement);
+        // Build line items for display using canonical builder
+        const resolver = createAccountCodeResolver(userCodes);
+        const mpLabel = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
+        const xeroLines = buildPostingLineItems(settlement as SettlementForPosting, resolver, mpLabel);
+        const lineItems = toLineItemPreviews(xeroLines);
 
         // Build validation checks (now with CoA awareness)
         const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes);
@@ -425,25 +430,8 @@ function SettlementPreviewCard({ preview, index, total }: {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function buildLineItemsFromSettlement(s: SettlementPreview): LineItemPreview[] {
-  const items: LineItemPreview[] = [];
-  const add = (desc: string, amount: number, code: string, tax: string) => {
-    if (Math.abs(amount) >= 0.01) {
-      items.push({ description: desc, amount: Math.round(amount * 100) / 100, accountCode: code, taxType: tax });
-    }
-  };
-
-  add('Sales', (s.sales_principal || 0) + (s.sales_shipping || 0), '200', 'OUTPUT');
-  add('Refunds', s.refunds || 0, '205', 'OUTPUT');
-  add('Seller Fees', s.seller_fees || 0, '407', 'INPUT');
-  add('FBA Fees', s.fba_fees || 0, '408', 'INPUT');
-  add('Storage Fees', s.storage_fees || 0, '409', 'INPUT');
-  add('Advertising', s.advertising_costs || 0, '410', 'INPUT');
-  add('Other Fees', s.other_fees || 0, '405', 'INPUT');
-  add('Reimbursements', s.reimbursements || 0, '271', 'BASEXCLUDED');
-
-  return items;
-}
+// buildLineItemsFromSettlement — replaced by canonical builder (xero-posting-line-items.ts)
+// Kept as a no-op reference; actual building now happens in loadPreviews() above.
 
 function buildValidationChecks(
   s: SettlementPreview,

@@ -20,7 +20,6 @@ import {
   deleteSettlement,
   formatSettlementDate,
   formatAUD,
-  buildSimpleInvoiceLines,
 } from '@/utils/settlement-engine';
 import { runUniversalReconciliation, type UniversalReconciliationResult } from '@/utils/universal-reconciliation';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
@@ -461,9 +460,8 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     }
 
     setPushing(true);
-    // Build proper invoice lines including refunds
-    const lineItems = dataToCheck ? await buildSimpleInvoiceLines(dataToCheck) : undefined;
-    const result = await syncSettlementToXero(targetId, 'bunnings', lineItems ? { lineItems } : undefined);
+    // syncSettlementToXero now builds canonical 10-category lines internally
+    const result = await syncSettlementToXero(targetId, 'bunnings');
     if (result.success) {
       clearParsedStorage();
       toast.success('Invoice created in Xero!');

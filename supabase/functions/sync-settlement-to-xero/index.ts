@@ -67,45 +67,72 @@ interface InvoiceRequest {
   journalIds?: string[];
 }
 
-// ─── Audit CSV Attachment Helper ──────────────────────────────────────
-function buildSettlementCsv(data: Record<string, any>): string {
+// ─── Canonical Version (must match src/utils/xero-posting-line-items.ts) ──
+const CANONICAL_VERSION = 'v2-10cat';
+
+// ─── Multi-Row Audit CSV Attachment Helper ──────────────────────────────
+// Mirrors buildAuditCsvContent from src/utils/xero-posting-line-items.ts
+function buildSettlementCsv(data: Record<string, any>, lineItems: InvoiceLineItem[]): string {
   const headers = [
     'settlement_id', 'period_start', 'period_end', 'marketplace',
-    'net_amount', 'sales', 'refunds', 'reimbursements', 'seller_fees',
-    'fba_fees', 'storage_fees', 'advertising_costs', 'other_fees',
-    'promotional_discounts', 'bank_deposit', 'status'
+    'category', 'amount_ex_gst', 'gst_amount', 'amount_inc_gst',
+    'account_code', 'tax_type',
   ];
 
-  const row = [
-    data.settlement_id || '',
-    data.period_start || '',
-    data.period_end || '',
-    data.marketplace || '',
-    data.net_ex_gst ?? data.net_amount ?? '',
-    (data.sales_principal || 0) + (data.sales_shipping || 0),
-    data.refunds || 0,
-    data.reimbursements || 0,
-    data.seller_fees || 0,
-    data.fba_fees || 0,
-    data.storage_fees || 0,
-    data.advertising_costs || 0,
-    data.other_fees || 0,
-    data.promotional_discounts || 0,
-    data.bank_deposit || 0,
-    data.status || 'pushed',
-  ];
+  const sid = data.settlement_id || '';
+  const ps = data.period_start || '';
+  const pe = data.period_end || '';
+  const mp = data.marketplace || '';
 
-  return headers.join(',') + '\n' + row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',') + '\n';
+  const rows: string[] = [headers.join(',')];
+  let totalExGst = 0;
+  let totalGst = 0;
+
+  for (const li of lineItems) {
+    const exGst = Math.round(li.UnitAmount * 100) / 100;
+    const gstRate = li.TaxType === 'BASEXCLUDED' ? 0 : 0.1;
+    const gstAmount = Math.round(exGst * gstRate * 100) / 100;
+    const incGst = Math.round((exGst + gstAmount) * 100) / 100;
+
+    totalExGst += exGst;
+    totalGst += gstAmount;
+
+    rows.push(
+      [sid, ps, pe, mp, li.Description, exGst, gstAmount, incGst, li.AccountCode, li.TaxType]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    );
+  }
+
+  const totalInc = Math.round((totalExGst + totalGst) * 100) / 100;
+  rows.push(
+    [sid, ps, pe, mp, 'TOTAL', Math.round(totalExGst * 100) / 100, Math.round(totalGst * 100) / 100, totalInc, '', '']
+      .map(v => `"${String(v).replace(/"/g, '""')}"`)
+      .join(',')
+  );
+
+  return rows.join('\n') + '\n';
+}
+
+// Simple hash for CSV immutability verification
+function hashCsv(csv: string): string {
+  let hash = 5381;
+  for (let i = 0; i < csv.length; i++) {
+    hash = ((hash << 5) + hash + csv.charCodeAt(i)) & 0xFFFFFFFF;
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 async function attachSettlementToXero(
   token: XeroToken,
   xeroInvoiceId: string,
   settlementData: Record<string, any>,
+  lineItems: InvoiceLineItem[],
   filename: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; csvHash?: string }> {
   try {
-    const csvContent = buildSettlementCsv(settlementData);
+    const csvContent = buildSettlementCsv(settlementData, lineItems);
+    const csvHashValue = hashCsv(csvContent);
     const encoder = new TextEncoder();
     const csvBytes = encoder.encode(csvContent);
 
@@ -129,7 +156,7 @@ async function attachSettlementToXero(
     }
 
     console.log('CSV attached successfully to invoice:', xeroInvoiceId);
-    return { success: true };
+    return { success: true, csvHash: csvHashValue };
   } catch (err: any) {
     console.error('Attachment failed (non-fatal):', err.message);
     return { success: false, error: err.message };
@@ -956,22 +983,39 @@ serve(async (req) => {
       },
     });
 
-    // ─── Attach audit CSV (non-blocking) ──────────────────────────
-    let attachmentResult: { success: boolean; error?: string } | null = null;
-    if (invoiceId && body.settlementData) {
+    // ─── Attach audit CSV (REQUIRED — fail if missing or upload fails) ──
+    let attachmentResult: { success: boolean; error?: string; csvHash?: string } | null = null;
+    if (!body.settlementData) {
+      // Enforcement: settlementData is required for attachment
+      console.error('Missing settlementData — attachment cannot be created');
+      // We already created the invoice, so we log the error but still return success
+      // with a warning. The invoice exists in Xero but without attachment.
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_csv_attachment',
+        severity: 'warning',
+        settlement_id: body.settlementData?.settlement_id || reference?.replace('Xettle-', '') || null,
+        marketplace_code: body.settlementData?.marketplace || null,
+        details: {
+          xero_invoice_id: invoiceId,
+          error: 'missing_attachment_data',
+          canonical_version: CANONICAL_VERSION,
+        },
+      });
+    } else if (invoiceId) {
       try {
         const sd = body.settlementData;
         const mp = (sd.marketplace || 'unknown').replace(/_/g, '-');
         const periodLabel = `${(sd.period_start || '').slice(0, 7)}`;
         const sid = sd.settlement_id || reference?.replace('Xettle-', '') || 'unknown';
         const filename = `xettle-${mp}-${periodLabel}-${sid}.csv`;
-        attachmentResult = await attachSettlementToXero(token, invoiceId, sd, filename);
+        attachmentResult = await attachSettlementToXero(token, invoiceId, sd, lineItems, filename);
 
         // Log attachment result to system_events
         await supabase.from('system_events').insert({
           user_id: userId,
           event_type: 'xero_csv_attachment',
-          severity: attachmentResult.success ? 'info' : 'warning',
+          severity: attachmentResult.success ? 'info' : 'error',
           settlement_id: sd.settlement_id || null,
           marketplace_code: sd.marketplace || null,
           details: {
@@ -979,11 +1023,56 @@ serve(async (req) => {
             filename,
             success: attachmentResult.success,
             error: attachmentResult.error || null,
+            csv_hash: attachmentResult.csvHash || null,
+            canonical_version: CANONICAL_VERSION,
           },
         });
+
+        // If attachment upload failed, return error (invoice exists but attachment missing)
+        if (!attachmentResult.success) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'xero_attachment_failed',
+            invoiceId,
+            invoiceNumber,
+            message: `Invoice created in Xero but CSV attachment upload failed: ${attachmentResult.error}`,
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       } catch (attachErr: any) {
-        console.error('Attachment logging failed (non-fatal):', attachErr.message);
+        console.error('Attachment failed:', attachErr.message);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'xero_attachment_failed',
+          invoiceId,
+          invoiceNumber,
+          message: `Invoice created but attachment failed: ${attachErr.message}`,
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
+    }
+
+    // Update xero_push_success event with csv_hash and attachment info
+    // (The event was already written above, so we update it)
+    if (attachmentResult?.csvHash) {
+      // Re-insert a supplementary event with CSV hash
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_push_success',
+        severity: 'info',
+        settlement_id: body.settlementData?.settlement_id || reference?.replace('Xettle-', '') || null,
+        marketplace_code: body.settlementData?.marketplace || null,
+        details: {
+          ...pushEventDetails,
+          csv_hash: attachmentResult.csvHash,
+          attachment_filename: `xettle-${(body.settlementData?.marketplace || 'unknown').replace(/_/g, '-')}-${(body.settlementData?.period_start || '').slice(0, 7)}-${body.settlementData?.settlement_id || 'unknown'}.csv`,
+          canonical_version: CANONICAL_VERSION,
+        },
+      });
     }
 
     return new Response(JSON.stringify({
