@@ -958,6 +958,8 @@ Deno.serve(async (req) => {
     function getGroupAnchor(settlement: any, part: number | null): {
       net: number;
       method: string;
+      basis: 'gross' | 'net' | 'split_part_gross';
+      components: string[];
       fees: number;
       refunds: number;
       gstOnIncome: number;
@@ -974,6 +976,8 @@ Deno.serve(async (req) => {
           return {
             net: partNet,
             method: 'split_part_anchor',
+            basis: 'split_part_gross',
+            components: [`split_month_${part}_data.grossTotal`],
             fees: Math.abs(Number(splitData?.sellerFees ?? 0))
               + Math.abs(Number(splitData?.fbaFees ?? 0))
               + Math.abs(Number(splitData?.storageFees ?? 0))
@@ -986,11 +990,13 @@ Deno.serve(async (req) => {
         }
         // Split data missing/invalid — fall through to parent settlement anchor
       }
-      // Non-split or fallback: use parent settlement values with payout anchor
-      const basis = getInvoiceBasisNet(settlement);
+      // Non-split or fallback: use parent settlement values with basis-correct anchor
+      const basisResult = getInvoiceBasisNet(settlement);
       return {
-        net: basis.anchor,
-        method: basis.method,
+        net: basisResult.anchor,
+        method: basisResult.method,
+        basis: basisResult.basis,
+        components: basisResult.components,
         fees: Math.abs(settlement.seller_fees ?? 0)
           + Math.abs(settlement.fba_fees ?? 0)
           + Math.abs(settlement.storage_fees ?? 0)
