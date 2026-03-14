@@ -130,7 +130,7 @@ async function attachSettlementToXero(
   filename: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const csvContent = buildSettlementCsv(settlementData);
+    const csvContent = buildSettlementCsv(settlementData, lineItems);
     const encoder = new TextEncoder();
     const csvBytes = encoder.encode(csvContent);
 
