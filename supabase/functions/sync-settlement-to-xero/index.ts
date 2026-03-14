@@ -127,10 +127,12 @@ async function attachSettlementToXero(
   token: XeroToken,
   xeroInvoiceId: string,
   settlementData: Record<string, any>,
+  lineItems: InvoiceLineItem[],
   filename: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; csvHash?: string }> {
   try {
     const csvContent = buildSettlementCsv(settlementData, lineItems);
+    const csvHashValue = hashCsv(csvContent);
     const encoder = new TextEncoder();
     const csvBytes = encoder.encode(csvContent);
 
