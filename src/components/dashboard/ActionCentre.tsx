@@ -542,6 +542,35 @@ export default function ActionCentre({
             </Card>
           )}
 
+          {/* Card 2c — Auto-post failed */}
+          {autoPostFailed.length > 0 && (
+            <Card className="border-destructive/30 bg-destructive/5">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <h3 className="font-semibold text-sm">Auto-post Failed</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {autoPostFailed.length} settlement{autoPostFailed.length > 1 ? 's' : ''} failed to auto-post.
+                </p>
+                <ul className="space-y-1">
+                  {autoPostFailed.slice(0, 3).map(s => (
+                    <li key={s.id} className="text-xs flex items-center gap-1.5">
+                      <span className="text-destructive">•</span>
+                      {MARKETPLACE_LABELS[s.marketplace || ''] || s.marketplace} — {formatPeriodShort(s.period_start, s.period_end)}
+                    </li>
+                  ))}
+                  {autoPostFailed.length > 3 && (
+                    <li className="text-xs text-muted-foreground">+ {autoPostFailed.length - 3} more</li>
+                  )}
+                </ul>
+                <p className="text-[10px] text-muted-foreground">
+                  Review and retry in Settings → Rail Posting Mode
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Card 3 — Posted — Awaiting Deposit */}
           {awaitingBank.length > 0 && (() => {
             const grouped = groupByMarketplaceMonth(awaitingBank);
