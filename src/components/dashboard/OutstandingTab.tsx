@@ -1253,6 +1253,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     if (row.match_status === 'settlement_matched') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'balanced' || row.match_status === 'confirmed') return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (row.match_status === 'confirmed_manual') return <CheckCircle2 className="h-4 w-4 text-blue-600" />;
+    if (row.match_status === 'settlement_mismatch') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'awaiting_confirmation') return <Clock3 className="h-4 w-4 text-amber-500" />;
     if (row.match_status === 'suggestion_high' || row.match_status === 'suggestion_multiple') return <AlertTriangle className="h-4 w-4 text-amber-600" />;
     if (row.match_status === 'unsupported_marketplace') return <AlertTriangle className="h-4 w-4 text-muted-foreground" />;
