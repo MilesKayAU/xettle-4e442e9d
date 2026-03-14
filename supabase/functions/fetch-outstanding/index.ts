@@ -1415,6 +1415,27 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ─── Split consistency diagnostic ───
+    // For every is_split_month settlement, verify: abs(gross1 + gross2 - bank_deposit) <= 0.10
+    const splitDiagnostics: { settlement_id: string; bank_deposit: number; gross1: number | null; gross2: number | null; drift: number; ok: boolean }[] = [];
+    for (const s of allSettlements) {
+      if (!s.is_split_month) continue;
+      const gross1 = getInvoiceBasisNetPart(s, 1);
+      const gross2 = getInvoiceBasisNetPart(s, 2);
+      const bankDep = Math.abs(s.bank_deposit ?? 0);
+      if (gross1 !== null && gross2 !== null) {
+        const drift = Math.round(Math.abs((gross1 + gross2) - bankDep) * 100) / 100;
+        splitDiagnostics.push({
+          settlement_id: s.settlement_id,
+          bank_deposit: bankDep,
+          gross1,
+          gross2,
+          drift,
+          ok: drift <= 0.10,
+        });
+      }
+    }
+
     // ─── Structured diagnostics log ───
     const bankDates = bankTxns.map((t: any) => parseXeroDate(t.Date)).filter(Boolean).sort();
     const syncInfo = {
@@ -1452,6 +1473,9 @@ Deno.serve(async (req) => {
       bank_sync_last_success_at: bankSyncLastSuccessAt,
       bank_sync_cooldown_until: bankSyncCooldownUntil,
       bank_sync_cooldown_seconds_remaining: bankSyncCooldownSecondsRemaining,
+      // Split-month consistency diagnostics
+      split_settlement_checks: splitDiagnostics.length > 0 ? splitDiagnostics : undefined,
+      split_settlement_drift_detected: splitDiagnostics.some(d => !d.ok),
     };
 
     console.log(JSON.stringify({
