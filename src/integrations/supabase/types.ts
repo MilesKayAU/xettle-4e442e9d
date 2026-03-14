@@ -1616,6 +1616,7 @@ export type Database = {
           period_end: string
           period_start: string
           posted_at: string | null
+          posting_claimed_at: string | null
           posting_error: string | null
           posting_state: string | null
           promotional_discounts: number | null
@@ -1679,6 +1680,7 @@ export type Database = {
           period_end: string
           period_start: string
           posted_at?: string | null
+          posting_claimed_at?: string | null
           posting_error?: string | null
           posting_state?: string | null
           promotional_discounts?: number | null
@@ -1742,6 +1744,7 @@ export type Database = {
           period_end?: string
           period_start?: string
           posted_at?: string | null
+          posting_claimed_at?: string | null
           posting_error?: string | null
           posting_state?: string | null
           promotional_discounts?: number | null
