@@ -274,6 +274,8 @@ async function fetchBankTxnsForUser(
         stopped_reason: 'cooldown',
         xero_rate_limited: false,
         cooldown_applied: true,
+        cooldown_key_used: COOLDOWN_KEY,
+        cooldown_active: true,
         live_xero_call_attempted: false,
         live_xero_429_received: false,
         recent_success_guard_applied: false,
@@ -288,6 +290,7 @@ async function fetchBankTxnsForUser(
         invoice_range_days: null,
         mapped_account_ids_count: mappedAccountIds.size,
         has_any_mapping: hasAnyMapping,
+        ...buildRequestAudit(),
       };
     }
   }
