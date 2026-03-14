@@ -627,6 +627,7 @@ async function processSettlement(
       },
       resolved_mappings: resolvedMappings,
       retry_count: newRetryCount,
+      canonical_version: CANONICAL_VERSION,
     };
 
     // Log success
