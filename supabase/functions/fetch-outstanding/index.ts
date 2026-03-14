@@ -399,6 +399,7 @@ Deno.serve(async (req) => {
             DueDate: c.due_date || null,
             AmountDue: Number(c.amount_due || 0),
             Total: Number(c.total || 0),
+            SubTotal: Number(c.sub_total || 0),
             CurrencyCode: c.currency_code || 'AUD',
             Status: c.status,
           }));
