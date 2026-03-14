@@ -2099,9 +2099,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                               {group.anchor_components && (
                                 <p><strong>Components:</strong> {group.anchor_components.join(' + ')}</p>
                               )}
-                              <p><strong>Invoice sum:</strong> {formatAUD(group.group_sum)}</p>
+                              {group.comparison_field && (
+                                <p><strong>Comparison field:</strong> {group.comparison_field}</p>
+                              )}
+                              <p><strong>Invoice sum ({group.comparison_field === 'SubTotal' ? 'SubTotal' : 'AmountDue'}):</strong> {formatAUD(group.group_sum)}</p>
+                              {group.amount_due_total != null && group.comparison_field === 'SubTotal' && (
+                                <p><strong>AmountDue total:</strong> {formatAUD(group.amount_due_total)}</p>
+                              )}
                               <p><strong>Settlement anchor:</strong> {formatAUD(group.group_net)}</p>
                               <p><strong>Diff:</strong> {formatAUD(group.group_diff)}</p>
+                              {group.rows[0]?.line_amount_types && (
+                                <p><strong>Tax type:</strong> {group.rows[0].line_amount_types}</p>
+                              )}
                             </div>
                           </TooltipContent>
                         </Tooltip>
