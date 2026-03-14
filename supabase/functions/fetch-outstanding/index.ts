@@ -454,6 +454,7 @@ Deno.serve(async (req) => {
             DueDate: null,
             AmountDue: Math.abs(Number(m.matched_amount || 0)),
             Total: Math.abs(Number(m.matched_amount || 0)),
+            SubTotal: 0,
             CurrencyCode: 'AUD',
           }));
           console.log(`[fetch-outstanding] Last-resort fallback from xero_accounting_matches: ${allInvoices.length} invoices`);
