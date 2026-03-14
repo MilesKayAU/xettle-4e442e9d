@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { syncSettlementToXero, syncXeroStatus, buildSimpleInvoiceLines, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
+import { syncSettlementToXero, syncXeroStatus, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
 import { type UserMarketplace, MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 
 interface MonthlyReconciliationStatusProps {
