@@ -1415,9 +1415,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── Split consistency diagnostic ───
-    // For every is_split_month settlement, verify: abs(gross1 + gross2 - bank_deposit) <= 0.10
-    const splitDiagnostics: { settlement_id: string; bank_deposit: number; gross1: number | null; gross2: number | null; drift: number; ok: boolean }[] = [];
+    // ─── Split consistency diagnostic (bounded) ───
+    // Verify: abs(gross1 + gross2 - bank_deposit) <= 0.10 for split settlements.
+    // Only emit failed checks + a small sample of passing checks to keep payload lightweight.
+    const splitChecksTotal = allSettlements.filter(s => s.is_split_month).length;
+    let splitChecksFailed = 0;
+    const failedChecks: { settlement_id: string; bank_deposit: number; gross1: number | null; gross2: number | null; drift: number }[] = [];
+    const sampledOkChecks: { settlement_id: string; drift: number }[] = [];
+    const SAMPLE_OK_LIMIT = 5;
+
     for (const s of allSettlements) {
       if (!s.is_split_month) continue;
       const gross1 = getInvoiceBasisNetPart(s, 1);
@@ -1425,14 +1431,12 @@ Deno.serve(async (req) => {
       const bankDep = Math.abs(s.bank_deposit ?? 0);
       if (gross1 !== null && gross2 !== null) {
         const drift = Math.round(Math.abs((gross1 + gross2) - bankDep) * 100) / 100;
-        splitDiagnostics.push({
-          settlement_id: s.settlement_id,
-          bank_deposit: bankDep,
-          gross1,
-          gross2,
-          drift,
-          ok: drift <= 0.10,
-        });
+        if (drift > 0.10) {
+          splitChecksFailed++;
+          failedChecks.push({ settlement_id: s.settlement_id, bank_deposit: bankDep, gross1, gross2, drift });
+        } else if (sampledOkChecks.length < SAMPLE_OK_LIMIT) {
+          sampledOkChecks.push({ settlement_id: s.settlement_id, drift });
+        }
       }
     }
 
@@ -1473,9 +1477,13 @@ Deno.serve(async (req) => {
       bank_sync_last_success_at: bankSyncLastSuccessAt,
       bank_sync_cooldown_until: bankSyncCooldownUntil,
       bank_sync_cooldown_seconds_remaining: bankSyncCooldownSecondsRemaining,
-      // Split-month consistency diagnostics
-      split_settlement_checks: splitDiagnostics.length > 0 ? splitDiagnostics : undefined,
-      split_settlement_drift_detected: splitDiagnostics.some(d => !d.ok),
+      // Split-month consistency diagnostics (bounded payload)
+      split_checks_total: splitChecksTotal,
+      split_checks_failed: splitChecksFailed,
+      split_checks_sampled: sampledOkChecks.length,
+      split_settlement_drift_detected: splitChecksFailed > 0,
+      split_failed_details: failedChecks.length > 0 ? failedChecks : undefined,
+      split_ok_sample: sampledOkChecks.length > 0 ? sampledOkChecks : undefined,
     };
 
     console.log(JSON.stringify({
