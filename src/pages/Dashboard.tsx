@@ -923,6 +923,7 @@ export default function Dashboard() {
               </div>
               <DestinationAccountMapper />
               <AccountMapperCard />
+              <RailPostingSettings />
               <AccountingBoundarySettings
                 xeroConnected={xeroConnected}
                 onConnectXero={() => {

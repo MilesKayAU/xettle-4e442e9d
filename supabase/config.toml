@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.fetch-xero-bank-transactions]
 verify_jwt = false
+
+[functions.auto-post-settlement]
+verify_jwt = false

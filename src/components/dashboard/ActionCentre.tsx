@@ -126,7 +126,13 @@ export default function ActionCentre({
   const [readySettlements, setReadySettlements] = useState<Array<{
     id: string; marketplace: string | null; settlement_id: string;
     period_start: string; period_end: string; bank_deposit: number | null;
-    status: string | null;
+    status: string | null; posting_state: string | null;
+  }>>([]);
+  const [autoPostRails, setAutoPostRails] = useState<Set<string>>(new Set());
+  const [autoPostFailed, setAutoPostFailed] = useState<Array<{
+    id: string; marketplace: string | null; settlement_id: string;
+    period_start: string; period_end: string; bank_deposit: number | null;
+    posting_error: string | null;
   }>>([]);
   const [ingestedSettlements, setIngestedSettlements] = useState<Array<{
     id: string; marketplace: string | null; settlement_id: string;
