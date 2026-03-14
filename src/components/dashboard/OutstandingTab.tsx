@@ -119,11 +119,13 @@ interface OutstandingRow {
   } | null;
   bank_difference: number | null;
   match_status: string;
-  // Aggregate / suggestion fields
-  aggregate_group_id?: string | null;
-  aggregate_sum?: number | null;
-  aggregate_settlement_count?: number | null;
-  aggregate_candidates?: BankCandidate[];
+  // Settlement group fields
+  settlement_group_matched?: boolean;
+  settlement_group_sum?: number | null;
+  settlement_group_net?: number | null;
+  settlement_group_diff?: number | null;
+  settlement_group_invoice_count?: number | null;
+  settlement_group_confidence?: 'high' | 'medium' | null;
   bank_match_method?: string | null;
   bank_match_confidence?: string | null;
   bank_match_confirmed_at?: string | null;
