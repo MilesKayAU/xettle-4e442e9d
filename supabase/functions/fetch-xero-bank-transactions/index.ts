@@ -1116,12 +1116,15 @@ async function fetchBankTxnsForUser(
         const countsByStatus: Record<string, number> = {};
         const contactsByType: Record<string, Record<string, number>> = {};
         const amazonSamples: any[] = [];
+        const countsBySource: Record<string, number> = {};
 
         for (const row of allCached) {
           const t = row.transaction_type || 'UNKNOWN';
           const s = row.xero_status || 'UNKNOWN';
+          const src = row.source || 'bank_transaction';
           countsByType[t] = (countsByType[t] || 0) + 1;
           countsByStatus[s] = (countsByStatus[s] || 0) + 1;
+          countsBySource[src] = (countsBySource[src] || 0) + 1;
 
           // Track contacts per type
           const contactKey = row.contact_name || row.reference || '(none)';
@@ -1137,6 +1140,7 @@ async function fetchBankTxnsForUser(
             amazonSamples.push({
               type: t,
               status: s,
+              source: src,
               contact: row.contact_name,
               reference: row.reference,
               amount: row.amount,
@@ -1158,9 +1162,14 @@ async function fetchBankTxnsForUser(
           total_cached_rows: allCached.length,
           counts_by_type: countsByType,
           counts_by_status: countsByStatus,
+          counts_by_source: countsBySource,
           top_contacts_by_type: topContactsByType,
           amazon_samples: amazonSamples,
           amazon_rows_found: amazonSamples.length,
+          statement_lines_upserted: statementLinesUpserted,
+          statement_lines_seen: statementLinesSeen,
+          statement_lines_skipped: statementLinesSkipped,
+          statement_lines_error: statementLinesError,
         };
       }
     } catch (diagErr: any) {
