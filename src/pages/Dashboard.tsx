@@ -653,6 +653,13 @@ export default function Dashboard() {
         {activeView === 'dashboard' && (
           <ErrorBoundary>
             <div className="space-y-6">
+              {/* Today's Tasks — what needs doing right now */}
+              <DailyTaskStrip
+                onNavigate={(view, subTab) => {
+                  switchView(view as DashboardView);
+                  if (subTab) switchSettlementsSubTab(subTab as SettlementsSubTab);
+                }}
+              />
               {/* Post-setup scan banner — triggers adaptive sync on first load */}
               <PostSetupBanner
                 onSwitchToUpload={() => switchView('smart_upload')}
