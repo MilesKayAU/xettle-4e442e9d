@@ -632,7 +632,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} />
+                      <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} />
                     </td>
                     <td className="px-4 py-3 text-center">
                       {(() => {
