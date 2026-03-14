@@ -1395,27 +1395,20 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             {backgroundRefreshing && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
           </h2>
           <p className="text-muted-foreground mt-1">
-            Xero invoices awaiting payment — matched against your settlements and bank deposits.
+            Xero invoices awaiting settlement matching. Bank feed is optional verification.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={syncBankFeedAndRefresh}
-                disabled={syncingBankFeed || loading}
-                className="gap-1.5"
-              >
-                <Banknote className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
-                {syncingBankFeed ? 'Syncing…' : 'Sync bank feed'}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Refresh cached bank transactions from Xero</p>
-            </TooltipContent>
-          </Tooltip>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchOutstanding({ runSync: true })}
+            disabled={loading || rescanning}
+            className="gap-1.5"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Sync with Xero
+          </Button>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -1430,21 +1423,68 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Rebuild suggestions from the last 90 days</p>
+              <p>Rebuild settlement matching from the last 90 days</p>
             </TooltipContent>
           </Tooltip>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fetchOutstanding({ runSync: true })}
-            disabled={loading || rescanning}
-            className="gap-1.5"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Sync with Xero
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={syncBankFeedAndRefresh}
+                disabled={syncingBankFeed || loading}
+                className="gap-1.5"
+              >
+                <Banknote className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+                {syncingBankFeed ? 'Syncing…' : 'Sync bank feed'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Optional — refresh bank transactions for deposit verification</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
+
+      {/* ─── PRIMARY: Settlement matching status banner ─── */}
+      {data && data.invoice_count > 0 && (() => {
+        const totalInvoices = filteredRows.length;
+        const settlementLinked = filteredRows.filter(r => r.settlement_id).length;
+        const settlementMatched = filteredRows.filter(r => r.settlement_group_matched).length;
+        const missingSettlement = filteredRows.filter(r => !r.settlement_id && r.is_marketplace).length;
+        const mismatchCount = filteredRows.filter(r => r.settlement_id && r.settlement_group_matched === false).length;
+
+        return (
+          <div className="p-4 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+              <p className="text-sm font-medium text-foreground">
+                Settlement matching — {totalInvoices} invoice{totalInvoices !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3 ml-7 text-xs">
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                {settlementMatched} matched via settlement
+              </span>
+              {settlementLinked > settlementMatched && (
+                <span className="text-amber-700 dark:text-amber-400 font-medium">
+                  {settlementLinked - settlementMatched} linked, pending match
+                </span>
+              )}
+              {missingSettlement > 0 && (
+                <span className="text-destructive font-medium">
+                  {missingSettlement} missing settlement
+                </span>
+              )}
+              {mismatchCount > 0 && (
+                <span className="text-amber-700 dark:text-amber-400 font-medium">
+                  {mismatchCount} mismatch
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── Bank feed diagnostic banners ─── */}
       {data?.sync_info?.bank_feed_empty && (
