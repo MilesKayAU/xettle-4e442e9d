@@ -76,6 +76,7 @@ Deno.serve(async (req) => {
         'accounting.settings.read',
         'accounting.banktransactions.read',
         'accounting.payments.read',
+        'finance.bankstatementsplus.read',
       ].join(' ')
 
       const authUrl = new URL(XERO_AUTH_URL)
