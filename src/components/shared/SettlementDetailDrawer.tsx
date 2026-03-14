@@ -167,6 +167,31 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
           </div>
         ) : settlement ? (
           <div className="space-y-5 mt-4">
+            {/* External Xero match banner */}
+            {externalCandidate && !settlement.xero_invoice_id && (
+              <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-xs">
+                <ExternalLink className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">
+                    External Xero invoice detected
+                  </p>
+                  <p className="text-muted-foreground mt-0.5">
+                    Found <span className="font-mono">{externalCandidate.xero_invoice_number}</span> ({formatAUD(externalCandidate.matched_amount || 0)}) created by another integration — not posted by Xettle.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px]"
+                      onClick={handleDismissCandidate}
+                      disabled={dismissingCandidate}
+                    >
+                      Ignore / keep separate
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Auto-post banner */}
             {isAutoPosted && settlement.status === 'pushed_to_xero' && (
               <div className="flex items-start gap-2 p-3 rounded-md bg-accent/50 border border-accent text-xs">
