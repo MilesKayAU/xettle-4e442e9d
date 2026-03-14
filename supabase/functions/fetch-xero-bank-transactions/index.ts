@@ -1058,6 +1058,7 @@ async function fetchBankTxnsForUser(
     cooldown_until: null,
     refreshed_at: refreshedAt,
     fetch_diagnostics: fetchDiagnostics,
+    ...buildRequestAudit(),
   };
 }
 
