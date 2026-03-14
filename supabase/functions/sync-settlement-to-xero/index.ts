@@ -191,13 +191,31 @@ function buildSettlementCsv(data: Record<string, any>, lineItems: InvoiceLineIte
   return rows.join('\n') + '\n';
 }
 
-// Simple hash for CSV immutability verification
-function hashCsv(csv: string): string {
+// Simple hash for immutability verification (djb2)
+function djb2Hash(input: string): string {
   let hash = 5381;
-  for (let i = 0; i < csv.length; i++) {
-    hash = ((hash << 5) + hash + csv.charCodeAt(i)) & 0xFFFFFFFF;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) + hash + input.charCodeAt(i)) & 0xFFFFFFFF;
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function hashCsv(csv: string): string {
+  return djb2Hash(csv);
+}
+
+/** Stable hash of line items array for forensic verification */
+function hashLineItems(items: InvoiceLineItem[]): string {
+  const canonical = items.map(i =>
+    `${i.Description}|${i.AccountCode}|${i.TaxType}|${i.UnitAmount}|${i.Quantity}`
+  ).join('\n');
+  return djb2Hash(canonical);
+}
+
+/** Stable hash of settlementData fields used for rebuild */
+function hashSettlementData(sd: Record<string, any>): string {
+  const fields = SERVER_POSTING_CATEGORIES.map(c => `${c.field}=${sd[c.field] ?? 0}`).join('|');
+  return djb2Hash(fields);
 }
 
 async function attachSettlementToXero(
