@@ -1487,182 +1487,118 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       })()}
 
       {/* ─── Bank feed diagnostic banners ─── */}
-      {data?.sync_info?.bank_feed_empty && (
-        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
-          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Bank feed is empty</p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-              No cached bank transactions found. Sync your bank feed to enable deposit matching.
-            </p>
-          </div>
-          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
-            <Banknote className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
-            {syncingBankFeed ? 'Syncing…' : 'Sync now'}
-          </Button>
-        </div>
-      )}
-      {data?.sync_info?.bank_cache_stale && !data?.sync_info?.bank_feed_empty && (
-        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
-          <Clock3 className="h-5 w-5 text-amber-600 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Bank feed is stale</p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-              Last refreshed: {data.sync_info.bank_cache_last_refreshed_at
-                ? new Date(data.sync_info.bank_cache_last_refreshed_at).toLocaleString('en-AU')
-                : 'unknown'}. Refresh to get the latest deposits.
-            </p>
-          </div>
-          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
-            <RefreshCw className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
-            {syncingBankFeed ? 'Syncing…' : 'Refresh'}
-          </Button>
-        </div>
-      )}
-      {(() => {
-        const missingRails = data?.sync_info?.mapping_status?.missing_rails || data?.sync_info?.mapping_status?.missing_marketplaces || [];
-        return missingRails.length > 0 ? (
-          <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-            <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
-            <p className="text-xs text-muted-foreground">
-              Missing destination mappings for: <strong>{missingRails.map((m: string) => MARKETPLACE_LABELS[m] || m).join(', ')}</strong>. 
-              Deposit matching is disabled for these rails until mapped.
-            </p>
-          </div>
-        ) : null;
-      })()}
-
-      {/* ─── Bank sync timestamp + cooldown ─── */}
-      {data?.sync_info?.bank_feed_empty && (
-        <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-          <Clock3 className="h-4 w-4 text-muted-foreground shrink-0" />
-          <div className="flex-1 text-xs text-muted-foreground">
-            <span className="font-medium">Last successful bank sync: </span>
-            {data.sync_info.bank_sync_last_success_at
-              ? (() => {
-                  const mins = Math.round((Date.now() - new Date(data.sync_info.bank_sync_last_success_at!).getTime()) / 60000);
-                  return mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
-                })()
-              : 'never'}
-            {(() => {
-              const cooldownSec = Number(data.sync_info.bank_sync_cooldown_seconds_remaining);
-              return cooldownSec > 0 ? (
-                <span className="ml-2">· Retry in ~{cooldownSec}s</span>
-              ) : null;
-            })()}
-          </div>
-          <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
-            <RefreshCw className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
-            {syncingBankFeed ? 'Syncing…' : 'Sync now'}
-          </Button>
-          {!data.sync_info.bank_sync_last_success_at && (
-            <p className="w-full text-xs text-muted-foreground mt-1">
-              If this continues, open Xero and confirm your bank feed is connected and has RECEIVE transactions.
-            </p>
+      {/* ─── SECONDARY: Bank verification section (collapsible, non-blocking) ─── */}
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1 py-1">
+          <Banknote className="h-3.5 w-3.5" />
+          <span>Bank verification (optional)</span>
+          <ChevronDown className="h-3 w-3" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-3 mt-2">
+          {data?.sync_info?.bank_feed_empty && (
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
+              <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-muted-foreground">Bank verification unavailable (optional)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  No cached bank transactions found. Settlement matching still works. Sync bank feed only if you want deposit verification.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
+                <Banknote className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+                {syncingBankFeed ? 'Syncing…' : 'Sync now'}
+              </Button>
+            </div>
           )}
-        </div>
-      )}
+          {data?.sync_info?.bank_cache_stale && !data?.sync_info?.bank_feed_empty && (
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
+              <Clock3 className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-muted-foreground">Bank feed is stale</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Last refreshed: {data.sync_info.bank_cache_last_refreshed_at
+                    ? new Date(data.sync_info.bank_cache_last_refreshed_at).toLocaleString('en-AU')
+                    : 'unknown'}. Refresh to update deposit verification.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={syncBankFeedAndRefresh} disabled={syncingBankFeed} className="gap-1.5 shrink-0">
+                <RefreshCw className={`h-4 w-4 ${syncingBankFeed ? 'animate-pulse' : ''}`} />
+                {syncingBankFeed ? 'Syncing…' : 'Refresh'}
+              </Button>
+            </div>
+          )}
+          {(() => {
+            const missingRails = data?.sync_info?.mapping_status?.missing_rails || data?.sync_info?.mapping_status?.missing_marketplaces || [];
+            return missingRails.length > 0 ? (
+              <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
+                <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  Bank verification mappings missing for: <strong>{missingRails.map((m: string) => MARKETPLACE_LABELS[m] || m).join(', ')}</strong>.
+                  Settlement matching and pushing to Xero are unaffected. Map destination accounts only to enable bank-deposit verification.
+                </p>
+              </div>
+            ) : null;
+          })()}
 
-      {/* ─── Bank sync diagnostics (collapsible) ─── */}
-      {lastBankSyncResult ? (
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1 py-0.5">
-            <Info className="h-3.5 w-3.5" />
-            <span>Show sync details</span>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="mt-1 p-3 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground space-y-1">
-              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
-                <span className="font-medium">Outcome</span>
-                <span>{
-                  lastBankSyncResult.error ? `Error: ${lastBankSyncResult.error}`
-                  : lastBankSyncResult.skipped ? `Skipped (${lastBankSyncResult.skip_reason || 'unknown'})`
-                  : lastBankSyncResult.xero_rate_limited ? 'Rate limited'
-                  : `Synced ${lastBankSyncResult.synced_row_count ?? lastBankSyncResult.upserted ?? 0} rows`
-                }</span>
-                {lastBankSyncResult.mapped_account_ids_count != null && (
-                  <><span className="font-medium">Mapped accounts</span><span>{lastBankSyncResult.mapped_account_ids_count}</span></>
-                )}
-                {lastBankSyncResult.mapped_account_ids && lastBankSyncResult.mapped_account_ids.length > 0 && (
-                  <><span className="font-medium">Account IDs</span><span className="truncate">{lastBankSyncResult.mapped_account_ids.join(', ')}</span></>
-                )}
-                {lastBankSyncResult.synced_row_count != null && (
-                  <><span className="font-medium">Synced rows</span><span>{lastBankSyncResult.synced_row_count}</span></>
-                )}
-                {lastBankSyncResult.lookback_days != null && (
-                  <><span className="font-medium">Date range span</span><span>{lastBankSyncResult.lookback_days} days</span></>
-                )}
-                {lastBankSyncResult.date_range_source && (
-                  <><span className="font-medium">Range source</span><span>{lastBankSyncResult.date_range_source}</span></>
-                )}
-                {lastBankSyncResult.cooldown_until && (
-                  <><span className="font-medium">Cooldown until</span><span>{new Date(lastBankSyncResult.cooldown_until).toLocaleTimeString('en-AU')}</span></>
-                )}
-                {lastBankSyncResult.retry_after_seconds != null && (
-                  <><span className="font-medium">Retry in</span><span>~{lastBankSyncResult.retry_after_seconds}s</span></>
-                )}
-                <span className="font-medium">Rate limited</span><span>{lastBankSyncResult.xero_rate_limited ? 'Yes' : 'No'}</span>
-                <span className="font-medium">Has mapping</span><span>{lastBankSyncResult.has_any_mapping === true ? 'Yes' : lastBankSyncResult.has_any_mapping === false ? 'No' : '—'}</span>
-                {lastBankSyncResult.pages_fetched != null && (
-                  <><span className="font-medium">Pages fetched</span><span>{lastBankSyncResult.pages_fetched}</span></>
-                )}
-                {lastBankSyncResult.transactions_seen_total != null && (
-                  <><span className="font-medium">Txns seen (total)</span><span>{lastBankSyncResult.transactions_seen_total}</span></>
-                )}
-                {lastBankSyncResult.transactions_in_range != null && (
-                  <><span className="font-medium">Txns in range</span><span>{lastBankSyncResult.transactions_in_range}</span></>
-                )}
-                {lastBankSyncResult.stopped_reason && (
-                  <><span className="font-medium">Stopped reason</span><span>{lastBankSyncResult.stopped_reason}</span></>
-                )}
+          {/* Bank sync timestamp */}
+          {data?.sync_info && (
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
+              <Clock3 className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1 text-xs text-muted-foreground">
+                <span className="font-medium">Last bank sync: </span>
+                {data.sync_info.bank_sync_last_success_at
+                  ? (() => {
+                      const mins = Math.round((Date.now() - new Date(data.sync_info.bank_sync_last_success_at!).getTime()) / 60000);
+                      return mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+                    })()
+                  : 'never'}
                 {(() => {
-                  const ids = lastBankSyncResult.bank_account_ids_used || [];
-                  const namesById = lastBankSyncResult.bank_account_names_used || {};
-                  const hasIds = ids.length > 0;
-                  const hasNames = Object.keys(namesById).length > 0;
-
-                  if (!hasIds && !hasNames) return null;
-
-                  const paired = (hasIds ? ids : Object.keys(namesById)).map((id) => {
-                    const name = namesById[id];
-                    return name ? `${id} (${name})` : id;
-                  });
-
-                  return (
-                    <>
-                      <span className="font-medium">Bank accounts used</span>
-                      <span className="max-w-[420px] break-all">{paired.join(' · ')}</span>
-                    </>
-                  );
+                  const cooldownSec = Number(data.sync_info.bank_sync_cooldown_seconds_remaining);
+                  return cooldownSec > 0 ? (
+                    <span className="ml-2">· Retry in ~{cooldownSec}s</span>
+                  ) : null;
                 })()}
-                {lastBankSyncResult.endpoint_used && (
-                  <><span className="font-medium">Endpoint</span><span className="truncate max-w-[200px]">{lastBankSyncResult.endpoint_used}</span></>
-                )}
-                {lastBankSyncResult.fetch_from && (
-                  <><span className="font-medium">Fetch from</span><span>{lastBankSyncResult.fetch_from}</span></>
-                )}
-                {lastBankSyncResult.fetch_to && (
-                  <><span className="font-medium">Fetch to</span><span>{lastBankSyncResult.fetch_to}</span></>
-                )}
-                {lastBankSyncResult.if_modified_since_value && (
-                  <><span className="font-medium">If-Modified-Since</span><span className="truncate max-w-[200px]">{lastBankSyncResult.if_modified_since_value}</span></>
-                )}
-                {lastBankSyncResult.per_account_stats && (
-                  <><span className="font-medium">Per-account</span><span className="truncate max-w-[200px]">{JSON.stringify(lastBankSyncResult.per_account_stats)}</span></>
-                )}
-                {lastBankSyncResult.skip_reason && (
-                  <><span className="font-medium">Skip reason</span><span>{lastBankSyncResult.skip_reason}</span></>
-                )}
-                {lastBankSyncResult.refreshed_at && (
-                  <><span className="font-medium">Refreshed at</span><span>{new Date(lastBankSyncResult.refreshed_at).toLocaleTimeString('en-AU')}</span></>
-                )}
               </div>
             </div>
-          </CollapsibleContent>
-        </Collapsible>
-      ) : (
-        <p className="text-xs text-muted-foreground px-1">No bank sync diagnostics yet.</p>
-      )}
+          )}
+
+          {/* Bank sync diagnostics */}
+          {lastBankSyncResult ? (
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1 py-0.5">
+                <Info className="h-3.5 w-3.5" />
+                <span>Show sync details</span>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-1 p-3 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground space-y-1">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                    <span className="font-medium">Outcome</span>
+                    <span>{
+                      lastBankSyncResult.error ? `Error: ${lastBankSyncResult.error}`
+                      : lastBankSyncResult.skipped ? `Skipped (${lastBankSyncResult.skip_reason || 'unknown'})`
+                      : lastBankSyncResult.xero_rate_limited ? 'Rate limited'
+                      : `Synced ${lastBankSyncResult.synced_row_count ?? lastBankSyncResult.upserted ?? 0} rows`
+                    }</span>
+                    {lastBankSyncResult.mapped_account_ids_count != null && (
+                      <><span className="font-medium">Mapped accounts</span><span>{lastBankSyncResult.mapped_account_ids_count}</span></>
+                    )}
+                    {lastBankSyncResult.synced_row_count != null && (
+                      <><span className="font-medium">Synced rows</span><span>{lastBankSyncResult.synced_row_count}</span></>
+                    )}
+                    {lastBankSyncResult.lookback_days != null && (
+                      <><span className="font-medium">Date range span</span><span>{lastBankSyncResult.lookback_days} days</span></>
+                    )}
+                    <span className="font-medium">Rate limited</span><span>{lastBankSyncResult.xero_rate_limited ? 'Yes' : 'No'}</span>
+                    <span className="font-medium">Has mapping</span><span>{lastBankSyncResult.has_any_mapping === true ? 'Yes' : lastBankSyncResult.has_any_mapping === false ? 'No' : '—'}</span>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          ) : (
+            <p className="text-xs text-muted-foreground px-1">No bank sync diagnostics yet.</p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
 
       {data?.sync_info?.xero_rate_limited && (
