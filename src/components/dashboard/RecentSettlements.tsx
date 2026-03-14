@@ -29,6 +29,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { isBankMatchRequired } from '@/constants/settlement-rails';
 
 interface SettlementRow {
   id: string;
