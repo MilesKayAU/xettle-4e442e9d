@@ -853,9 +853,19 @@ Additionally, `settlement-parser.ts` has ~10 `console.info` calls for debugging 
 - **Missing:** `CREATE UNIQUE INDEX idx_settlement_dedup ON settlements (settlement_id, marketplace, user_id)`
 - **Impact:** Race conditions can create duplicate settlements (dedup is application-level only in `saveSettlement()`)
 
-### Rate limiting on edge functions
-- **Missing:** No rate limiting logic in any edge function
-- **Impact:** All edge functions accept unlimited requests
+### Rate limiting on edge functions — ROOT CAUSE IDENTIFIED (14 Mar 2026)
+- **Root cause:** Absence of a tenant-scoped Xero request governor (shared budget + priority + cooldown + coalescing) allows invoice/status traffic (`sync-xero-status` ~40 calls, `fetch-outstanding` ~4 retries) to exhaust the shared Xero tenant/app rate limit, starving `fetch-xero-bank-transactions` (1 call → immediate 429). Bank cache never seeds → `bank_feed_empty=true` → reconciliation blocked.
+- **Fix deployed (14 Mar 2026):**
+  - Global Xero rate governor with priority lanes (P0 bank sync, P1 outstanding, P2 status checks)
+  - Shared `xero_api_cooldown_until` key respected by all functions before any Xero call
+  - `fetch-outstanding`: 0 retries on 429, 1 retry on 5xx only
+  - `sync-xero-status`: stops all pagination on 429, checks shared cooldown before each batch
+  - Frontend: 30s throttle + AbortController dedup on Outstanding refresh
+  - Structured audit logging (`system_events.xero_api_call`) for every outbound Xero request
+- **Secondary contributors (may need tuning):**
+  - Frontend refresh/deduping patterns on other views
+  - Retry policies on any new endpoints added later
+  - Other Xero endpoints that may spike under load
 
 ### Unit tests
 - **Missing:** No test files anywhere (`*.test.ts`, `*.spec.ts`). No Vitest config. No test script in `package.json` (it uses `tsc` only).
