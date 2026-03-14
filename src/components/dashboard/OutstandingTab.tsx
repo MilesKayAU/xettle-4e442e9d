@@ -1228,7 +1228,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
             <p className="text-xs text-green-700 dark:text-green-400">
               Settlement net: {formatAUD(row.settlement_group_net || 0)}
               {(row.settlement_group_diff || 0) > 0 && ` · Diff: $${row.settlement_group_diff?.toFixed(2)}`}
-              {row.settlement_group_confidence && <Badge variant="outline" className="ml-2 text-[10px] border-green-300 text-green-700">{row.settlement_group_confidence} confidence</Badge>}
+              {row.settlement_group_confidence && <Badge variant="outline" className="ml-2 text-[10px] border-green-300 text-green-700">{row.settlement_group_confidence}{row.settlement_group_explanation ? ` (${row.settlement_group_explanation})` : ''}</Badge>}
             </p>
           </div>
         </div>
