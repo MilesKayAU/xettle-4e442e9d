@@ -334,6 +334,8 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     unexpected_extras: OutstandingRow[];
     anchor_basis: string | null;
     anchor_components: string[] | null;
+    comparison_field: string | null;
+    amount_due_total: number | null;
   }
 
   const { settlementGroups, ungroupedRows } = useMemo(() => {
