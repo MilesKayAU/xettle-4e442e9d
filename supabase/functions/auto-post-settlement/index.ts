@@ -439,6 +439,39 @@ async function processSettlement(
       xero_type: pushResult.xeroType || 'invoice',
     }).eq('id', settlementDbId);
 
+    // Build immutable snapshot of what was posted to Xero
+    const normalizedLineItems = lineItems.slice(0, 200).map((li: any) => ({
+      description: li.Description || '',
+      account_code: li.AccountCode || '',
+      tax_type: li.TaxType || '',
+      amount: li.UnitAmount ?? 0,
+    }));
+    const snapshotDetails = {
+      posting_mode: 'auto',
+      xero_request_payload: {
+        lineItems: lineItems.slice(0, 200),
+        contactName,
+        reference,
+        description,
+        date: settlement.deposit_date || settlement.period_end,
+        dueDate: settlement.deposit_date || settlement.period_end,
+        netAmount,
+      },
+      xero_response: {
+        invoice_id: pushResult.invoiceId,
+        invoice_number: pushResult.invoiceNumber,
+        xero_status: 'DRAFT',
+        xero_type: pushResult.xeroType || 'invoice',
+      },
+      normalized: {
+        net_amount: netAmount,
+        currency: 'AUD',
+        contact_name: contactName,
+        line_items: normalizedLineItems,
+        truncated: lineItems.length > 200,
+      },
+      retry_count: newRetryCount,
+    };
     // Log success
     await supabase.from('system_events').insert({
       user_id: userId,
@@ -446,14 +479,7 @@ async function processSettlement(
       severity: 'info',
       marketplace_code: marketplace,
       settlement_id: sid,
-      details: {
-        marketplace,
-        amount: netAmount,
-        xero_invoice_id: pushResult.invoiceId,
-        xero_invoice_number: pushResult.invoiceNumber,
-        posting_mode: 'auto',
-        retry_count: newRetryCount,
-      },
+      details: snapshotDetails,
     });
 
     console.log(`[auto-post-settlement] Successfully posted ${sid} to Xero as ${pushResult.invoiceNumber}`);
