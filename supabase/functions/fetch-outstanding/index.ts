@@ -1173,11 +1173,13 @@ Deno.serve(async (req) => {
         bank_match: bankMatch,
         bank_difference: bankDifference,
         match_status: matchStatus,
-        // Aggregate candidate fields (suggestions, not confirmed matches)
-        aggregate_group_id: aggGroup?.id || null,
-        aggregate_sum: aggGroup ? aggGroup.sum : null,
-        aggregate_settlement_count: aggGroup ? aggGroup.invoiceIds.length : null,
-        aggregate_candidates: aggGroup?.candidates || [],
+        // Settlement group match fields
+        settlement_group_matched: isSettlementGroupMatched,
+        settlement_group_sum: settlementGroup?.group_sum ?? null,
+        settlement_group_net: settlementGroup?.settlement_net ?? null,
+        settlement_group_diff: settlementGroup?.difference ?? null,
+        settlement_group_invoice_count: settlementGroup?.invoice_count ?? null,
+        settlement_group_confidence: settlementGroup?.confidence ?? null,
         // Confirmed match audit trail
         bank_match_method: settlement?.bank_match_method || null,
         bank_match_confidence: settlement?.bank_match_confidence || null,
