@@ -352,6 +352,15 @@ export default function ValidationSweep({
     return result;
   }, [actionableRows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir]);
 
+  const toggleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  }, [sortKey]);
+
   const [vsPage, setVsPage] = useState(1);
   const vsTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
   const safeVsPage = Math.min(vsPage, vsTotalPages);
