@@ -23,7 +23,7 @@
  * See: architecture rule #11
  */
 
-import { useState, useCallback, useEffect, Fragment, useMemo } from 'react';
+import { useState, useCallback, useEffect, Fragment, useMemo, useRef } from 'react';
 import { Switch } from '@/components/ui/switch';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -362,7 +362,31 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, []);
 
+  // ─── REQUEST DEDUP / THROTTLE: prevent parallel Outstanding + Status refreshes ───
+  const inflightRef = useRef<AbortController | null>(null);
+  const lastFetchTimestampRef = useRef<number>(0);
+  const THROTTLE_MS = 30_000; // 30s minimum between fetch-outstanding calls
+
   const fetchOutstanding = useCallback(async (options?: { runSync?: boolean; background?: boolean }) => {
+    const now = Date.now();
+    const timeSinceLast = now - lastFetchTimestampRef.current;
+
+    // Throttle: skip if called within THROTTLE_MS (unless it's the first load)
+    if (lastFetchTimestampRef.current > 0 && timeSinceLast < THROTTLE_MS && !options?.runSync) {
+      console.log(`[OutstandingTab] Throttled: ${Math.round(timeSinceLast / 1000)}s since last fetch (min ${THROTTLE_MS / 1000}s)`);
+      return;
+    }
+
+    // Dedup: if a request is already in-flight, cancel it (latest wins)
+    if (inflightRef.current) {
+      console.log('[OutstandingTab] Cancelling in-flight fetch — new request takes priority');
+      inflightRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    inflightRef.current = controller;
+    lastFetchTimestampRef.current = now;
+
     const isBackground = options?.background === true;
     if (isBackground) {
       setBackgroundRefreshing(true);
@@ -382,6 +406,9 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
 
+        // Check if aborted while waiting
+        if (controller.signal.aborted) return;
+
         // Treat sync failure as actionable — surface no-connection explicitly
         if (syncResp.error) {
           console.warn(`[OutstandingTab] sync-xero-status error: ${syncResp.error.message}`);
@@ -396,10 +423,14 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         }
       }
 
+      if (controller.signal.aborted) return;
+
       const resp = await supabase.functions.invoke('fetch-outstanding', {
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: { force_refresh: !!options?.runSync },
       });
+
+      if (controller.signal.aborted) return;
 
       // Check for structured no_xero_connection signal from fetch-outstanding
       if (resp.data?.sync_info?.no_xero_connection === true) {
@@ -427,12 +458,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       // Persist to client-side cache so next page load is instant
       persistToCache(summary.rows);
     } catch (err: any) {
+      if (controller.signal.aborted) return; // Silently ignore aborted requests
       if (!isBackground) {
         toast.error(`Failed to fetch outstanding: ${err.message}`);
       } else {
         console.warn('[OutstandingTab] background fetch failed:', err.message);
       }
     } finally {
+      if (inflightRef.current === controller) {
+        inflightRef.current = null;
+      }
       if (isBackground) {
         setBackgroundRefreshing(false);
       } else {
