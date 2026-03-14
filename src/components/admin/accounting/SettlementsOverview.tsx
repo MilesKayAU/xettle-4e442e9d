@@ -44,6 +44,9 @@ export default function SettlementsOverview({
   const [rows, setRows] = useState<MarketplaceStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [pushingCode, setPushingCode] = useState<string | null>(null);
+  const [batchPreviewOpen, setBatchPreviewOpen] = useState(false);
+  const [batchSettlements, setBatchSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
+  const [pendingBatchCode, setPendingBatchCode] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
