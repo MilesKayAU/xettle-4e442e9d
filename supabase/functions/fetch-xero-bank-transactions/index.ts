@@ -785,12 +785,13 @@ async function fetchBankTxnsForUser(
           bank_account_id: txn.BankAccount?.AccountID || null,
           bank_account_name: txn.BankAccount?.Name || null,
           date: parsedDate,
-          amount: Math.abs(txn.Total || 0),
+          amount: Number(txn.Total || 0),
           currency: txn.CurrencyCode || 'AUD',
           description: txn.LineItems?.[0]?.Description || null,
           reference: txn.Reference || null,
           contact_name: txn.Contact?.Name || null,
           transaction_type: txnType,
+          xero_status: txn.Status || null,
           fetched_at: new Date().toISOString(),
         });
       }
