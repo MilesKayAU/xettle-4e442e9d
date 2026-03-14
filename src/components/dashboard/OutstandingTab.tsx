@@ -1944,30 +1944,26 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                           <XCircle className="h-4 w-4 text-destructive inline" />
                         )}
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-2 text-right">
                         {row.match_status === 'pending_enrichment' ? (
                           <span className="text-muted-foreground">—</span>
-                        ) : row.match_status === 'confirmed' || row.match_status === 'balanced' ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
-                        ) : row.match_status === 'confirmed_manual' ? (
-                          <CheckCircle2 className="h-4 w-4 text-blue-600 inline" />
-                        ) : hasSuggestion ? (
+                        ) : row.settlement_group_matched && (row.settlement_group_diff == null || row.settlement_group_diff < 0.50) ? (
+                          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓</span>
+                        ) : row.settlement_group_diff != null && row.settlement_group_diff >= 0.50 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
+                              <span className="text-xs font-mono font-medium text-amber-600 dark:text-amber-400">
+                                {formatAUD(row.settlement_group_diff)}
+                              </span>
                             </TooltipTrigger>
-                            <TooltipContent className="text-xs">Suggested match — needs your confirmation</TooltipContent>
+                            <TooltipContent className="text-xs">
+                              Settlement total: {formatAUD(row.settlement_group_net || 0)} · Invoices: {formatAUD(row.settlement_group_sum || 0)}
+                            </TooltipContent>
                           </Tooltip>
-                        ) : row.has_bank_deposit ? (
-                          row.bank_match?.fuzzy ? (
-                            <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
-                          )
-                        ) : row.is_pre_boundary ? (
-                          <MinusCircle className="h-4 w-4 text-muted-foreground inline" />
+                        ) : row.has_settlement ? (
+                          <span className="text-xs text-muted-foreground">—</span>
                         ) : (
-                          <XCircle className="h-4 w-4 text-destructive inline" />
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
