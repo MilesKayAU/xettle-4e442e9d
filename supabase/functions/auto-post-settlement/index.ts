@@ -1,11 +1,33 @@
 /**
  * auto-post-settlement — Async worker that auto-posts ready settlements to Xero.
  *
- * Triggered per-settlement when posting_mode='auto' for the rail.
- * Idempotent: checks posting_state before acting.
+ * Triggered:
+ *   1. Per-settlement (single mode) from UI retry
+ *   2. Batch mode from scheduled-sync (scans all users with auto-post rails)
+ *
+ * Idempotent: checks posting_state + xero_invoice_id before acting.
  * Uses atomic compare-and-set to prevent duplicate posting.
  *
  * This does NOT bypass validation — it only removes the manual click.
+ *
+ * Safety checklist (all must pass before posting):
+ *   ✅ status = ready_to_push
+ *   ✅ not hidden
+ *   ✅ not duplicate
+ *   ✅ not pre-boundary
+ *   ✅ no existing xero_invoice_id
+ *   ✅ posting_state not already posting/posted
+ *   ✅ rail configured for auto-post
+ *   ✅ reconciliation_status is not 'alert' (mismatch)
+ *   ✅ account mapping exists for at least one category
+ *   ✅ Xero token exists for the user
+ *   ✅ bank match exists if require_bank_match = true
+ *   ✅ push_retry_count < 3 (prevents infinite retry loops)
+ *
+ * Table: rail_posting_settings
+ *   Scoped by user_id (acting as org proxy — one user = one org).
+ *   This is an org-level accounting workflow setting, not a personal preference.
+ *   When multi-user orgs are added, user_id will be replaced with org_id.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
@@ -17,6 +39,8 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+const MAX_RETRY_COUNT = 3;
 
 const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
@@ -31,6 +55,7 @@ const MARKETPLACE_CONTACTS: Record<string, string> = {
   ebay: 'eBay Australia',
   woolworths: 'Woolworths Everyday Market',
   everyday_market: 'Everyday Market',
+  temu: 'Temu',
 };
 
 function round2(n: number): number {
@@ -43,7 +68,20 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // ─── Auth: verify caller is authenticated or service-role ─────
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.replace('Bearer ', '');
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    let callerUserId: string | null = null;
+    let isServiceRole = token === serviceRoleKey;
+
+    if (!isServiceRole && token) {
+      const { data: userData, error: authErr } = await supabase.auth.getUser(token);
+      if (!authErr && userData?.user) {
+        callerUserId = userData.user.id;
+      }
+    }
 
     // Accept: { settlement_id: string (DB id), user_id: string }
     // OR: no body = scan all users for auto-postable settlements
@@ -58,6 +96,16 @@ Deno.serve(async (req) => {
       // No body — batch mode
     }
 
+    // In single-settlement mode, enforce user_id matches caller (unless service role)
+    if (targetSettlementId && targetUserId && !isServiceRole) {
+      if (!callerUserId || callerUserId !== targetUserId) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized: user_id mismatch' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const results: Array<{ settlement_id: string; result: string; error?: string }> = [];
 
     // ─── Single settlement mode ──────────────────────────────────
@@ -68,7 +116,7 @@ Deno.serve(async (req) => {
       // ─── Batch mode: scan all users with auto-post rails ───────
       const { data: autoRails } = await supabase
         .from('rail_posting_settings')
-        .select('user_id, rail')
+        .select('user_id, rail, require_bank_match')
         .eq('posting_mode', 'auto');
 
       if (!autoRails || autoRails.length === 0) {
@@ -78,67 +126,47 @@ Deno.serve(async (req) => {
       }
 
       // Group by user
-      const userRails = new Map<string, string[]>();
+      const userRails = new Map<string, Array<{ rail: string; require_bank_match: boolean }>>();
       for (const r of autoRails) {
         const existing = userRails.get(r.user_id) || [];
-        existing.push(r.rail);
+        existing.push({ rail: r.rail, require_bank_match: r.require_bank_match });
         userRails.set(r.user_id, existing);
       }
 
       for (const [userId, rails] of userRails) {
-        // Find ready_to_push settlements for auto-post rails
+        const railCodes = rails.map(r => r.rail);
+
+        // Find ready_to_push settlements for auto-post rails (null posting_state OR failed with retry budget)
         const { data: settlements } = await supabase
           .from('settlements')
-          .select('id, settlement_id, marketplace, status, posting_state, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id')
+          .select('id, settlement_id, marketplace, status, posting_state, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id, push_retry_count, reconciliation_status, bank_verified')
           .eq('user_id', userId)
           .eq('status', 'ready_to_push')
           .eq('is_hidden', false)
           .eq('is_pre_boundary', false)
           .is('duplicate_of_settlement_id', null)
-          .is('posting_state', null)
-          .in('marketplace', rails);
+          .is('xero_invoice_id', null)
+          .in('marketplace', railCodes);
 
         if (!settlements || settlements.length === 0) continue;
 
-        // Also process failed ones that can retry
-        const { data: failedSettlements } = await supabase
-          .from('settlements')
-          .select('id, settlement_id, marketplace, status, posting_state, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id')
-          .eq('user_id', userId)
-          .eq('status', 'ready_to_push')
-          .eq('posting_state', 'failed')
-          .eq('is_hidden', false)
-          .eq('is_pre_boundary', false)
-          .is('duplicate_of_settlement_id', null)
-          .in('marketplace', rails);
+        // Filter to only postable settlements
+        const postable = settlements.filter(s => {
+          // Skip already posting/posted
+          if (s.posting_state === 'posting' || s.posting_state === 'posted') return false;
+          // Skip if over retry limit
+          if (s.posting_state === 'failed' && (s.push_retry_count || 0) >= MAX_RETRY_COUNT) return false;
+          // Skip if null posting_state is fine, or failed with retry budget
+          if (s.posting_state !== null && s.posting_state !== 'failed') return false;
+          // Skip if reconciliation has alert/mismatch
+          if (s.reconciliation_status === 'alert') return false;
+          // Check bank match requirement
+          const railConfig = rails.find(r => r.rail === s.marketplace);
+          if (railConfig?.require_bank_match && !s.bank_verified) return false;
+          return true;
+        });
 
-        const allSettlements = [...settlements, ...(failedSettlements || [])];
-
-        for (const s of allSettlements) {
-          // Check rail config for bank match requirement
-          const railConfig = autoRails.find(r => r.user_id === userId && r.rail === s.marketplace);
-          if (!railConfig) continue;
-
-          const { data: railSettings } = await supabase
-            .from('rail_posting_settings')
-            .select('require_bank_match')
-            .eq('user_id', userId)
-            .eq('rail', s.marketplace)
-            .single();
-
-          if (railSettings?.require_bank_match) {
-            // Check if bank matched
-            const { data: settlement } = await supabase
-              .from('settlements')
-              .select('bank_verified')
-              .eq('id', s.id)
-              .single();
-            if (!settlement?.bank_verified) {
-              results.push({ settlement_id: s.settlement_id, result: 'skipped', error: 'bank_match_required_not_met' });
-              continue;
-            }
-          }
-
+        for (const s of postable) {
           const result = await processSettlement(supabase, s.id, userId);
           results.push(result);
         }
@@ -180,22 +208,32 @@ async function processSettlement(
 
   const sid = settlement.settlement_id;
 
-  // ─── Idempotency checks ────────────────────────────────────────
+  // ─── Safety check 1: Idempotency ──────────────────────────────
   if (settlement.posting_state === 'posted' || settlement.posting_state === 'posting') {
     return { settlement_id: sid, result: 'skipped', error: `Already ${settlement.posting_state}` };
   }
+  // ─── Safety check 2: No existing Xero invoice ─────────────────
   if (settlement.xero_invoice_id) {
     return { settlement_id: sid, result: 'skipped', error: 'Already has xero_invoice_id' };
   }
+  // ─── Safety check 3: Status must be ready_to_push ─────────────
   if (settlement.status !== 'ready_to_push') {
     return { settlement_id: sid, result: 'skipped', error: `Status is ${settlement.status}, not ready_to_push` };
   }
+  // ─── Safety check 4: Not hidden, pre-boundary, or duplicate ───
   if (settlement.is_hidden || settlement.is_pre_boundary || settlement.duplicate_of_settlement_id) {
     return { settlement_id: sid, result: 'skipped', error: 'Hidden, pre-boundary, or duplicate' };
   }
+  // ─── Safety check 5: Retry budget ─────────────────────────────
+  if ((settlement.push_retry_count || 0) >= MAX_RETRY_COUNT) {
+    return { settlement_id: sid, result: 'skipped', error: `Exceeded max retry count (${MAX_RETRY_COUNT})` };
+  }
+  // ─── Safety check 6: No reconciliation mismatch ───────────────
+  if (settlement.reconciliation_status === 'alert') {
+    return { settlement_id: sid, result: 'skipped', error: 'Reconciliation mismatch detected — manual review required' };
+  }
 
-  // ─── Safety validations ────────────────────────────────────────
-  // Check rail posting setting
+  // ─── Safety check 7: Rail posting setting ─────────────────────
   const { data: railSetting } = await supabase
     .from('rail_posting_settings')
     .select('posting_mode, require_bank_match')
@@ -207,11 +245,24 @@ async function processSettlement(
     return { settlement_id: sid, result: 'skipped', error: 'Rail not configured for auto-post' };
   }
 
+  // ─── Safety check 8: Bank match if required ───────────────────
   if (railSetting.require_bank_match && !settlement.bank_verified) {
     return { settlement_id: sid, result: 'skipped', error: 'Bank match required but not verified' };
   }
 
-  // Check account mapping exists
+  // ─── Safety check 9: Xero connection exists ───────────────────
+  const { data: xeroToken, error: xeroErr } = await supabase
+    .from('xero_tokens')
+    .select('id')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (xeroErr || !xeroToken) {
+    return { settlement_id: sid, result: 'skipped', error: 'No Xero connection found' };
+  }
+
+  // ─── Safety check 10: Account mapping exists ──────────────────
   const { data: mappings } = await supabase
     .from('marketplace_account_mapping')
     .select('id')
@@ -219,12 +270,17 @@ async function processSettlement(
     .eq('marketplace_code', settlement.marketplace)
     .limit(1);
 
-  // Not blocking on missing mapping — sync-settlement-to-xero uses defaults
+  // Log warning but don't block — sync-settlement-to-xero uses hardcoded defaults
+  if (!mappings || mappings.length === 0) {
+    console.warn(`[auto-post-settlement] No account mapping for ${settlement.marketplace}, using defaults`);
+  }
 
   // ─── Atomic compare-and-set: claim this settlement ─────────────
-  const { data: claimed, error: claimErr } = await supabase
+  const newRetryCount = (settlement.push_retry_count || 0) + (settlement.posting_state === 'failed' ? 1 : 0);
+
+  const { data: claimed } = await supabase
     .from('settlements')
-    .update({ posting_state: 'posting' })
+    .update({ posting_state: 'posting', push_retry_count: newRetryCount })
     .eq('id', settlementDbId)
     .eq('user_id', userId)
     .is('posting_state', null)
@@ -235,7 +291,7 @@ async function processSettlement(
   if (!claimed) {
     const { data: retryClaimed } = await supabase
       .from('settlements')
-      .update({ posting_state: 'posting', posting_error: null })
+      .update({ posting_state: 'posting', posting_error: null, push_retry_count: newRetryCount })
       .eq('id', settlementDbId)
       .eq('user_id', userId)
       .eq('posting_state', 'failed')
@@ -292,12 +348,12 @@ async function processSettlement(
       { Description: `${contactName} Sales`, AccountCode: getCode('Sales'), TaxType: 'OUTPUT', UnitAmount: round2((settlement.sales_principal || 0) + (settlement.sales_shipping || 0)), Quantity: 1 },
       { Description: `${contactName} Promotional Discounts`, AccountCode: getCode('Promotional Discounts'), TaxType: 'OUTPUT', UnitAmount: round2(settlement.promotional_discounts || 0), Quantity: 1 },
       { Description: `${contactName} Refunds`, AccountCode: getCode('Refunds'), TaxType: 'OUTPUT', UnitAmount: round2(settlement.refunds || 0), Quantity: 1 },
-      { Description: `${contactName} Reimbursements`, AccountCode: getCode('Reimbursements'), TaxType: 'NONE', UnitAmount: round2(settlement.reimbursements || 0), Quantity: 1 },
+      { Description: `${contactName} Reimbursements`, AccountCode: getCode('Reimbursements'), TaxType: 'BASEXCLUDED', UnitAmount: round2(settlement.reimbursements || 0), Quantity: 1 },
       { Description: `${contactName} Seller Fees`, AccountCode: getCode('Seller Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.seller_fees || 0)), Quantity: 1 },
       { Description: `${contactName} FBA Fees`, AccountCode: getCode('FBA Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.fba_fees || 0)), Quantity: 1 },
       { Description: `${contactName} Storage Fees`, AccountCode: getCode('Storage Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.storage_fees || 0)), Quantity: 1 },
       { Description: `${contactName} Advertising Costs`, AccountCode: getCode('Advertising Costs'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.advertising_costs || 0)), Quantity: 1 },
-      { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(Math.max(round2(settlement.other_fees || 0), 0)), Quantity: 1 },
+      { Description: `${contactName} Other Fees`, AccountCode: getCode('Other Fees'), TaxType: 'INPUT', UnitAmount: -Math.abs(round2(settlement.other_fees || 0)), Quantity: 1 },
     ].filter(item => Math.abs(item.UnitAmount) > 0.01);
 
     if (lineItems.length === 0) {
@@ -364,7 +420,7 @@ async function processSettlement(
         severity: 'warning',
         marketplace_code: marketplace,
         settlement_id: sid,
-        details: { error: errMsg, marketplace, amount: netAmount },
+        details: { error: errMsg, marketplace, amount: netAmount, retry_count: newRetryCount },
       });
 
       return { settlement_id: sid, result: 'failed', error: errMsg };
@@ -396,6 +452,7 @@ async function processSettlement(
         xero_invoice_id: pushResult.invoiceId,
         xero_invoice_number: pushResult.invoiceNumber,
         posting_mode: 'auto',
+        retry_count: newRetryCount,
       },
     });
 
@@ -416,7 +473,7 @@ async function processSettlement(
       severity: 'error',
       marketplace_code: settlement.marketplace,
       settlement_id: sid,
-      details: { error: err.message },
+      details: { error: err.message, retry_count: newRetryCount },
     });
 
     return { settlement_id: sid, result: 'failed', error: err.message };

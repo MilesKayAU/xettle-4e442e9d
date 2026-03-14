@@ -311,6 +311,16 @@ Deno.serve(async (req) => {
     results.xero_push = { skipped: true, reason: 'elapsed_timeout' };
   }
 
+  // 8.5. Auto-post settlements for rails with posting_mode='auto'
+  if (Date.now() - startTime < MAX_ELAPSED_MS) {
+    console.log("[scheduled-sync] Step 8.5: Auto-post per-rail settlements...");
+    results.auto_post = await callFunction("auto-post-settlement");
+    if (results.auto_post?.error) stepErrors.push('auto_post');
+  } else {
+    console.log("[scheduled-sync] Step 8.5: SKIPPED (elapsed > 4 min)");
+    results.auto_post = { skipped: true, reason: 'elapsed_timeout' };
+  }
+
   // 9. Match bank deposits against settlements (using local cache)
   console.log("[scheduled-sync] Step 9: Bank deposit matching...");
   results.bank_matching = { users: xeroUserIds.length, results: [] };
