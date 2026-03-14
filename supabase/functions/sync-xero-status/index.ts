@@ -398,7 +398,8 @@ serve(async (req) => {
               default: derivedStatus = 'pushed_to_xero'; break;
             }
           } else {
-            derivedStatus = 'pushed_to_xero';
+            // ─── SAFETY: External invoices never get 'pushed_to_xero' ───
+            derivedStatus = 'already_recorded';
             syncOrigin = 'external';
           }
 

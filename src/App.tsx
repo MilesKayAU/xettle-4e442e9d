@@ -61,6 +61,7 @@ function App() {
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/setup" element={<Setup />} />
                     <Route path="/admin" element={<Admin />} />
+                    <Route path="/audit/xero-posting" element={<XeroPostingAudit />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
                 </Routes>
