@@ -26,7 +26,25 @@ const LOOKBACK_DAYS_SELF = 30;
 
 // formatXeroDateTime removed — no longer used after switching to If-Modified-Since header
 
-async function refreshXeroToken(supabase: any, userId: string, clientId: string, clientSecret: string) {
+type XeroRequestLedgerEntry = {
+  timestamp: string;
+  function_name: string;
+  invoker: string;
+  endpoint: string;
+  account_id: string | null;
+  response_code: number;
+  retry_number: number;
+  from_wrapper_retry_logic: boolean;
+};
+
+async function refreshXeroToken(
+  supabase: any,
+  userId: string,
+  clientId: string,
+  clientSecret: string,
+  trackRequest?: (entry: XeroRequestLedgerEntry) => void,
+  invoker: string = 'unknown',
+) {
   // Optimistic locking: re-read token immediately before refresh
   const { data: tokenRow, error } = await supabase
     .from('xero_tokens')
@@ -39,6 +57,7 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
   const expiresAt = new Date(tokenRow.expires_at);
   if (expiresAt > new Date(Date.now() + 60000)) return tokenRow;
 
+  const timestamp = new Date().toISOString();
   const res = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: {
@@ -49,6 +68,17 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
       grant_type: 'refresh_token',
       refresh_token: tokenRow.refresh_token,
     }),
+  });
+
+  trackRequest?.({
+    timestamp,
+    function_name: 'fetch-xero-bank-transactions',
+    invoker,
+    endpoint: 'identity.xero.com/connect/token',
+    account_id: null,
+    response_code: res.status,
+    retry_number: 0,
+    from_wrapper_retry_logic: false,
   });
 
   if (!res.ok) {
@@ -138,6 +168,7 @@ async function fetchBankTxnsForUser(
   guardMinutes: number,
   cacheFreshMinutes: number,
   fallbackLookbackDays: number,
+  invoker: string,
 ) {
   // ══════════════════════════════════════════════════════════════
   // STEP 1 — Gather facts for guard evaluation (single parallel batch)
@@ -212,6 +243,20 @@ async function fetchBankTxnsForUser(
     has_any_mapping: hasAnyMapping,
   };
 
+  const outboundRequestLedger: XeroRequestLedgerEntry[] = [];
+  const buildRequestAudit = () => {
+    const idx429 = outboundRequestLedger.findIndex((entry) => entry.response_code === 429);
+    return {
+      xero_request_count: outboundRequestLedger.length,
+      xero_calls_made: outboundRequestLedger.length,
+      xero_endpoints_hit: [...new Set(outboundRequestLedger.map((entry) => entry.endpoint))],
+      retry_attempts: outboundRequestLedger.filter((entry) => entry.from_wrapper_retry_logic).length,
+      xero_wrapper_retry_attempts: outboundRequestLedger.filter((entry) => entry.from_wrapper_retry_logic).length,
+      '429_received_on_request_number': idx429 >= 0 ? idx429 + 1 : null,
+      outbound_request_ledger: outboundRequestLedger,
+    };
+  };
+
   // ══════════════════════════════════════════════════════════════
   // STEP 2A — Xero 429 cooldown (always respected, never extended on skip)
   // ══════════════════════════════════════════════════════════════
@@ -229,6 +274,8 @@ async function fetchBankTxnsForUser(
         stopped_reason: 'cooldown',
         xero_rate_limited: false,
         cooldown_applied: true,
+        cooldown_key_used: COOLDOWN_KEY,
+        cooldown_active: true,
         live_xero_call_attempted: false,
         live_xero_429_received: false,
         recent_success_guard_applied: false,
@@ -243,6 +290,7 @@ async function fetchBankTxnsForUser(
         invoice_range_days: null,
         mapped_account_ids_count: mappedAccountIds.size,
         has_any_mapping: hasAnyMapping,
+        ...buildRequestAudit(),
       };
     }
   }
@@ -267,7 +315,14 @@ async function fetchBankTxnsForUser(
   // ══════════════════════════════════════════════════════════════
   let token: any;
   try {
-    token = await refreshXeroToken(adminSupabase, userId, clientId, clientSecret);
+    token = await refreshXeroToken(
+      adminSupabase,
+      userId,
+      clientId,
+      clientSecret,
+      (entry) => outboundRequestLedger.push(entry),
+      invoker,
+    );
   } catch (tokenErr: any) {
     console.error(`[fetch-bank-txns] Token refresh threw for ${userId}:`, tokenErr.message);
     token = null;
@@ -280,6 +335,8 @@ async function fetchBankTxnsForUser(
       stopped_reason: 'token_refresh_failed',
       xero_rate_limited: false,
       cooldown_applied: false,
+      cooldown_key_used: COOLDOWN_KEY,
+      cooldown_active: false,
       live_xero_call_attempted: false,
       live_xero_429_received: false,
       recent_success_guard_applied: false,
@@ -293,6 +350,7 @@ async function fetchBankTxnsForUser(
       invoice_range_days: null,
       mapped_account_ids_count: 0,
       ...baseDiag,
+      ...buildRequestAudit(),
     };
   }
 
@@ -333,6 +391,8 @@ async function fetchBankTxnsForUser(
       stopped_reason: 'no_mapping',
       xero_rate_limited: false,
       cooldown_applied: false,
+      cooldown_key_used: COOLDOWN_KEY,
+      cooldown_active: false,
       live_xero_call_attempted: false,
       live_xero_429_received: false,
       recent_success_guard_applied: false,
@@ -355,6 +415,7 @@ async function fetchBankTxnsForUser(
       transactions_in_range: 0,
       date_range_source: dateRangeSource,
       ...baseDiag,
+      ...buildRequestAudit(),
     };
   }
 
@@ -496,6 +557,8 @@ async function fetchBankTxnsForUser(
       performedRealXeroFetch = true;
 
       const url = `https://api.xero.com/api.xro/2.0/BankTransactions?bankAccountID=${accountId}&where=${encodeURIComponent(whereClause)}&page=${page}`;
+      const requestTimestamp = new Date().toISOString();
+      const endpointLabel = `BankTransactions?bankAccountID=${accountId}&page=${page}`;
       const res = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token.access_token}`,
@@ -504,6 +567,17 @@ async function fetchBankTxnsForUser(
           // If-Modified-Since DISABLED for testing — uncomment to re-enable
           // 'If-Modified-Since': ifModifiedSinceValue,
         },
+      });
+
+      outboundRequestLedger.push({
+        timestamp: requestTimestamp,
+        function_name: 'fetch-xero-bank-transactions',
+        invoker,
+        endpoint: endpointLabel,
+        account_id: accountId,
+        response_code: res.status,
+        retry_number: 0,
+        from_wrapper_retry_logic: false,
       });
 
       totalPagesFetched++;
@@ -536,6 +610,8 @@ async function fetchBankTxnsForUser(
             xero_rate_limited: true,
             skip_reason: null,
             cooldown_applied: false,
+            cooldown_key_used: COOLDOWN_KEY,
+            cooldown_active: false,
             live_xero_call_attempted: true,
             live_xero_429_received: true,
             recent_success_guard_applied: false,
@@ -546,6 +622,8 @@ async function fetchBankTxnsForUser(
             synced_row_count: totalUpserted,
             partial: totalUpserted > 0,
             stopped_reason: 'rate_limited',
+            accounts_checked: accountIds.length,
+            mapped_accounts: mappedAccountIds.size,
             pages_fetched: totalPagesFetched,
             transactions_seen_total: totalTransactionsSeen,
             transactions_seen: totalTransactionsSeen,
@@ -565,6 +643,7 @@ async function fetchBankTxnsForUser(
             if_modified_since_value: null,
             cached_bank_rows_total: cachedBankRowsTotal,
             last_successful_bank_sync_at: lastSuccessfulBankSyncAt,
+            ...buildRequestAudit(),
           };
         }
 
@@ -713,6 +792,8 @@ async function fetchBankTxnsForUser(
       stopped_reason: 'unchanged_recent',
       xero_rate_limited: false,
       cooldown_applied: false,
+      cooldown_key_used: COOLDOWN_KEY,
+      cooldown_active: false,
       live_xero_call_attempted: false,
       live_xero_429_received: false,
       recent_success_guard_applied: true,
@@ -738,6 +819,7 @@ async function fetchBankTxnsForUser(
       if_modified_since_value: null,
       per_account_stats: perAccountStats,
       ...baseDiag,
+      ...buildRequestAudit(),
     };
   }
 
@@ -794,6 +876,8 @@ async function fetchBankTxnsForUser(
     stopped_reason: stoppedReason,
     xero_rate_limited: false,
     cooldown_applied: false,
+    cooldown_key_used: COOLDOWN_KEY,
+    cooldown_active: false,
     live_xero_call_attempted: performedRealXeroFetch,
     live_xero_429_received: false,
     recent_success_guard_applied: accountsSkippedByChangeDetection > 0,
@@ -801,6 +885,8 @@ async function fetchBankTxnsForUser(
     retry_after_seconds: 0,
     bank_rows_upserted: totalUpserted,
     synced_row_count: totalUpserted,
+    mapped_accounts: mappedAccountIds.size,
+    accounts_checked: accountIds.length,
     pages_fetched: totalPagesFetched,
     transactions_seen_total: totalTransactionsSeen,
     transactions_seen: totalTransactionsSeen,
@@ -822,6 +908,7 @@ async function fetchBankTxnsForUser(
     last_successful_bank_sync_at: effectiveLastSuccess,
     cooldown_until: null,
     refreshed_at: refreshedAt,
+    ...buildRequestAudit(),
   };
 }
 
@@ -895,7 +982,16 @@ Deno.serve(async (req) => {
 
       let result: any;
       try {
-        result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_SELF, CACHE_FRESH_MINUTES_SELF, LOOKBACK_DAYS_SELF);
+        result = await fetchBankTxnsForUser(
+          adminSupabase,
+          userId,
+          clientId,
+          clientSecret,
+          GUARD_MINUTES_SELF,
+          CACHE_FRESH_MINUTES_SELF,
+          LOOKBACK_DAYS_SELF,
+          invoker,
+        );
       } finally {
         await adminSupabase.rpc('release_sync_lock', {
           p_user_id: userId,
@@ -959,7 +1055,16 @@ Deno.serve(async (req) => {
           continue;
         }
         try {
-          const result = await fetchBankTxnsForUser(adminSupabase, userId, clientId, clientSecret, GUARD_MINUTES_BATCH, CACHE_FRESH_MINUTES_BATCH, LOOKBACK_DAYS_BATCH);
+          const result = await fetchBankTxnsForUser(
+            adminSupabase,
+            userId,
+            clientId,
+            clientSecret,
+            GUARD_MINUTES_BATCH,
+            CACHE_FRESH_MINUTES_BATCH,
+            LOOKBACK_DAYS_BATCH,
+            'batch',
+          );
           results.push({ ...result, invoker: 'batch', lock_acquired: true });
         } finally {
           await adminSupabase.rpc('release_sync_lock', {
