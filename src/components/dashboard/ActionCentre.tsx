@@ -125,6 +125,10 @@ export default function ActionCentre({
     period_start: string; period_end: string; bank_deposit: number | null;
     status: string | null;
   }>>([]);
+  const [ingestedSettlements, setIngestedSettlements] = useState<Array<{
+    id: string; marketplace: string | null; settlement_id: string;
+    period_start: string; period_end: string; bank_deposit: number | null;
+  }>>([]);
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -134,7 +138,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -144,11 +148,18 @@ export default function ActionCentre({
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('settlements')
           .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status')
-          .in('status', ['ingested', 'ready_to_push'])
+          .eq('status', 'ready_to_push')
           .eq('is_hidden', false)
           .eq('is_pre_boundary', false)
           .is('duplicate_of_settlement_id', null)
           .order('marketplace')
+          .order('period_start', { ascending: false }),
+        supabase.from('settlements')
+          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit')
+          .eq('status', 'ingested')
+          .eq('is_hidden', false)
+          .eq('is_pre_boundary', false)
+          .is('duplicate_of_settlement_id', null)
           .order('period_start', { ascending: false }),
       ]);
 
@@ -171,6 +182,9 @@ export default function ActionCentre({
       }
       if (readySettlementsRes.data) {
         setReadySettlements(readySettlementsRes.data as any);
+      }
+      if (ingestedRes.data) {
+        setIngestedSettlements(ingestedRes.data as any);
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
@@ -469,6 +483,24 @@ export default function ActionCentre({
             </Card>
             );
           })()}
+
+          {/* Card 2b — Uploaded, needs review */}
+          {ingestedSettlements.length > 0 && (
+            <Card className="border-muted bg-muted/30">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block" />
+                  <h3 className="font-semibold text-sm">Uploaded — needs review</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {ingestedSettlements.length} settlement{ingestedSettlements.length > 1 ? 's' : ''} uploaded but not yet validated for posting.
+                </p>
+                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
+                  <Search className="h-3 w-3" /> Review in Settlement Matching
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Card 3 — Posted — Awaiting Deposit */}
           {awaitingBank.length > 0 && (() => {
