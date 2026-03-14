@@ -1253,6 +1253,7 @@ Deno.serve(async (req) => {
       force_recompute_used: forceRecompute,
       mapping_status: mappingStatus,
       missing_settlement_ids: missingSettlementIds,
+      settlement_level_matches: settlementLevelMatches,
       // Invoice cache diagnostics
       invoice_cache_age_minutes: invoiceCacheAgeMinutes,
       invoice_cache_fetched_at: invoiceCacheFetchedAt,
