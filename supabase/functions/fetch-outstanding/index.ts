@@ -334,8 +334,9 @@ Deno.serve(async (req) => {
 
     if (shouldHitXero && !governorBlocked) {
       // ─── Fetch ALL outstanding sales invoices (ACCREC) from Xero ───
+      // Remove summaryOnly to get LineAmountTypes, TotalTax for tax-basis gating
       const invoiceWhere = encodeURIComponent(`Type=="ACCREC"`);
-      const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC&summaryOnly=true`;
+      const url = `https://api.xero.com/api.xro/2.0/Invoices?Statuses=DRAFT,SUBMITTED,AUTHORISED&where=${invoiceWhere}&order=Date DESC`;
 
       const xeroResult = await fetchXeroWithRetry(url, {
         'Authorization': `Bearer ${token.access_token}`,
