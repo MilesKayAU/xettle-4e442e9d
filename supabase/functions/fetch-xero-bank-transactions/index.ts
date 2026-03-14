@@ -809,9 +809,6 @@ async function fetchBankTxnsForUser(
         }
       }
 
-      const firstDate = pageTxnDates[0] || null;
-      const lastDate = pageTxnDates[pageTxnDates.length - 1] || null;
-      const newestToOldest = !!firstDate && !!lastDate ? firstDate >= lastDate : null;
 
       // With server-side date filtering, no need for client-side date boundary stops.
       // Just paginate until empty or max pages.
