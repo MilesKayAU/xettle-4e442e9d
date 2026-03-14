@@ -243,6 +243,20 @@ async function fetchBankTxnsForUser(
     has_any_mapping: hasAnyMapping,
   };
 
+  const outboundRequestLedger: XeroRequestLedgerEntry[] = [];
+  const buildRequestAudit = () => {
+    const idx429 = outboundRequestLedger.findIndex((entry) => entry.response_code === 429);
+    return {
+      xero_request_count: outboundRequestLedger.length,
+      xero_calls_made: outboundRequestLedger.length,
+      xero_endpoints_hit: [...new Set(outboundRequestLedger.map((entry) => entry.endpoint))],
+      retry_attempts: outboundRequestLedger.filter((entry) => entry.from_wrapper_retry_logic).length,
+      xero_wrapper_retry_attempts: outboundRequestLedger.filter((entry) => entry.from_wrapper_retry_logic).length,
+      _429_received_on_request_number: idx429 >= 0 ? idx429 + 1 : null,
+      outbound_request_ledger: outboundRequestLedger,
+    };
+  };
+
   // ══════════════════════════════════════════════════════════════
   // STEP 2A — Xero 429 cooldown (always respected, never extended on skip)
   // ══════════════════════════════════════════════════════════════
