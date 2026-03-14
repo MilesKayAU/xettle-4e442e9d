@@ -505,7 +505,7 @@ export default function ActionCentre({
                 </div>
                 <ul className="space-y-1">
                   {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
-                    <li key={r.id} className="text-xs flex items-center gap-1.5">
+                    <li key={r.id} className="text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5" onClick={() => { setDrawerSettlementId(r.settlement_id); setDrawerOpen(true); }}>
                       <span className="text-blue-400">•</span>
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start, r.period_end)}
                       {r.settlement_net ? ` — ${formatAUD(r.settlement_net)}` : ''}
