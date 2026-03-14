@@ -1397,6 +1397,28 @@ serve(async (req) => {
                 backfilled++;
                 console.log(`[backfill] ✓ Found and ingested settlement ${header.settlementId}`);
 
+                // ─── Compute and persist settlement_components ───
+                const payoutTotal = round2(summary.bankDeposit);
+                const commerceGrossTotal = round2(payoutTotal + Math.abs(summary.gstOnIncome) + summary.gstOnExpenses);
+                await supabase.from('settlement_components').upsert({
+                  user_id: userId,
+                  settlement_id: header.settlementId,
+                  marketplace_code: 'amazon_au',
+                  currency: 'AUD',
+                  period_start: header.periodStart,
+                  period_end: header.periodEnd,
+                  sales_ex_tax: round2(Math.abs(summary.salesPrincipal) + Math.abs(summary.salesShipping) - Math.abs(summary.gstOnIncome)),
+                  sales_tax: round2(Math.abs(summary.gstOnIncome)),
+                  fees_ex_tax: round2(-(Math.abs(summary.sellerFees) + Math.abs(summary.fbaFees) - Math.abs(summary.gstOnExpenses))),
+                  fees_tax: round2(-Math.abs(summary.gstOnExpenses)),
+                  payout_total: payoutTotal,
+                  payout_gst_inclusive: commerceGrossTotal,
+                  commerce_gross_total: commerceGrossTotal,
+                  gst_rate: 10,
+                  reconciled: true,
+                  source: 'api_backfill',
+                } as any, { onConflict: 'user_id,settlement_id,marketplace_code' });
+
                 // Auto-link to pre-cached Xero invoice
                 const { data: preMatch } = await supabase
                   .from('xero_accounting_matches')
