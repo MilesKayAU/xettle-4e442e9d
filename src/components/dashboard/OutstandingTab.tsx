@@ -1844,19 +1844,18 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
               <p className="text-xs text-muted-foreground">of {data.invoice_count}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={(() => {
+            const matched = filteredRows.filter(r => r.settlement_group_matched).length;
+            return matched > 0 ? 'border-emerald-200 dark:border-emerald-800' : '';
+          })()}>
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Bank deposit found</p>
+              <p className="text-xs text-muted-foreground">Settlement matched</p>
               <p className={`text-xl font-bold ${
-                data.bank_deposit_found === 0 && filteredRows.every(r => r.has_bank_deposit || isAmazon(r))
-                  ? 'text-muted-foreground'
-                  : 'text-foreground'
-              }`}>{data.bank_deposit_found}</p>
-              <p className="text-xs text-muted-foreground">
-                {data.bank_deposit_found === 0 && filteredRows.every(r => r.has_bank_deposit || isAmazon(r))
-                  ? 'Amazon uses batched deposits'
-                  : `of ${data.invoice_count}`}
-              </p>
+                filteredRows.filter(r => r.settlement_group_matched).length > 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-muted-foreground'
+              }`}>{filteredRows.filter(r => r.settlement_group_matched).length}</p>
+              <p className="text-xs text-muted-foreground">of {filteredRows.length}</p>
             </CardContent>
           </Card>
           <Card>
