@@ -1363,7 +1363,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         <div>
           <h2 className="text-2xl font-bold text-foreground">Outstanding</h2>
           <p className="text-muted-foreground mt-1">
-            Xero invoices awaiting payment — matched against your settlements and bank deposits.
+            Xero invoices awaiting settlement matching. Bank feed is optional verification.
           </p>
         </div>
         <Card>
