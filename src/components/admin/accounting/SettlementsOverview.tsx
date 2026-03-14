@@ -339,6 +339,18 @@ export default function SettlementsOverview({
           ))}
         </div>
       </CardContent>
+
+      {/* Golden Rule: Batch push goes through PushSafetyPreview */}
+      <PushSafetyPreview
+        open={batchPreviewOpen}
+        onClose={() => {
+          setBatchPreviewOpen(false);
+          setBatchSettlements([]);
+          setPendingBatchCode(null);
+        }}
+        onConfirm={handleBatchConfirm}
+        settlements={batchSettlements}
+      />
     </Card>
   );
 }
