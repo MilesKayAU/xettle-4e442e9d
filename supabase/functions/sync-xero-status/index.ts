@@ -1107,6 +1107,7 @@ serve(async (req) => {
         cache_status_changed: cacheStatusChanged,
         new_reference_matches: updated,
         fuzzy_matched: fuzzyMatched,
+        auto_resolved: autoResolved,
         invoices_scanned: dedupedInvoices.length,
         uncached_settlements: uncachedSettlements.length,
         unmatched: unmatchedCount,
