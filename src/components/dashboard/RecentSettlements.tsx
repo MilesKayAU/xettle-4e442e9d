@@ -51,6 +51,7 @@ interface SettlementRow {
   other_fees: number | null;
   storage_fees: number | null;
   advertising_costs: number | null;
+  is_pre_boundary: boolean;
 }
 
 const MARKETPLACE_DISPLAY: Record<string, string> = {
