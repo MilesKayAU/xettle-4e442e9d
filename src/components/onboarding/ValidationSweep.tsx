@@ -186,6 +186,7 @@ export default function ValidationSweep({
                 supabase.from('marketplace_validation')
                   .update({ overall_status: 'settlement_needed' })
                   .eq('id', row.id)
+                  .then()
               );
             }
           }
