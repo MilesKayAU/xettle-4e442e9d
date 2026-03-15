@@ -243,7 +243,7 @@ export interface ParserOptions {
  * Parse the Amazon Settlement Report TSV file
  */
 export function parseSettlementTSV(tsvContent: string, options?: ParserOptions): ParsedSettlement {
-  console.log('[PARSER START]', 'version:', PARSER_VERSION, 'input length:', tsvContent.length);
+  // Parser start logged at debug level only
   const gstDivisor = 1 + (100 / (options?.gstRate || 10)); // 10% GST-inclusive → divide by 11 to extract GST component
   const rawLines = tsvContent.split('\n').filter(line => line.trim().length > 0);
 
