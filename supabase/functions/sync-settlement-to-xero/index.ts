@@ -1076,6 +1076,27 @@ serve(async (req) => {
       settlement_data_hash: hashSettlementData(body.settlementData),
     };
 
+    // ─── DURABLE CSV RETENTION — store in our own storage before Xero ──
+    // This ensures we always have an independent copy even if Xero attachments are removed.
+    if (body.settlementData && lineItems.length > 0) {
+      try {
+        const csvForStorage = buildSettlementCsv(body.settlementData, lineItems);
+        const csvHashForStorage = hashCsv(csvForStorage);
+        const storageClient = createClient(supabaseUrl, supabaseServiceKey);
+        const storagePath = `${userId}/${csvHashForStorage}.csv`;
+        await storageClient.storage.from('audit-csvs').upload(storagePath, new TextEncoder().encode(csvForStorage), {
+          contentType: 'text/csv',
+          upsert: false, // immutable — never overwrite
+        });
+        console.log(`[csv-retention] Stored durable copy: audit-csvs/${storagePath}`);
+      } catch (storageErr: any) {
+        // Non-fatal: log but continue (file may already exist from prior attempt)
+        if (!storageErr?.message?.includes('already exists') && !storageErr?.message?.includes('Duplicate')) {
+          console.warn(`[csv-retention] Storage upload warning: ${storageErr.message}`);
+        }
+      }
+    }
+
     // ─── Attach audit CSV (REQUIRED — fail if missing or upload fails) ──
     // ORPHAN INVOICE PREVENTION (Option B — Recoverable State):
     // If attachment fails after invoice creation, we:
