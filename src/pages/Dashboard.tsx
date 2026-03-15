@@ -659,6 +659,11 @@ export default function Dashboard() {
                   switchView(view as DashboardView);
                   if (subTab) switchSettlementsSubTab(subTab as SettlementsSubTab);
                 }}
+                onScrollToActionCentre={() => {
+                  setTimeout(() => {
+                    document.getElementById('action-centre-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 100);
+                }}
               />
               {/* Post-setup scan banner — triggers adaptive sync on first load */}
               <PostSetupBanner
@@ -715,6 +720,7 @@ export default function Dashboard() {
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
 
               {/* Action Centre — what needs attention */}
+              <div id="action-centre-section">
               <ActionCentre
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);
@@ -737,6 +743,7 @@ export default function Dashboard() {
                   }, 100);
                 }}
               />
+              </div>
 
               {/* Recent settlements — real payout/settlement records only */}
               <div id="settlements-table-section">

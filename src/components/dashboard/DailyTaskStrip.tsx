@@ -4,6 +4,7 @@ import { FileText, Send, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-
 
 interface DailyTaskStripProps {
   onNavigate: (view: string, subTab?: string) => void;
+  onScrollToActionCentre?: () => void;
 }
 
 interface TaskCounts {
@@ -13,7 +14,7 @@ interface TaskCounts {
   reconAlerts: number;
 }
 
-export default function DailyTaskStrip({ onNavigate }: DailyTaskStripProps) {
+export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: DailyTaskStripProps) {
   const [counts, setCounts] = useState<TaskCounts>({ filesToReview: 0, readyToPush: 0, awaitingReconciliation: 0, reconAlerts: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -66,7 +67,7 @@ export default function DailyTaskStrip({ onNavigate }: DailyTaskStripProps) {
       color: 'text-amber-500',
       bgColor: 'bg-amber-500/10',
       borderColor: 'border-amber-500/30',
-      onClick: () => onNavigate('smart_upload'),
+      onClick: () => onNavigate('settlements', 'overview'),
     },
     {
       key: 'push',
@@ -76,7 +77,7 @@ export default function DailyTaskStrip({ onNavigate }: DailyTaskStripProps) {
       color: 'text-primary',
       bgColor: 'bg-primary/10',
       borderColor: 'border-primary/30',
-      onClick: () => onNavigate('dashboard'),
+      onClick: () => onScrollToActionCentre?.() ?? onNavigate('dashboard'),
     },
     {
       key: 'recon',
