@@ -173,20 +173,22 @@ export default function ValidationSweep({
             if (!sStatus) continue;
 
             if (sStatus === 'already_recorded' || sStatus === 'pushed_to_xero') {
-              row.overall_status = 'complete'; // fix locally
+              row.overall_status = 'complete';
               fixPromises.push(
-                supabase.from('marketplace_validation')
-                  .update({ overall_status: 'complete' })
-                  .eq('id', row.id)
-                  .then()
+                Promise.resolve(
+                  supabase.from('marketplace_validation')
+                    .update({ overall_status: 'complete' })
+                    .eq('id', row.id)
+                )
               );
             } else if (sStatus === 'ingested' || sStatus === 'saved') {
-              row.overall_status = 'settlement_needed'; // fix locally
+              row.overall_status = 'settlement_needed';
               fixPromises.push(
-                supabase.from('marketplace_validation')
-                  .update({ overall_status: 'settlement_needed' })
-                  .eq('id', row.id)
-                  .then()
+                Promise.resolve(
+                  supabase.from('marketplace_validation')
+                    .update({ overall_status: 'settlement_needed' })
+                    .eq('id', row.id)
+                )
               );
             }
           }
