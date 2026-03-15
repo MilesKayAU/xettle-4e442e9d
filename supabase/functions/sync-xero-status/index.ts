@@ -1058,6 +1058,40 @@ serve(async (req) => {
       }
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    // AUTO-RESOLVE: Move ready_to_push settlements with PAID external matches to already_recorded
+    // ════════════════════════════════════════════════════════════════════
+    let autoResolved = 0;
+    const { data: readySettlements } = await supabase
+      .from('settlements').select('id, settlement_id')
+      .eq('user_id', userId).eq('status', 'ready_to_push')
+      .eq('is_hidden', false).is('duplicate_of_settlement_id', null);
+
+    if (readySettlements && readySettlements.length > 0) {
+      const readySids = readySettlements.map(s => s.settlement_id);
+      const { data: paidMatches } = await supabase
+        .from('xero_accounting_matches')
+        .select('settlement_id')
+        .eq('user_id', userId)
+        .eq('xero_status', 'PAID')
+        .in('settlement_id', readySids);
+
+      if (paidMatches && paidMatches.length > 0) {
+        const paidSids = new Set(paidMatches.map(m => m.settlement_id));
+        const idsToResolve = readySettlements
+          .filter(s => paidSids.has(s.settlement_id))
+          .map(s => s.id);
+
+        if (idsToResolve.length > 0) {
+          await supabase.from('settlements')
+            .update({ status: 'already_recorded', sync_origin: 'external' })
+            .in('id', idsToResolve);
+          autoResolved = idsToResolve.length;
+          console.log(`[sync-xero-status] Auto-resolved ${autoResolved} ready_to_push settlements with PAID external matches`);
+        }
+      }
+    }
+
     // Count remaining unmatched (only ready_to_push, not saved — saved means still being checked)
     const { data: stillUnmatched } = await supabase
       .from('settlements').select('settlement_id').eq('user_id', userId)
@@ -1073,6 +1107,7 @@ serve(async (req) => {
         cache_status_changed: cacheStatusChanged,
         new_reference_matches: updated,
         fuzzy_matched: fuzzyMatched,
+        auto_resolved: autoResolved,
         invoices_scanned: dedupedInvoices.length,
         uncached_settlements: uncachedSettlements.length,
         unmatched: unmatchedCount,
