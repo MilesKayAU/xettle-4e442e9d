@@ -489,11 +489,18 @@ serve(async (req) => {
       for (const inv of outstandingInvoices) {
         const sid = extractSettlementId(inv.Reference || '');
         if (!sid) continue;
-        if (localSettlementIds.has(sid)) continue;
         if (cacheBySettlement.has(sid)) continue;
-        if (!['DRAFT', 'SUBMITTED', 'AUTHORISED'].includes(inv.Status || '')) continue;
 
         const ref = inv.Reference || '';
+        const isExternalInvoice = !ref.toLowerCase().startsWith('xettle-');
+
+        // For external invoices (LMB, A2X, etc.), we want to match them even if
+        // we have a local settlement — this is how we detect "already in Xero".
+        // For Xettle invoices, skip if we already have the settlement locally.
+        if (!isExternalInvoice && localSettlementIds.has(sid)) continue;
+        // Only filter status for non-external invoices (seeding outstanding)
+        if (!isExternalInvoice && !['DRAFT', 'SUBMITTED', 'AUTHORISED'].includes(inv.Status || '')) continue;
+
         const contactName = inv.Contact?.Name || '';
         const detectedMarketplace = detectMarketplaceFromContact(contactName);
 
@@ -615,13 +622,18 @@ serve(async (req) => {
     }
 
     // Load incremental cursor for full reference scan
+    // If many settlements are unmatched, do a full scan to catch older external invoices
+    const uncachedCount = uncachedSettlements.length;
     const { data: cursorSetting } = await supabase
       .from('app_settings').select('value')
       .eq('user_id', userId).eq('key', `xero_last_invoice_scan_at_${token.tenant_id}`)
       .maybeSingle();
-    const modifiedAfter = cursorSetting?.value || null;
-    console.log(`[step-4] Incremental cursor: ${modifiedAfter || 'FULL SCAN (first run)'}`);
-
+    const modifiedAfter = (uncachedCount > 10) ? null : (cursorSetting?.value || null);
+    if (uncachedCount > 10) {
+      console.log(`[step-4] ${uncachedCount} unmatched — forcing FULL SCAN (ignoring cursor)`);
+    } else {
+      console.log(`[step-4] Incremental cursor: ${modifiedAfter || 'FULL SCAN (first run)'}`);
+    }
     // Run reference queries — only for new/modified invoices
     const newFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("Xettle-")', modifiedAfter);
     const oldFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Settlement")', modifiedAfter);
@@ -645,20 +657,31 @@ serve(async (req) => {
     console.log(`[step-4] Found ${dedupedInvoices.length} invoices from incremental scan`);
 
     // Extract settlement IDs from references
-    const seen = new Map<string, any>();
+    // Group ALL invoices by settlement ID to find the best match (prefer PAID, then Xettle-)
+    const allBySid = new Map<string, any[]>();
     for (const inv of dedupedInvoices) {
       const sid = extractSettlementId(inv.Reference || '');
       if (!sid) continue;
-      if (!seen.has(sid) || (inv.Reference || '').startsWith('Xettle-')) {
-        seen.set(sid, inv);
-      }
+      if (!allBySid.has(sid)) allBySid.set(sid, []);
+      allBySid.get(sid)!.push(inv);
+    }
+    // Pick best invoice per settlement: prefer PAID status, then Xettle- prefix
+    const seen = new Map<string, any>();
+    for (const [sid, invs] of allBySid.entries()) {
+      const paid = invs.find(i => i.Status === 'PAID');
+      const xettle = invs.find(i => (i.Reference || '').startsWith('Xettle-'));
+      seen.set(sid, paid || xettle || invs[0]);
     }
 
-    // Update settlements + cache for reference hits (only uncached ones)
+    // Update settlements + cache for reference hits
+    // Allow overwrite of cached entries if the new match has PAID status (more definitive)
     let updated = 0;
     for (const [settlementId, inv] of seen.entries()) {
-      // Skip if already cached (status was already verified in Step 2)
-      if (cacheBySettlement.has(settlementId)) continue;
+      const cachedEntry = cacheBySettlement.get(settlementId);
+      // Skip if already cached AND the cached status is same or better
+      if (cachedEntry && cachedEntry.xero_status === 'PAID') continue;
+      // If cached but not PAID, allow PAID to overwrite
+      if (cachedEntry && inv.Status !== 'PAID') continue;
 
       const ref = inv.Reference || '';
       const isXettleFormat = ref.startsWith('Xettle-');
@@ -1024,7 +1047,7 @@ serve(async (req) => {
         .eq('is_pre_boundary', false)
         .is('xero_journal_id', null)
         .lt('period_end', cutoffDate);
-      console.log(`[step-5b] Marked ${savedUnmatchedOld.length} OLD saved settlements as already_recorded`);
+      console.log(`[step-5b] Marked ${ingestedUnmatchedOld.length} OLD ingested settlements as pre-boundary`);
     }
 
     // ════════════════════════════════════════════════════════════════════
