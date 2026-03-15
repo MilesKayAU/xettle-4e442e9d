@@ -19,6 +19,9 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
   if (name.includes('amazon') || name.match(/^\d{10,}\.csv/) || name.match(/flat.*file/i)) {
     return 'amazon_au';
   }
+  if (name.includes('ebay') || name.includes('order_proceeds') || name.includes('transaction_report')) {
+    return 'ebay_au';
+  }
 
   // ── Content-based signals ──
   try {
