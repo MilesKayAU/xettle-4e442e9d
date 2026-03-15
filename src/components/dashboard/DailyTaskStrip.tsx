@@ -21,21 +21,30 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
   useEffect(() => {
     async function load() {
       try {
-        const [ingested, ready, awaiting, alerts] = await Promise.all([
-          supabase.from('settlements').select('id', { count: 'exact', head: true })
-            .eq('status', 'ingested').eq('is_hidden', false),
-          supabase.from('settlements').select('id', { count: 'exact', head: true })
-            .eq('status', 'ready_to_push').eq('is_hidden', false).eq('is_pre_boundary', false),
-          supabase.from('settlements').select('id', { count: 'exact', head: true })
-            .eq('xero_status', 'pushed_to_xero').eq('is_hidden', false),
+        // Use marketplace_validation as source of truth (same as Overview page)
+        const [valRes, reconAlerts] = await Promise.all([
+          supabase.from('marketplace_validation').select('overall_status'),
           supabase.from('marketplace_validation').select('id', { count: 'exact', head: true })
             .in('overall_status', ['missing', 'partial']),
         ]);
+
+        const valRows = valRes.data || [];
+        // Count using same logic as ValidationSweep
+        let filesToReview = 0;
+        let readyToPush = 0;
+        let awaitingReconciliation = 0;
+        valRows.forEach(r => {
+          const s = r.overall_status;
+          if (s === 'settlement_needed' || s === 'missing') filesToReview++;
+          else if (s === 'ready_to_push') readyToPush++;
+          else if (s === 'pushed_to_xero' || s === 'synced_external') awaitingReconciliation++;
+        });
+
         setCounts({
-          filesToReview: ingested.count ?? 0,
-          readyToPush: ready.count ?? 0,
-          awaitingReconciliation: awaiting.count ?? 0,
-          reconAlerts: alerts.count ?? 0,
+          filesToReview,
+          readyToPush,
+          awaitingReconciliation,
+          reconAlerts: reconAlerts.count ?? 0,
         });
       } catch {
         // silent
@@ -61,7 +70,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
   const tasks = [
     {
       key: 'review',
-      label: 'Files to review',
+      label: 'Upload needed',
       count: counts.filesToReview,
       icon: FileText,
       color: 'text-amber-500',
