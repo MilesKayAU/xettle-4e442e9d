@@ -24,7 +24,7 @@ export default function LoginForm({ onLoginSuccess, signIn }: LoginFormProps) {
     
     // Check honeypot for spam
     if (honeypot.trim().length > 0) {
-      console.log('Spam attempt detected');
+      // Spam attempt silently blocked
       return;
     }
 

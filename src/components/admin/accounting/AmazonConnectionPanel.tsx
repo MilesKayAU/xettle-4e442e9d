@@ -166,7 +166,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'All reports already synced.');
         if (imported > 0) onSettlementsAutoFetched?.();
         setLastSync(new Date().toISOString());
-        if (details.length > 0) console.log('[Sync Details]', details);
+        // Sync details available in edge function logs
       }
     } catch (err: any) {
       toast.error(`Sync failed: ${err.message}`);

@@ -317,12 +317,12 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         if (elapsed < AUDIT_COOLDOWN_MS) {
           const mins = Math.round((AUDIT_COOLDOWN_MS - elapsed) / 60000);
           setLastAuditTime(new Date(parseInt(cached, 10)).toISOString());
-          console.log(`[AutoImported] Skipping auto-audit — last run ${Math.round(elapsed / 60000)}min ago (cooldown: ${mins}min left)`);
+          // Skipping auto-audit — cooldown active
           return;
         }
       }
 
-      console.log(`[AutoImported] Auto-auditing Xero status for ${settlements.length} settlements`);
+      // Auto-auditing Xero status
       handleRunAudit();
     };
 
@@ -361,7 +361,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       if (!user) throw new Error('Not authenticated');
 
       // Run sync-xero-status (now includes fuzzy matching)
-      console.log('[Audit] Starting Xero status sync...');
+      // Starting Xero status sync
       const { data: xeroResult, error: xeroErr } = await supabase.functions.invoke('sync-xero-status', {
         body: { userId: user.id },
       });
@@ -370,11 +370,11 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         console.error('[Audit] Xero sync error:', xeroErr);
         toast.error(`Xero audit failed: ${xeroErr.message}`);
       } else {
-        console.log('[Audit] Xero result:', xeroResult);
+        // Xero audit completed
       }
 
       // Run bank deposit matching
-      console.log('[Audit] Starting bank deposit matching...');
+      // Starting bank deposit matching
       const { data: bankResult, error: bankErr } = await supabase.functions.invoke('match-bank-deposits', {
         body: {},
       });
@@ -382,7 +382,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       if (bankErr) {
         console.error('[Audit] Bank match error:', bankErr);
       } else {
-        console.log('[Audit] Bank result:', bankResult);
+        // Bank matching completed
       }
 
       const xeroUpdated = xeroResult?.updated || 0;

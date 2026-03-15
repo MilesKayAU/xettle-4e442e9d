@@ -362,7 +362,7 @@ export const orderToXeroRows = (order: AlibabaOrderForExport): XeroBillRow[] => 
         const targetAdjustableTotal = orderAud - serviceFeeAud;
         const adjustmentRatio = targetAdjustableTotal / adjustableTotal;
         
-        console.log(`Adjusting Product/Freight by ratio ${adjustmentRatio.toFixed(4)} to match order total (Service Fee fixed at $${serviceFeeAud.toFixed(2)})`);
+        // Proportional adjustment applied
         
         // Apply proportional adjustment to non-service-fee items
         adjustableTypes.forEach(ct => {
@@ -374,7 +374,7 @@ export const orderToXeroRows = (order: AlibabaOrderForExport): XeroBillRow[] => 
       // Estimate service fee at ~2.99% for Alibaba
       const estimatedServiceFee = orderAud * 0.0299;
       if (estimatedServiceFee > 0.50) {
-        console.log(`No per-item AUD for order ${order.order_id} - estimating Service Fee at ~3% ($${estimatedServiceFee.toFixed(2)} AUD)`);
+        // Estimating service fee at ~3% for order without per-item AUD
         const remainingAud = orderAud - estimatedServiceFee;
         
         // Add service fee line
