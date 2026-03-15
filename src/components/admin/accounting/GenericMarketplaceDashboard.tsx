@@ -973,6 +973,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         )}
       </div>
 
+      {/* eBay upload guide */}
+      {code === 'ebay_au' && <EbayUploadGuide />}
+
       {/* Upload prompt — below data, not blocking view */}
       {onSwitchToUpload && (
         <>
