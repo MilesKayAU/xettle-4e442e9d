@@ -124,7 +124,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   useEffect(() => {
     if (hasLoadedOnce && settlements.length > 0 && !hasAutoAudited && !refreshingXero) {
       setHasAutoAudited(true);
-      console.log(`[GenericDashboard] Auto-auditing Xero status for ${code} (${settlements.length} settlements)`);
+      // Auto-audit Xero status on first load
       handleRefreshXero();
     }
   }, [hasLoadedOnce, settlements.length, hasAutoAudited, refreshingXero, handleRefreshXero, code]);

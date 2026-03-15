@@ -382,7 +382,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       if (bankErr) {
         console.error('[Audit] Bank match error:', bankErr);
       } else {
-        console.log('[Audit] Bank result:', bankResult);
+        // Bank matching completed
       }
 
       const xeroUpdated = xeroResult?.updated || 0;
