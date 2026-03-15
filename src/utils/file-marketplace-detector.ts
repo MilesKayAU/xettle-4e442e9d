@@ -101,4 +101,5 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   shopify_payments: 'Shopify Payments',
   shopify_orders: 'Shopify Orders',
   woolworths_marketplus: 'Woolworths MarketPlus',
+  ebay_au: 'eBay AU',
 };
