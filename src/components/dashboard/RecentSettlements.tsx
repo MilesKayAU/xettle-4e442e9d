@@ -343,6 +343,51 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
       if (error) throw error;
       const rows = (data || []) as SettlementRow[];
+      
+      // Bulk-promote stuck 'ingested' settlements that aren't pre-boundary
+      const stuckIngested = rows.filter(r => r.status === 'ingested' && !r.is_pre_boundary);
+      if (stuckIngested.length > 0) {
+        const stuckIds = stuckIngested.map(r => r.id);
+        await supabase.from('settlements')
+          .update({ status: 'ready_to_push' } as any)
+          .in('id', stuckIds);
+        console.log(`[RecentSettlements] Promoted ${stuckIds.length} stuck ingested → ready_to_push`);
+        // Re-fetch with updated statuses
+        const { data: refreshed } = await supabase
+          .from('settlements')
+          .select('*')
+          .eq('user_id', userId)
+          .neq('status', 'duplicate_suppressed')
+          .neq('status', 'already_recorded')
+          .order('period_end', { ascending: false });
+        const freshRows = (refreshed || []) as SettlementRow[];
+        setAllRows(freshRows);
+        // Continue with fresh rows for external match check
+        const readyIds2 = freshRows.filter(r => r.status === 'ready_to_push').map(r => r.settlement_id).filter(Boolean);
+        if (readyIds2.length > 0) {
+          const { data: matches } = await supabase
+            .from('xero_accounting_matches')
+            .select('settlement_id, xero_status')
+            .in('settlement_id', readyIds2);
+          if (matches) {
+            const paidMatchIds = new Set(
+              matches.filter((m: any) => m.xero_status === 'PAID').map((m: any) => m.settlement_id)
+            );
+            if (paidMatchIds.size > 0) {
+              const paidDbIds = freshRows.filter(r => paidMatchIds.has(r.settlement_id)).map(r => r.id);
+              supabase.from('settlements')
+                .update({ status: 'already_recorded', sync_origin: 'external' } as any)
+                .in('id', paidDbIds)
+                .then(() => { console.log(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`); fetchAll(); });
+            }
+            setExternalMatchIds(new Set(
+              matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
+            ));
+          }
+        }
+        return; // Already handled everything
+      }
+      
       setAllRows(rows);
 
       // Fetch external matches for ready-to-push settlements with xero_status
