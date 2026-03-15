@@ -129,7 +129,7 @@ const MARKETPLACE_SOURCE_HINTS: Record<string, string> = {
   bigw: 'Provided by Big W via email or marketplace portal',
   everyday_market: 'Provided by Everyday Market via email or marketplace portal',
   mydeal: 'Provided by MyDeal via email or marketplace portal',
-  bunnings: 'Bunnings Marketplace portal → Sales Summary PDF',
+  bunnings: 'Upload the "Summary of Transactions" PDF from Bunnings Marketplace portal. Optionally include the "Billing Cycle Orders" CSV for order-level detail.',
   kogan: 'Provided by Kogan via email or marketplace portal',
   catch: 'Provided by Catch via email or marketplace portal',
   ebay_au: 'eBay Seller Hub → Payments → Reports → Download CSV',
