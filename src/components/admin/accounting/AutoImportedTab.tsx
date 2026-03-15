@@ -370,7 +370,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         console.error('[Audit] Xero sync error:', xeroErr);
         toast.error(`Xero audit failed: ${xeroErr.message}`);
       } else {
-        console.log('[Audit] Xero result:', xeroResult);
+        // Xero audit completed
       }
 
       // Run bank deposit matching
