@@ -54,11 +54,12 @@ export default function SettlementsOverview({
       const codes = userMarketplaces.map(m => m.marketplace_code);
       if (codes.length === 0) { setRows([]); setLoading(false); return; }
 
-      // Fetch all settlements for the user's marketplaces
+      // Fetch all settlements for the user's marketplaces (exclude analytics-only shopify_auto records)
       const { data: allSettlements, error } = await supabase
         .from('settlements')
-        .select('marketplace, period_end, status, xero_status, updated_at')
+        .select('marketplace, period_end, status, xero_status, updated_at, settlement_id')
         .in('marketplace', codes)
+        .neq('source', 'api_sync')
         .order('period_end', { ascending: false });
 
       if (error) throw error;
@@ -154,6 +155,7 @@ export default function SettlementsOverview({
     setPushingCode(code);
     try {
       // Only ready_to_push — never parsed (must be validated first)
+      // Exclude shopify_auto_* analytics records
       const { data: unsent, error } = await supabase
         .from('settlements')
         .select('settlement_id, marketplace')
@@ -161,6 +163,7 @@ export default function SettlementsOverview({
         .eq('status', 'ready_to_push')
         .eq('is_hidden', false)
         .eq('is_pre_boundary', false)
+        .neq('source', 'api_sync')
         .is('duplicate_of_settlement_id', null)
         .order('period_end');
 
