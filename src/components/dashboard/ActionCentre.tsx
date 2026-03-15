@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   RefreshCw, Upload, Send, CheckCircle2, AlertTriangle, Plus,
-  ArrowRight, Clock, PartyPopper, Loader2, Search,
+  ArrowRight, Clock, PartyPopper, Loader2, Search, ShieldAlert,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
@@ -141,6 +141,7 @@ export default function ActionCentre({
     id: string; marketplace: string | null; settlement_id: string;
     period_start: string; period_end: string; bank_deposit: number | null;
   }>>([]);
+  const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -202,6 +203,17 @@ export default function ActionCentre({
       }
       if (readySettlementsRes.data) {
         setReadySettlements(readySettlementsRes.data as any);
+        // Fetch external matches for ready settlements
+        const readyIds = (readySettlementsRes.data as any[]).map((s: any) => s.settlement_id).filter(Boolean);
+        if (readyIds.length > 0) {
+          const { data: matches } = await supabase
+            .from('xero_accounting_matches')
+            .select('settlement_id')
+            .in('settlement_id', readyIds);
+          if (matches) {
+            setExternalMatchIds(new Set(matches.map((m: any) => m.settlement_id)));
+          }
+        }
       }
       if (ingestedRes.data) {
         setIngestedSettlements(ingestedRes.data as any);
@@ -491,26 +503,57 @@ export default function ActionCentre({
           {/* Card 2 — Ready to Post */}
           {readyToPush.length > 0 && (() => {
             const totalAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
+            const hasExternalRisk = readyToPush.some(r => r.settlement_id && externalMatchIds.has(r.settlement_id));
             return (
-            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
+            <Card className={cn(
+              "bg-blue-50/50 dark:bg-blue-900/10",
+              hasExternalRisk
+                ? "border-destructive/60 ring-1 ring-destructive/30"
+                : "border-blue-200 dark:border-blue-800"
+            )}>
               <CardContent className="py-5 space-y-3">
                 <div className="flex items-center gap-2">
                    <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
                    <h3 className="font-semibold text-sm">Send to Xero</h3>
                  </div>
                  <p className="text-[10px] text-muted-foreground/70 -mt-1">Not yet posted</p>
+                 {hasExternalRisk && (
+                   <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+                     <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                     <p className="text-[11px] text-destructive font-medium leading-tight">
+                       Some settlements below may already exist in Xero (e.g. posted by Link My Books). Open each flagged row to review before pushing.
+                     </p>
+                   </div>
+                 )}
                  <div>
                    <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to send</span></p>
                   <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
                 </div>
                 <ul className="space-y-1">
-                  {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => (
-                    <li key={r.id} className="text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5" onClick={() => { setDrawerSettlementId(r.settlement_id); setDrawerOpen(true); }}>
-                      <span className="text-blue-400">•</span>
+                  {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => {
+                    const isRisky = r.settlement_id ? externalMatchIds.has(r.settlement_id) : false;
+                    return (
+                    <li key={r.id} className={cn(
+                      "text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5",
+                      isRisky && "bg-destructive/5"
+                    )} onClick={() => { setDrawerSettlementId(r.settlement_id); setDrawerOpen(true); }}>
+                      {isRisky ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <ShieldAlert className="h-3.5 w-3.5 text-destructive shrink-0" />
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="max-w-[200px] text-xs">
+                            Possible duplicate — an invoice for this settlement was found in Xero
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-blue-400">•</span>
+                      )}
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start, r.period_end)}
                       {r.settlement_net ? ` — ${formatAUD(r.settlement_net)}` : ''}
                     </li>
-                  ))}
+                    );
+                  })}
                   {readyToPush.length > 3 && (
                     <li>
                       <button onClick={() => setExpandedCards(prev => ({ ...prev, ready: !prev.ready }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
