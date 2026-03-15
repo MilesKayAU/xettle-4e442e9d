@@ -70,7 +70,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
   const tasks = [
     {
       key: 'review',
-      label: 'Files to review',
+      label: 'Upload needed',
       count: counts.filesToReview,
       icon: FileText,
       color: 'text-amber-500',
