@@ -203,6 +203,17 @@ export default function ActionCentre({
       }
       if (readySettlementsRes.data) {
         setReadySettlements(readySettlementsRes.data as any);
+        // Fetch external matches for ready settlements
+        const readyIds = (readySettlementsRes.data as any[]).map((s: any) => s.settlement_id).filter(Boolean);
+        if (readyIds.length > 0) {
+          const { data: matches } = await supabase
+            .from('xero_accounting_matches')
+            .select('settlement_id')
+            .in('settlement_id', readyIds);
+          if (matches) {
+            setExternalMatchIds(new Set(matches.map((m: any) => m.settlement_id)));
+          }
+        }
       }
       if (ingestedRes.data) {
         setIngestedSettlements(ingestedRes.data as any);
