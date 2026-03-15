@@ -317,7 +317,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         if (elapsed < AUDIT_COOLDOWN_MS) {
           const mins = Math.round((AUDIT_COOLDOWN_MS - elapsed) / 60000);
           setLastAuditTime(new Date(parseInt(cached, 10)).toISOString());
-          console.log(`[AutoImported] Skipping auto-audit — last run ${Math.round(elapsed / 60000)}min ago (cooldown: ${mins}min left)`);
+          // Skipping auto-audit — cooldown active
           return;
         }
       }
