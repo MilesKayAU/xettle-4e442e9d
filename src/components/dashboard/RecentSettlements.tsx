@@ -525,6 +525,47 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
+        {/* ── Stale settlements bulk action ── */}
+        {(() => {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const staleReady = allRows.filter(r => 
+            r.status === 'ready_to_push' && 
+            new Date(r.period_end + 'T00:00:00') < thirtyDaysAgo
+          );
+          if (staleReady.length === 0) return null;
+          return (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/15 px-4 py-3">
+              <div className="flex items-center gap-2 text-xs">
+                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="text-muted-foreground">
+                  <span className="font-medium text-foreground">{staleReady.length}</span> settlement{staleReady.length > 1 ? 's' : ''} older than 30 days still awaiting push — already handled externally?
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs shrink-0 h-7 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400"
+                onClick={async () => {
+                  const ids = staleReady.map(r => r.id);
+                  const { error } = await supabase
+                    .from('settlements')
+                    .update({ status: 'already_recorded', reconciliation_status: 'already_recorded' } as any)
+                    .in('id', ids);
+                  if (error) {
+                    toast.error('Failed to update settlements');
+                  } else {
+                    toast.success(`${ids.length} settlement${ids.length > 1 ? 's' : ''} marked as already reconciled`);
+                    fetchAll();
+                  }
+                }}
+              >
+                Mark as Already Reconciled
+              </Button>
+            </div>
+          );
+        })()}
+
         {/* ── Status summary cards (clickable filters) ── */}
         <div className={cn("grid gap-3", summaryCards.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
           {summaryCards.map(card => (
