@@ -51,6 +51,7 @@ interface SettlementRow {
   other_fees: number | null;
   storage_fees: number | null;
   advertising_costs: number | null;
+  is_pre_boundary: boolean;
 }
 
 const MARKETPLACE_DISPLAY: Record<string, string> = {
@@ -175,9 +176,9 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: 
   }
   if (status === 'ingested') {
     return (
-      <Badge variant="outline" className="text-muted-foreground text-xs">
+      <Badge variant="outline" className="text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
         <Clock className="h-3 w-3 mr-1" />
-        Processing
+        Needs Sync
       </Badge>
     );
   }
@@ -335,7 +336,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     try {
       const { data, error } = await supabase
         .from('settlements')
-        .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs')
+        .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs, is_pre_boundary')
         .neq('source', 'api_sync')
         .neq('status', 'duplicate_suppressed')
         .neq('status', 'already_recorded')
@@ -343,6 +344,51 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
       if (error) throw error;
       const rows = (data || []) as SettlementRow[];
+      
+      // Bulk-promote stuck 'ingested' settlements that aren't pre-boundary
+      const stuckIngested = rows.filter(r => r.status === 'ingested' && !r.is_pre_boundary);
+      if (stuckIngested.length > 0) {
+        const stuckIds = stuckIngested.map(r => r.id);
+        await supabase.from('settlements')
+          .update({ status: 'ready_to_push' } as any)
+          .in('id', stuckIds);
+        console.log(`[RecentSettlements] Promoted ${stuckIds.length} stuck ingested → ready_to_push`);
+        // Re-fetch with updated statuses
+        const { data: refreshed } = await supabase
+          .from('settlements')
+          .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs, is_pre_boundary')
+          .neq('source', 'api_sync')
+          .neq('status', 'duplicate_suppressed')
+          .neq('status', 'already_recorded')
+          .order('period_end', { ascending: false });
+        const freshRows = (refreshed || []) as SettlementRow[];
+        setAllRows(freshRows);
+        // Continue with fresh rows for external match check
+        const readyIds2 = freshRows.filter(r => r.status === 'ready_to_push').map(r => r.settlement_id).filter(Boolean);
+        if (readyIds2.length > 0) {
+          const { data: matches } = await supabase
+            .from('xero_accounting_matches')
+            .select('settlement_id, xero_status')
+            .in('settlement_id', readyIds2);
+          if (matches) {
+            const paidMatchIds = new Set(
+              matches.filter((m: any) => m.xero_status === 'PAID').map((m: any) => m.settlement_id)
+            );
+            if (paidMatchIds.size > 0) {
+              const paidDbIds = freshRows.filter(r => paidMatchIds.has(r.settlement_id)).map(r => r.id);
+              supabase.from('settlements')
+                .update({ status: 'already_recorded', sync_origin: 'external' } as any)
+                .in('id', paidDbIds)
+                .then(() => { console.log(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`); fetchAll(); });
+            }
+            setExternalMatchIds(new Set(
+              matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
+            ));
+          }
+        }
+        return; // Already handled everything
+      }
+      
       setAllRows(rows);
 
       // Fetch external matches for ready-to-push settlements with xero_status
@@ -506,8 +552,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     },
     {
       key: 'posted',
-      label: 'Waiting for Payout',
-      sublabel: 'Posted, awaiting destination match',
+      label: 'In Xero — Processing',
+      sublabel: 'Posted, awaiting reconciliation',
       count: counts.posted,
       total: counts.postedTotal,
       color: 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-900/25',
