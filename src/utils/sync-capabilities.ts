@@ -114,14 +114,14 @@ export async function callEdgeFunctionSafe(
     const data = await res.json().catch(() => ({}));
     return { ok: true, data };
   } catch (err: any) {
-    if (err.name === 'AbortError') {
+    if (err.name === 'AbortError' || (err.message && err.message.includes('aborted'))) {
       // Check if it was user-initiated vs timeout
       if (options?.signal?.aborted) {
         console.warn(`[sync] ${name} stopped by user`);
         return { ok: false, error: 'Stopped by user', aborted: true };
       }
-      console.warn(`[sync] ${name} timed out`);
-      return { ok: false, error: 'Taking longer than expected — will retry automatically' };
+      console.warn(`[sync] ${name} timed out or aborted`);
+      return { ok: false, error: 'Taking longer than expected — will retry automatically', aborted: true };
     }
     console.error(`[sync] ${name} error:`, err);
     return { ok: false, error: err.message || `${name} failed` };
