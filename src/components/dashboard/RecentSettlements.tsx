@@ -345,15 +345,35 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       const rows = (data || []) as SettlementRow[];
       setAllRows(rows);
 
-      // Fetch external matches for ready-to-push settlements
+      // Fetch external matches for ready-to-push settlements with xero_status
       const readyIds = rows.filter(r => r.status === 'ready_to_push').map(r => r.settlement_id).filter(Boolean);
       if (readyIds.length > 0) {
         const { data: matches } = await supabase
           .from('xero_accounting_matches')
-          .select('settlement_id')
+          .select('settlement_id, xero_status')
           .in('settlement_id', readyIds);
         if (matches) {
-          setExternalMatchIds(new Set(matches.map((m: any) => m.settlement_id)));
+          // Auto-resolve PAID external matches — update status in background
+          const paidMatchIds = new Set(
+            matches.filter((m: any) => m.xero_status === 'PAID').map((m: any) => m.settlement_id)
+          );
+          if (paidMatchIds.size > 0) {
+            const paidDbIds = rows
+              .filter(r => paidMatchIds.has(r.settlement_id))
+              .map(r => r.id);
+            supabase.from('settlements')
+              .update({ status: 'already_recorded', sync_origin: 'external' } as any)
+              .in('id', paidDbIds)
+              .then(() => {
+                console.log(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`);
+                // Re-fetch to remove them from view
+                fetchAll();
+              });
+          }
+          // Only non-PAID matches show "Duplicate Risk"
+          setExternalMatchIds(new Set(
+            matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
+          ));
         }
       }
     } catch (err) {

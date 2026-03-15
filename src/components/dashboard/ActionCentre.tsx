@@ -202,17 +202,42 @@ export default function ActionCentre({
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
       if (readySettlementsRes.data) {
-        setReadySettlements(readySettlementsRes.data as any);
-        // Fetch external matches for ready settlements
-        const readyIds = (readySettlementsRes.data as any[]).map((s: any) => s.settlement_id).filter(Boolean);
+        const allReady = readySettlementsRes.data as any[];
+        // Fetch external matches for ready settlements with xero_status
+        const readyIds = allReady.map((s: any) => s.settlement_id).filter(Boolean);
         if (readyIds.length > 0) {
           const { data: matches } = await supabase
             .from('xero_accounting_matches')
-            .select('settlement_id')
+            .select('settlement_id, xero_status')
             .in('settlement_id', readyIds);
           if (matches) {
-            setExternalMatchIds(new Set(matches.map((m: any) => m.settlement_id)));
+            // Auto-resolve PAID external matches — move to already_recorded
+            const paidMatchIds = new Set(
+              matches.filter((m: any) => m.xero_status === 'PAID').map((m: any) => m.settlement_id)
+            );
+            if (paidMatchIds.size > 0) {
+              const paidDbIds = allReady
+                .filter((s: any) => paidMatchIds.has(s.settlement_id))
+                .map((s: any) => s.id);
+              // Batch update in background — don't block UI
+              supabase.from('settlements')
+                .update({ status: 'already_recorded', sync_origin: 'external' } as any)
+                .in('id', paidDbIds)
+                .then(() => console.log(`[ActionCentre] Auto-resolved ${paidDbIds.length} PAID external matches`));
+            }
+            // Only non-PAID matches are "Duplicate Risk"
+            const nonPaidMatchIds = new Set(
+              matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
+            );
+            setExternalMatchIds(nonPaidMatchIds);
+            // Filter out PAID matches from ready settlements
+            const filteredReady = allReady.filter((s: any) => !paidMatchIds.has(s.settlement_id));
+            setReadySettlements(filteredReady);
+          } else {
+            setReadySettlements(allReady);
           }
+        } else {
+          setReadySettlements(allReady);
         }
       }
       if (ingestedRes.data) {
