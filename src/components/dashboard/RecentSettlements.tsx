@@ -732,7 +732,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                     </tr>
                   )}
                 </React.Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
