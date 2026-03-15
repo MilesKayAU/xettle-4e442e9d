@@ -489,9 +489,17 @@ serve(async (req) => {
       for (const inv of outstandingInvoices) {
         const sid = extractSettlementId(inv.Reference || '');
         if (!sid) continue;
-        if (localSettlementIds.has(sid)) continue;
         if (cacheBySettlement.has(sid)) continue;
-        if (!['DRAFT', 'SUBMITTED', 'AUTHORISED'].includes(inv.Status || '')) continue;
+
+        const ref = inv.Reference || '';
+        const isExternalInvoice = !ref.toLowerCase().startsWith('xettle-');
+
+        // For external invoices (LMB, A2X, etc.), we want to match them even if
+        // we have a local settlement — this is how we detect "already in Xero".
+        // For Xettle invoices, skip if we already have the settlement locally.
+        if (!isExternalInvoice && localSettlementIds.has(sid)) continue;
+        // Only filter status for non-external invoices (seeding outstanding)
+        if (!isExternalInvoice && !['DRAFT', 'SUBMITTED', 'AUTHORISED'].includes(inv.Status || '')) continue;
 
         const ref = inv.Reference || '';
         const contactName = inv.Contact?.Name || '';
