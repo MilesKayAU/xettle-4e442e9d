@@ -680,7 +680,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         toast.success(`Found ${resp.data.backfilled} missing settlement${resp.data.backfilled > 1 ? 's' : ''} — refreshing…`);
         await fetchOutstanding({ runSync: false });
       } else {
-        toast.info('Settlement reports not found in Amazon — they may be older than 270 days.');
+        // Track these IDs as permanently unfindable so we don't retry on every load
+        try {
+          const existing = JSON.parse(sessionStorage.getItem('backfill_failed_ids') || '[]');
+          const merged = [...new Set([...existing, ...missingIds])];
+          sessionStorage.setItem('backfill_failed_ids', JSON.stringify(merged));
+        } catch {}
+        toast.info('Settlement reports not found in Amazon — they may be older than 270 days.', { id: 'backfill-270-days' });
       }
     } catch (err: any) {
       console.error('[backfill] error:', err);
@@ -689,11 +695,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, [backfilling, fetchOutstanding]);
 
-  // Auto-trigger backfill when missing settlement IDs detected
+  // Auto-trigger backfill when missing settlement IDs detected (skip already-failed ones)
   useEffect(() => {
     const missingIds = data?.sync_info?.missing_settlement_ids;
     if (missingIds && missingIds.length > 0 && hasLoaded && !backfilling) {
-      triggerBackfill(missingIds);
+      let failedIds: string[] = [];
+      try { failedIds = JSON.parse(sessionStorage.getItem('backfill_failed_ids') || '[]'); } catch {}
+      const newIds = missingIds.filter((id: string) => !failedIds.includes(id));
+      if (newIds.length > 0) {
+        triggerBackfill(newIds);
+      }
     }
   }, [data?.sync_info?.missing_settlement_ids, hasLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
