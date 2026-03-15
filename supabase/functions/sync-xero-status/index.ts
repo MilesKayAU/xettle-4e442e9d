@@ -657,20 +657,31 @@ serve(async (req) => {
     console.log(`[step-4] Found ${dedupedInvoices.length} invoices from incremental scan`);
 
     // Extract settlement IDs from references
-    const seen = new Map<string, any>();
+    // Group ALL invoices by settlement ID to find the best match (prefer PAID, then Xettle-)
+    const allBySid = new Map<string, any[]>();
     for (const inv of dedupedInvoices) {
       const sid = extractSettlementId(inv.Reference || '');
       if (!sid) continue;
-      if (!seen.has(sid) || (inv.Reference || '').startsWith('Xettle-')) {
-        seen.set(sid, inv);
-      }
+      if (!allBySid.has(sid)) allBySid.set(sid, []);
+      allBySid.get(sid)!.push(inv);
+    }
+    // Pick best invoice per settlement: prefer PAID status, then Xettle- prefix
+    const seen = new Map<string, any>();
+    for (const [sid, invs] of allBySid.entries()) {
+      const paid = invs.find(i => i.Status === 'PAID');
+      const xettle = invs.find(i => (i.Reference || '').startsWith('Xettle-'));
+      seen.set(sid, paid || xettle || invs[0]);
     }
 
-    // Update settlements + cache for reference hits (only uncached ones)
+    // Update settlements + cache for reference hits
+    // Allow overwrite of cached entries if the new match has PAID status (more definitive)
     let updated = 0;
     for (const [settlementId, inv] of seen.entries()) {
-      // Skip if already cached (status was already verified in Step 2)
-      if (cacheBySettlement.has(settlementId)) continue;
+      const cachedEntry = cacheBySettlement.get(settlementId);
+      // Skip if already cached AND the cached status is same or better
+      if (cachedEntry && cachedEntry.xero_status === 'PAID') continue;
+      // If cached but not PAID, allow PAID to overwrite
+      if (cachedEntry && inv.Status !== 'PAID') continue;
 
       const ref = inv.Reference || '';
       const isXettleFormat = ref.startsWith('Xettle-');
