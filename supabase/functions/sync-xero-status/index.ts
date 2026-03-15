@@ -1037,7 +1037,7 @@ serve(async (req) => {
         .eq('is_pre_boundary', false)
         .is('xero_journal_id', null)
         .lt('period_end', cutoffDate);
-      console.log(`[step-5b] Marked ${savedUnmatchedOld.length} OLD saved settlements as already_recorded`);
+      console.log(`[step-5b] Marked ${ingestedUnmatchedOld.length} OLD ingested settlements as pre-boundary`);
     }
 
     // ════════════════════════════════════════════════════════════════════
