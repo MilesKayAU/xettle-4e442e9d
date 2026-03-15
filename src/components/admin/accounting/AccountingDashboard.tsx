@@ -38,7 +38,7 @@ import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
 import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplicateCheck } from '@/utils/settlement-engine';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
-import InsightsTab from '@/components/admin/accounting/InsightsTab';
+
 import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
@@ -1022,9 +1022,6 @@ export default function AccountingDashboard() {
               <TabsTrigger value="settings" className="gap-1.5">
                 <Settings className="h-3.5 w-3.5" /> Settings
               </TabsTrigger>
-              <TabsTrigger value="insights" className="gap-1.5">
-                <BarChart3 className="h-3.5 w-3.5" /> Insights
-              </TabsTrigger>
               <TabsTrigger value="gst-audit" className="gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5" /> GST Audit
               </TabsTrigger>
@@ -1299,10 +1296,6 @@ export default function AccountingDashboard() {
               </div>
             </TabsContent>
 
-            {/* INSIGHTS TAB */}
-            <TabsContent value="insights">
-              <InsightsTab />
-            </TabsContent>
 
             {/* GST AUDIT TAB */}
             <TabsContent value="gst-audit">
