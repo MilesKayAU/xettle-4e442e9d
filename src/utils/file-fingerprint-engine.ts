@@ -227,6 +227,54 @@ const FINGERPRINTS: Fingerprint[] = [
     correctReportPath: 'Seller Central → Reports → Payments → All Statements → Download TSV',
     priority: 75,
   },
+
+  // ── eBay ──────────────────────────────────────────────────────────
+
+  // eBay Transaction Report (settlement-level, preferred)
+  {
+    marketplace: 'ebay_au',
+    marketplaceLabel: 'eBay AU',
+    isSettlementFile: true,
+    requiredColumns: ['payout id', 'net amount'],
+    anyOfColumns: ['final value fee', 'item subtotal', 'gross transaction amount', 'international fee'],
+    columnMapping: {
+      settlement_id: 'Payout ID',
+      gross_sales: 'Item subtotal',
+      fees: 'Final value fee',
+      net_payout: 'Net amount',
+      period_start: 'Payout date',
+      order_id: 'Order number',
+    },
+    priority: 100,
+  },
+
+  // eBay Order Proceeds / Earnings Report (order-level)
+  {
+    marketplace: 'ebay_au',
+    marketplaceLabel: 'eBay AU',
+    isSettlementFile: true,
+    requiredColumns: ['item subtotal', 'net proceeds'],
+    anyOfColumns: ['ebay collected tax', 'final value fee', 'order id', 'gross amount'],
+    columnMapping: {
+      gross_sales: 'Item subtotal',
+      fees: 'Final value fee',
+      net_payout: 'Net proceeds',
+      order_id: 'Order ID',
+    },
+    priority: 95,
+  },
+
+  // eBay Orders export (WRONG — no fee/net columns)
+  {
+    marketplace: 'ebay_au',
+    marketplaceLabel: 'eBay AU',
+    isSettlementFile: false,
+    requiredColumns: ['order id'],
+    anyOfColumns: ['buyer username', 'buyer name', 'ship to city'],
+    wrongFileMessage: 'This is an eBay Orders export, not a settlement/payments report. It doesn\'t contain fee breakdowns needed for accounting.',
+    correctReportPath: 'Seller Hub → Payments → Reports → Download Transaction Report (CSV)',
+    priority: 70,
+  },
 ];
 
 // ─── Level 1: Fingerprint Detection ─────────────────────────────────────────

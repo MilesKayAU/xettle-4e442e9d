@@ -3,7 +3,7 @@
  * Returns null if detection is inconclusive.
  */
 
-export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'shopify_payments' | 'shopify_orders' | 'woolworths_marketplus' | null;
+export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'shopify_payments' | 'shopify_orders' | 'woolworths_marketplus' | 'ebay_au' | null;
 
 /** Sniff a file and return the detected marketplace */
 export async function detectFileMarketplace(file: File): Promise<DetectedMarketplace> {
@@ -18,6 +18,9 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
   }
   if (name.includes('amazon') || name.match(/^\d{10,}\.csv/) || name.match(/flat.*file/i)) {
     return 'amazon_au';
+  }
+  if (name.includes('ebay') || name.includes('order_proceeds') || name.includes('transaction_report')) {
+    return 'ebay_au';
   }
 
   // ── Content-based signals ──
@@ -49,6 +52,13 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
           (lower.includes('charges') && lower.includes('total') && lower.includes('bank reference')) ||
           (lower.includes('shopify') && (lower.includes('gross') || lower.includes('charges')))) {
         return 'shopify_payments';
+      }
+
+      // eBay content signals
+      if ((lower.includes('payout id') && lower.includes('net amount')) ||
+          (lower.includes('item subtotal') && lower.includes('net proceeds')) ||
+          (lower.includes('ebay collected tax') && lower.includes('final value fee'))) {
+        return 'ebay_au';
       }
 
       if (lower.includes('settlement-id') || lower.includes('settlement-start-date') ||
@@ -91,4 +101,5 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   shopify_payments: 'Shopify Payments',
   shopify_orders: 'Shopify Orders',
   woolworths_marketplus: 'Woolworths MarketPlus',
+  ebay_au: 'eBay AU',
 };
