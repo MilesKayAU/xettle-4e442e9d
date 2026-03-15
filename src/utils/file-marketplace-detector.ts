@@ -10,7 +10,7 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
   const name = file.name.toLowerCase();
 
   // ── Filename-based signals ──
-  if (name.includes('bunnings') || name.includes('bun-') || name.includes('summary-of-transactions')) {
+  if (name.includes('bunnings') || name.includes('bun-') || name.includes('summary-of-transactions') || name.includes('billing-cycle-orders')) {
     return 'bunnings';
   }
   if (name.includes('shopify') || name.includes('payout')) {
