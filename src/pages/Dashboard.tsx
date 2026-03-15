@@ -720,6 +720,7 @@ export default function Dashboard() {
               <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
 
               {/* Action Centre — what needs attention */}
+              <div id="action-centre-section">
               <ActionCentre
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);
