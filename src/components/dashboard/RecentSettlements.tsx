@@ -355,8 +355,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         // Re-fetch with updated statuses
         const { data: refreshed } = await supabase
           .from('settlements')
-          .select('*')
-          .eq('user_id', userId)
+          .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs, is_pre_boundary')
+          .neq('source', 'api_sync')
           .neq('status', 'duplicate_suppressed')
           .neq('status', 'already_recorded')
           .order('period_end', { ascending: false });
