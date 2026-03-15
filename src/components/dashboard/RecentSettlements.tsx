@@ -611,18 +611,35 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                   </td>
                 </tr>
               )}
-              {pageRows.map((row, idx) => (
+              {pageRows.map((row, idx) => {
+                const hasExternalRisk = row.status === 'ready_to_push' && externalMatchIds.has(row.settlement_id);
+                return (
                 <React.Fragment key={row.id}>
                   <tr
                     className={cn(
                       'border-b border-border/30 last:border-0 transition-colors hover:bg-muted/30',
                       idx % 2 === 1 && 'bg-muted/10',
                       expandedId === row.id && 'bg-muted/20',
-                      row.status === 'hidden' && 'opacity-60'
+                      row.status === 'hidden' && 'opacity-60',
+                      hasExternalRisk && 'bg-destructive/5 border-l-2 border-l-destructive/60'
                     )}
                   >
                     <td className="px-4 py-3 font-medium text-foreground">
-                      {getMarketplaceLabel(row.marketplace)}
+                      <div className="flex items-center gap-1.5">
+                        {hasExternalRisk && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[220px] text-xs">
+                                Possible duplicate — an invoice for this settlement already exists in Xero (e.g. Link My Books). Open the drawer to review before pushing.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {getMarketplaceLabel(row.marketplace)}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                       {formatDateRange(row.period_start, row.period_end)}
@@ -638,6 +655,12 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
+                      {hasExternalRisk ? (
+                        <Badge variant="outline" className="text-destructive bg-destructive/10 border-destructive/30 text-xs">
+                          <ShieldAlert className="h-3 w-3 mr-1" />
+                          Duplicate Risk
+                        </Badge>
+                      ) : (
                       <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} />
                     </td>
                     <td className="px-4 py-3 text-center">
