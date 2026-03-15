@@ -633,6 +633,35 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       // Pre-parse after AI detection
       const settlements = await preParseFile(file, detection);
 
+      // ── Propagate AI detection to sibling unknown files with matching headers ──
+      const sourceHeaders = filesRef.current[idx]?.csvHeaders;
+      let propagatedCount = 0;
+      const siblingUpdates: Array<{ sibIdx: number; detection: FileDetectionResult; settlements: StandardSettlement[] }> = [];
+
+      if (sourceHeaders && sourceHeaders.length > 0) {
+        const normSourceHeaders = new Set(sourceHeaders.map(h => h.toLowerCase().trim()));
+        for (let si = 0; si < filesRef.current.length; si++) {
+          if (si === idx) continue;
+          const sibling = filesRef.current[si];
+          if (sibling.status !== 'unknown') continue;
+          const sibHeaders = sibling.csvHeaders;
+          if (!sibHeaders || sibHeaders.length === 0) continue;
+          const normSibHeaders = new Set(sibHeaders.map(h => h.toLowerCase().trim()));
+          // Check if headers match (same set of columns)
+          if (normSibHeaders.size === normSourceHeaders.size && [...normSibHeaders].every(h => normSourceHeaders.has(h))) {
+            // Propagate detection with slightly lower confidence
+            const sibDetection: FileDetectionResult = {
+              ...detection,
+              confidence: Math.max(detection.confidence - 5, 50),
+              confidenceReason: `Matched via AI propagation from "${file.name}"`,
+            };
+            const sibSettlements = await preParseFile(sibling.file, sibDetection);
+            siblingUpdates.push({ sibIdx: si, detection: sibDetection, settlements: sibSettlements });
+            propagatedCount++;
+          }
+        }
+      }
+
       setFiles(prev => {
         const updated = [...prev];
         updated[idx] = {
@@ -641,8 +670,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           detection,
           settlements: settlements.length > 0 ? settlements : undefined,
         };
+        // Apply propagated detections
+        for (const su of siblingUpdates) {
+          if (su.sibIdx < updated.length) {
+            updated[su.sibIdx] = {
+              ...updated[su.sibIdx],
+              status: 'detected',
+              detection: su.detection,
+              settlements: su.settlements.length > 0 ? su.settlements : undefined,
+            };
+          }
+        }
         return updated;
       });
+
+      if (propagatedCount > 0) {
+        toast.success(`Applied ${detection.marketplaceLabel} detection to ${propagatedCount} similar file${propagatedCount > 1 ? 's' : ''}`);
+      }
     } catch (err: any) {
       const isRateLimit = err?.message?.includes('429') || err?.status === 429;
       const isPayment = err?.message?.includes('402') || err?.status === 402;

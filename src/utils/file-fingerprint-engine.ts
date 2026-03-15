@@ -123,7 +123,26 @@ const FINGERPRINTS: Fingerprint[] = [
     priority: 105,  // Higher than individual BigW/MyDeal fingerprints
   },
 
-  // Kogan
+  // Kogan Seller Portal Payout CSV
+  {
+    marketplace: 'kogan',
+    marketplaceLabel: 'Kogan',
+    isSettlementFile: true,
+    requiredColumns: ['apinvoice', 'invoiceref', 'commission (inc gst)', 'remitted'],
+    anyOfColumns: ['suppliercode', 'sku', 'datemanifested'],
+    columnMapping: {
+      settlement_id: 'APInvoice',
+      gross_sales: 'Total (AUD)',
+      fees: 'Commission (Inc GST)',
+      net_payout: 'Remitted',
+      period_start: 'InvoiceDate',
+      period_end: 'InvoiceDate',
+      order_id: 'SalesOrderNumber',
+    },
+    priority: 100,
+  },
+
+  // Kogan (legacy format — fallback)
   {
     marketplace: 'kogan',
     marketplaceLabel: 'Kogan',
@@ -134,7 +153,7 @@ const FINGERPRINTS: Fingerprint[] = [
       order_id: 'Kogan Order ID',
       fees: 'Commission',
     },
-    priority: 90,
+    priority: 85,
   },
 
   // BigW (Mirakl-based, like Bunnings)
