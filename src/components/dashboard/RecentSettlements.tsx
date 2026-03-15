@@ -91,13 +91,22 @@ function formatDateRange(start: string, end: string): string {
   return `${startStr} – ${endStr}`;
 }
 
-type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'other';
+type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'completed' | 'other';
 
 function categorize(row: SettlementRow): StatusCategory {
   if ((row as any).is_hidden) return 'hidden';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
-  if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(row.status)) return 'posted';
-  if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID') return 'posted';
+  // Settlement-confirmed rails that are posted are considered complete, not "waiting"
+  if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(row.status)) {
+    if (row.marketplace && !isBankMatchRequired(row.marketplace)) return 'completed';
+    if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return 'completed';
+    return 'posted';
+  }
+  if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID') {
+    if (row.xero_status === 'PAID') return 'completed';
+    if (row.marketplace && !isBankMatchRequired(row.marketplace)) return 'completed';
+    return 'posted';
+  }
   if (row.status === 'ready_to_push') return 'ready';
   if (row.status === 'ingested') return 'other';
   return 'other';
@@ -166,9 +175,9 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: 
   }
   if (status === 'ingested') {
     return (
-      <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
+      <Badge variant="outline" className="text-muted-foreground text-xs">
         <Clock className="h-3 w-3 mr-1" />
-        Waiting for Payout
+        Processing
       </Badge>
     );
   }
@@ -358,7 +367,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
   // Summary counts
   const counts = useMemo(() => {
-    const c = { ready: 0, posted: 0, attention: 0, hidden: 0, other: 0, readyTotal: 0, postedTotal: 0 };
+    const c = { ready: 0, posted: 0, attention: 0, hidden: 0, completed: 0, other: 0, readyTotal: 0, postedTotal: 0 };
     for (const r of allRows) {
       const cat = categorize(r);
       c[cat]++;
