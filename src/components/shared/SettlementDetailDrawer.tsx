@@ -167,28 +167,71 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
           </div>
         ) : settlement ? (
           <div className="space-y-5 mt-4">
-            {/* External Xero match banner */}
+            {/* External Xero match banner — STRONG duplicate warning */}
             {externalCandidate && !settlement.xero_invoice_id && (
-              <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-xs">
-                <ExternalLink className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium text-foreground">
-                    External Xero invoice detected
+              <div className="rounded-lg border-2 border-destructive bg-destructive/10 overflow-hidden">
+                <div className="bg-destructive px-3 py-2 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive-foreground" />
+                  <span className="text-sm font-bold text-destructive-foreground">
+                    ⚠ DO NOT PUSH — Duplicate Invoice Risk
+                  </span>
+                </div>
+                <div className="p-3 space-y-2">
+                  <p className="text-xs text-foreground">
+                    An invoice for this exact settlement already exists in Xero, created by <strong>another integration</strong> (e.g. Link My Books):
                   </p>
-                  <p className="text-muted-foreground mt-0.5">
-                    Found <span className="font-mono">{externalCandidate.xero_invoice_number}</span> ({formatAUD(externalCandidate.matched_amount || 0)}) created by another integration — not posted by Xettle.
+                  <div className="bg-background rounded-md border border-border p-2.5 text-xs font-mono space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Invoice #</span>
+                      <span className="font-semibold text-foreground">{externalCandidate.xero_invoice_number}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Amount</span>
+                      <span className="text-foreground">{formatAUD(externalCandidate.matched_amount || 0)}</span>
+                    </div>
+                    {externalCandidate.xero_status && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Status</span>
+                        <span className="text-foreground">{externalCandidate.xero_status}</span>
+                      </div>
+                    )}
+                    {externalCandidate.matched_reference && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Reference</span>
+                        <span className="text-foreground">{externalCandidate.matched_reference}</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-destructive font-medium">
+                    Pushing this settlement would create a <strong>duplicate invoice</strong> in Xero. This will double-count revenue and GST.
                   </p>
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex gap-2 mt-1">
                     <Button
                       size="sm"
-                      variant="outline"
-                      className="h-6 text-[10px]"
-                      onClick={handleDismissCandidate}
+                      variant="destructive"
+                      className="h-7 text-xs gap-1"
+                      onClick={handleAcknowledgeExternal}
                       disabled={dismissingCandidate}
                     >
-                      Ignore / keep separate
+                      <CheckCircle2 className="h-3 w-3" />
+                      {dismissingCandidate ? 'Saving…' : 'Acknowledge — already in Xero, do not push'}
                     </Button>
                   </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    This will mark this settlement as "already recorded" so it won't appear in your push queue.
+                  </p>
+                </div>
+              </div>
+            )}
+            {/* Settlement marked as already_recorded */}
+            {settlement.status === 'already_recorded' && (
+              <div className="flex items-start gap-2 p-3 rounded-md bg-muted border border-border text-xs">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-foreground">Already recorded in Xero</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    This settlement was posted by another integration. Xettle will not push it again.
+                  </p>
                 </div>
               </div>
             )}
