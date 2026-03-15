@@ -54,6 +54,13 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
         return 'shopify_payments';
       }
 
+      // eBay content signals
+      if ((lower.includes('payout id') && lower.includes('net amount')) ||
+          (lower.includes('item subtotal') && lower.includes('net proceeds')) ||
+          (lower.includes('ebay collected tax') && lower.includes('final value fee'))) {
+        return 'ebay_au';
+      }
+
       if (lower.includes('settlement-id') || lower.includes('settlement-start-date') ||
           lower.includes('amzn') || lower.includes('amazon') || lower.includes('fba')) {
         return 'amazon_au';
