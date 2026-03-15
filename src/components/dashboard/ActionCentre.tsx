@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   RefreshCw, Upload, Send, CheckCircle2, AlertTriangle, Plus,
-  ArrowRight, Clock, PartyPopper, Loader2, Search,
+  ArrowRight, Clock, PartyPopper, Loader2, Search, ShieldAlert,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
