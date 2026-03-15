@@ -1296,10 +1296,6 @@ export default function AccountingDashboard() {
               </div>
             </TabsContent>
 
-            {/* INSIGHTS TAB */}
-            <TabsContent value="insights">
-              <InsightsTab />
-            </TabsContent>
 
             {/* GST AUDIT TAB */}
             <TabsContent value="gst-audit">
