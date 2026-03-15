@@ -4,6 +4,7 @@ import { FileText, Send, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-
 
 interface DailyTaskStripProps {
   onNavigate: (view: string, subTab?: string) => void;
+  onScrollToActionCentre?: () => void;
 }
 
 interface TaskCounts {
