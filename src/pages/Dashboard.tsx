@@ -743,6 +743,7 @@ export default function Dashboard() {
                   }, 100);
                 }}
               />
+              </div>
 
               {/* Recent settlements — real payout/settlement records only */}
               <div id="settlements-table-section">
