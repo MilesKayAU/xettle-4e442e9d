@@ -680,7 +680,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         toast.success(`Found ${resp.data.backfilled} missing settlement${resp.data.backfilled > 1 ? 's' : ''} — refreshing…`);
         await fetchOutstanding({ runSync: false });
       } else {
-        toast.info('Settlement reports not found in Amazon — they may be older than 270 days.');
+        // Track these IDs as permanently unfindable so we don't retry on every load
+        try {
+          const existing = JSON.parse(sessionStorage.getItem('backfill_failed_ids') || '[]');
+          const merged = [...new Set([...existing, ...ids])];
+          sessionStorage.setItem('backfill_failed_ids', JSON.stringify(merged));
+        } catch {}
+        toast.info('Settlement reports not found in Amazon — they may be older than 270 days.', { id: 'backfill-270-days' });
       }
     } catch (err: any) {
       console.error('[backfill] error:', err);
