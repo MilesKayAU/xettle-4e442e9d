@@ -509,6 +509,22 @@ serve(async (req) => {
         // for user review — they are NEVER auto-linked to settlements.
         const isXettleCreated = ref.toLowerCase().startsWith('xettle-');
 
+        // ─── HARD GUARD: Verify push event exists before trusting Xettle prefix ──
+        let confirmedXettle = false;
+        if (isXettleCreated) {
+          const { data: pushEvt } = await supabase
+            .from('system_events')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('event_type', 'xero_push_success')
+            .eq('settlement_id', sid)
+            .limit(1);
+          confirmedXettle = (pushEvt && pushEvt.length > 0);
+          if (!confirmedXettle) {
+            console.warn(`[step-3b] Xettle-prefixed ref "${ref}" but NO push event for ${sid} — treating as external_candidate`);
+          }
+        }
+
         await supabase.from('xero_accounting_matches').upsert({
           user_id: userId,
           settlement_id: sid,
@@ -517,15 +533,15 @@ serve(async (req) => {
           xero_invoice_number: inv.InvoiceNumber || null,
           xero_status: inv.Status || null,
           xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
-          match_method: isXettleCreated ? 'xero_pre_seed' : 'external_candidate',
-          confidence: isXettleCreated ? 1.0 : 0.0,
+          match_method: confirmedXettle ? 'xero_pre_seed' : 'external_candidate',
+          confidence: confirmedXettle ? 1.0 : 0.0,
           matched_amount: inv.Total || null,
           matched_date: parseXeroDate(inv.Date),
           matched_contact: contactName,
           matched_reference: ref,
           reference_hash: ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
-          notes: isXettleCreated
-            ? 'Pre-seeded from Xettle-created Xero invoice'
+          notes: confirmedXettle
+            ? 'Pre-seeded from Xettle-created Xero invoice (push event verified)'
             : 'External invoice detected — requires user review before linking',
         }, { onConflict: 'user_id,settlement_id' });
 
@@ -676,6 +692,41 @@ serve(async (req) => {
           notes: 'External invoice detected — requires user review before linking',
         }, { onConflict: 'user_id,settlement_id' });
         console.log(`[step-4] External invoice ${inv.InvoiceNumber || inv.InvoiceID} stored as candidate for settlement ${settlementId}`);
+        continue;
+      }
+
+      // ─── HARD GUARD: Xettle-prefix alone is insufficient ──────────────
+      // Verify a xero_push_success event exists for this settlement before
+      // accepting it as "posted by Xettle". Without this, a manually created
+      // Xero invoice with "Xettle-" prefix would be falsely adopted.
+      const { data: pushEvent } = await supabase
+        .from('system_events')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('event_type', 'xero_push_success')
+        .eq('settlement_id', settlementId)
+        .limit(1);
+
+      if (!pushEvent || pushEvent.length === 0) {
+        // No push event found — treat as external candidate, not Xettle-posted
+        console.warn(`[step-4] Xettle-prefixed ref "${ref}" but NO xero_push_success event for ${settlementId} — treating as external_candidate`);
+        await supabase.from('xero_accounting_matches').upsert({
+          user_id: userId,
+          settlement_id: settlementId,
+          marketplace_code: detectedMarketplace,
+          xero_invoice_id: inv.InvoiceID,
+          xero_invoice_number: inv.InvoiceNumber || null,
+          xero_status: inv.Status || null,
+          xero_type: inv.Type === 'ACCPAY' ? 'bill' : 'invoice',
+          match_method: 'external_candidate',
+          confidence: 0.0,
+          matched_amount: inv.Total || null,
+          matched_date: parseXeroDate(inv.Date),
+          matched_contact: contactName,
+          matched_reference: ref,
+          reference_hash: ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
+          notes: 'Xettle-prefixed but no push event found — possible external creation. Requires user review.',
+        }, { onConflict: 'user_id,settlement_id' });
         continue;
       }
 
