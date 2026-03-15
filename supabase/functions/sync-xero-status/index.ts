@@ -501,7 +501,6 @@ serve(async (req) => {
         // Only filter status for non-external invoices (seeding outstanding)
         if (!isExternalInvoice && !['DRAFT', 'SUBMITTED', 'AUTHORISED'].includes(inv.Status || '')) continue;
 
-        const ref = inv.Reference || '';
         const contactName = inv.Contact?.Name || '';
         const detectedMarketplace = detectMarketplaceFromContact(contactName);
 
