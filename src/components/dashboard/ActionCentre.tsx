@@ -173,6 +173,7 @@ export default function ActionCentre({
           .eq('status', 'ingested')
           .eq('is_hidden', false)
           .eq('is_pre_boundary', false)
+          .neq('source', 'api_sync')
           .is('duplicate_of_settlement_id', null)
           .order('period_start', { ascending: false }),
         supabase.from('rail_posting_settings')
