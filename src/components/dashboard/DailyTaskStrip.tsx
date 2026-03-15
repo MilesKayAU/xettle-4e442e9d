@@ -67,7 +67,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
       color: 'text-amber-500',
       bgColor: 'bg-amber-500/10',
       borderColor: 'border-amber-500/30',
-      onClick: () => onNavigate('smart_upload'),
+      onClick: () => onNavigate('settlements', 'overview'),
     },
     {
       key: 'push',
@@ -77,7 +77,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
       color: 'text-primary',
       bgColor: 'bg-primary/10',
       borderColor: 'border-primary/30',
-      onClick: () => onNavigate('dashboard'),
+      onClick: () => onScrollToActionCentre?.() ?? onNavigate('dashboard'),
     },
     {
       key: 'recon',
