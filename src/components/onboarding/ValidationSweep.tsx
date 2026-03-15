@@ -257,9 +257,12 @@ export default function ValidationSweep({
   };
 
   // Counts
-  // Filter out already_recorded rows from actionable views
+  // Filter out already_recorded rows AND shopify_auto analytics-only records from actionable views
   const actionableRows = useMemo(() => {
-    return rows.filter(r => r.overall_status !== 'already_recorded');
+    return rows.filter(r => 
+      r.overall_status !== 'already_recorded' &&
+      !(r.settlement_id && r.settlement_id.startsWith('shopify_auto_'))
+    );
   }, [rows]);
 
   const counts = useMemo(() => {
