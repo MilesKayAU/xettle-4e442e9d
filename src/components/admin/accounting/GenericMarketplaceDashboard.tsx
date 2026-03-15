@@ -630,6 +630,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                 xeroInvoiceNumber={s.xero_invoice_number}
                                 xeroType={(s as any).xero_type}
                                 xeroStatus={s.xero_status}
+                                marketplace={s.marketplace}
                               />
                             </div>
 

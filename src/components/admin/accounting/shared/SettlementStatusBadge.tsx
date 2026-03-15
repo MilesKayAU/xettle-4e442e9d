@@ -19,15 +19,17 @@
 
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
+import { isBankMatchRequired } from '@/constants/settlement-rails';
 
 interface SettlementStatusBadgeProps {
   status: string | null;
   xeroInvoiceNumber?: string | null;
   xeroType?: string | null;
   xeroStatus?: string | null;
+  marketplace?: string | null;
 }
 
-export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroType, xeroStatus }: SettlementStatusBadgeProps) {
+export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroType, xeroStatus, marketplace }: SettlementStatusBadgeProps) {
   const typeLabel = xeroType === 'bill' ? 'Bill' : 'Inv';
   const refSuffix = xeroInvoiceNumber ? ` (${typeLabel}: ${xeroInvoiceNumber})` : '';
 
@@ -41,6 +43,14 @@ export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroT
       );
 
     case 'authorised_in_xero':
+      // Settlement-confirmed rails: show as complete once authorised
+      if (marketplace && !isBankMatchRequired(marketplace)) {
+        return (
+          <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+            Posted{refSuffix} ✓
+          </Badge>
+        );
+      }
       return (
         <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
           Awaiting Reconciliation{refSuffix}
@@ -66,6 +76,14 @@ export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroT
         );
       }
       if (xs === 'AUTHORISED') {
+        // Settlement-confirmed rails: treat as complete once authorised
+        if (marketplace && !isBankMatchRequired(marketplace)) {
+          return (
+            <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+              Posted{refSuffix} ✓
+            </Badge>
+          );
+        }
         return (
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
             Awaiting Reconciliation{refSuffix}

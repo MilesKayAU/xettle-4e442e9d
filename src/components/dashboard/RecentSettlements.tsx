@@ -91,13 +91,22 @@ function formatDateRange(start: string, end: string): string {
   return `${startStr} – ${endStr}`;
 }
 
-type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'other';
+type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'completed' | 'other';
 
 function categorize(row: SettlementRow): StatusCategory {
   if ((row as any).is_hidden) return 'hidden';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
-  if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(row.status)) return 'posted';
-  if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID') return 'posted';
+  // Settlement-confirmed rails that are posted are considered complete, not "waiting"
+  if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(row.status)) {
+    if (row.marketplace && !isBankMatchRequired(row.marketplace)) return 'completed';
+    if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return 'completed';
+    return 'posted';
+  }
+  if (row.xero_status === 'DRAFT' || row.xero_status === 'AUTHORISED' || row.xero_status === 'PAID') {
+    if (row.xero_status === 'PAID') return 'completed';
+    if (row.marketplace && !isBankMatchRequired(row.marketplace)) return 'completed';
+    return 'posted';
+  }
   if (row.status === 'ready_to_push') return 'ready';
   if (row.status === 'ingested') return 'other';
   return 'other';
