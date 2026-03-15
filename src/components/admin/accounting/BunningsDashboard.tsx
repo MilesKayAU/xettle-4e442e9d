@@ -263,43 +263,72 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // BULK mode: multiple files selected
-    if (files.length > 1) {
-      const arr = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-      // Sort chronologically by filename date pattern (e.g. BUN-2301-2026-02-15 → 2026-02-15)
-      arr.sort((a, b) => {
-        const dateA = a.name.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || a.name;
-        const dateB = b.name.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || b.name;
-        return dateA.localeCompare(dateB);
-      });
-      setBulkFiles(arr);
-      setFile(null);
-      setParsed(null);
-      setUploadWarning(null);
-      setSavedSettlementId(null);
-      setBulkBatch([]);
-      await processBulkFiles(arr);
-      return;
+    // Separate PDFs and CSVs
+    const allFiles = Array.from(files);
+    const pdfFiles = allFiles.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    const csvFiles = allFiles.filter(f => f.name.toLowerCase().endsWith('.csv'));
+
+    // Handle CSV files — store for Xero attachment as raw evidence
+    for (const csv of csvFiles) {
+      const isBunningsOrders = csv.name.toLowerCase().includes('billing-cycle-orders');
+      if (!isBunningsOrders) {
+        // Check content for Bunnings orders signature
+        try {
+          const preview = await csv.slice(0, 1024).text();
+          if (!preview.includes(';') || !preview.toLowerCase().includes('order number')) {
+            toast.info(`"${csv.name}" doesn't appear to be a Bunnings Orders CSV — skipped.`);
+            continue;
+          }
+        } catch {
+          continue;
+        }
+      }
+      // Store the CSV in audit-csvs bucket for later Xero attachment
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const csvContent = await csv.text();
+          const blob = new Blob([csvContent], { type: 'text/csv' });
+          const path = `bunnings/${user.id}/orders-${csv.name}`;
+          await supabase.storage.from('audit-csvs').upload(path, blob, { upsert: true });
+          toast.success(`"${csv.name}" stored — will be attached to your Xero invoice as raw evidence.`);
+        }
+      } catch {
+        toast.warning(`Could not store "${csv.name}" — the settlement will still work without it.`);
+      }
     }
 
-    // SINGLE mode
-    const f = files[0];
-    if (!f.name.toLowerCase().endsWith('.pdf')) {
-      // Non-PDF — check if it's an Amazon file uploaded to wrong tab
-      const { detectFileMarketplace, MARKETPLACE_LABELS } = await import('@/utils/file-marketplace-detector');
-      const detected = await detectFileMarketplace(f);
-      if (detected === 'amazon_au') {
-        toast.warning(
-          `This looks like an ${MARKETPLACE_LABELS[detected]} settlement (TSV/CSV). Switch to the Amazon AU tab to upload it.`,
-          { duration: 6000 }
-        );
+    if (pdfFiles.length === 0) {
+      if (csvFiles.length > 0) {
+        toast.info('Orders CSV stored. Now upload the Summary of Transactions PDF to create the settlement.');
       } else {
         toast.error('Please upload a PDF file (Summary of Transactions).');
       }
       return;
     }
 
-    // PDF uploaded — quick check it's not mislabelled
+    // BULK mode: multiple PDFs selected
+    if (pdfFiles.length > 1) {
+      // Sort chronologically by filename date pattern
+      pdfFiles.sort((a, b) => {
+        const dateA = a.name.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || a.name;
+        const dateB = b.name.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || b.name;
+        return dateA.localeCompare(dateB);
+      });
+      setBulkFiles(pdfFiles);
+      setFile(null);
+      setParsed(null);
+      setUploadWarning(null);
+      setSavedSettlementId(null);
+      setBulkBatch([]);
+      await processBulkFiles(pdfFiles);
+      return;
+    }
+
+    // SINGLE mode
+    const f = pdfFiles[0];
+
+    // Quick check it's not mislabelled
     {
       const { detectFileMarketplace, MARKETPLACE_LABELS } = await import('@/utils/file-marketplace-detector');
       const detected = await detectFileMarketplace(f);
@@ -329,7 +358,6 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
         setExtra(result.extra);
         const warning = checkDuplicateAndGap(result.settlement, settlements);
         setUploadWarning(warning);
-        // Persist to localStorage so state survives navigation / logout
         saveParsedToStorage(result.settlement, result.extra, warning, null);
         if (warning?.type === 'duplicate') {
           toast.warning('Duplicate detected — review before saving.');
