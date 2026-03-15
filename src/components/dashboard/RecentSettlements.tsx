@@ -506,8 +506,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     },
     {
       key: 'posted',
-      label: 'Waiting for Payout',
-      sublabel: 'Posted, awaiting destination match',
+      label: 'In Xero — Processing',
+      sublabel: 'Posted, awaiting reconciliation',
       count: counts.posted,
       total: counts.postedTotal,
       color: 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-900/25',

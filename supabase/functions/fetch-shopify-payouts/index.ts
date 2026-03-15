@@ -281,10 +281,9 @@ async function syncPayoutsForUser(
       const feesExGst = Math.abs(totalFees) - gstOnExpenses;
       const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
-      // All ingestion paths start at 'ingested'; sync-xero-status promotes to 'ready_to_push'
-      // See: src/constants/settlement-status.ts for canonical state machine
+      // Shopify payouts arrive fully reconciled — promote immediately unless pre-boundary
       const isBeforeBoundary = dateMin && payoutDate < dateMin;
-      const settlementStatus = "ingested";
+      const settlementStatus = isBeforeBoundary ? "ingested" : "ready_to_push";
 
       // ─── Insert settlement (ON CONFLICT DO NOTHING) ─────────
       const { error: insertError } = await supabase.from("settlements").upsert({
