@@ -362,7 +362,7 @@ export const orderToXeroRows = (order: AlibabaOrderForExport): XeroBillRow[] => 
         const targetAdjustableTotal = orderAud - serviceFeeAud;
         const adjustmentRatio = targetAdjustableTotal / adjustableTotal;
         
-        console.log(`Adjusting Product/Freight by ratio ${adjustmentRatio.toFixed(4)} to match order total (Service Fee fixed at $${serviceFeeAud.toFixed(2)})`);
+        // Proportional adjustment applied
         
         // Apply proportional adjustment to non-service-fee items
         adjustableTypes.forEach(ct => {
