@@ -361,7 +361,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       if (!user) throw new Error('Not authenticated');
 
       // Run sync-xero-status (now includes fuzzy matching)
-      console.log('[Audit] Starting Xero status sync...');
+      // Starting Xero status sync
       const { data: xeroResult, error: xeroErr } = await supabase.functions.invoke('sync-xero-status', {
         body: { userId: user.id },
       });
