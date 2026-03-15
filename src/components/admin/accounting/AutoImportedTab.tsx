@@ -322,7 +322,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         }
       }
 
-      console.log(`[AutoImported] Auto-auditing Xero status for ${settlements.length} settlements`);
+      // Auto-auditing Xero status
       handleRunAudit();
     };
 
