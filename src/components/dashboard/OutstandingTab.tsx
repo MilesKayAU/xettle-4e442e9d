@@ -695,11 +695,16 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     }
   }, [backfilling, fetchOutstanding]);
 
-  // Auto-trigger backfill when missing settlement IDs detected
+  // Auto-trigger backfill when missing settlement IDs detected (skip already-failed ones)
   useEffect(() => {
     const missingIds = data?.sync_info?.missing_settlement_ids;
     if (missingIds && missingIds.length > 0 && hasLoaded && !backfilling) {
-      triggerBackfill(missingIds);
+      let failedIds: string[] = [];
+      try { failedIds = JSON.parse(sessionStorage.getItem('backfill_failed_ids') || '[]'); } catch {}
+      const newIds = missingIds.filter((id: string) => !failedIds.includes(id));
+      if (newIds.length > 0) {
+        triggerBackfill(newIds);
+      }
     }
   }, [data?.sync_info?.missing_settlement_ids, hasLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
