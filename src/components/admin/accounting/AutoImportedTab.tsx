@@ -374,7 +374,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
       }
 
       // Run bank deposit matching
-      console.log('[Audit] Starting bank deposit matching...');
+      // Starting bank deposit matching
       const { data: bankResult, error: bankErr } = await supabase.functions.invoke('match-bank-deposits', {
         body: {},
       });
