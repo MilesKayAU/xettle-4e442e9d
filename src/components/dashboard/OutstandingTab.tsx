@@ -683,7 +683,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         // Track these IDs as permanently unfindable so we don't retry on every load
         try {
           const existing = JSON.parse(sessionStorage.getItem('backfill_failed_ids') || '[]');
-          const merged = [...new Set([...existing, ...ids])];
+          const merged = [...new Set([...existing, ...missingIds])];
           sessionStorage.setItem('backfill_failed_ids', JSON.stringify(merged));
         } catch {}
         toast.info('Settlement reports not found in Amazon — they may be older than 270 days.', { id: 'backfill-270-days' });
