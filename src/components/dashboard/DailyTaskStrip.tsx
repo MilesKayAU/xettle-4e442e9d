@@ -14,7 +14,7 @@ interface TaskCounts {
   reconAlerts: number;
 }
 
-export default function DailyTaskStrip({ onNavigate }: DailyTaskStripProps) {
+export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: DailyTaskStripProps) {
   const [counts, setCounts] = useState<TaskCounts>({ filesToReview: 0, readyToPush: 0, awaitingReconciliation: 0, reconAlerts: 0 });
   const [loading, setLoading] = useState(true);
 
