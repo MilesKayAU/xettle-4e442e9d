@@ -127,6 +127,22 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     setDismissingCandidate(false);
   }, [externalCandidate]);
 
+  const handleAcknowledgeExternal = useCallback(async () => {
+    if (!settlement?.id) return;
+    setDismissingCandidate(true);
+    const { error } = await supabase
+      .from('settlements')
+      .update({ status: 'already_recorded' })
+      .eq('id', settlement.id);
+    if (error) {
+      toast.error('Failed to update settlement status');
+    } else {
+      setSettlement((prev: any) => prev ? { ...prev, status: 'already_recorded' } : prev);
+      toast.success('Settlement marked as already recorded — removed from push queue');
+    }
+    setDismissingCandidate(false);
+  }, [settlement]);
+
   // Build reconstructed line items from settlement row (fallback for pre-snapshot settlements)
   const reconstructedLines: NormalizedLineItem[] = settlement ? [
     { description: 'Sales', account_code: '200', tax_type: 'OUTPUT', amount: (settlement.sales_principal || 0) + (settlement.sales_shipping || 0) },
