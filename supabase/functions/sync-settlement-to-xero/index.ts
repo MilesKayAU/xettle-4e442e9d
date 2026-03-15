@@ -1235,6 +1235,95 @@ serve(async (req) => {
       }
     }
 
+    // ─── History Note (like Link My Books) ────────────────────────
+    // Adds a contextual note visible in Xero's invoice history tab.
+    // Non-fatal: if it fails, we log and continue.
+    if (invoiceId && body.settlementData) {
+      try {
+        const sd = body.settlementData;
+        const amt = typeof netAmount === 'number' ? netAmount.toFixed(2) : '0.00';
+        const csvHash = attachmentResult?.csvHash || 'n/a';
+        const historyNote =
+          `This ${isNegativeSettlement ? 'bill' : 'invoice'} relates to the total settlement of AUD ${amt} ` +
+          `for period ${sd.period_start || '?'} to ${sd.period_end || '?'}. ` +
+          `Posted by Xettle (csv_hash: ${csvHash}).`;
+
+        const histResp = await fetch(
+          `https://api.xero.com/api.xro/2.0/Invoices/${invoiceId}/History`,
+          {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token.access_token}`,
+              'Content-Type': 'application/json',
+              'Xero-tenant-id': token.tenant_id,
+            },
+            body: JSON.stringify({ HistoryRecords: [{ Details: historyNote }] }),
+          }
+        );
+
+        if (histResp.ok) {
+          console.log('[history-note] Added history note to invoice', invoiceId);
+        } else {
+          console.warn('[history-note] Failed:', histResp.status, await histResp.text());
+        }
+      } catch (histErr: any) {
+        console.warn('[history-note] Non-fatal error:', histErr.message);
+      }
+    }
+
+    // ─── Raw Source Data Attachment (like Link My Books) ─────────
+    // Attach the original settlement_lines data as a second CSV so accountants
+    // can validate the raw source alongside the derived audit CSV.
+    if (invoiceId && body.settlementData?.settlement_id) {
+      try {
+        const rawSettlementId = body.settlementData.settlement_id;
+        const { data: rawLines } = await supabase
+          .from('settlement_lines')
+          .select('transaction_type, amount_type, amount_description, amount, order_id, sku, posted_date')
+          .eq('settlement_id', rawSettlementId)
+          .eq('user_id', userId)
+          .limit(5000);
+
+        if (rawLines && rawLines.length > 0) {
+          const rawHeaders = ['transaction_type', 'amount_type', 'amount_description', 'amount', 'order_id', 'sku', 'posted_date'];
+          const rawCsvRows = [rawHeaders.join(',')];
+          for (const row of rawLines) {
+            rawCsvRows.push(
+              rawHeaders.map(h => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',')
+            );
+          }
+          const rawCsv = rawCsvRows.join('\n') + '\n';
+          const rawBytes = new TextEncoder().encode(rawCsv);
+
+          const mp = (body.settlementData.marketplace || 'unknown').replace(/_/g, '-');
+          const rawFilename = `xettle-raw-${mp}-${rawSettlementId}.csv`;
+
+          const rawAttachResp = await fetch(
+            `https://api.xero.com/api.xro/2.0/Invoices/${invoiceId}/Attachments/${encodeURIComponent(rawFilename)}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Authorization': `Bearer ${token.access_token}`,
+                'Content-Type': 'text/csv',
+                'Xero-tenant-id': token.tenant_id,
+              },
+              body: rawBytes,
+            }
+          );
+
+          if (rawAttachResp.ok) {
+            console.log(`[raw-attachment] Attached ${rawLines.length} raw lines as ${rawFilename}`);
+          } else {
+            console.warn('[raw-attachment] Failed:', rawAttachResp.status);
+          }
+        } else {
+          console.log('[raw-attachment] No settlement_lines found, skipping raw attachment');
+        }
+      } catch (rawErr: any) {
+        console.warn('[raw-attachment] Non-fatal error:', rawErr.message);
+      }
+    }
+
     // ─── SINGLE authoritative xero_push_success event ───────────────
     // Written ONCE after invoice + attachment both succeed.
     // Contains full payload snapshot, csv_hash, attachment_filename, canonical_version.
