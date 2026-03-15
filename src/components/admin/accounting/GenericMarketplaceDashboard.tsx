@@ -25,6 +25,7 @@ import { Label } from '@/components/ui/label';
 
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
+import EbayUploadGuide from './EbayUploadGuide';
 
 // ── Shared architecture hooks + components ──────────────────────────────────
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
