@@ -2270,67 +2270,132 @@ export type Database = {
         Args: { p_key: string; p_user_id: string; p_window_seconds?: number }
         Returns: Json
       }
-      get_channel_comparison: {
-        Args: { p_user_id: string }
-        Returns: {
-          avg_fee_rate_pct: number
-          date_range: string
-          margin_pct: number
-          marketplace: string
-          total_all_fees: number
-          total_fees_fba: number
-          total_fees_other: number
-          total_fees_seller: number
-          total_fees_storage: number
-          total_gross_sales: number
-          total_gst_claimable: number
-          total_gst_payable: number
-          total_net_payout: number
-          total_refunds: number
-          total_settlements: number
-        }[]
-      }
-      get_gst_liability_by_quarter: {
-        Args: { p_user_id: string }
-        Returns: {
-          fees_total: number
-          gst_claimable: number
-          gst_payable: number
-          net_gst_liability: number
-          quarter: string
-          quarter_end: string
-          quarter_start: string
-          sales_principal: number
-          settlements_count: number
-        }[]
-      }
-      get_marketplace_fee_analysis: {
-        Args: { p_user_id: string }
-        Returns: {
-          fee_percentage: number
-          gst_payable: number
-          marketplace: string
-          month: string
-          net_amount: number
-          sales_ex_gst: number
-          settlement_count: number
-          total_fees: number
-        }[]
-      }
-      get_rolling_12_month_trend: {
-        Args: { p_user_id: string }
-        Returns: {
-          gross_sales: number
-          gst_on_income: number
-          margin_pct: number
-          net_deposit: number
-          period_end: string
-          period_label: string
-          refunds_net: number
-          settlement_count: number
-          total_fees: number
-        }[]
-      }
+      get_channel_comparison:
+        | {
+            Args: { p_user_id: string }
+            Returns: {
+              avg_fee_rate_pct: number
+              date_range: string
+              margin_pct: number
+              marketplace: string
+              total_all_fees: number
+              total_fees_fba: number
+              total_fees_other: number
+              total_fees_seller: number
+              total_fees_storage: number
+              total_gross_sales: number
+              total_gst_claimable: number
+              total_gst_payable: number
+              total_net_payout: number
+              total_refunds: number
+              total_settlements: number
+            }[]
+          }
+        | {
+            Args: { p_marketplace?: string; p_user_id: string }
+            Returns: {
+              avg_fee_rate_pct: number
+              date_range: string
+              margin_pct: number
+              marketplace: string
+              total_all_fees: number
+              total_fees_fba: number
+              total_fees_other: number
+              total_fees_seller: number
+              total_fees_storage: number
+              total_gross_sales: number
+              total_gst_claimable: number
+              total_gst_payable: number
+              total_net_payout: number
+              total_refunds: number
+              total_settlements: number
+            }[]
+          }
+      get_gst_liability_by_quarter:
+        | {
+            Args: { p_user_id: string }
+            Returns: {
+              fees_total: number
+              gst_claimable: number
+              gst_payable: number
+              net_gst_liability: number
+              quarter: string
+              quarter_end: string
+              quarter_start: string
+              sales_principal: number
+              settlements_count: number
+            }[]
+          }
+        | {
+            Args: { p_marketplace?: string; p_user_id: string }
+            Returns: {
+              fees_total: number
+              gst_claimable: number
+              gst_payable: number
+              net_gst_liability: number
+              quarter: string
+              quarter_end: string
+              quarter_start: string
+              sales_principal: number
+              settlements_count: number
+            }[]
+          }
+      get_marketplace_fee_analysis:
+        | {
+            Args: { p_user_id: string }
+            Returns: {
+              fee_percentage: number
+              gst_payable: number
+              marketplace: string
+              month: string
+              net_amount: number
+              sales_ex_gst: number
+              settlement_count: number
+              total_fees: number
+            }[]
+          }
+        | {
+            Args: { p_marketplace?: string; p_user_id: string }
+            Returns: {
+              fee_percentage: number
+              gst_payable: number
+              marketplace: string
+              month: string
+              net_amount: number
+              sales_ex_gst: number
+              settlement_count: number
+              total_fees: number
+            }[]
+          }
+      get_rolling_12_month_trend:
+        | {
+            Args: { p_user_id: string }
+            Returns: {
+              gross_sales: number
+              gst_on_income: number
+              margin_pct: number
+              net_deposit: number
+              period_end: string
+              period_label: string
+              refunds_net: number
+              settlement_count: number
+              total_fees: number
+            }[]
+          }
+        | {
+            Args: { p_marketplace?: string; p_user_id: string }
+            Returns: {
+              gross_sales: number
+              gst_on_income: number
+              margin_pct: number
+              net_deposit: number
+              period_end: string
+              period_label: string
+              refunds_net: number
+              settlement_count: number
+              total_fees: number
+            }[]
+          }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
