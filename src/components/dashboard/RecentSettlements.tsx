@@ -661,7 +661,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                           Duplicate Risk
                         </Badge>
                       ) : (
-                      <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} />
+                        <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} />
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {(() => {
