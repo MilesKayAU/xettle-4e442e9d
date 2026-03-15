@@ -691,7 +691,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
               <input
                 ref={inputRef}
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.csv"
                 multiple
                 onChange={handleFileChange}
                 disabled={parsing || bulkProcessing}

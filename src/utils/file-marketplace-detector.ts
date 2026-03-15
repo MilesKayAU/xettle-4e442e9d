@@ -28,6 +28,11 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
       const text = await slice.text();
       const lower = text.toLowerCase();
 
+      // Bunnings Orders CSV — semicolon-delimited with specific headers
+      if (lower.includes('invoice number') && lower.includes('order number') && lower.includes('order status') && text.includes(';')) {
+        return 'bunnings';
+      }
+
       // Woolworths MarketPlus — has 'order source' AND 'bank payment ref'
       if (lower.includes('order source') && lower.includes('bank payment ref')) {
         return 'woolworths_marketplus';
