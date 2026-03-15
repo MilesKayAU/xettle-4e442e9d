@@ -566,6 +566,28 @@ async function sweepUser(adminSupabase: any, userId: string) {
           record.settlement_id = settlement.settlement_id
           record.settlement_net = settlement.bank_deposit || 0
           record.settlement_uploaded_at = settlement.created_at || new Date().toISOString()
+
+          // Guard: if settlement is already_recorded or pushed_to_xero, force validation to complete
+          if (settlement.status === 'already_recorded') {
+            record.overall_status = 'already_recorded'
+            record.processing_state = 'processed'
+            record.processing_completed_at = new Date().toISOString()
+            // Upsert and skip remaining steps for this period
+            await adminSupabase
+              .from('marketplace_validation')
+              .upsert(record, { onConflict: 'user_id,marketplace_code,period_label' })
+            summary.already_recorded++
+            continue
+          }
+          if (settlement.status === 'pushed_to_xero') {
+            record.xero_pushed = true
+            record.xero_pushed_at = settlement.created_at || new Date().toISOString()
+          }
+          // Guard: don't promote ingested/saved settlements to ready_to_push
+          if (settlement.status === 'ingested' || settlement.status === 'saved') {
+            // Let the trigger compute overall_status naturally — don't force ready_to_push
+            // The trigger will set settlement_needed since xero_pushed=false and reconciliation may not be matched
+          }
         }
 
         // Step 3: Reconciliation — check reconciliation_checks first, then fall back to settlement's own status
