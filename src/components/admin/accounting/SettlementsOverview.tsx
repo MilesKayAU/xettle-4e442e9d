@@ -155,6 +155,7 @@ export default function SettlementsOverview({
     setPushingCode(code);
     try {
       // Only ready_to_push — never parsed (must be validated first)
+      // Exclude shopify_auto_* analytics records
       const { data: unsent, error } = await supabase
         .from('settlements')
         .select('settlement_id, marketplace')
@@ -162,6 +163,7 @@ export default function SettlementsOverview({
         .eq('status', 'ready_to_push')
         .eq('is_hidden', false)
         .eq('is_pre_boundary', false)
+        .neq('source', 'api_sync')
         .is('duplicate_of_settlement_id', null)
         .order('period_end');
 

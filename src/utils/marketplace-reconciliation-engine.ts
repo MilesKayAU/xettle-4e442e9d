@@ -403,7 +403,8 @@ export async function autoReconcileSettlement(
     });
 
     // ─── Auto-promote: ingested → ready_to_push when reconciliation is matched ───
-    if (result.status === 'matched') {
+    // NEVER promote shopify_auto_* analytics records — they are for insights only
+    if (result.status === 'matched' && !settlementId.startsWith('shopify_auto_')) {
       const { error: promoteErr } = await supabase
         .from('settlements')
         .update({
