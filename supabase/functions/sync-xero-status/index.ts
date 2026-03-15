@@ -623,13 +623,18 @@ serve(async (req) => {
     }
 
     // Load incremental cursor for full reference scan
+    // If many settlements are unmatched, do a full scan to catch older external invoices
+    const uncachedCount = uncachedSettlements.length;
     const { data: cursorSetting } = await supabase
       .from('app_settings').select('value')
       .eq('user_id', userId).eq('key', `xero_last_invoice_scan_at_${token.tenant_id}`)
       .maybeSingle();
-    const modifiedAfter = cursorSetting?.value || null;
-    console.log(`[step-4] Incremental cursor: ${modifiedAfter || 'FULL SCAN (first run)'}`);
-
+    const modifiedAfter = (uncachedCount > 10) ? null : (cursorSetting?.value || null);
+    if (uncachedCount > 10) {
+      console.log(`[step-4] ${uncachedCount} unmatched — forcing FULL SCAN (ignoring cursor)`);
+    } else {
+      console.log(`[step-4] Incremental cursor: ${modifiedAfter || 'FULL SCAN (first run)'}`);
+    }
     // Run reference queries — only for new/modified invoices
     const newFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.StartsWith("Xettle-")', modifiedAfter);
     const oldFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Settlement")', modifiedAfter);
