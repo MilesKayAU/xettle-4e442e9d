@@ -24,7 +24,7 @@ import {
 import {
   FileText, ArrowRight, CheckCircle2, Clock, Send, AlertTriangle,
   MoreHorizontal, Eye, RefreshCw, EyeOff, Download, ChevronLeft, ChevronRight,
-  EyeIcon, ChevronDown, ChevronUp, Loader2,
+  EyeIcon, ChevronDown, ChevronUp, Loader2, ShieldAlert,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
