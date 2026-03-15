@@ -320,6 +320,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   const [activeFilter, setActiveFilter] = useState<StatusCategory | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
+  const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
 
   const fetchAll = useCallback(async () => {
     try {
@@ -332,7 +333,20 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         .order('period_end', { ascending: false });
 
       if (error) throw error;
-      setAllRows((data || []) as SettlementRow[]);
+      const rows = (data || []) as SettlementRow[];
+      setAllRows(rows);
+
+      // Fetch external matches for ready-to-push settlements
+      const readyIds = rows.filter(r => r.status === 'ready_to_push').map(r => r.settlement_id).filter(Boolean);
+      if (readyIds.length > 0) {
+        const { data: matches } = await supabase
+          .from('xero_accounting_matches')
+          .select('settlement_id')
+          .in('settlement_id', readyIds);
+        if (matches) {
+          setExternalMatchIds(new Set(matches.map((m: any) => m.settlement_id)));
+        }
+      }
     } catch (err) {
       console.error('Failed to load settlements:', err);
     } finally {
