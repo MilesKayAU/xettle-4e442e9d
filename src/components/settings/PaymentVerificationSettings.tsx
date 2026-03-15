@@ -153,10 +153,19 @@ export default function PaymentVerificationSettings() {
           );
         })}
 
-        <p className="text-xs text-muted-foreground pt-2 border-t border-border">
-          Payment verification matches gateway transactions against your orders for confirmation.
-          Settlements remain the only source of accounting entries (Rule #11).
-        </p>
+        <div className="space-y-2 pt-2 border-t border-border">
+          <p className="text-xs text-muted-foreground">
+            Payment verification matches gateway transactions against your orders for confirmation.
+            Settlements remain the only source of accounting entries (Rule #11).
+          </p>
+          <div className="flex items-start gap-2 rounded-md bg-muted/50 border border-border px-3 py-2">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">PayPal</span> transactions are reconciled via your Xero bank feed — no separate PayPal API required. 
+              Once Xero marks the invoice as Paid, the settlement is automatically closed.
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

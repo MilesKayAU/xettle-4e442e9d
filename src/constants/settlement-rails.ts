@@ -55,7 +55,7 @@ export interface RailPayoutConfig {
 export const RAIL_PAYOUT_MODE: Record<string, RailPayoutConfig> = {
   amazon_au:         { payout_source: 'settlement', bank_match_required: false },
   amazon_us:         { payout_source: 'settlement', bank_match_required: false },
-  shopify_payments:  { payout_source: 'bank',       bank_match_required: true },
+  shopify_payments:  { payout_source: 'settlement', bank_match_required: false },
   stripe:            { payout_source: 'bank',       bank_match_required: true },
   paypal:            { payout_source: 'bank',       bank_match_required: true },
   kogan:             { payout_source: 'settlement', bank_match_required: false },
