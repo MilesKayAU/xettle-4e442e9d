@@ -650,11 +650,20 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                         </div>
                         <div className="rounded border border-border bg-muted/40 p-2 space-y-1 mt-2">
                           <p className="font-medium text-foreground">Which files does Bunnings provide?</p>
-                          <ul className="space-y-1 text-muted-foreground">
-                            <li><span className="text-primary font-medium">✓ Summary of Transactions PDF</span> — <strong>this is the one to upload.</strong> Contains the billing period totals, sales, commission and net payout.</li>
-                            <li><span className="text-muted-foreground">✗ Invoice PDF</span> — a tax invoice for the same period; not needed here.</li>
-                            <li><span className="text-muted-foreground">✗ Billing cycle orders CSV</span> — order-level detail; not required for accounting import.</li>
+                          <ul className="space-y-1.5 text-muted-foreground">
+                            <li>
+                              <span className="text-primary font-medium">✓ Summary of Transactions PDF</span> — <strong>Required.</strong> Contains the billing period totals, sales, commission and net payout. This is what Xettle parses to create your Xero invoice.
+                            </li>
+                            <li>
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">★ Billing Cycle Orders CSV</span> — <strong>Recommended.</strong> Order-level detail with SKUs, quantities and per-order commission. Will be attached to your Xero invoice as raw evidence for your accountant.
+                            </li>
+                            <li>
+                              <span className="text-muted-foreground">○ Commission Invoice PDF</span> — <strong>Optional.</strong> Bunnings' tax invoice for commission fees. Useful for BAS/input tax credit records, but data is already captured in the Summary.
+                            </li>
                           </ul>
+                          <p className="text-[10px] text-muted-foreground mt-2 italic">
+                            You can download all 3 from the Bunnings Marketplace portal under Accounting → Billing Cycles → click ⋮
+                          </p>
                         </div>
                       </div>
                     </CollapsibleContent>
