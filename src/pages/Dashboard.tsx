@@ -659,6 +659,11 @@ export default function Dashboard() {
                   switchView(view as DashboardView);
                   if (subTab) switchSettlementsSubTab(subTab as SettlementsSubTab);
                 }}
+                onScrollToActionCentre={() => {
+                  setTimeout(() => {
+                    document.getElementById('action-centre-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 100);
+                }}
               />
               {/* Post-setup scan banner — triggers adaptive sync on first load */}
               <PostSetupBanner
