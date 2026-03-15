@@ -627,7 +627,7 @@ serve(async (req) => {
     }
 
     // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { description, date, dueDate, country, contactName, netAmount } = body;
+    const { description, date, dueDate, country, contactName } = body;
 
     // ─── SERVER-SIDE REFERENCE GENERATION ─────────────────────────────
     const settlementId = body.settlementId || body.settlementData?.settlement_id;
@@ -638,8 +638,16 @@ serve(async (req) => {
     const reference = `Xettle-${settlementId}${splitSuffix}`;
     const cacheSettlementKey = `${settlementId}${splitSuffix}`;
 
+    // ─── SERVER-DERIVED NET AMOUNT (never trust client-provided netAmount) ──
+    // Derive from settlementData fields (bank_deposit preferred, then net_ex_gst)
+    const sd = body.settlementData || {};
+    const serverNetAmount: number = typeof sd.bank_deposit === 'number' ? sd.bank_deposit
+      : typeof sd.net_ex_gst === 'number' ? sd.net_ex_gst
+      : (typeof body.netAmount === 'number' ? body.netAmount : 0);
+    const netAmount = serverNetAmount;
+
     // Determine if this is a negative (fee-only) settlement → create a Bill (ACCPAY)
-    const isNegativeSettlement = typeof netAmount === 'number' && netAmount < 0;
+    const isNegativeSettlement = netAmount < 0;
     const invoiceType = isNegativeSettlement ? "ACCPAY" : "ACCREC";
 
     console.log('Create request:', { userId, settlementId, reference, date, country, contactName, netAmount, invoiceType });
