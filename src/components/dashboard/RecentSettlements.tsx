@@ -367,7 +367,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
   // Summary counts
   const counts = useMemo(() => {
-    const c = { ready: 0, posted: 0, attention: 0, hidden: 0, other: 0, readyTotal: 0, postedTotal: 0 };
+    const c = { ready: 0, posted: 0, attention: 0, hidden: 0, completed: 0, other: 0, readyTotal: 0, postedTotal: 0 };
     for (const r of allRows) {
       const cat = categorize(r);
       c[cat]++;
