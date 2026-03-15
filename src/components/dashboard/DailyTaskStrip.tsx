@@ -23,12 +23,16 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
       try {
         // Use marketplace_validation as source of truth (same as Overview page)
         const [valRes, reconAlerts] = await Promise.all([
-          supabase.from('marketplace_validation').select('overall_status'),
+          supabase.from('marketplace_validation').select('overall_status, settlement_id'),
           supabase.from('marketplace_validation').select('id', { count: 'exact', head: true })
             .in('overall_status', ['missing', 'partial']),
         ]);
 
-        const valRows = valRes.data || [];
+        // Filter out already_recorded and shopify_auto analytics-only records (same as ValidationSweep)
+        const valRows = (valRes.data || []).filter(r =>
+          r.overall_status !== 'already_recorded' &&
+          !(r.settlement_id && r.settlement_id.startsWith('shopify_auto_'))
+        );
         // Count using same logic as ValidationSweep
         let filesToReview = 0;
         let readyToPush = 0;
