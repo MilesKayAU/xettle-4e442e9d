@@ -141,6 +141,7 @@ export default function ActionCentre({
     id: string; marketplace: string | null; settlement_id: string;
     period_start: string; period_end: string; bank_deposit: number | null;
   }>>([]);
+  const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
