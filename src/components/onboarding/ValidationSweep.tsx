@@ -151,7 +151,55 @@ export default function ValidationSweep({
       ]);
 
       if (valRes.error) throw valRes.error;
-      setRows((valRes.data || []) as ValidationRow[]);
+      const validationRows = (valRes.data || []) as ValidationRow[];
+      
+      // ── Sync guard: fix stale validation rows whose settlement status has changed ──
+      const staleCandidate = validationRows.filter(
+        r => r.overall_status === 'ready_to_push' && r.settlement_id
+      );
+      if (staleCandidate.length > 0) {
+        const settlementIds = staleCandidate.map(r => r.settlement_id!);
+        const { data: settlements } = await supabase
+          .from('settlements')
+          .select('settlement_id, status')
+          .in('settlement_id', settlementIds);
+
+        if (settlements && settlements.length > 0) {
+          const statusMap = new Map(settlements.map(s => [s.settlement_id, s.status]));
+          const fixPromises: Promise<any>[] = [];
+
+          for (const row of staleCandidate) {
+            const sStatus = statusMap.get(row.settlement_id!);
+            if (!sStatus) continue;
+
+            if (sStatus === 'already_recorded' || sStatus === 'pushed_to_xero') {
+              row.overall_status = 'complete';
+              fixPromises.push(
+                Promise.resolve(
+                  supabase.from('marketplace_validation')
+                    .update({ overall_status: 'complete' })
+                    .eq('id', row.id)
+                )
+              );
+            } else if (sStatus === 'ingested' || sStatus === 'saved') {
+              row.overall_status = 'settlement_needed';
+              fixPromises.push(
+                Promise.resolve(
+                  supabase.from('marketplace_validation')
+                    .update({ overall_status: 'settlement_needed' })
+                    .eq('id', row.id)
+                )
+              );
+            }
+          }
+          if (fixPromises.length > 0) {
+            await Promise.all(fixPromises);
+            console.log(`[ValidationSweep] Fixed ${fixPromises.length} stale validation rows`);
+          }
+        }
+      }
+
+      setRows(validationRows);
       
       if (boundaryRes.data?.value) {
         setBoundaryDate(boundaryRes.data.value);
