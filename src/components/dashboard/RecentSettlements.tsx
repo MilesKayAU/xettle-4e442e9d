@@ -24,7 +24,7 @@ import {
 import {
   FileText, ArrowRight, CheckCircle2, Clock, Send, AlertTriangle,
   MoreHorizontal, Eye, RefreshCw, EyeOff, Download, ChevronLeft, ChevronRight,
-  EyeIcon, ChevronDown, ChevronUp, Loader2,
+  EyeIcon, ChevronDown, ChevronUp, Loader2, ShieldAlert,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -320,6 +320,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   const [activeFilter, setActiveFilter] = useState<StatusCategory | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
+  const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
 
   const fetchAll = useCallback(async () => {
     try {
@@ -332,7 +333,20 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         .order('period_end', { ascending: false });
 
       if (error) throw error;
-      setAllRows((data || []) as SettlementRow[]);
+      const rows = (data || []) as SettlementRow[];
+      setAllRows(rows);
+
+      // Fetch external matches for ready-to-push settlements
+      const readyIds = rows.filter(r => r.status === 'ready_to_push').map(r => r.settlement_id).filter(Boolean);
+      if (readyIds.length > 0) {
+        const { data: matches } = await supabase
+          .from('xero_accounting_matches')
+          .select('settlement_id')
+          .in('settlement_id', readyIds);
+        if (matches) {
+          setExternalMatchIds(new Set(matches.map((m: any) => m.settlement_id)));
+        }
+      }
     } catch (err) {
       console.error('Failed to load settlements:', err);
     } finally {
@@ -597,18 +611,35 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                   </td>
                 </tr>
               )}
-              {pageRows.map((row, idx) => (
+              {pageRows.map((row, idx) => {
+                const hasExternalRisk = row.status === 'ready_to_push' && externalMatchIds.has(row.settlement_id);
+                return (
                 <React.Fragment key={row.id}>
                   <tr
                     className={cn(
                       'border-b border-border/30 last:border-0 transition-colors hover:bg-muted/30',
                       idx % 2 === 1 && 'bg-muted/10',
                       expandedId === row.id && 'bg-muted/20',
-                      row.status === 'hidden' && 'opacity-60'
+                      row.status === 'hidden' && 'opacity-60',
+                      hasExternalRisk && 'bg-destructive/5 border-l-2 border-l-destructive/60'
                     )}
                   >
                     <td className="px-4 py-3 font-medium text-foreground">
-                      {getMarketplaceLabel(row.marketplace)}
+                      <div className="flex items-center gap-1.5">
+                        {hasExternalRisk && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[220px] text-xs">
+                                Possible duplicate — an invoice for this settlement already exists in Xero (e.g. Link My Books). Open the drawer to review before pushing.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {getMarketplaceLabel(row.marketplace)}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                       {formatDateRange(row.period_start, row.period_end)}
@@ -624,7 +655,14 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} />
+                      {hasExternalRisk ? (
+                        <Badge variant="outline" className="text-destructive bg-destructive/10 border-destructive/30 text-xs">
+                          <ShieldAlert className="h-3 w-3 mr-1" />
+                          Duplicate Risk
+                        </Badge>
+                      ) : (
+                        <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} />
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {(() => {
@@ -694,7 +732,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                     </tr>
                   )}
                 </React.Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
