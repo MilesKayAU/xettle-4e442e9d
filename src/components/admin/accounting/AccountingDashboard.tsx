@@ -312,6 +312,9 @@ export default function AccountingDashboard() {
   const settlementInputRef = useRef<HTMLInputElement>(null);
   const transactionInputRef = useRef<HTMLInputElement>(null);
    const pendingPushRef = useRef(false);
+  // PushSafetyPreview state
+  const [pushPreviewOpen, setPushPreviewOpen] = useState(false);
+  const [pushPreviewSettlements, setPushPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
 
   // Poll localStorage to detect fetch completion/timeout (e.g. after page refresh)
   useEffect(() => {
