@@ -551,7 +551,7 @@ Return JSON with this structure:
           }
         }
       } catch (e) {
-        console.error('Failed to parse AI content response:', e)
+        logger.error('Failed to parse AI content response:', e)
       }
     }
 
