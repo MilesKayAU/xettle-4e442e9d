@@ -373,7 +373,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
 
     // Debug: log first 10 transaction rows' marketplace names, and first non-AU row raw value
     if (transactionType && debugRowCount < 10) {
-      console.info(`[Parser] Row ${i} marketplace-name: "${marketplaceName}", isAU: ${isAuMarketplace}, txType: ${transactionType}, amount: ${amount}`);
+      logger.info(`[Parser] Row ${i} marketplace-name: "${marketplaceName}", isAU: ${isAuMarketplace}, txType: ${transactionType}, amount: ${amount}`);
       debugRowCount++;
     }
     if (transactionType && isExplicitNonAu && firstNonAuMarketplaceName === null) {
