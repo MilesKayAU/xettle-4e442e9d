@@ -64,17 +64,19 @@ export async function provisionMarketplace(opts: {
     return { success: true, action: 'already_exists', connectionId: existing.id };
   }
 
+  const row = {
+    user_id: user.id,
+    marketplace_code: code,
+    marketplace_name: opts.marketplaceName,
+    connection_type: opts.connectionType || 'manual',
+    connection_status: 'active',
+    country_code: opts.countryCode || 'AU',
+    settings: (opts.settings || {}) as any,
+  };
+
   const { data, error } = await supabase
     .from('marketplace_connections')
-    .insert({
-      user_id: user.id,
-      marketplace_code: code,
-      marketplace_name: opts.marketplaceName,
-      connection_type: opts.connectionType || 'manual',
-      connection_status: 'active',
-      country_code: opts.countryCode || 'AU',
-      settings: opts.settings || {},
-    })
+    .insert(row)
     .select('id')
     .single();
 
