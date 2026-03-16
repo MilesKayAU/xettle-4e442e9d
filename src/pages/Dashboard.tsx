@@ -561,10 +561,6 @@ export default function Dashboard() {
                 Plans
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => switchView('settings')}>
-              <Settings className="h-4 w-4 mr-1" />
-              Settings
-            </Button>
             {isAdmin && (
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/admin">
