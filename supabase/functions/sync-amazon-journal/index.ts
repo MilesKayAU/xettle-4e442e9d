@@ -380,20 +380,18 @@ serve(async (req) => {
       });
     }
 
-    // ─── CREATE ACTION (default) ─────────────────────────────────────
-    const { date, dueDate, lineItems, country, contactName } = body;
-
-    // ─── SERVER-SIDE REFERENCE GENERATION ─────────────────────────────
-    const settlementId = body.settlementId;
-    if (!settlementId) {
-      throw new Error('Missing settlementId — reference is generated server-side');
-    }
-    const splitSuffix = body.splitPart ? `-P${body.splitPart}` : '';
-    const reference = `Xettle-${settlementId}${splitSuffix}`;
-
-    console.log('Create invoice request:', { userId, settlementId, reference, date, country, contactName, lineItemCount: lineItems?.length });
-    if (!date) throw new Error('Missing date');
-    if (!lineItems || lineItems.length === 0) throw new Error('Missing line items');
+    // ─── CREATE ACTION — BLOCKED (Golden Rule enforcement) ─────────────
+    // Invoice creation MUST go through sync-settlement-to-xero which enforces:
+    //   - Server-side line item rebuild (canonical 10-category model)
+    //   - DRAFT-only status
+    //   - Per-marketplace contact mapping (no silent fallback)
+    //   - Mandatory audit CSV attachment
+    //   - Post-sync balance verification
+    // This function is retained for ROLLBACK actions only.
+    throw new Error(
+      'BLOCKED: Invoice creation via sync-amazon-journal is retired. ' +
+      'Use sync-settlement-to-xero via PushSafetyPreview for all Xero pushes.'
+    );
 
     let token = await getXeroToken(supabase, userId);
     console.log('Found Xero token for tenant:', token.tenant_name);
