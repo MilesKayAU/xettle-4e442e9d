@@ -471,8 +471,19 @@ function buildValidationChecks(
   coaMap?: Map<string, { name: string; type: string; active: boolean }>,
   userCodes?: Record<string, string>,
   alreadyInXeroCheck?: ValidationCheck | null,
+  periodLocked?: boolean,
+  periodMonth?: string | null,
 ): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
+
+  // 0a. Period lock check — blocks push
+  if (periodLocked && periodMonth) {
+    checks.push({
+      label: 'Period is locked',
+      status: 'red',
+      detail: `${periodMonth} is closed. Unlock the period first to push changes.`,
+    });
+  }
 
   // 0. Already in Xero — must be first (blocks push)
   if (alreadyInXeroCheck) {
