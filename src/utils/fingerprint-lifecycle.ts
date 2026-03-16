@@ -207,6 +207,16 @@ export async function logDriftDetected(params: {
 /**
  * Auto-demote an active fingerprint to draft on hard failure.
  * Logs format_auto_demoted_to_draft event for FormatInspector visibility.
+ *
+ * Anti-flap guards:
+ *  - Won't demote if already demoted within the last 6 hours.
+ *  - Won't demote unless at least one settlement was previously saved with this fingerprint.
+ *
+ * Includes a reason_code derived from failedGates for diagnostics:
+ *  - missing_dates_due_to_mapping  (incomplete_mapping also failed)
+ *  - missing_dates_due_to_parser   (sanity_failed also present)
+ *  - missing_dates_due_to_file_type (none of the above — likely wrong file)
+ *  - sanity_failed / payout_mismatch / combined
  */
 export async function autoDemoteFingerprint(params: {
   fingerprintId: string;
@@ -215,6 +225,50 @@ export async function autoDemoteFingerprint(params: {
   failedGates: string[];
 }): Promise<void> {
   try {
+    // ── Anti-flap: skip if demoted within last 6 hours ──────────────
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    const { data: recentDemotions } = await supabase
+      .from('system_events')
+      .select('id')
+      .eq('user_id', params.userId)
+      .eq('event_type', 'format_auto_demoted_to_draft')
+      .gte('created_at', sixHoursAgo)
+      .limit(1) as any;
+
+    if (recentDemotions && recentDemotions.length > 0) {
+      // Already demoted recently — skip to prevent flapping
+      return;
+    }
+
+    // ── Anti-flap: only demote if at least one settlement was saved with this fingerprint ──
+    const { data: priorSettlements } = await supabase
+      .from('settlements')
+      .select('id')
+      .eq('fingerprint_id', params.fingerprintId)
+      .limit(1) as any;
+
+    if (!priorSettlements || priorSettlements.length === 0) {
+      // No prior settlements — this fingerprint was never successfully used, skip demotion
+      return;
+    }
+
+    // ── Derive reason_code from failedGates ─────────────────────────
+    const gates = new Set(params.failedGates);
+    let reasonCode = 'combined';
+    if (gates.has('missing_dates')) {
+      if (gates.has('incomplete_mapping')) {
+        reasonCode = 'missing_dates_due_to_mapping';
+      } else if (gates.has('sanity_failed')) {
+        reasonCode = 'missing_dates_due_to_parser';
+      } else {
+        reasonCode = 'missing_dates_due_to_file_type';
+      }
+    } else if (gates.has('sanity_failed') && gates.size === 1) {
+      reasonCode = 'sanity_failed';
+    } else if (gates.has('payout_mismatch') && gates.size === 1) {
+      reasonCode = 'payout_mismatch';
+    }
+
     await supabase
       .from('marketplace_file_fingerprints')
       .update({ status: 'draft' } as any)
@@ -229,8 +283,8 @@ export async function autoDemoteFingerprint(params: {
         fingerprint_id: params.fingerprintId,
         marketplace_code: params.marketplaceCode,
         failed_gates: params.failedGates,
+        reason_code: reasonCode,
         actor_user_id: params.userId,
-        reason: 'drift_hard_failure',
       },
     } as any);
   } catch { /* non-blocking */ }
