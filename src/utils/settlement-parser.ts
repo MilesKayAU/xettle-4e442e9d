@@ -441,7 +441,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     throw new Error('No settlement header row found (expected row with total-amount but no transaction-type)');
   }
 
-  console.info('[Marketplace Split]', {
+  logger.info('[Marketplace Split]', {
     settlementId: header.settlementId,
     auIncomeTotal: round2(auIncomeTotal),
     intlIncomeTotal: round2(intlIncomeTotal),
