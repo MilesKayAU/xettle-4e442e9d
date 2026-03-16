@@ -1078,9 +1078,62 @@ serve(async (req) => {
       }
     }
 
-    // Fallback: Check Xero API directly
+    // Fallback: Check Xero API directly — if found, backfill local DB (retry recovery)
     const existing = await checkExistingInvoice(token, reference);
     if (existing.exists) {
+      // ─── RETRY RECOVERY (Option B): Xero has the invoice but our DB doesn't ──
+      // This happens when Xero creation succeeded but the DB write failed (timeout, crash).
+      // Instead of throwing, backfill the local cache and return success.
+      const isRetryRecovery = existing.status === 'DRAFT';
+      
+      if (isRetryRecovery) {
+        console.log(`[retry-recovery] Found orphaned DRAFT invoice ${existing.invoiceId} in Xero — backfilling local DB`);
+
+        // Backfill xero_accounting_matches cache
+        const sd = body.settlementData || {};
+        await supabase.from('xero_accounting_matches').upsert({
+          user_id: userId,
+          settlement_id: cacheSettlementKey,
+          marketplace_code: sd.marketplace || 'unknown',
+          xero_invoice_id: existing.invoiceId,
+          xero_invoice_number: null,
+          xero_status: existing.status,
+          xero_type: netAmount < 0 ? 'bill' : 'invoice',
+          match_method: 'retry_recovery',
+          confidence: 1.0,
+          matched_amount: netAmount || null,
+          matched_date: date || null,
+          matched_contact: contactName || null,
+          matched_reference: existing.matchedReference || reference,
+          reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
+        }, { onConflict: 'user_id,settlement_id' });
+
+        // Log recovery event
+        await supabase.from('system_events').insert({
+          user_id: userId,
+          event_type: 'xero_push_retry_recovered',
+          severity: 'warning',
+          settlement_id: sd.settlement_id || null,
+          marketplace_code: sd.marketplace || null,
+          details: {
+            xero_invoice_id: existing.invoiceId,
+            matched_reference: existing.matchedReference || reference,
+            recovery_reason: 'invoice_exists_in_xero_but_not_in_local_cache',
+          },
+        });
+
+        return new Response(JSON.stringify({
+          success: true,
+          invoiceId: existing.invoiceId,
+          reference: existing.matchedReference || reference,
+          recoveredFromRetry: true,
+          message: 'Invoice already existed in Xero — local database backfilled successfully.',
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Non-DRAFT existing invoice — genuine duplicate, block as before
       const refInfo = existing.matchedReference && existing.matchedReference !== reference
         ? ` (matched legacy reference: "${existing.matchedReference}")`
         : '';
