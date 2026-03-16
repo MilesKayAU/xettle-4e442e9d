@@ -1,9 +1,9 @@
 /**
- * Tests for Trusted Format Lifecycle (Draft → Active)
+ * Tests for Trusted Format Lifecycle (Draft → Active) + Drift Detection
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { validateDraftGates, type FingerprintRecord } from './fingerprint-lifecycle';
+import { validateDraftGates, validateFormatGates, type FingerprintRecord } from './fingerprint-lifecycle';
 import type { StandardSettlement } from './settlement-engine';
 
 function makeSettlement(overrides: Partial<StandardSettlement> = {}): StandardSettlement {
@@ -38,7 +38,6 @@ function makeFingerprint(overrides: Partial<FingerprintRecord> = {}): Fingerprin
 }
 
 describe('Trusted Format Lifecycle', () => {
-  // Test 1: First Contact creates fingerprint with status='draft' and correct parser_type
   it('draft fingerprint with generic parser_type passes validation when gates met', () => {
     const fp = makeFingerprint({ status: 'draft', parser_type: 'generic' });
     const settlement = makeSettlement();
@@ -48,7 +47,6 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.missingGates).toHaveLength(0);
   });
 
-  // Test 2: Draft blocks save when dates missing (no fallback)
   it('blocks save when period_start is missing', () => {
     const fp = makeFingerprint();
     const settlement = makeSettlement({ period_start: '', period_end: '2025-01-15' });
@@ -64,7 +62,6 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.canSave).toBe(false);
   });
 
-  // Test 3: Draft blocks save when reconciliation fails
   it('blocks save when reconciliation fails', () => {
     const fp = makeFingerprint();
     const settlement = makeSettlement({ reconciles: false });
@@ -73,7 +70,6 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.missingGates.some(g => g.includes('Reconciliation'))).toBe(true);
   });
 
-  // Test 4: Draft allows save and auto-promotes for low-risk CSV
   it('allows auto-promote for generic CSV with all gates passing', () => {
     const fp = makeFingerprint({ parser_type: 'generic', confidence: null });
     const settlement = makeSettlement();
@@ -82,7 +78,6 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.canAutoPromote).toBe(true);
   });
 
-  // Test 5: AI-created draft with confidence < 80 does NOT auto-promote
   it('does not auto-promote AI draft with confidence < 80', () => {
     const fp = makeFingerprint({ parser_type: 'ai', confidence: 65 });
     const settlement = makeSettlement();
@@ -100,7 +95,6 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.canAutoPromote).toBe(true);
   });
 
-  // Test 6: Rejected fingerprint blocks save
   it('blocks save for rejected fingerprint', () => {
     const fp = makeFingerprint({ status: 'rejected' });
     const settlement = makeSettlement();
@@ -109,7 +103,6 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.missingGates.some(g => g.includes('rejected'))).toBe(true);
   });
 
-  // Test 7: Active fingerprint always allows save (no draft gates)
   it('active fingerprint skips draft gates entirely', () => {
     const fp = makeFingerprint({ status: 'active' });
     const settlement = makeSettlement({ period_start: '', reconciles: false });
@@ -118,7 +111,6 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.canAutoPromote).toBe(false);
   });
 
-  // Test: PDF formats don't auto-promote
   it('does not auto-promote PDF formats', () => {
     const fp = makeFingerprint({ parser_type: 'generic' });
     const settlement = makeSettlement();
@@ -127,7 +119,6 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.canAutoPromote).toBe(false);
   });
 
-  // Test: All-zero settlement blocked
   it('blocks all-zero settlement', () => {
     const fp = makeFingerprint();
     const settlement = makeSettlement({ sales_ex_gst: 0, fees_ex_gst: 0, net_payout: 0 });
@@ -136,12 +127,83 @@ describe('Trusted Format Lifecycle', () => {
     expect(result.missingGates.some(g => g.includes('$0'))).toBe(true);
   });
 
-  // Test: Sanity failed blocks save
   it('blocks save when sanity_failed is set', () => {
     const fp = makeFingerprint();
     const settlement = makeSettlement({ metadata: { sanity_failed: true, fileFormat: 'csv' } });
     const result = validateDraftGates(settlement, fp, 'csv');
     expect(result.canSave).toBe(false);
     expect(result.missingGates.some(g => g.includes('sanity'))).toBe(true);
+  });
+});
+
+describe('Format Drift Detection (validateFormatGates)', () => {
+  it('active fingerprint + passing gates => passes', () => {
+    const fp = makeFingerprint({ status: 'active' });
+    const settlement = makeSettlement();
+    const result = validateFormatGates(settlement, fp);
+    expect(result.passed).toBe(true);
+    expect(result.failedGates).toHaveLength(0);
+    expect(result.hardFailure).toBe(false);
+  });
+
+  it('active fingerprint + missing dates => hard failure', () => {
+    const fp = makeFingerprint({ status: 'active' });
+    const settlement = makeSettlement({ period_start: '', period_end: '' });
+    const result = validateFormatGates(settlement, fp);
+    expect(result.passed).toBe(false);
+    expect(result.hardFailure).toBe(true);
+    expect(result.failedGates).toContain('missing_dates');
+  });
+
+  it('active fingerprint + sanity_failed => hard failure', () => {
+    const fp = makeFingerprint({ status: 'active' });
+    const settlement = makeSettlement({ metadata: { sanity_failed: true, fileFormat: 'csv' } });
+    const result = validateFormatGates(settlement, fp);
+    expect(result.passed).toBe(false);
+    expect(result.hardFailure).toBe(true);
+    expect(result.failedGates).toContain('sanity_failed');
+  });
+
+  it('active fingerprint + payout mismatch => hard failure', () => {
+    const fp = makeFingerprint({ status: 'active' });
+    const settlement = makeSettlement({ net_payout: 0, sales_ex_gst: 5000 });
+    const result = validateFormatGates(settlement, fp);
+    expect(result.passed).toBe(false);
+    expect(result.hardFailure).toBe(true);
+    expect(result.failedGates).toContain('payout_mismatch');
+  });
+
+  it('active fingerprint + reconciliation failure only => soft failure (no hardFailure)', () => {
+    const fp = makeFingerprint({ status: 'active' });
+    const settlement = makeSettlement({ reconciles: false });
+    const result = validateFormatGates(settlement, fp);
+    expect(result.passed).toBe(false);
+    expect(result.hardFailure).toBe(false);
+    expect(result.failedGates).toContain('reconciliation_failed');
+  });
+
+  it('active fingerprint + incomplete mapping => soft failure', () => {
+    const fp = makeFingerprint({ status: 'active', column_mapping: { gross_sales: 'Sales' } });
+    const settlement = makeSettlement();
+    const result = validateFormatGates(settlement, fp);
+    expect(result.passed).toBe(false);
+    expect(result.hardFailure).toBe(false);
+    expect(result.failedGates).toContain('incomplete_mapping');
+  });
+
+  it('multiple failures accumulate correctly', () => {
+    const fp = makeFingerprint({ status: 'active' });
+    const settlement = makeSettlement({
+      period_start: '',
+      reconciles: false,
+      metadata: { sanity_failed: true, fileFormat: 'csv' },
+    });
+    const result = validateFormatGates(settlement, fp);
+    expect(result.passed).toBe(false);
+    expect(result.hardFailure).toBe(true);
+    expect(result.failedGates).toContain('missing_dates');
+    expect(result.failedGates).toContain('sanity_failed');
+    expect(result.failedGates).toContain('reconciliation_failed');
+    expect(result.failedGates.length).toBeGreaterThanOrEqual(3);
   });
 });
