@@ -46,9 +46,14 @@ export default function EbayCallback() {
         setEbayUsername(data.ebay_username);
         setStatus('success');
 
-        setTimeout(() => {
-          navigate('/dashboard?connected=ebay', { replace: true });
-        }, 3000);
+        // If opened as popup, close after brief delay
+        if (window.opener) {
+          setTimeout(() => window.close(), 2000);
+        } else {
+          setTimeout(() => {
+            navigate('/dashboard?connected=ebay', { replace: true });
+          }, 3000);
+        }
       } catch (err: any) {
         console.error('[eBay Callback] Error:', err);
         setStatus('error');
