@@ -1333,7 +1333,7 @@ serve(async (req) => {
           });
 
           if (!reportsResponse.ok) {
-            console.error(`[backfill] SP-API error: ${reportsResponse.status}`);
+            logger.error(`[backfill] SP-API error: ${reportsResponse.status}`);
             if (reportsResponse.status === 429) break; // Stop on rate limit
             continue;
           }
