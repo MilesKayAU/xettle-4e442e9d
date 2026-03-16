@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
 
           // UNSUPPORTED: always block autopost
           if (tier === 'UNSUPPORTED') {
-            console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: UNSUPPORTED tier`);
+            logger.debug(`[auto-post] Skipping ${r.rail} for user ${userId}: UNSUPPORTED tier`);
             return false;
           }
 
