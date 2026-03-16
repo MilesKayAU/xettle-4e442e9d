@@ -528,9 +528,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                       const failed = settlements.filter(s => s.status === 'push_failed' || s.status === 'push_failed_permanent');
                       if (failed.length === 0) return;
                       try {
-                        for (const s of failed) {
-                          await supabase.from('settlements').update({ status: 'ready_to_push', push_retry_count: 0 }).eq('id', s.id);
-                        }
+                        const { resetFailedSettlements } = await import('@/actions/settlements');
+                        const result = await resetFailedSettlements(failed.map(s => s.id));
+                        if (!result.success) throw new Error(result.error);
                         toast.success(`Reset ${failed.length} failed settlement(s) — ready to retry`);
                         loadSettlements(true);
                       } catch (err: any) {

@@ -96,13 +96,15 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
     if (!confirmed) return;
     setRollingBack(settlement.id);
     try {
-      const invoiceIds = [settlement.xero_journal_id];
-      const result = await rollbackSettlementFromXero(settlement.settlement_id, settlement.marketplace, invoiceIds);
+      const { rollbackSettlement } = await import('@/actions/repost');
+      const result = await rollbackSettlement({
+        settlementDbId: settlement.id,
+        settlementId: settlement.settlement_id,
+        marketplace: settlement.marketplace,
+        invoiceIds: [settlement.xero_journal_id],
+      });
       if (result.success) {
-        await supabase.from('settlements').update({
-          status: 'saved', xero_journal_id: null, xero_invoice_number: null, xero_status: null
-        } as any).eq('id', settlement.id);
-        toast.success('Invoice voided in Xero — settlement reset to Ready');
+        toast.success('Invoice voided in Xero — settlement reset');
         loadSettlements();
       } else {
         toast.error(result.error || 'Rollback failed');

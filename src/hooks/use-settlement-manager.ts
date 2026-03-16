@@ -93,12 +93,8 @@ export function useSettlementManager<T extends BaseSettlementRow = BaseSettlemen
   const handleDelete = useCallback(async (settlement: BaseSettlementRow) => {
     setDeleting(settlement.id);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      await supabase.from('settlement_lines').delete().eq('user_id', user.id).eq('settlement_id', settlement.settlement_id);
-      await supabase.from('settlement_unmapped').delete().eq('user_id', user.id).eq('settlement_id', settlement.settlement_id);
-      await supabase.from('settlements').delete().eq('id', settlement.id);
+      const result = await canonicalDeleteSettlement(settlement.id);
+      if (!result.success) throw new Error(result.error);
 
       toast.success(`Deleted settlement ${settlement.settlement_id}`);
       loadSettlements();
