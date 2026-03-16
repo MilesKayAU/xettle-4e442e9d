@@ -1,29 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle, Search, ChevronsUpDown, Filter } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import {
+  refreshXeroCOA,
+  getCachedXeroAccounts,
+  getCoaLastSyncedAt,
+  type CachedXeroAccount,
+} from '@/actions';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
-
-interface CoaEntry {
-  name: string;
-  type: string;
-  active: boolean;
-}
-
-interface XeroAccount {
-  code: string;
-  name: string;
-  type: string;
-  taxType: string;
-  description: string;
-}
 
 interface MappingEntry {
   code: string;
@@ -52,11 +46,14 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   'Other Fees': 'Miscellaneous marketplace charges',
 };
 
-/** Known marketplace labels that match MARKETPLACE_LABELS in settlement-engine */
 const KNOWN_MARKETPLACES = [
   'Amazon AU', 'Shopify', 'Bunnings', 'eBay AU', 'Catch',
   'MyDeal', 'Kogan', 'Everyday Market', 'The Iconic', 'Etsy',
 ];
+
+const REVENUE_CATEGORIES_SET = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
+const REVENUE_ACCOUNT_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS']);
+const EXPENSE_ACCOUNT_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
 
 export default function AccountMapperCard() {
   const [state, setState] = useState<MapperState>('unmapped');
@@ -64,18 +61,34 @@ export default function AccountMapperCard() {
   const [editableMapping, setEditableMapping] = useState<Record<string, string>>({});
   const [confidence, setConfidence] = useState<string>('medium');
   const [notes, setNotes] = useState<string>('');
-  const [accounts, setAccounts] = useState<XeroAccount[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Xero COA state
+  const [coaAccounts, setCoaAccounts] = useState<CachedXeroAccount[]>([]);
+  const [coaLastSynced, setCoaLastSynced] = useState<string | null>(null);
+  const [refreshingCoa, setRefreshingCoa] = useState(false);
+  const [showOnlyMissing, setShowOnlyMissing] = useState(false);
 
   // Marketplace split state
   const [splitByMarketplace, setSplitByMarketplace] = useState(false);
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
-  // CoA validation state
-  const [coaMap, setCoaMap] = useState<Map<string, CoaEntry>>(new Map());
-  // Per-marketplace use_global_mappings flags
   const [globalMappingFlags, setGlobalMappingFlags] = useState<Record<string, boolean>>({});
 
-  // Load current state on mount
+  // Build CoA lookup map
+  const coaMap = useMemo(() => {
+    const map = new Map<string, { name: string; type: string; active: boolean }>();
+    for (const acc of coaAccounts) {
+      if (acc.account_code) {
+        map.set(acc.account_code, {
+          name: acc.account_name,
+          type: (acc.account_type || '').toUpperCase(),
+          active: acc.is_active !== false,
+        });
+      }
+    }
+    return map;
+  }, [coaAccounts]);
+
   useEffect(() => {
     loadCurrentState();
   }, []);
@@ -86,22 +99,13 @@ export default function AccountMapperCard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load cached Chart of Accounts for validation badges
-      const { data: coaAccounts } = await supabase
-        .from('xero_chart_of_accounts')
-        .select('account_code, account_name, account_type, is_active')
-        .eq('user_id', user.id);
-      const newCoaMap = new Map<string, CoaEntry>();
-      for (const acc of (coaAccounts || [])) {
-        if (acc.account_code) {
-          newCoaMap.set(acc.account_code, {
-            name: acc.account_name,
-            type: (acc.account_type || '').toUpperCase(),
-            active: acc.is_active !== false,
-          });
-        }
-      }
-      setCoaMap(newCoaMap);
+      // Load cached COA + last sync in parallel
+      const [accounts, lastSynced] = await Promise.all([
+        getCachedXeroAccounts(),
+        getCoaLastSyncedAt(),
+      ]);
+      setCoaAccounts(accounts);
+      setCoaLastSynced(lastSynced);
 
       // Load split toggle state
       const { data: splitSetting } = await supabase
@@ -113,7 +117,7 @@ export default function AccountMapperCard() {
       const isSplit = splitSetting?.value === 'true';
       setSplitByMarketplace(isSplit);
 
-      // Load active marketplace connections to know which channels to show
+      // Load active marketplace connections
       const { data: connections } = await supabase
         .from('marketplace_connections')
         .select('marketplace_name, settings')
@@ -122,15 +126,13 @@ export default function AccountMapperCard() {
 
       if (connections && connections.length > 0) {
         setActiveMarketplaces(connections.map(c => c.marketplace_name));
-        // Load use_global_mappings flags from connection settings
         const flags: Record<string, boolean> = {};
         for (const c of connections) {
           const settings = (c.settings || {}) as Record<string, any>;
-          flags[c.marketplace_name] = settings.use_global_mappings !== false; // default true
+          flags[c.marketplace_name] = settings.use_global_mappings !== false;
         }
         setGlobalMappingFlags(flags);
       } else {
-        // Fallback: detect from settlements
         const { data: settlements } = await supabase
           .from('settlements')
           .select('marketplace')
@@ -138,16 +140,13 @@ export default function AccountMapperCard() {
           .not('status', 'in', '("duplicate_suppressed","already_recorded")');
         if (settlements) {
           const unique = [...new Set(settlements.map(s => s.marketplace).filter(Boolean))];
-          // Map codes to labels
-          const labels = unique.map(code => {
-            const labelMap: Record<string, string> = {
-              amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
-              shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
-              kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
-              etsy: 'Etsy', theiconic: 'The Iconic',
-            };
-            return labelMap[code || ''] || code || '';
-          }).filter(Boolean);
+          const labelMap: Record<string, string> = {
+            amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
+            shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
+            kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
+            etsy: 'Etsy', theiconic: 'The Iconic',
+          };
+          const labels = unique.map(code => labelMap[code || ''] || code || '').filter(Boolean);
           setActiveMarketplaces([...new Set(labels)]);
         }
       }
@@ -166,24 +165,22 @@ export default function AccountMapperCard() {
           const restored: Record<string, MappingEntry> = {};
           for (const cat of CATEGORIES) {
             if (codes[cat]) {
-              restored[cat] = { code: codes[cat], name: `Account ${codes[cat]}` };
+              const coaEntry = accounts.find(a => a.account_code === codes[cat]);
+              restored[cat] = { code: codes[cat], name: coaEntry?.account_name || `Account ${codes[cat]}` };
             }
           }
-          // Restore marketplace overrides
           for (const key of Object.keys(codes)) {
             if (key.includes(':')) {
-              restored[key] = { code: codes[key], name: `Account ${codes[key]}` };
+              const coaEntry = accounts.find(a => a.account_code === codes[key]);
+              restored[key] = { code: codes[key], name: coaEntry?.account_name || `Account ${codes[key]}` };
             }
           }
           setMapping(restored);
-
-          // Restore editable mapping
           const editable: Record<string, string> = {};
           for (const [k, v] of Object.entries(codes)) {
             editable[k] = v as string;
           }
           setEditableMapping(editable);
-
           setState('confirmed');
         } catch { /* fall through */ }
         setLoading(false);
@@ -219,20 +216,48 @@ export default function AccountMapperCard() {
     }
   };
 
+  const handleRefreshCoa = useCallback(async () => {
+    setRefreshingCoa(true);
+    try {
+      const result = await refreshXeroCOA();
+      if (!result.success) {
+        toast.error(`COA refresh failed: ${result.error}`);
+        return;
+      }
+      const [accounts, lastSynced] = await Promise.all([
+        getCachedXeroAccounts(),
+        getCoaLastSyncedAt(),
+      ]);
+      setCoaAccounts(accounts);
+      setCoaLastSynced(lastSynced);
+      toast.success(`Refreshed ${result.accounts_count} accounts, ${result.tax_rates_count} tax rates`);
+    } catch (err: any) {
+      toast.error(`COA refresh failed: ${err.message}`);
+    } finally {
+      setRefreshingCoa(false);
+    }
+  }, []);
+
   const runMapper = useCallback(async () => {
     setState('scanning');
     try {
       const { data, error } = await supabase.functions.invoke('ai-account-mapper', {
         body: { action: 'scan_and_match' },
       });
-
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Mapping failed');
 
       setMapping(data.mapping || {});
       setConfidence(data.confidence || 'medium');
       setNotes(data.notes || '');
-      setAccounts(data.accounts || []);
+
+      // Refresh COA after AI mapper (it caches too)
+      const [accounts, lastSynced] = await Promise.all([
+        getCachedXeroAccounts(),
+        getCoaLastSyncedAt(),
+      ]);
+      setCoaAccounts(accounts);
+      setCoaLastSynced(lastSynced);
 
       const editable: Record<string, string> = {};
       for (const [cat, entry] of Object.entries(data.mapping || {})) {
@@ -257,7 +282,6 @@ export default function AccountMapperCard() {
         value: enabled ? 'true' : 'false',
       } as any, { onConflict: 'user_id,key' });
 
-      // If disabling, strip marketplace-specific keys from editable mapping
       if (!enabled) {
         const cleaned = { ...editableMapping };
         for (const key of Object.keys(cleaned)) {
@@ -275,13 +299,11 @@ export default function AccountMapperCard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Build the final codes object
       const finalCodes: Record<string, string> = {};
       for (const cat of CATEGORIES) {
         finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
       }
 
-      // Include marketplace-specific overrides if split is enabled
       if (splitByMarketplace) {
         for (const mp of getEffectiveMarketplaces()) {
           for (const cat of SPLITTABLE_CATEGORIES) {
@@ -293,36 +315,32 @@ export default function AccountMapperCard() {
         }
       }
 
-      // Save to accounting_xero_account_codes
       const { error } = await supabase.from('app_settings').upsert({
         user_id: user.id,
         key: 'accounting_xero_account_codes',
         value: JSON.stringify(finalCodes),
       } as any, { onConflict: 'user_id,key' });
-
       if (error) throw error;
 
-      // Update mapper status
       await supabase.from('app_settings').upsert({
         user_id: user.id,
         key: 'ai_mapper_status',
         value: 'confirmed',
       } as any, { onConflict: 'user_id,key' });
 
-      // Update mapping display with potentially edited values
       const updatedMapping: Record<string, MappingEntry> = {};
       for (const cat of CATEGORIES) {
         const code = finalCodes[cat];
-        const account = accounts.find(a => a.code === code);
+        const coaEntry = coaAccounts.find(a => a.account_code === code);
         updatedMapping[cat] = {
           code,
-          name: account?.name || mapping[cat]?.name || `Account ${code}`,
+          name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
         };
       }
-      // Include marketplace overrides in display mapping
       for (const key of Object.keys(finalCodes)) {
         if (key.includes(':')) {
-          updatedMapping[key] = { code: finalCodes[key], name: `Account ${finalCodes[key]}` };
+          const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
+          updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
         }
       }
       setMapping(updatedMapping);
@@ -333,10 +351,21 @@ export default function AccountMapperCard() {
     }
   };
 
-  /** Get marketplaces to display — active connections or detected from settlements */
+  const handleApplySuggestionsToMissing = () => {
+    // For each category that has no mapping, apply the AI suggestion
+    const updated = { ...editableMapping };
+    for (const cat of CATEGORIES) {
+      if (!updated[cat] && mapping[cat]?.code) {
+        updated[cat] = mapping[cat].code;
+      }
+    }
+    setEditableMapping(updated);
+    toast.success('Applied suggestions to all unmapped categories');
+  };
+
   const getEffectiveMarketplaces = (): string[] => {
     if (activeMarketplaces.length > 0) return activeMarketplaces;
-    return KNOWN_MARKETPLACES.slice(0, 3); // Safe default
+    return KNOWN_MARKETPLACES.slice(0, 3);
   };
 
   const confidenceBadge = (level: string) => {
@@ -345,13 +374,8 @@ export default function AccountMapperCard() {
     return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">❌ Low</Badge>;
   };
 
-  const REVENUE_CATEGORIES_SET = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
-  const REVENUE_ACCOUNT_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS']);
-  const EXPENSE_ACCOUNT_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
-
-  /** Validate a single account code against the cached CoA */
   const validateCode = (code: string | undefined, category: string): CoaValidation => {
-    if (!code || coaMap.size === 0) return 'valid'; // No CoA data — skip validation
+    if (!code || coaMap.size === 0) return 'valid';
     const entry = coaMap.get(code);
     if (!entry) return 'missing';
     if (!entry.active) return 'inactive';
@@ -361,18 +385,17 @@ export default function AccountMapperCard() {
     return 'valid';
   };
 
-  /** Render a validation badge next to a mapping */
   const renderValidationBadge = (code: string | undefined, category: string) => {
     if (!code || coaMap.size === 0) return null;
     const status = validateCode(code, category);
     if (status === 'valid') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
     if (status === 'missing') return (
-      <span className="flex items-center gap-1 text-[10px] text-red-600">
-        <XCircle className="h-3.5 w-3.5 shrink-0" /> Missing
+      <span className="flex items-center gap-1 text-[10px] text-destructive">
+        <XCircle className="h-3.5 w-3.5 shrink-0" /> Not in Xero
       </span>
     );
     if (status === 'inactive') return (
-      <span className="flex items-center gap-1 text-[10px] text-red-600">
+      <span className="flex items-center gap-1 text-[10px] text-destructive">
         <XCircle className="h-3.5 w-3.5 shrink-0" /> Inactive
       </span>
     );
@@ -383,38 +406,53 @@ export default function AccountMapperCard() {
     );
   };
 
-  /** Render an account code selector (dropdown or text input) */
-  const renderAccountSelector = (key: string, placeholder?: string) => {
-    if (accounts.length > 0) {
+  const renderStatusBadge = (code: string | undefined, category: string) => {
+    if (!code) return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Unmapped</Badge>;
+    const status = validateCode(code, category);
+    if (status === 'valid') return <Badge variant="outline" className="text-emerald-700 border-emerald-300 text-[10px]">Mapped</Badge>;
+    if (status === 'missing') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Not in Xero</Badge>;
+    if (status === 'inactive') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Inactive</Badge>;
+    return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Wrong type</Badge>;
+  };
+
+  /** Searchable COA dropdown */
+  const renderAccountSelector = (key: string, category: string, placeholder?: string) => {
+    const currentValue = editableMapping[key] || mapping[key]?.code || '';
+    const isRevenue = REVENUE_CATEGORIES_SET.has(category.split(':')[0]);
+
+    // Filter accounts by type relevance
+    const relevantAccounts = coaAccounts.filter(a => {
+      if (!a.account_code) return false;
+      const type = (a.account_type || '').toUpperCase();
+      const validTypes = isRevenue ? REVENUE_ACCOUNT_TYPES : EXPENSE_ACCOUNT_TYPES;
+      return validTypes.has(type);
+    });
+
+    const allAccounts = coaAccounts.filter(a => a.account_code);
+
+    if (coaAccounts.length === 0) {
+      // Fallback to text input
       return (
-        <Select
-          value={editableMapping[key] || mapping[key]?.code || ''}
-          onValueChange={(v) => setEditableMapping(prev => ({ ...prev, [key]: v }))}
-        >
-          <SelectTrigger className="h-7 text-xs w-24">
-            <SelectValue placeholder={placeholder || 'Select'} />
-          </SelectTrigger>
-          <SelectContent>
-            {accounts.map((a) => (
-              <SelectItem key={a.code} value={a.code} className="text-xs">
-                {a.code} — {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Input
+          className="h-7 w-28 text-xs font-mono"
+          placeholder={placeholder || 'Code'}
+          value={currentValue}
+          onChange={(e) => setEditableMapping(prev => ({ ...prev, [key]: e.target.value }))}
+        />
       );
     }
+
     return (
-      <input
-        className="h-7 w-20 text-xs border rounded px-1.5 font-mono bg-background"
+      <AccountCombobox
+        accounts={relevantAccounts}
+        allAccounts={allAccounts}
+        value={currentValue}
+        onChange={(v) => setEditableMapping(prev => ({ ...prev, [key]: v }))}
         placeholder={placeholder}
-        value={editableMapping[key] || mapping[key]?.code || ''}
-        onChange={(e) => setEditableMapping(prev => ({ ...prev, [key]: e.target.value }))}
       />
     );
   };
 
-  /** Render marketplace override rows for a splittable category */
   const renderMarketplaceOverrides = (baseCat: string) => {
     if (!splitByMarketplace) return null;
     const marketplaces = getEffectiveMarketplaces();
@@ -423,6 +461,7 @@ export default function AccountMapperCard() {
     return marketplaces.map(mp => {
       const key = `${baseCat}:${mp}`;
       const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
+      const overrideCode = editableMapping[key] || '';
       return (
         <tr key={key} className="border-b last:border-b-0 bg-muted/20">
           <td className="p-2 pl-6">
@@ -434,12 +473,21 @@ export default function AccountMapperCard() {
             </span>
           </td>
           <td className="p-2">
-            {renderAccountSelector(key, baseCode)}
+            {renderStatusBadge(overrideCode || baseCode, baseCat)}
+          </td>
+          <td className="p-2">
+            {renderAccountSelector(key, baseCat, baseCode)}
           </td>
         </tr>
       );
     });
   };
+
+  // Count missing mappings
+  const missingCount = CATEGORIES.filter(cat => {
+    const code = editableMapping[cat] || mapping[cat]?.code;
+    return !code || validateCode(code, cat) !== 'valid';
+  }).length;
 
   if (loading) {
     return (
@@ -450,6 +498,28 @@ export default function AccountMapperCard() {
       </Card>
     );
   }
+
+  // ─── Shared COA refresh strip ──────────────────────────────────────
+  const renderCoaRefreshStrip = () => (
+    <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span>
+          {coaAccounts.length > 0
+            ? `${coaAccounts.length} Xero accounts cached`
+            : 'No Xero accounts cached'}
+        </span>
+        {coaLastSynced && (
+          <span className="text-[10px]">
+            · Last refreshed {new Date(coaLastSynced).toLocaleDateString()} {new Date(coaLastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+      </div>
+      <Button variant="ghost" size="sm" onClick={handleRefreshCoa} disabled={refreshingCoa} className="h-6 text-xs gap-1">
+        {refreshingCoa ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+        Refresh from Xero
+      </Button>
+    </div>
+  );
 
   // ─── UNMAPPED STATE ──────────────────────────────────────────────
   if (state === 'unmapped') {
@@ -464,7 +534,8 @@ export default function AccountMapperCard() {
             Automatically match your Xero chart of accounts to ecommerce settlement categories using AI.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {renderCoaRefreshStrip()}
           <Button onClick={runMapper} className="gap-2">
             <Sparkles className="h-4 w-4" />
             Auto-detect accounts
@@ -494,6 +565,13 @@ export default function AccountMapperCard() {
 
   // ─── REVIEW STATE ────────────────────────────────────────────────
   if (state === 'review') {
+    const categoriesToShow = showOnlyMissing
+      ? CATEGORIES.filter(cat => {
+          const code = editableMapping[cat] || mapping[cat]?.code;
+          return !code || validateCode(code, cat) !== 'valid';
+        })
+      : [...CATEGORIES];
+
     return (
       <Card>
         <CardHeader>
@@ -502,23 +580,51 @@ export default function AccountMapperCard() {
             AI Account Mapper
           </CardTitle>
           <CardDescription className="flex items-center gap-2">
-            Review the AI-suggested mapping below. Override any row you disagree with.
+            Review the AI-suggested mapping below. Select accounts from your Xero COA.
             {confidenceBadge(confidence)}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {renderCoaRefreshStrip()}
+
+          {/* Top controls */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={handleApplySuggestionsToMissing} className="h-7 text-xs gap-1">
+              <CheckCircle2 className="h-3 w-3" />
+              Apply suggestions to all missing
+            </Button>
+            <div className="flex items-center gap-1.5">
+              <Switch
+                id="show-missing"
+                checked={showOnlyMissing}
+                onCheckedChange={setShowOnlyMissing}
+              />
+              <Label htmlFor="show-missing" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
+                <Filter className="h-3 w-3" />
+                Show only missing
+              </Label>
+            </div>
+            {missingCount > 0 && (
+              <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">
+                {missingCount} unmapped — will block posting
+              </Badge>
+            )}
+          </div>
+
           <div className="border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="text-left p-2 font-medium">Category</th>
-                  <th className="text-left p-2 font-medium">Suggested Account</th>
-                  <th className="text-center p-2 font-medium w-20">Override</th>
+                  <th className="text-left p-2 font-medium">Suggested</th>
+                  <th className="text-center p-2 font-medium w-20">Status</th>
+                  <th className="text-left p-2 font-medium">Xero Account</th>
                 </tr>
               </thead>
               <tbody>
-                {CATEGORIES.map((cat) => {
+                {categoriesToShow.map((cat) => {
                   const entry = mapping[cat];
+                  const currentCode = editableMapping[cat] || entry?.code || '';
                   const isSplittable = (SPLITTABLE_CATEGORIES as readonly string[]).includes(cat);
                   return (
                     <React.Fragment key={cat}>
@@ -528,11 +634,20 @@ export default function AccountMapperCard() {
                           <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
                         </td>
                         <td className="p-2">
-                          <span className="font-mono text-xs">{entry?.code}</span>
-                          <span className="text-muted-foreground ml-1 text-xs">— {entry?.name}</span>
+                          {entry?.code ? (
+                            <span className="text-xs">
+                              <span className="font-mono">{entry.code}</span>
+                              <span className="text-muted-foreground ml-1">— {entry.name}</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-2 text-center">
+                          {renderStatusBadge(currentCode, cat)}
                         </td>
                         <td className="p-2">
-                          {renderAccountSelector(cat)}
+                          {renderAccountSelector(cat, cat)}
                         </td>
                       </tr>
                       {isSplittable && renderMarketplaceOverrides(cat)}
@@ -594,15 +709,19 @@ export default function AccountMapperCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {renderCoaRefreshStrip()}
+
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           {CATEGORIES.map((cat) => {
             const entry = mapping[cat];
             const code = entry?.code;
+            const coaEntry = code ? coaMap.get(code) : undefined;
             return (
               <div key={cat} className="flex items-center justify-between py-1 border-b border-border/50 gap-2">
                 <span className="text-muted-foreground">{cat}</span>
                 <span className="flex items-center gap-1.5">
                   <span className="font-mono">{code || '—'}</span>
+                  {coaEntry && <span className="text-muted-foreground truncate max-w-[100px]">{coaEntry.name}</span>}
                   {renderValidationBadge(code, cat)}
                 </span>
               </div>
@@ -610,7 +729,6 @@ export default function AccountMapperCard() {
           })}
         </div>
 
-        {/* Show marketplace overrides if any */}
         {marketplaceOverrideKeys.length > 0 && (
           <div className="mt-2">
             <p className="text-xs font-medium text-muted-foreground mb-1">Marketplace overrides</p>
@@ -632,7 +750,6 @@ export default function AccountMapperCard() {
           </div>
         )}
 
-        {/* Per-marketplace use_global_mappings toggles */}
         {getEffectiveMarketplaces().length > 1 && (
           <div className="mt-3">
             <p className="text-xs font-medium text-muted-foreground mb-2">Per-marketplace mapping mode</p>
@@ -657,7 +774,6 @@ export default function AccountMapperCard() {
                       onCheckedChange={async (checked) => {
                         const newFlags = { ...globalMappingFlags, [mp]: checked };
                         setGlobalMappingFlags(newFlags);
-                        // Persist to marketplace_connections.settings
                         try {
                           const { data: { user } } = await supabase.auth.getUser();
                           if (!user) return;
@@ -679,15 +795,112 @@ export default function AccountMapperCard() {
           </div>
         )}
 
+        {missingCount > 0 && (
+          <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-md px-3 py-2">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span>{missingCount} category{missingCount > 1 ? 'ies' : 'y'} unmapped or invalid — this will block Compare and posting</span>
+          </div>
+        )}
+
         <TrackingCategoryPrompt />
-        <Button variant="outline" size="sm" onClick={runMapper} className="gap-2">
-          <RefreshCw className="h-3 w-3" />
-          Re-run AI mapper
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setState('review')} className="gap-2">
+            <Search className="h-3 w-3" />
+            Edit mappings
+          </Button>
+          <Button variant="outline" size="sm" onClick={runMapper} className="gap-2">
+            <RefreshCw className="h-3 w-3" />
+            Re-run AI mapper
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
 }
+
+// ─── Searchable Account Combobox ──────────────────────────────────────────────
+
+function AccountCombobox({
+  accounts,
+  allAccounts,
+  value,
+  onChange,
+  placeholder,
+}: {
+  accounts: CachedXeroAccount[];
+  allAccounts: CachedXeroAccount[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  const displayAccounts = showAll ? allAccounts : accounts;
+  const selectedAccount = allAccounts.find(a => a.account_code === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-7 w-[200px] justify-between text-xs font-normal"
+        >
+          {value ? (
+            <span className="truncate">
+              <span className="font-mono">{value}</span>
+              {selectedAccount && <span className="text-muted-foreground ml-1">— {selectedAccount.account_name}</span>}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{placeholder || 'Select account…'}</span>
+          )}
+          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[320px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search by code or name…" className="text-xs" />
+          <CommandList>
+            <CommandEmpty>
+              <div className="py-3 text-center text-xs text-muted-foreground">
+                No matching account found in Xero
+              </div>
+            </CommandEmpty>
+            <CommandGroup heading={showAll ? 'All accounts' : 'Relevant accounts'}>
+              {displayAccounts.map((acc) => (
+                <CommandItem
+                  key={acc.xero_account_id}
+                  value={`${acc.account_code} ${acc.account_name}`}
+                  onSelect={() => {
+                    onChange(acc.account_code || '');
+                    setOpen(false);
+                  }}
+                  className="text-xs"
+                >
+                  <span className="font-mono mr-2 text-foreground">{acc.account_code}</span>
+                  <span className="truncate text-muted-foreground">{acc.account_name}</span>
+                  <Badge variant="outline" className="ml-auto text-[9px] shrink-0">{acc.account_type}</Badge>
+                  {acc.account_code === value && <CheckCircle2 className="ml-1 h-3 w-3 text-emerald-500 shrink-0" />}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {!showAll && allAccounts.length > accounts.length && (
+              <div className="p-2 border-t">
+                <Button variant="ghost" size="sm" className="w-full h-6 text-xs" onClick={() => setShowAll(true)}>
+                  Show all {allAccounts.length} accounts
+                </Button>
+              </div>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ─── Tracking Category Prompt ────────────────────────────────────────────────
 
 function TrackingCategoryPrompt() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
