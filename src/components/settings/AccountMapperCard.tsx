@@ -22,7 +22,8 @@ import {
   createXeroAccounts,
   type CachedXeroAccount,
 } from '@/actions';
-import { Save, Upload } from 'lucide-react';
+import { Save, Upload, Copy } from 'lucide-react';
+import CloneCoaDialog from './CloneCoaDialog';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
 
