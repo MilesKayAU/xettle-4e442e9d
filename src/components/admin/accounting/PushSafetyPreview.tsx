@@ -399,7 +399,7 @@ export default function PushSafetyPreview({
 
 // ─── Settlement Preview Card ────────────────────────────────────────
 
-function SettlementPreviewCard({ preview, index, total }: {
+function SettlementPreviewCard({ preview, index, total, onReloadPreviews }: {
   preview: {
     settlement: SettlementPreview;
     lineItems: LineItemPreview[];
@@ -412,6 +412,7 @@ function SettlementPreviewCard({ preview, index, total }: {
   };
   index: number;
   total: number;
+  onReloadPreviews?: () => void;
 }) {
   const { settlement: s, lineItems, checks, contactName, reference, isRepost, repostOfInvoiceId, repostReason } = preview;
   const label = MARKETPLACE_LABELS[s.marketplace] || s.marketplace;
