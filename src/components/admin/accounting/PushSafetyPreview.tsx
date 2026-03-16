@@ -687,8 +687,8 @@ function buildValidationChecks(
       });
     } else if (wrongTypeCodes.length > 0) {
       checks.push({
-        label: 'Account type mismatch',
-        status: 'red',
+        label: 'Account type mismatch — review recommended',
+        status: 'amber',
         detail: wrongTypeCodes.join('; '),
       });
     } else if (unmappedLines.length === 0) {
