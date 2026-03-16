@@ -110,69 +110,109 @@ export default function AccountMapperCard() {
   }, [coaAccounts]);
 
   // ─── Gap detection: find uncovered marketplaces (via canonical action) ──
-  const { uncoveredMarketplaces, coveredMarketplaces } = useMemo(() => {
+  const { uncoveredMarketplaces, coveredMarketplaces, coverageDetails } = useMemo(() => {
     if (!splitByMarketplace || coaAccounts.length === 0 || activeMarketplaces.length === 0) {
-      return { uncoveredMarketplaces: [] as string[], coveredMarketplaces: [] as string[] };
+      return { uncoveredMarketplaces: [] as string[], coveredMarketplaces: [] as string[], coverageDetails: [] as { marketplace: string; status: string; matchCount: number }[] };
     }
 
     const coverage = getMarketplaceCoverage(activeMarketplaces, coaAccounts);
     return {
       uncoveredMarketplaces: [...coverage.uncovered, ...coverage.partial],
       coveredMarketplaces: coverage.covered,
+      coverageDetails: coverage.details,
     };
   }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
 
+  // User-selected marketplaces for COA cloning
+  const [selectedForClone, setSelectedForClone] = useState<Set<string>>(new Set());
+
   // ─── Clone COA banner renderer ───────────────────────────────────
   const renderCloneBanner = () => {
-    if (!splitByMarketplace || !isAdmin) return null;
+    if (!splitByMarketplace || !isAdmin || activeMarketplaces.length === 0 || coaAccounts.length === 0) return null;
 
-    // No-template-available: uncovered marketplaces exist but no covered template
-    if (uncoveredMarketplaces.length > 0 && coveredMarketplaces.length === 0) {
+    // No-template-available: nothing covered at all
+    if (coveredMarketplaces.length === 0 && activeMarketplaces.length > 0) {
       return (
         <Alert className="border-amber-300 bg-amber-50">
           <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
           <AlertDescription className="text-xs text-amber-900">
-            <strong>{uncoveredMarketplaces.join(', ')}</strong> {uncoveredMarketplaces.length === 1 ? 'has' : 'have'} no accounts in your COA, and no marketplace template is available yet.
-            Create accounts manually or confirm a base marketplace structure first.
+            No marketplace account structures detected in your COA yet.
+            Create accounts manually for at least one marketplace to use as a template.
           </AlertDescription>
         </Alert>
       );
     }
 
-    if (uncoveredMarketplaces.length === 0) {
-      return null;
-    }
-
     return (
-      <div className="flex items-center justify-between text-xs bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Copy className="h-3.5 w-3.5 text-primary shrink-0" />
-          <span>
-            <strong>{uncoveredMarketplaces.join(', ')}</strong>
-            {uncoveredMarketplaces.length === 1 ? ' has' : ' have'} no accounts in your COA.
-            Clone structure from an existing marketplace?
-          </span>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          <span>Select marketplaces that need Xero accounts created. Detected coverage shown below.</span>
         </div>
-        <div className="flex gap-1.5 shrink-0">
-          {uncoveredMarketplaces.map(mp => (
-            <Button
-              key={mp}
-              variant="outline"
-              size="sm"
-              className="h-6 text-xs gap-1"
-              onClick={() => {
-                // PIN gate for COA clone
-                settingsPin.requirePin(() => {
-                  setCloneTarget(mp);
-                  setCloneDialogOpen(true);
-                });
-              }}
-            >
-              <Copy className="h-3 w-3" />
-              {uncoveredMarketplaces.length > 1 ? mp : 'Clone COA'}
-            </Button>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+          {coverageDetails.map(detail => {
+            const isCovered = detail.status === 'covered';
+            const isSelected = selectedForClone.has(detail.marketplace);
+            const isPotentiallyMissing = detail.status === 'uncovered' || detail.status === 'partial';
+
+            return (
+              <label
+                key={detail.marketplace}
+                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs cursor-pointer transition-colors ${
+                  isSelected
+                    ? 'border-primary bg-primary/5'
+                    : isCovered
+                      ? 'border-border bg-background'
+                      : 'border-amber-200 bg-amber-50/50'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={(e) => {
+                    const next = new Set(selectedForClone);
+                    if (e.target.checked) next.add(detail.marketplace);
+                    else next.delete(detail.marketplace);
+                    setSelectedForClone(next);
+                  }}
+                  className="rounded border-muted-foreground/30 h-3.5 w-3.5"
+                />
+                <span className="font-medium truncate">{detail.marketplace}</span>
+                {isCovered ? (
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500 ml-auto shrink-0" />
+                ) : isPotentiallyMissing ? (
+                  <AlertTriangle className="h-3 w-3 text-amber-500 ml-auto shrink-0" />
+                ) : null}
+              </label>
+            );
+          })}
         </div>
+        {selectedForClone.size > 0 && (
+          <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
+            <span className="text-xs">
+              Clone COA structure for <strong>{[...selectedForClone].join(', ')}</strong>?
+            </span>
+            <div className="flex gap-1.5 shrink-0">
+              {[...selectedForClone].map(mp => (
+                <Button
+                  key={mp}
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-xs gap-1"
+                  onClick={() => {
+                    settingsPin.requirePin(() => {
+                      setCloneTarget(mp);
+                      setCloneDialogOpen(true);
+                    });
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                  {selectedForClone.size > 1 ? mp : 'Clone COA'}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
