@@ -8,6 +8,7 @@ const corsHeaders = {
 const EBAY_API_BASE = 'https://apiz.ebay.com'
 const EBAY_TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
 const EBAY_SCOPES = 'https://api.ebay.com/oauth/api_scope/sell.finances https://api.ebay.com/oauth/api_scope/sell.fulfillment'
+const MAX_LOOKBACK_DAYS = 180
 
 function round2(n: number): number { return Math.round(n * 100) / 100 }
 
@@ -17,7 +18,6 @@ async function getEbayAccessToken(
   supabase: any,
   tokenRow: any,
 ): Promise<{ access_token: string; error?: string }> {
-  // If token is still valid (60s buffer), return it
   if (tokenRow.access_token && tokenRow.expires_at &&
     new Date(tokenRow.expires_at) > new Date(Date.now() + 60_000)) {
     return { access_token: tokenRow.access_token }
@@ -168,18 +168,66 @@ async function fetchTransactionsForPayout(
   return allTx
 }
 
+// ─── GST Extraction ────────────────────────────────────────────────────
+
+/**
+ * Extract GST from eBay-provided tax fields on a transaction.
+ * Returns { taxAmount, mode } where mode indicates source.
+ * Falls back to 1/11th estimate for AUD when no tax data present.
+ */
+function extractTransactionGst(
+  tx: EbayTransaction,
+  amount: number,
+  currency: string,
+): { taxAmount: number; mode: 'ebay_provided' | 'estimate_1_11th' | 'none' } {
+  // Check orderLineItems for tax breakdown (eBay provides per-line tax)
+  if (tx.orderLineItems && Array.isArray(tx.orderLineItems)) {
+    let totalLineTax = 0
+    let hasTaxData = false
+    for (const li of tx.orderLineItems) {
+      if (li.tax && li.tax.amount && li.tax.amount.value !== undefined) {
+        totalLineTax += parseFloat(li.tax.amount.value || '0')
+        hasTaxData = true
+      }
+      // Some eBay responses use taxes[] array
+      if (li.taxes && Array.isArray(li.taxes)) {
+        for (const t of li.taxes) {
+          if (t.amount && t.amount.value !== undefined) {
+            totalLineTax += parseFloat(t.amount.value || '0')
+            hasTaxData = true
+          }
+        }
+      }
+    }
+    if (hasTaxData) {
+      return { taxAmount: round2(totalLineTax), mode: 'ebay_provided' }
+    }
+  }
+
+  // Fallback: 1/11th estimate for AUD only
+  if (currency === 'AUD' && amount > 0) {
+    return { taxAmount: round2(amount / 11), mode: 'estimate_1_11th' }
+  }
+
+  return { taxAmount: 0, mode: 'none' }
+}
+
 // ─── Settlement Builder ─────────────────────────────────────────────────
 
 function buildSettlementFromPayout(
   payout: EbayPayout,
   transactions: EbayTransaction[],
   userId: string,
-): any {
-  // Aggregate transaction amounts by type
+): { settlement: any; gst_mode: string } {
   let salesTotal = 0
   let refundsTotal = 0
   let feesTotal = 0
   let shippingTotal = 0
+  let gstOnIncomeTotal = 0
+  let gstOnExpensesTotal = 0
+  let gstModeSet = new Set<string>()
+
+  const currency = payout.amount?.currency || 'AUD'
 
   for (const tx of transactions) {
     const amount = parseFloat(tx.amount?.value || '0')
@@ -187,10 +235,19 @@ function buildSettlementFromPayout(
     const type = tx.transactionType || ''
 
     switch (type) {
-      case 'SALE':
+      case 'SALE': {
         salesTotal += amount
         feesTotal -= Math.abs(feeAmount)
+        // Extract GST from eBay-provided fields or estimate
+        const gst = extractTransactionGst(tx, amount, currency)
+        gstOnIncomeTotal += gst.taxAmount
+        gstModeSet.add(gst.mode)
+        // GST on fees (estimate only — eBay doesn't break out fee GST per-line)
+        if (currency === 'AUD' && feeAmount > 0) {
+          gstOnExpensesTotal += round2(Math.abs(feeAmount) / 11)
+        }
         break
+      }
       case 'REFUND':
         refundsTotal += amount // already negative from eBay
         break
@@ -204,24 +261,21 @@ function buildSettlementFromPayout(
         feesTotal += amount
         break
       default:
-        // Other transaction types go to other_fees
         feesTotal += amount
         break
     }
   }
 
   const payoutAmount = parseFloat(payout.amount?.value || '0')
-  const currency = payout.amount?.currency || 'AUD'
 
-  // eBay AU GST model: seller-collected (1/11th estimate for AUD)
-  const gstRate = currency === 'AUD' ? 10 : 0
-  const gstOnIncome = gstRate > 0 ? round2(salesTotal / 11) : 0
-  const gstOnExpenses = gstRate > 0 ? round2(Math.abs(feesTotal) / 11) : 0
+  // Determine dominant GST mode for metadata
+  const gstMode = gstModeSet.has('ebay_provided') ? 'ebay_provided'
+    : gstModeSet.has('estimate_1_11th') ? 'estimate_1_11th'
+    : 'none'
 
   // Derive period from payout date
   const payoutDate = payout.payoutDate?.split('T')[0] || new Date().toISOString().split('T')[0]
 
-  // Find earliest and latest transaction dates for period range
   let periodStart = payoutDate
   let periodEnd = payoutDate
   for (const tx of transactions) {
@@ -231,26 +285,47 @@ function buildSettlementFromPayout(
   }
 
   return {
-    user_id: userId,
-    settlement_id: `ebay_payout_${payout.payoutId}`,
-    marketplace: 'ebay_au',
-    period_start: periodStart,
-    period_end: periodEnd,
-    deposit_date: payoutDate,
-    sales_principal: round2(salesTotal),
-    sales_shipping: round2(shippingTotal),
-    seller_fees: round2(feesTotal),
-    refunds: round2(refundsTotal),
-    gst_on_income: round2(gstOnIncome),
-    gst_on_expenses: round2(-gstOnExpenses),
-    bank_deposit: round2(payoutAmount),
-    net_ex_gst: round2(payoutAmount - gstOnIncome),
-    source: 'api',
-    source_reference: `ebay_finances_api`,
-    sync_origin: 'scheduled',
-    status: 'saved',
-    parser_version: 'ebay_finances_v1',
+    settlement: {
+      user_id: userId,
+      settlement_id: `ebay_payout_${payout.payoutId}`,
+      marketplace: 'ebay_au',
+      period_start: periodStart,
+      period_end: periodEnd,
+      deposit_date: payoutDate,
+      sales_principal: round2(salesTotal),
+      sales_shipping: round2(shippingTotal),
+      seller_fees: round2(feesTotal),
+      refunds: round2(refundsTotal),
+      reimbursements: 0,
+      fba_fees: 0,
+      storage_fees: 0,
+      advertising_costs: 0,
+      promotional_discounts: 0,
+      other_fees: 0,
+      gst_on_income: round2(gstOnIncomeTotal),
+      gst_on_expenses: round2(-gstOnExpensesTotal),
+      bank_deposit: round2(payoutAmount),
+      net_ex_gst: round2(payoutAmount - gstOnIncomeTotal),
+      holdback_amount: 0,
+      source: 'api',
+      source_reference: 'ebay_finances_api_v1',
+      sync_origin: 'scheduled',
+      status: 'saved',
+      parser_version: 'ebay_finances_v1',
+      is_hidden: false,
+      is_pre_boundary: false,
+    },
+    gst_mode: gstMode,
   }
+}
+
+// ─── Sync window cap helper ────────────────────────────────────────────
+
+function clampSyncFrom(syncFrom: string): string {
+  const cap = new Date()
+  cap.setDate(cap.getDate() - MAX_LOOKBACK_DAYS)
+  const capStr = cap.toISOString().split('T')[0]
+  return syncFrom < capStr ? capStr : syncFrom
 }
 
 // ─── Main Handler ──────────────────────────────────────────────────────
@@ -265,28 +340,29 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const adminClient = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Support both user-authenticated and service-role (cron) calls
     const authHeader = req.headers.get('Authorization') || ''
     const isServiceRole = authHeader.includes(supabaseServiceKey)
 
     let body: any = {}
     try { body = await req.json() } catch { /* empty body ok */ }
 
-    const syncFrom = body.sync_from || (() => {
+    let syncFrom = body.sync_from || (() => {
       const d = new Date(); d.setMonth(d.getMonth() - 2)
       return d.toISOString().split('T')[0]
     })()
     const syncTo = body.sync_to || new Date().toISOString().split('T')[0]
 
+    // Apply 180-day hard cap
+    syncFrom = clampSyncFrom(syncFrom)
+
     // Collect eBay users to process
     let userTokens: any[] = []
 
     if (isServiceRole) {
-      // Cron mode: process all users with eBay tokens
       const { data } = await adminClient.from('ebay_tokens').select('*')
       userTokens = data || []
     } else {
-      // User mode: process only the authenticated user
+      // User mode: acquire mutex to prevent concurrent manual + cron
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
       const userClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: authHeader } },
@@ -298,23 +374,52 @@ Deno.serve(async (req) => {
         })
       }
 
+      // Acquire sync lock for manual mode
+      const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
+        p_user_id: user.id,
+        p_integration: 'ebay',
+        p_lock_key: 'settlement_sync',
+        p_ttl_seconds: 300,
+      })
+      if (lockResult && !lockResult.acquired) {
+        return new Response(JSON.stringify({
+          error: 'eBay sync already in progress. Please wait and try again.',
+          locked: true,
+          retry_after: lockResult.expires_at,
+        }), {
+          status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
       const { data } = await userClient.from('ebay_tokens').select('*').eq('user_id', user.id).limit(1)
       userTokens = data || []
+
+      // Store user id for lock release in finally block
+      ;(req as any)._manualUserId = user.id
+      ;(req as any)._manualLockAcquired = lockResult?.acquired
     }
 
     if (userTokens.length === 0) {
+      // Release lock if acquired
+      if ((req as any)._manualLockAcquired) {
+        await adminClient.rpc('release_sync_lock', {
+          p_user_id: (req as any)._manualUserId,
+          p_integration: 'ebay',
+          p_lock_key: 'settlement_sync',
+        })
+      }
       return new Response(JSON.stringify({ skipped: true, reason: 'no_ebay_tokens' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
     const results: any[] = []
+    let isFirstImportThisRun = true
 
     for (const tokenRow of userTokens) {
       const userId = tokenRow.user_id
       console.log(`[fetch-ebay-settlements] Processing user ${userId}, sync_from=${syncFrom}`)
 
-      // Use service-role client scoped to user for writes
       const userAdminClient = adminClient
 
       // 1. Get valid access token
@@ -335,12 +440,25 @@ Deno.serve(async (req) => {
       const { payouts, error: payoutsError } = await fetchPayouts(access_token, syncFrom, syncTo)
 
       if (payoutsError === 'rate_limited') {
-        // Set cooldown
+        // Set cooldown + log system event
         await userAdminClient.from('app_settings').upsert({
           user_id: userId,
           key: 'ebay_rate_limit_until',
           value: new Date(Date.now() + 3600_000).toISOString(),
         }, { onConflict: 'user_id,key' })
+
+        await userAdminClient.from('system_events').insert({
+          user_id: userId,
+          event_type: 'ebay_sync_rate_limited',
+          severity: 'warning',
+          marketplace_code: 'ebay_au',
+          details: {
+            retry_after: new Date(Date.now() + 3600_000).toISOString(),
+            sync_from: syncFrom,
+            sync_to: syncTo,
+          },
+        })
+
         results.push({ user_id: userId, error: 'rate_limited', imported: 0 })
         continue
       }
@@ -352,66 +470,124 @@ Deno.serve(async (req) => {
 
       console.log(`[fetch-ebay-settlements] Found ${payouts.length} payouts for user ${userId}`)
 
-      // 3. Filter to SUCCEEDED payouts only, check for existing settlements
+      // 3. Filter to SUCCEEDED payouts only
       const succeededPayouts = payouts.filter(p => p.payoutStatus === 'SUCCEEDED')
       let imported = 0
+      let updated = 0
       let skipped = 0
 
       for (const payout of succeededPayouts) {
         const settlementId = `ebay_payout_${payout.payoutId}`
 
-        // Check if already exists
+        // 4. Fetch transactions for this payout
+        const transactions = await fetchTransactionsForPayout(access_token, payout.payoutId)
+
+        // 5. Build settlement
+        const { settlement, gst_mode } = buildSettlementFromPayout(payout, transactions, userId)
+
+        // 6. Upsert — handles both new inserts and payout adjustments/corrections
+        // Check if exists first to determine if this is an insert or update
         const { data: existing } = await userAdminClient
           .from('settlements')
-          .select('id')
+          .select('id, bank_deposit, sales_principal')
           .eq('user_id', userId)
           .eq('settlement_id', settlementId)
           .limit(1)
 
-        if (existing && existing.length > 0) {
-          skipped++
-          continue
-        }
+        const isUpdate = existing && existing.length > 0
 
-        // 4. Fetch transactions for this payout
-        const transactions = await fetchTransactionsForPayout(access_token, payout.payoutId)
-
-        // 5. Build and insert settlement
-        const settlement = buildSettlementFromPayout(payout, transactions, userId)
-
-        const { error: insertError } = await userAdminClient
+        const { error: upsertError } = await userAdminClient
           .from('settlements')
-          .insert(settlement)
+          .upsert(settlement, { onConflict: 'user_id,settlement_id' })
 
-        if (insertError) {
-          console.error(`[fetch-ebay-settlements] Insert failed for payout ${payout.payoutId}:`, insertError)
+        if (upsertError) {
+          console.error(`[fetch-ebay-settlements] Upsert failed for payout ${payout.payoutId}:`, upsertError)
           continue
         }
 
-        imported++
+        if (isUpdate) {
+          const prev = existing[0]
+          const changed = prev.bank_deposit !== settlement.bank_deposit || prev.sales_principal !== settlement.sales_principal
+          if (changed) {
+            updated++
+            await userAdminClient.from('system_events').insert({
+              user_id: userId,
+              event_type: 'ebay_settlement_updated',
+              severity: 'info',
+              marketplace_code: 'ebay_au',
+              settlement_id: settlementId,
+              details: {
+                payout_id: payout.payoutId,
+                prev_deposit: prev.bank_deposit,
+                new_deposit: settlement.bank_deposit,
+                prev_sales: prev.sales_principal,
+                new_sales: settlement.sales_principal,
+                gst_mode,
+              },
+            })
+          } else {
+            skipped++
+          }
+        } else {
+          imported++
 
-        // 6. Log system event
-        await userAdminClient.from('system_events').insert({
-          user_id: userId,
-          event_type: 'ebay_settlement_imported',
-          severity: 'info',
-          marketplace_code: 'ebay_au',
-          settlement_id: settlementId,
-          details: {
-            payout_id: payout.payoutId,
-            payout_date: payout.payoutDate,
-            amount: payout.amount?.value,
-            currency: payout.amount?.currency,
-            transaction_count: transactions.length,
-            source: 'ebay_finances_api',
-          },
-        })
+          // Log import event
+          await userAdminClient.from('system_events').insert({
+            user_id: userId,
+            event_type: 'ebay_settlement_imported',
+            severity: 'info',
+            marketplace_code: 'ebay_au',
+            settlement_id: settlementId,
+            details: {
+              payout_id: payout.payoutId,
+              payout_date: payout.payoutDate,
+              amount: payout.amount?.value,
+              currency: payout.amount?.currency,
+              transaction_count: transactions.length,
+              gst_mode,
+              source: 'ebay_finances_api_v1',
+            },
+          })
+
+          // Debug artefact: log full settlement object for first import per run
+          if (isFirstImportThisRun) {
+            isFirstImportThisRun = false
+            await userAdminClient.from('system_events').insert({
+              user_id: userId,
+              event_type: 'ebay_sync_debug',
+              severity: 'info',
+              marketplace_code: 'ebay_au',
+              settlement_id: settlementId,
+              details: {
+                settlement_object: settlement,
+                gst_mode,
+                dedupe_key: settlementId,
+                payout_raw: {
+                  payoutId: payout.payoutId,
+                  payoutDate: payout.payoutDate,
+                  amount: payout.amount,
+                  transactionCount: payout.transactionCount,
+                },
+                transaction_count: transactions.length,
+                sync_from: syncFrom,
+                sync_to: syncTo,
+              },
+            })
+          }
+        }
       }
 
-      console.log(`[fetch-ebay-settlements] User ${userId}: imported=${imported}, skipped=${skipped}, total_payouts=${succeededPayouts.length}`)
+      // Reset rate limit cooldown on successful sync
+      await userAdminClient.from('app_settings')
+        .delete()
+        .eq('user_id', userId)
+        .eq('key', 'ebay_rate_limit_until')
+
+      console.log(`[fetch-ebay-settlements] User ${userId}: imported=${imported}, updated=${updated}, skipped=${skipped}, total_payouts=${succeededPayouts.length}`)
       results.push({
         user_id: userId,
         imported,
+        updated,
         skipped,
         total_payouts: succeededPayouts.length,
         sync_from: syncFrom,
@@ -419,16 +595,42 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Release manual lock if acquired
+    if ((req as any)._manualLockAcquired) {
+      await adminClient.rpc('release_sync_lock', {
+        p_user_id: (req as any)._manualUserId,
+        p_integration: 'ebay',
+        p_lock_key: 'settlement_sync',
+      })
+    }
+
     const totalImported = results.reduce((sum, r) => sum + (r.imported || 0), 0)
+    const totalUpdated = results.reduce((sum, r) => sum + (r.updated || 0), 0)
 
     return new Response(JSON.stringify({
       success: true,
-      total_synced: totalImported,
+      total_synced: totalImported + totalUpdated,
+      total_imported: totalImported,
+      total_updated: totalUpdated,
       users_processed: results.length,
       results,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (err) {
+    // Release manual lock on error
+    try {
+      if ((req as any)._manualLockAcquired) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        const adminClient = createClient(supabaseUrl, serviceRoleKey)
+        await adminClient.rpc('release_sync_lock', {
+          p_user_id: (req as any)._manualUserId,
+          p_integration: 'ebay',
+          p_lock_key: 'settlement_sync',
+        })
+      }
+    } catch { /* best effort */ }
+
     console.error('[fetch-ebay-settlements] error:', err)
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
