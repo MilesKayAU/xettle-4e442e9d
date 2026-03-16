@@ -29,6 +29,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { upsertMarketplaceConnection } from '@/utils/marketplace-connections';
+import { findNearDuplicate } from '@/utils/marketplace-codes';
 
 export interface MarketplaceDefinition {
   code: string;
