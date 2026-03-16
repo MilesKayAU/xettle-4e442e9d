@@ -15,6 +15,7 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

@@ -24,6 +24,7 @@
  */
 
 import { useState, useCallback, useEffect, Fragment, useMemo, useRef } from 'react';
+import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { Switch } from '@/components/ui/switch';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
