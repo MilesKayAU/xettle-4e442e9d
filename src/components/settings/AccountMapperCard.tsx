@@ -35,7 +35,7 @@ type MapperState = 'unmapped' | 'scanning' | 'review' | 'confirmed';
 
 const CATEGORIES = [
   'Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements',
-  'Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees',
+  'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees',
 ] as const;
 
 /** Categories that support per-marketplace overrides */
