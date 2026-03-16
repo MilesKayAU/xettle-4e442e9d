@@ -1289,7 +1289,7 @@ serve(async (req) => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      console.log(`[backfill] Looking for ${stillMissing.length} missing settlement IDs: ${stillMissing.join(', ')}`);
+      logger.debug(`[backfill] Looking for ${stillMissing.length} missing settlement IDs: ${stillMissing.join(', ')}`);
 
       // Use the smart-sync infrastructure but with wider window chunks
       // Each chunk goes back 90 days further. Max 3 chunks = 270 days total.
