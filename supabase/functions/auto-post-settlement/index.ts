@@ -267,7 +267,8 @@ Deno.serve(async (req) => {
 async function processSettlement(
   supabase: any,
   settlementDbId: string,
-  userId: string
+  userId: string,
+  invoiceStatus: string = 'DRAFT'
 ): Promise<{ settlement_id: string; result: string; error?: string }> {
   // Load settlement
   const { data: settlement, error: loadErr } = await supabase
