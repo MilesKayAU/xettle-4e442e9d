@@ -285,8 +285,8 @@ export default function PushSafetyPreview({
         const xeroLines = buildPostingLineItems(settlement as SettlementForPosting, resolver, mpLabel);
         const lineItems = toLineItemPreviews(xeroLines);
 
-        // Build validation checks (now with CoA awareness + already-in-Xero + period lock)
-        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck, periodLocked, periodMonth);
+        // Build validation checks (now with CoA awareness + already-in-Xero + period lock + CoA freshness)
+        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck, periodLocked, periodMonth, isCoaStale);
 
         const contactName = MARKETPLACE_CONTACTS[settlement.marketplace] || `${settlement.marketplace} Marketplace`;
         const reference = `Xettle-${settlement.settlement_id}`;
