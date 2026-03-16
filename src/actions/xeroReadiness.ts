@@ -12,8 +12,9 @@
 
 // Re-export the canonical readiness check
 export { 
-  checkMappingReadiness,
-  type MappingReadinessResult,
+  checkXeroReadinessForMarketplace,
+  type XeroReadinessResult,
+  type XeroReadinessCheck,
 } from '@/utils/xero-mapping-readiness';
 
 /**
