@@ -131,10 +131,11 @@ function buildServerLineItems(
     if (Math.abs(amount) < 0.01) continue;
 
     const legacyKey = LEGACY_ACCOUNT_KEY_MAP[cat.name] || cat.name;
+    const resolvedCode = getCode(legacyKey, marketplace);
 
     lines.push({
       Description: cat.name,
-      AccountCode: getCode(legacyKey, marketplace),
+      AccountCode: resolvedCode || '', // Empty string signals unmapped — checked after build
       TaxType: cat.taxType,
       UnitAmount: amount,
       Quantity: 1,
@@ -682,12 +683,14 @@ serve(async (req) => {
       console.error('Failed to load user account codes, using defaults:', e);
     }
 
-    const getCode = (category: string, marketplace?: string): string => {
+    const getCode = (category: string, marketplace?: string): string | null => {
       if (marketplace) {
         const mpKey = `${category}:${marketplace}`;
         if (userAccountCodes[mpKey]) return userAccountCodes[mpKey];
       }
-      return userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
+      if (userAccountCodes[category]) return userAccountCodes[category];
+      // No fallback — return null to block push
+      return null;
     };
 
     // ─── SERVER-SIDE LINE ITEM REBUILD (MANDATORY) ────────────────────
@@ -714,6 +717,75 @@ serve(async (req) => {
 
     if (lineItems.length === 0) throw new Error('No non-zero line items to post');
 
+    // ─── UNMAPPED LINE ITEMS CHECK — hard block ────────────────────────
+    const unmappedLines = lineItems.filter(li => !li.AccountCode);
+    if (unmappedLines.length > 0) {
+      const unmappedCategories = unmappedLines.map(li => li.Description).join(', ');
+      console.error('MAPPING_REQUIRED: unmapped categories:', unmappedCategories);
+
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_push_mapping_required',
+        severity: 'error',
+        settlement_id: body.settlementData?.settlement_id || null,
+        marketplace_code: body.settlementData?.marketplace || null,
+        details: { unmapped_categories: unmappedLines.map(li => li.Description) },
+      });
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'MAPPING_REQUIRED',
+        unmappedCategories: unmappedLines.map(li => li.Description),
+        message: `Account mapping is missing for: ${unmappedCategories}. Configure your Account Mapper before pushing.`,
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ─── REQUIRED CATEGORIES COMPLETENESS CHECK ────────────────────────
+    const REQUIRED_CATEGORIES = ['Sales', 'Seller Fees', 'Refunds', 'Other Fees', 'Shipping'];
+    const missingRequired: string[] = [];
+    for (const reqCat of REQUIRED_CATEGORIES) {
+      // Check if this category has a non-zero value in settlement data
+      const catDef = SERVER_POSTING_CATEGORIES.find(c => {
+        const legacyKey = LEGACY_ACCOUNT_KEY_MAP[c.name] || c.name;
+        return legacyKey === reqCat || c.name === reqCat;
+      });
+      if (!catDef) continue;
+      const rawVal = body.settlementData?.[catDef.field];
+      const val = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal) || 0;
+      if (Math.abs(val) < 0.01) continue; // Zero amount — no mapping needed
+      
+      const resolvedCode = getCode(reqCat, contactName);
+      if (!resolvedCode) {
+        missingRequired.push(reqCat);
+      }
+    }
+
+    if (missingRequired.length > 0) {
+      console.error('MAPPING_INCOMPLETE: missing required categories:', missingRequired);
+
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_push_mapping_incomplete',
+        severity: 'error',
+        settlement_id: body.settlementData?.settlement_id || null,
+        marketplace_code: body.settlementData?.marketplace || null,
+        details: { missing_categories: missingRequired },
+      });
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'MAPPING_INCOMPLETE',
+        missingCategories: missingRequired,
+        message: `Required account mappings missing for: ${missingRequired.join(', ')}. Configure in Account Mapper.`,
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // ─── CoA VALIDATION: verify mapped codes exist and are correct type ──
     const REVENUE_CATEGORIES = ['Sales', 'Shipping', 'Refunds', 'Reimbursements', 'Promotional Discounts'];
     const EXPENSE_CATEGORIES = ['Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees', 'Advertising Costs'];
@@ -722,10 +794,11 @@ serve(async (req) => {
 
     const { data: coaAccounts } = await supabase
       .from('xero_chart_of_accounts')
-      .select('account_code, account_name, account_type, is_active')
+      .select('account_code, account_name, account_type, is_active, synced_at')
       .eq('user_id', userId);
 
     const coaMap = new Map<string, { name: string; type: string; active: boolean }>();
+    let coaMaxSyncedAt: Date | null = null;
     for (const acc of (coaAccounts || [])) {
       if (acc.account_code) {
         coaMap.set(acc.account_code, {
@@ -733,7 +806,35 @@ serve(async (req) => {
           type: (acc.account_type || '').toUpperCase(),
           active: acc.is_active !== false,
         });
+        if (acc.synced_at) {
+          const d = new Date(acc.synced_at);
+          if (!coaMaxSyncedAt || d > coaMaxSyncedAt) coaMaxSyncedAt = d;
+        }
       }
+    }
+
+    // ─── CoA FRESHNESS CHECK — block if stale and cannot refresh ──
+    const COA_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    const coaAgeMs = coaMaxSyncedAt ? Date.now() - coaMaxSyncedAt.getTime() : Infinity;
+    if (coaAgeMs > COA_MAX_AGE_MS) {
+      console.warn(`[coa-freshness] CoA cache is stale (${Math.round(coaAgeMs / 3600000)}h old) or empty. Blocking push.`);
+
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_push_coa_stale',
+        severity: 'error',
+        settlement_id: body.settlementData?.settlement_id || null,
+        details: { coa_age_hours: Math.round(coaAgeMs / 3600000), coa_count: coaMap.size },
+      });
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'COA_STALE',
+        message: 'Chart of Accounts cache is stale or empty. Please refresh your Xero connection before pushing.',
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (coaMap.size > 0) {
@@ -745,6 +846,7 @@ serve(async (req) => {
       }
 
       for (const code of usedCodes) {
+        if (!code) continue; // Unmapped — already caught by MAPPING_REQUIRED check
         const coaEntry = coaMap.get(code);
         if (!coaEntry) {
           validationErrors.push(`Account code "${code}" does not exist in your Xero Chart of Accounts`);
@@ -758,7 +860,7 @@ serve(async (req) => {
       const allCategories = [...REVENUE_CATEGORIES, ...EXPENSE_CATEGORIES];
       for (const cat of allCategories) {
         const code = getCode(cat);
-        if (!code || code === '400') continue;
+        if (!code) continue; // Unmapped — already caught
         const coaEntry = coaMap.get(code);
         if (!coaEntry) continue;
 

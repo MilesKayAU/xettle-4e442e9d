@@ -30,6 +30,7 @@ import {
 } from '@/utils/settlement-engine';
 import {
   buildPostingLineItems, toLineItemPreviews, createAccountCodeResolver,
+  REQUIRED_MAPPING_CATEGORIES,
   type SettlementForPosting,
 } from '@/utils/xero-posting-line-items';
 import { cn } from '@/lib/utils';
@@ -136,10 +137,11 @@ export default function PushSafetyPreview({
       let coaMap = new Map<string, { name: string; type: string; active: boolean }>();
       let userCodes: Record<string, string> = {};
       let lockedMonths = new Set<string>();
+      let coaFreshness: Date | null = null;
 
       if (user) {
         const [coaRes, codesRes, locksRes] = await Promise.all([
-          supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, is_active').eq('user_id', user.id),
+          supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, is_active, synced_at').eq('user_id', user.id),
           supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'accounting_xero_account_codes').maybeSingle(),
           supabase.from('period_locks').select('period_month').eq('user_id', user.id).is('unlocked_at', null),
         ]);
@@ -150,13 +152,62 @@ export default function PushSafetyPreview({
               type: (acc.account_type || '').toUpperCase(),
               active: acc.is_active !== false,
             });
+            // Track freshness
+            if (acc.synced_at) {
+              const d = new Date(acc.synced_at);
+              if (!coaFreshness || d > coaFreshness) coaFreshness = d;
+            }
           }
         }
+
+        // ─── CoA freshness check: auto-refresh if stale (>24h) ───
+        const coaAgeMs = coaFreshness ? Date.now() - coaFreshness.getTime() : Infinity;
+        const COA_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+        if (coaAgeMs > COA_MAX_AGE_MS) {
+          console.log('[push-safety] CoA cache stale or empty, attempting refresh…');
+          try {
+            const { error: refreshError } = await supabase.functions.invoke('fetch-xero-bank-accounts', {
+              body: { action: 'refresh_coa' },
+            });
+            if (!refreshError) {
+              // Re-fetch fresh CoA
+              const { data: freshCoa } = await supabase
+                .from('xero_chart_of_accounts')
+                .select('account_code, account_name, account_type, is_active, synced_at')
+                .eq('user_id', user.id);
+              coaMap = new Map();
+              coaFreshness = null;
+              for (const acc of (freshCoa || [])) {
+                if (acc.account_code) {
+                  coaMap.set(acc.account_code, {
+                    name: acc.account_name,
+                    type: (acc.account_type || '').toUpperCase(),
+                    active: acc.is_active !== false,
+                  });
+                  if (acc.synced_at) {
+                    const d = new Date(acc.synced_at);
+                    if (!coaFreshness || d > coaFreshness) coaFreshness = d;
+                  }
+                }
+              }
+              console.log('[push-safety] CoA refreshed successfully');
+            } else {
+              console.warn('[push-safety] CoA refresh failed:', refreshError);
+            }
+          } catch (e) {
+            console.warn('[push-safety] CoA refresh call failed:', e);
+          }
+        }
+
         if (codesRes.data?.value) {
           try { userCodes = JSON.parse(codesRes.data.value); } catch { /* */ }
         }
         (locksRes.data || []).forEach(l => lockedMonths.add(l.period_month));
       }
+
+      // Compute final CoA freshness for validation
+      const finalCoaAgeMs = coaFreshness ? Date.now() - coaFreshness.getTime() : Infinity;
+      const isCoaStale = finalCoaAgeMs > 24 * 60 * 60 * 1000;
 
       const results = [];
       for (const { settlementId, marketplace } of settlements) {
@@ -234,8 +285,8 @@ export default function PushSafetyPreview({
         const xeroLines = buildPostingLineItems(settlement as SettlementForPosting, resolver, mpLabel);
         const lineItems = toLineItemPreviews(xeroLines);
 
-        // Build validation checks (now with CoA awareness + already-in-Xero + period lock)
-        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck, periodLocked, periodMonth);
+        // Build validation checks (now with CoA awareness + already-in-Xero + period lock + CoA freshness)
+        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck, periodLocked, periodMonth, isCoaStale);
 
         const contactName = MARKETPLACE_CONTACTS[settlement.marketplace] || `${settlement.marketplace} Marketplace`;
         const reference = `Xettle-${settlement.settlement_id}`;
@@ -498,6 +549,7 @@ function buildValidationChecks(
   alreadyInXeroCheck?: ValidationCheck | null,
   periodLocked?: boolean,
   periodMonth?: string | null,
+  isCoaStale?: boolean,
 ): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
 
@@ -515,6 +567,54 @@ function buildValidationChecks(
     checks.push(alreadyInXeroCheck);
   } else {
     checks.push({ label: 'No existing invoice found in Xero ✓', status: 'green' });
+  }
+
+  // 0b. UNMAPPED account codes — hard block
+  const unmappedLines = lineItems.filter(li => li.accountCode === 'UNMAPPED');
+  if (unmappedLines.length > 0) {
+    const categories = unmappedLines.map(li => li.description).join(', ');
+    checks.push({
+      label: 'Unmapped account codes — push blocked',
+      status: 'red',
+      detail: `Missing account mapping for: ${categories}. Configure in Account Mapper before pushing.`,
+    });
+  }
+
+  // 0c. Per-marketplace mapping completeness gate
+  const missingRequired = REQUIRED_MAPPING_CATEGORIES.filter(reqCat => {
+    const matchingLine = lineItems.find(li => {
+      const desc = li.description;
+      if (reqCat === 'Sales') return desc === 'Sales (Principal)';
+      if (reqCat === 'Shipping') return desc === 'Shipping Revenue';
+      if (reqCat === 'Seller Fees') return desc === 'Seller Fees';
+      if (reqCat === 'Refunds') return desc === 'Refunds';
+      if (reqCat === 'Other Fees') return desc === 'Other Fees';
+      return false;
+    });
+    // If no line item for this category (zero amount), it's fine
+    if (!matchingLine) return false;
+    // If the line item is UNMAPPED, it's missing
+    return matchingLine.accountCode === 'UNMAPPED';
+  });
+
+  if (missingRequired.length > 0) {
+    const mpLabel = s.marketplace || 'Unknown';
+    checks.push({
+      label: 'Required account mappings incomplete',
+      status: 'red',
+      detail: `${mpLabel}: missing mapping for ${missingRequired.join(', ')}. All required categories must be mapped.`,
+    });
+  } else if (unmappedLines.length === 0) {
+    checks.push({ label: 'All required categories mapped ✓', status: 'green' });
+  }
+
+  // 0d. CoA freshness check
+  if (isCoaStale) {
+    checks.push({
+      label: 'Chart of Accounts could not be verified',
+      status: 'red',
+      detail: 'CoA cache is stale or empty and auto-refresh failed. Reconnect Xero or refresh your Chart of Accounts.',
+    });
   }
 
   // 1. Line items sum to settlement net
@@ -539,6 +639,7 @@ function buildValidationChecks(
     const REVENUE_DESCS = ['Sales', 'Refunds', 'Reimbursements'];
 
     for (const li of lineItems) {
+      if (li.accountCode === 'UNMAPPED') continue; // Already handled above
       const entry = coaMap.get(li.accountCode);
       if (!entry) {
         invalidCodes.push(li.accountCode);
@@ -571,12 +672,12 @@ function buildValidationChecks(
         status: 'red',
         detail: wrongTypeCodes.join('; '),
       });
-    } else {
+    } else if (unmappedLines.length === 0) {
       checks.push({ label: 'All account codes verified in Xero ✓', status: 'green' });
     }
-  } else {
+  } else if (!isCoaStale) {
     // No CoA cached — fallback to old check
-    const allCodesKnown = lineItems.every(li => ACCOUNT_NAMES[li.accountCode]);
+    const allCodesKnown = lineItems.every(li => li.accountCode !== 'UNMAPPED' && ACCOUNT_NAMES[li.accountCode]);
     checks.push({
       label: 'Account codes confirmed',
       status: allCodesKnown ? 'green' : 'amber',
@@ -592,12 +693,12 @@ function buildValidationChecks(
     detail: hasGstData ? undefined : 'No GST data — verify this settlement has correct tax treatment',
   });
 
-  // 4. Contact maps to known Xero contact
+  // 4. Contact maps to known Xero contact — RED BLOCK if missing
   const knownContact = !!MARKETPLACE_CONTACTS[s.marketplace];
   checks.push({
-    label: 'Contact maps to known Xero contact',
-    status: knownContact ? 'green' : 'amber',
-    detail: knownContact ? undefined : `Using fallback contact: "${s.marketplace} Marketplace"`,
+    label: knownContact ? 'Contact maps to known Xero contact' : 'No Xero contact mapping for this marketplace',
+    status: knownContact ? 'green' : 'red',
+    detail: knownContact ? undefined : `No contact mapping found for "${s.marketplace}". Add to marketplace contacts before pushing.`,
   });
 
   // 5. Bank deposit confirmed

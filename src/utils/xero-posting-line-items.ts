@@ -150,8 +150,14 @@ export interface SettlementForPosting {
   [key: string]: any; // Allow extra fields from DB row
 }
 
-/** Resolver function: (categoryName, marketplace?) → accountCode */
-export type AccountCodeResolver = (categoryName: string, marketplace?: string) => string;
+/** Resolver function: (categoryName, marketplace?) → accountCode | null */
+export type AccountCodeResolver = (categoryName: string, marketplace?: string) => string | null;
+
+/**
+ * Required categories that MUST have explicit mappings per marketplace.
+ * If any of these resolve to null, the push is blocked.
+ */
+export const REQUIRED_MAPPING_CATEGORIES = ['Sales', 'Seller Fees', 'Refunds', 'Other Fees', 'Shipping'] as const;
 
 // ─── Builder ────────────────────────────────────────────────────────────
 
@@ -165,9 +171,10 @@ function round2(n: number): number {
  * and/or marketplace_account_mapping rows merged in.
  */
 export function createAccountCodeResolver(
-  userCodes?: Record<string, string> | null
+  userCodes?: Record<string, string> | null,
+  options?: { skipBaseKeyFallback?: boolean }
 ): AccountCodeResolver {
-  return (categoryName: string, marketplace?: string): string => {
+  return (categoryName: string, marketplace?: string): string | null => {
     const legacyKey = LEGACY_ACCOUNT_KEY_MAP[categoryName] || categoryName;
     const codes = userCodes || {};
 
@@ -176,13 +183,15 @@ export function createAccountCodeResolver(
       const mpKey = `${legacyKey}:${marketplace}`;
       if (codes[mpKey]) return codes[mpKey];
     }
-    // 2. Base key  e.g. "Sales"
-    if (codes[legacyKey]) return codes[legacyKey];
-    if (codes[categoryName]) return codes[categoryName];
+    // 2. Base key  e.g. "Sales" (skipped when use_global_mappings === false)
+    if (!options?.skipBaseKeyFallback) {
+      if (codes[legacyKey]) return codes[legacyKey];
+      if (codes[categoryName]) return codes[categoryName];
+    }
 
-    // 3. Default from category definition
-    const def = POSTING_CATEGORIES.find(c => c.name === categoryName);
-    return def?.defaultAccountCode || '400';
+    // 3. No fallback — return null to block push
+    // defaultAccountCode is retained on category defs for documentation only
+    return null;
   };
 }
 
@@ -215,9 +224,11 @@ export function buildPostingLineItems(
 
     if (Math.abs(amount) < TOL_LINE_SUM) continue;
 
+    const resolvedCode = resolver(cat.name, marketplace);
+
     lines.push({
       Description: cat.name,
-      AccountCode: resolver(cat.name, marketplace),
+      AccountCode: resolvedCode ?? 'UNMAPPED',
       TaxType: cat.taxType,
       UnitAmount: amount,
       Quantity: 1,

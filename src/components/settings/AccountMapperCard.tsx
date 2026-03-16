@@ -72,6 +72,8 @@ export default function AccountMapperCard() {
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
   // CoA validation state
   const [coaMap, setCoaMap] = useState<Map<string, CoaEntry>>(new Map());
+  // Per-marketplace use_global_mappings flags
+  const [globalMappingFlags, setGlobalMappingFlags] = useState<Record<string, boolean>>({});
 
   // Load current state on mount
   useEffect(() => {
@@ -114,12 +116,19 @@ export default function AccountMapperCard() {
       // Load active marketplace connections to know which channels to show
       const { data: connections } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_name')
+        .select('marketplace_name, settings')
         .eq('user_id', user.id)
         .eq('connection_status', 'connected');
 
       if (connections && connections.length > 0) {
         setActiveMarketplaces(connections.map(c => c.marketplace_name));
+        // Load use_global_mappings flags from connection settings
+        const flags: Record<string, boolean> = {};
+        for (const c of connections) {
+          const settings = (c.settings || {}) as Record<string, any>;
+          flags[c.marketplace_name] = settings.use_global_mappings !== false; // default true
+        }
+        setGlobalMappingFlags(flags);
       } else {
         // Fallback: detect from settlements
         const { data: settlements } = await supabase
@@ -619,6 +628,53 @@ export default function AccountMapperCard() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Per-marketplace use_global_mappings toggles */}
+        {getEffectiveMarketplaces().length > 1 && (
+          <div className="mt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Per-marketplace mapping mode</p>
+            <div className="space-y-2">
+              {getEffectiveMarketplaces().map(mp => (
+                <div key={mp} className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium">{mp}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {globalMappingFlags[mp] !== false
+                        ? 'Uses global account mappings as fallback'
+                        : 'Requires explicit mappings — no fallback to global'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`global-${mp}`} className="text-[10px] text-muted-foreground">
+                      Use global
+                    </Label>
+                    <Switch
+                      id={`global-${mp}`}
+                      checked={globalMappingFlags[mp] !== false}
+                      onCheckedChange={async (checked) => {
+                        const newFlags = { ...globalMappingFlags, [mp]: checked };
+                        setGlobalMappingFlags(newFlags);
+                        // Persist to marketplace_connections.settings
+                        try {
+                          const { data: { user } } = await supabase.auth.getUser();
+                          if (!user) return;
+                          await supabase
+                            .from('marketplace_connections')
+                            .update({ settings: { use_global_mappings: checked } } as any)
+                            .eq('user_id', user.id)
+                            .eq('marketplace_name', mp);
+                          toast.success(`${mp}: ${checked ? 'global mappings enabled' : 'explicit mappings required'}`);
+                        } catch (e) {
+                          console.error('Failed to save use_global_mappings:', e);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
