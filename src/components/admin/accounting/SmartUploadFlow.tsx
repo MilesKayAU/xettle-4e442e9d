@@ -1069,6 +1069,28 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         return updated;
       });
 
+      // Xero readiness check for first settlement of a new marketplace
+      if (savedCount > 0 && marketplace && user) {
+        try {
+          const { count: mktCount } = await supabase
+            .from('settlements')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('marketplace', marketplace);
+          if (mktCount === savedCount) {
+            // First-ever settlement(s) for this marketplace — check Xero readiness
+            const xeroResult = await checkXeroReadinessForMarketplace({ marketplaceCode: marketplace, userId: user.id });
+            if (xeroResult.xeroConnected) {
+              setFiles(prev => {
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], xeroReadiness: xeroResult };
+                return updated;
+              });
+            }
+          }
+        } catch { /* non-blocking */ }
+      }
+
       onSettlementsSaved?.();
       onMarketplacesChanged?.();
     } catch (err: any) {
