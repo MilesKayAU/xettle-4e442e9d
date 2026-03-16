@@ -391,7 +391,7 @@ describe('xero-posting-line-items', () => {
       };
       const lines = buildPostingLineItems(empty);
       // All-zero settlement should produce zero or empty lines (no non-zero amounts)
-      const nonZeroLines = lines.filter(l => l.unitAmount !== 0);
+      const nonZeroLines = lines.filter(l => l.UnitAmount !== 0);
       expect(nonZeroLines.length).toBe(0);
     });
 
