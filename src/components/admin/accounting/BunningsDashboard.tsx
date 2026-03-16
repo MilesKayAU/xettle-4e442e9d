@@ -194,6 +194,10 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // PushSafetyPreview state — Golden Rule enforcement
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
+
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
