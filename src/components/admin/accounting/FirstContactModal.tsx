@@ -70,6 +70,7 @@ export default function FirstContactModal({
   detectedMarketplace,
   onConfirm,
   onCancel,
+  isAiDetected,
 }: FirstContactModalProps) {
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('');
   const [customName, setCustomName] = useState('');
