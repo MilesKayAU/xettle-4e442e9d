@@ -36,12 +36,14 @@ import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
   FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
   MinusCircle, Clock3, Search, ArrowRight, Shield, Link2, ShoppingBag,
-  Info,
+  Info, GitCompare,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import InvoiceRefreshButton from '@/components/shared/InvoiceRefreshButton';
+import XeroInvoiceCompareDrawer from '@/components/shared/XeroInvoiceCompareDrawer';
 import { ACCOUNTING_RULES } from '@/constants/accounting-rules';
 
 interface SettlementEvidence {
