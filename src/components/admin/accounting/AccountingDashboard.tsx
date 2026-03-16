@@ -2269,6 +2269,14 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                                     <Undo2 className="h-3.5 w-3.5 mr-2" /> Rollback Journal 2
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuSeparator />
+                                {/* Safe Repost — void + rebuild + push new DRAFT */}
+                                <DropdownMenuItem
+                                  onClick={() => setRepostTarget(s)}
+                                  className="text-primary focus:text-primary"
+                                >
+                                  <RefreshCw className="h-3.5 w-3.5 mr-2" /> Safe Repost…
+                                </DropdownMenuItem>
                               </>
                             )}
 
