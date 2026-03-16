@@ -117,10 +117,13 @@ Deno.serve(async (req) => {
   twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
   const defaultSyncFrom = twoMonthsAgo.toISOString().split('T')[0];
 
+  // 180-day hard cap for sync window
+  const hardCapDate = new Date();
+  hardCapDate.setDate(hardCapDate.getDate() - 180);
+  const hardCapStr = hardCapDate.toISOString().split('T')[0];
+
   for (const uid of allUserIds) {
     try {
-      // PRIORITY 1: Use oldest outstanding Xero invoice date (set by sync-xero-status)
-      // This ensures Amazon/Shopify sync windows cover all unreconciled Xero invoices
       const { data: xeroOutstandingSetting } = await adminClient
         .from('app_settings')
         .select('value')
@@ -132,11 +135,10 @@ Deno.serve(async (req) => {
 
       if (xeroOutstandingSetting?.value) {
         const xeroDate = new Date(xeroOutstandingSetting.value + 'T00:00:00Z');
-        xeroDate.setUTCDate(xeroDate.getUTCDate() - 7); // 7-day safety buffer for Xero outstanding
+        xeroDate.setUTCDate(xeroDate.getUTCDate() - 7);
         syncFrom = xeroDate.toISOString().split('T')[0];
         console.log(`[scheduled-sync] User ${uid}: sync_from = ${syncFrom} (from Xero outstanding priority)`);
       } else {
-        // PRIORITY 2: Fallback to oldest unreconciled settlement
         const { data: oldestGap } = await adminClient
           .from('settlements')
           .select('period_end')
@@ -155,6 +157,12 @@ Deno.serve(async (req) => {
         } else {
           console.log(`[scheduled-sync] User ${uid}: sync_from = ${syncFrom} (default 2 months)`);
         }
+      }
+
+      // Enforce 180-day hard cap
+      if (syncFrom < hardCapStr) {
+        console.log(`[scheduled-sync] User ${uid}: sync_from clamped from ${syncFrom} to ${hardCapStr} (180-day cap)`);
+        syncFrom = hardCapStr;
       }
 
       userSyncFromMap[uid] = syncFrom;
@@ -225,6 +233,11 @@ Deno.serve(async (req) => {
   // 4.5. Fetch eBay settlements (per-user lock/cooldown)
   console.log("[scheduled-sync] Step 4.5: eBay fetch (per-user locks)...");
   const ebayUserIds = [...new Set((ebayTokens || []).map(t => t.user_id))];
+  // Shuffle eBay users to add jitter and avoid stampeding the same user first every cycle
+  for (let i = ebayUserIds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [ebayUserIds[i], ebayUserIds[j]] = [ebayUserIds[j], ebayUserIds[i]];
+  }
   {
     const eligibleEbayUsers: string[] = [];
     for (const uid of ebayUserIds) {
