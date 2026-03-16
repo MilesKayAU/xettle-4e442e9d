@@ -578,7 +578,7 @@ Deno.serve(async (req) => {
         continue
       }
 
-      console.log(`[fetch-ebay-settlements] Found ${payouts.length} payouts for user ${userId}`)
+      logger.debug(`[fetch-ebay-settlements] Found ${payouts.length} payouts for user ${userId}`)
 
       // 3. Filter to SUCCEEDED payouts only
       const succeededPayouts = payouts.filter(p => p.payoutStatus === 'SUCCEEDED')
