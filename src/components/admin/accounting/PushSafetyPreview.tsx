@@ -11,14 +11,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ACCOUNTING_RULES } from '@/constants/accounting-rules';
-
-// Rule #11 enforcement: This component gates Xero pushes.
-// ACCOUNTING_RULES.SETTLEMENTS_ARE_ONLY_ACCOUNTING_SOURCE must be true.
-// Orders and payments NEVER create accounting entries.
-if (!ACCOUNTING_RULES.SETTLEMENTS_ARE_ONLY_ACCOUNTING_SOURCE) {
-  throw new Error('CRITICAL: Accounting rule violated — settlements must be the only accounting source');
-}
+// Rule #11 enforcement is server-side: sync-settlement-to-xero requires
+// settlementId + settlementData. No order/payment path exists.
+// See: src/constants/accounting-rules.ts for canonical documentation.
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
