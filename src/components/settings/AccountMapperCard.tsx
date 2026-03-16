@@ -22,6 +22,7 @@ import {
   createXeroAccounts,
   type CachedXeroAccount,
 } from '@/actions';
+import { Save, Upload } from 'lucide-react';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
 
@@ -176,9 +177,21 @@ export default function AccountMapperCard() {
         .eq('key', 'accounting_xero_account_codes')
         .maybeSingle();
 
-      if (confirmedSetting?.value) {
+      // Also check for draft mapping
+      const { data: draftSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'accounting_xero_account_codes_draft')
+        .maybeSingle();
+
+      // Use confirmed if exists, otherwise fall back to draft
+      const activeSetting = confirmedSetting?.value ? confirmedSetting : (draftSetting?.value ? draftSetting : null);
+      const isFromDraft = !confirmedSetting?.value && !!draftSetting?.value;
+
+      if (activeSetting?.value) {
         try {
-          const codes = JSON.parse(confirmedSetting.value);
+          const codes = JSON.parse(activeSetting.value);
           const restored: Record<string, MappingEntry> = {};
           for (const cat of CATEGORIES) {
             if (codes[cat]) {
@@ -198,7 +211,8 @@ export default function AccountMapperCard() {
             editable[k] = v as string;
           }
           setEditableMapping(editable);
-          setState('confirmed');
+          // If draft only, go to review state so user can continue editing
+          setState(isFromDraft ? 'review' : 'confirmed');
         } catch { /* fall through */ }
         setLoading(false);
         return;
@@ -329,6 +343,39 @@ export default function AccountMapperCard() {
     settingsPin.requirePin(doToggle);
   };
 
+  const handleSaveDraft = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const draftCodes: Record<string, string> = {};
+      for (const cat of CATEGORIES) {
+        draftCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
+      }
+      if (splitByMarketplace) {
+        for (const mp of getEffectiveMarketplaces()) {
+          for (const cat of SPLITTABLE_CATEGORIES) {
+            const key = `${cat}:${mp}`;
+            if (editableMapping[key]) {
+              draftCodes[key] = editableMapping[key];
+            }
+          }
+        }
+      }
+
+      const { error } = await supabase.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'accounting_xero_account_codes_draft',
+        value: JSON.stringify(draftCodes),
+      } as any, { onConflict: 'user_id,key' });
+      if (error) throw error;
+
+      toast.success('Draft saved locally — come back anytime to finish');
+    } catch (err: any) {
+      toast.error(`Failed to save draft: ${err.message}`);
+    }
+  };
+
   const handleConfirm = async () => {
     settingsPin.requirePin(async () => {
       try {
@@ -381,7 +428,9 @@ export default function AccountMapperCard() {
         }
         setMapping(updatedMapping);
         setState('confirmed');
-        toast.success('Account mapping saved — all Xero pushes will use these codes');
+        // Clean up draft after successful confirm
+        await supabase.from('app_settings').delete().eq('user_id', user.id).eq('key', 'accounting_xero_account_codes_draft');
+        toast.success('Account mapping confirmed — all Xero pushes will use these codes');
       } catch (err: any) {
         toast.error(`Failed to save mapping: ${err.message}`);
       }
@@ -772,16 +821,23 @@ export default function AccountMapperCard() {
             </div>
           )}
 
-          <div className="flex gap-2">
-            <Button onClick={handleConfirm} className="gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Confirm & Save
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={handleSaveDraft} className="gap-2">
+              <Save className="h-4 w-4" />
+              Save Draft
             </Button>
-            <Button variant="outline" onClick={runMapper} className="gap-2">
+            <Button onClick={handleConfirm} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Confirm & Push to Xero
+            </Button>
+            <Button variant="ghost" size="sm" onClick={runMapper} className="gap-2">
               <RefreshCw className="h-4 w-4" />
               Re-run
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            <strong>Save Draft</strong> keeps your changes locally. <strong>Confirm & Push</strong> locks the mapping for all future Xero pushes.
+          </p>
         </CardContent>
       </Card>
       </>
