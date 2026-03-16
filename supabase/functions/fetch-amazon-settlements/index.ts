@@ -1253,7 +1253,7 @@ serve(async (req) => {
         if (!syncFrom && body?.lookback_days && typeof body.lookback_days === 'number') {
           const lookbackDate = new Date(Date.now() - body.lookback_days * 24 * 60 * 60 * 1000);
           syncFrom = lookbackDate.toISOString().split('T')[0];
-          console.log(`[smart-sync] lookback_days=${body.lookback_days} → sync_from=${syncFrom}`);
+          logger.debug(`[smart-sync] lookback_days=${body.lookback_days} → sync_from=${syncFrom}`);
         }
       } catch { /* no body */ }
       return await handleSmartSync(supabase, userId, syncFrom);
