@@ -265,7 +265,7 @@ Deno.serve(async (req) => {
           // EXPERIMENTAL: only if acknowledged + force DRAFT
           if (tier === 'EXPERIMENTAL') {
             if (!r.support_acknowledged_at) {
-              console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: EXPERIMENTAL not acknowledged`);
+              logger.debug(`[auto-post] Skipping ${r.rail} for user ${userId}: EXPERIMENTAL not acknowledged`);
               return false;
             }
             // Force DRAFT for experimental rails — log for audit trail
