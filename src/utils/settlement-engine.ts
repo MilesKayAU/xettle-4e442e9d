@@ -538,6 +538,8 @@ export interface SaveResult {
   error?: string;
   duplicate?: boolean;
   sanityFailed?: boolean;
+  /** Gates that blocked save (for draft fingerprints) */
+  blockedGates?: string[];
 }
 
 /**
