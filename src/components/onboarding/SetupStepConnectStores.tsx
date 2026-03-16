@@ -6,6 +6,9 @@ import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { Package, ShoppingBag, CheckCircle2, Loader2, Store, Plus, Upload, ArrowRight, ArrowLeft, Search, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCachedXeroAccounts } from '@/actions';
+import { getMarketplaceCoverage } from '@/actions/coaCoverage';
+import CoaBlockerCta from '@/components/shared/CoaBlockerCta';
 
 interface Props {
   onNext: () => void;
