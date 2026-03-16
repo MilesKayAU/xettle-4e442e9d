@@ -921,7 +921,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
       // Skip verification if we know bank feed is empty (from sync_info)
       if (data?.sync_info?.bank_feed_empty) {
-        console.log('[OutstandingTab] Bank feed empty — skipping payment verification');
+        logger.debug('[OutstandingTab] Bank feed empty — skipping payment verification');
         return;
       }
 
