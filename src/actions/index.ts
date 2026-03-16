@@ -156,3 +156,10 @@ export {
   runMarketplaceSync,
   type SyncActionResult,
 } from './sync';
+
+// ─── Audit Export ────────────────────────────────────────────────────────────
+export {
+  exportAuditCsv,
+  type AuditExportFilters,
+  type AuditExportResult,
+} from './auditExport';

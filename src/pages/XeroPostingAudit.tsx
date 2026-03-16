@@ -18,9 +18,16 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, CheckCircle2, AlertTriangle, ExternalLink, Search, Shield } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ArrowLeft, CheckCircle2, AlertTriangle, ExternalLink, Search, Shield, Download, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
+import { exportAuditCsv, type AuditExportFilters } from '@/actions/auditExport';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 type AuditCategory = 'all' | 'xettle_posted' | 'external_detected' | 'unlinked';
@@ -76,6 +83,9 @@ export default function XeroPostingAudit() {
   const [filter, setFilter] = useState<AuditCategory>('all');
   const [preBoundaryFilter, setPreBoundaryFilter] = useState<string>('all');
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportFilters, setExportFilters] = useState<AuditExportFilters>({});
+  const [exporting, setExporting] = useState(false);
 
   const auditCounts = useMemo(() => ({
     total: rows.length,
@@ -207,7 +217,7 @@ export default function XeroPostingAudit() {
         <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             Xero Posting Audit
@@ -216,6 +226,15 @@ export default function XeroPostingAudit() {
             Everything posted by Xettle, detected externally, or unlinked — all from your database.
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setExportDialogOpen(true)}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export CSV
+        </Button>
       </div>
 
       {/* Summary cards */}
@@ -360,6 +379,84 @@ export default function XeroPostingAudit() {
         open={!!drawerSettlementId}
         onClose={() => setDrawerSettlementId(null)}
       />
+
+      {/* Export filter dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-4 w-4" />
+              Export Audit Log (CSV)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Date from</Label>
+                <Input
+                  type="date"
+                  value={exportFilters.date_from || ''}
+                  onChange={e => setExportFilters(f => ({ ...f, date_from: e.target.value || undefined }))}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Date to</Label>
+                <Input
+                  type="date"
+                  value={exportFilters.date_to || ''}
+                  onChange={e => setExportFilters(f => ({ ...f, date_to: e.target.value || undefined }))}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Settlement ID (optional)</Label>
+              <Input
+                value={exportFilters.settlement_id || ''}
+                onChange={e => setExportFilters(f => ({ ...f, settlement_id: e.target.value || undefined }))}
+                placeholder="e.g. AMZ-2026-03"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Marketplace (optional)</Label>
+              <Input
+                value={exportFilters.marketplace_code || ''}
+                onChange={e => setExportFilters(f => ({ ...f, marketplace_code: e.target.value || undefined }))}
+                placeholder="e.g. amazon_au"
+                className="h-8 text-xs"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Exports system events from your audit log. Max 5,000 rows. Sensitive data is excluded.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setExportDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={exporting}
+              onClick={async () => {
+                setExporting(true);
+                const result = await exportAuditCsv(exportFilters);
+                setExporting(false);
+                if (result.success) {
+                  toast.success('Audit log exported');
+                  setExportDialogOpen(false);
+                } else {
+                  toast.error(result.error || 'Export failed');
+                }
+              }}
+            >
+              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Download className="h-3.5 w-3.5 mr-1.5" />}
+              {exporting ? 'Exporting…' : 'Download CSV'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

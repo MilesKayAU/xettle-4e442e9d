@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.preview-xettle-invoice-payload]
 verify_jwt = false
+
+[functions.export-system-events-csv]
+verify_jwt = false
