@@ -515,12 +515,106 @@ export function detectFromHeaders(headers: string[]): FileDetectionResult | null
   return null;
 }
 
+// ─── Smart Header-Row Scanner (Preamble Skipper) ────────────────────────────
+
+const HEADER_KEYWORDS = /^(order|amount|fee|total|payout|gross|net|date|quantity|earnings|refund|commission|currency|subtotal|postage|discount|settlement|invoice|sku|item|shipping|expenses|proceeds)$/i;
+
+/**
+ * Scan the first 30 lines of a file to find the actual header row.
+ * Many marketplace exports (e.g. eBay) prepend metadata lines before the real headers.
+ * Returns { headerIndex, preambleMetadata }.
+ */
+export function findHeaderRow(lines: string[], delimiter: string): { headerIndex: number; preambleMetadata: { periodStart?: string; periodEnd?: string; sellerName?: string } } {
+  const meta: { periodStart?: string; periodEnd?: string; sellerName?: string } = {};
+  const maxScan = Math.min(lines.length, 30);
+
+  for (let i = 0; i < maxScan; i++) {
+    const fields = parseRow(lines[i], delimiter).filter(f => f && f !== '--' && f !== '');
+    if (fields.length < 5) {
+      // Extract metadata from short preamble lines
+      const raw = lines[i];
+      const startMatch = raw.match(/start\s*date[:\s,]*([^\t,]+)/i);
+      const endMatch = raw.match(/end\s*date[:\s,]*([^\t,]+)/i);
+      const sellerMatch = raw.match(/seller[\s_]*(?:name|id)?[:\s,]*([^\t,]+)/i);
+      if (startMatch) meta.periodStart = startMatch[1].trim();
+      if (endMatch) meta.periodEnd = endMatch[1].trim();
+      if (sellerMatch) meta.sellerName = sellerMatch[1].trim();
+      continue;
+    }
+    // Count how many fields look like known header keywords
+    const hits = fields.filter(f => {
+      const words = f.toLowerCase().trim().split(/[\s\-_]+/);
+      return words.some(w => HEADER_KEYWORDS.test(w));
+    });
+    if (hits.length >= 3) {
+      return { headerIndex: i, preambleMetadata: meta };
+    }
+  }
+
+  return { headerIndex: 0, preambleMetadata: meta };
+}
+
+// ─── Data Completeness Assessment ───────────────────────────────────────────
+
+const UPGRADE_ADVICE: Record<string, string> = {
+  ebay_au: 'For full accounting with bank matching, download the **Transaction Report** from Seller Hub → Payments → Reports. This groups data by Payout ID so each settlement matches a bank deposit.',
+  amazon_au: 'Download the **Settlement Report** from Seller Central → Reports → Payments → All Statements → Download TSV. This contains full fee breakdowns per payout.',
+  shopify_payments: 'Export the **Payouts** CSV from Shopify Admin → Finances → Payouts → Export. This groups transactions by payout with fee details.',
+  kogan: 'Download the **Payout Report** from Kogan Seller Portal → Payments → Download CSV. Ensure the file contains APInvoice and Remitted columns.',
+  catch: 'Download the **Settlement Report** from Catch Marketplace → Reports → Payments/Settlements.',
+  bunnings: 'Download the **Summary of Transactions** PDF from Bunnings Marketplace Portal → Billing → Download PDF.',
+  woolworths_marketplus: 'Download the **Settlement CSV** from Woolworths MarketPlus Portal → Reports → Settlements.',
+  _default: 'Look for a **Settlements**, **Payouts**, or **Transaction** report in your marketplace seller portal that includes fee breakdowns and payout totals.',
+};
+
+/**
+ * Assess whether a detection result provides enough data for full accounting.
+ * Enriches the result in-place with completeness fields.
+ */
+export function assessCompleteness(result: FileDetectionResult): void {
+  const m = result.columnMapping;
+  if (!m || !result.isSettlementFile) return;
+
+  const has = (field: string | undefined) => !!field;
+  const missing: string[] = [];
+
+  if (!has(m.gross_sales) && !has(m.net_payout)) {
+    missing.push('sales or net payout');
+  }
+  if (!has(m.fees)) missing.push('fees');
+  if (!has(m.settlement_id)) missing.push('payout/settlement ID (bank matching)');
+  if (!has(m.period_start) && !has(m.period_end)) missing.push('date range');
+
+  if (missing.length === 0) {
+    // Check for settlement_id specifically — it's needed for bank matching but
+    // file can still be "full" for accounting if it has gross + fees + net
+    if (!has(m.settlement_id) && has(m.gross_sales) && has(m.fees) && has(m.net_payout)) {
+      result.dataCompleteness = 'full';
+    } else {
+      result.dataCompleteness = 'full';
+    }
+    return;
+  }
+
+  // If we have net_payout or gross_sales but missing fees, it's partial
+  const hasAnySales = has(m.gross_sales) || has(m.net_payout);
+  if (!hasAnySales) {
+    result.dataCompleteness = 'orders_only';
+  } else {
+    result.dataCompleteness = 'partial';
+  }
+
+  result.missingFields = missing;
+  result.completenessWarning = `This report is missing: ${missing.join(', ')}`;
+  result.upgradeAdvice = UPGRADE_ADVICE[result.marketplace] || UPGRADE_ADVICE._default;
+}
+
 // ─── File Reading Helpers ───────────────────────────────────────────────────
 
 /**
  * Extract headers from a CSV/TSV file.
  */
-export async function extractFileHeaders(file: File): Promise<{ headers: string[]; sampleRows: string[][]; rowCount: number; delimiter: string } | null> {
+export async function extractFileHeaders(file: File): Promise<{ headers: string[]; sampleRows: string[][]; rowCount: number; delimiter: string; preambleMetadata?: { periodStart?: string; periodEnd?: string; sellerName?: string } } | null> {
   const name = file.name.toLowerCase();
   
   // Handle XLSX
@@ -551,19 +645,23 @@ export async function extractFileHeaders(file: File): Promise<{ headers: string[
     const lines = text.split('\n').filter(l => l.trim());
     if (lines.length < 1) return null;
 
-    // Detect delimiter
+    // Detect delimiter from the first non-empty line
     const firstLine = lines[0];
     const tabCount = (firstLine.match(/\t/g) || []).length;
     const commaCount = (firstLine.match(/,/g) || []).length;
     const delimiter = tabCount > commaCount ? '\t' : ',';
 
-    // Parse headers
-    const headers = parseRow(firstLine, delimiter);
+    // Smart header detection — skip preamble
+    const { headerIndex, preambleMetadata } = findHeaderRow(lines, delimiter);
 
-    // Sample rows (first 3 data rows)
-    const sampleRows = lines.slice(1, 4).map(l => parseRow(l, delimiter));
+    // Parse headers from the detected header row
+    const headers = parseRow(lines[headerIndex], delimiter);
 
-    return { headers, sampleRows, rowCount: lines.length - 1, delimiter };
+    // Sample rows (first 3 data rows after header)
+    const dataStart = headerIndex + 1;
+    const sampleRows = lines.slice(dataStart, dataStart + 3).map(l => parseRow(l, delimiter));
+
+    return { headers, sampleRows, rowCount: lines.length - dataStart, delimiter, preambleMetadata };
   } catch {
     return null;
   }
