@@ -428,7 +428,9 @@ export default function AccountMapperCard() {
         }
         setMapping(updatedMapping);
         setState('confirmed');
-        toast.success('Account mapping saved — all Xero pushes will use these codes');
+        // Clean up draft after successful confirm
+        await supabase.from('app_settings').delete().eq('user_id', user.id).eq('key', 'accounting_xero_account_codes_draft');
+        toast.success('Account mapping confirmed — all Xero pushes will use these codes');
       } catch (err: any) {
         toast.error(`Failed to save mapping: ${err.message}`);
       }
