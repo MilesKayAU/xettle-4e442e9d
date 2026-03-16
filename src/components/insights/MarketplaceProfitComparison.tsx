@@ -243,6 +243,9 @@ export default function MarketplaceProfitComparison() {
                       {mp.marketplace_name}
                       {isBest && <TrendingUp className="h-3 w-3 text-emerald-500" />}
                       {isWorst && <TrendingDown className="h-3 w-3 text-destructive" />}
+                      {!mp.has_cost_data && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-muted-foreground/30 text-muted-foreground">payout margin</Badge>
+                      )}
                     </TableCell>
                     <TableCell className={`text-xs text-right font-semibold ${getMarginColor(mp.avg_margin)}`}>
                       {mp.avg_margin.toFixed(1)}%
