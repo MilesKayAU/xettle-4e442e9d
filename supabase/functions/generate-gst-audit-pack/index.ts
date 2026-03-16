@@ -1,11 +1,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
+import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts';
 
 const GST_INCOME_CATEGORIES = ['gst_income'];
 const GST_EXPENSE_CATEGORIES = ['gst_expense'];
