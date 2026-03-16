@@ -55,9 +55,19 @@ export default function CloneCoaDialog({
 
   const isNonAuGst = taxProfile && taxProfile !== 'AU_GST';
 
+  // Validate template eligibility (prevent clone loops)
+  const templateEligibility = useMemo(() => {
+    if (!templateMarketplace) return { eligible: true };
+    return validateTemplateEligibility(templateMarketplace, coaAccounts);
+  }, [templateMarketplace, coaAccounts]);
+
   // When template changes, rebuild the clone rows via canonical action
   useEffect(() => {
     if (!templateMarketplace || !open) return;
+    if (!templateEligibility.eligible) {
+      setCloneRows([]);
+      return;
+    }
 
     const rows = buildClonePreview({
       templateMarketplace,
@@ -67,7 +77,7 @@ export default function CloneCoaDialog({
     });
 
     setCloneRows(rows);
-  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace]);
+  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible]);
 
   // Reset on open
   useEffect(() => {
