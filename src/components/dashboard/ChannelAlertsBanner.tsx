@@ -153,7 +153,7 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
     try {
       const [processorRes, connectionsRes, settlementsRes, fingerprintRes, subChannelsRes] = await Promise.all([
         supabase.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords'),
-        supabase.from('marketplace_connections').select('marketplace_code').eq('connection_status', 'active'),
+        supabase.from('marketplace_connections').select('marketplace_code').in('connection_status', ACTIVE_CONNECTION_STATUSES),
         supabase.from('settlements').select('marketplace').not('marketplace', 'is', null),
         supabase.from('marketplace_file_fingerprints').select('marketplace_code'),
         supabase.from('shopify_sub_channels').select('marketplace_code').eq('ignored', false).not('marketplace_code', 'is', null),

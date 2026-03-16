@@ -78,7 +78,7 @@ export default function DestinationAccountMapper() {
         supabase.functions.invoke('fetch-xero-bank-accounts'),
         supabase.from('app_settings').select('key, value').like('key', `${DESTINATION_KEY_PREFIX}%`),
         supabase.from('app_settings').select('key, value').like('key', `${LEGACY_KEY_PREFIX}%`),
-        supabase.from('marketplace_connections').select('marketplace_code, marketplace_name').eq('connection_status', 'active'),
+        supabase.from('marketplace_connections').select('marketplace_code, marketplace_name').in('connection_status', ACTIVE_CONNECTION_STATUSES),
       ]);
 
       // Bank accounts
