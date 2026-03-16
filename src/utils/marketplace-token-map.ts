@@ -111,7 +111,7 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
     for (const conn of allConnections) {
       // Always delete payment processor connections — they are gateways, not marketplaces
       if (isPaymentProcessor(conn.marketplace_code)) {
-        console.log(`[ghost-cleanup] Removing payment processor connection: ${conn.marketplace_code}`);
+        logger.debug(`[ghost-cleanup] Removing payment processor connection: ${conn.marketplace_code}`);
         await supabase.from('marketplace_connections').delete().eq('id', conn.id);
         continue;
       }
