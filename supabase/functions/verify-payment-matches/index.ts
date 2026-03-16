@@ -21,7 +21,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const GATEWAY_DETECTION: Record<string, string[]> = {
   paypal: ['paypal', 'pypl'],
@@ -47,9 +47,11 @@ interface PaymentCandidate {
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req)
-  const preflightResponse = handleCorsPreflightResponse(req)
-  if (preflightResponse) return preflightResponse
+  const origin = req.headers.get("Origin") ?? ""
+  const corsHeaders = getCorsHeaders(origin)
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders })
+  }
 
   // PAYMENT VERIFICATION LAYER ONLY
   // This function never creates accounting entries.

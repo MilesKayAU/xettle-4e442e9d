@@ -12,7 +12,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 // ⚠️ DEAD CODE: This function is permanently blocked at L66 (golden_rule_enforced).
 // This contact map is never reached. Canonical source: sync-settlement-to-xero/index.ts
@@ -36,9 +36,11 @@ function round2(n: number): number {
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req)
-  const preflightResponse = handleCorsPreflightResponse(req)
-  if (preflightResponse) return preflightResponse
+  const origin = req.headers.get("Origin") ?? ""
+  const corsHeaders = getCorsHeaders(origin)
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders })
+  }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!

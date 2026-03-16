@@ -1,6 +1,6 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 // ══════════════════════════════════════════════════════════════
 // INTERNAL FINANCIAL CATEGORIES (canonical)
@@ -30,9 +30,11 @@ const ADJUSTMENT_CATEGORY = 'adjustment';
 const PROMOTION_CATEGORY = 'promotion';
 
 Deno.serve(async (req: Request) => {
-  const corsHeaders = getCorsHeaders(req);
-  const preflightResponse = handleCorsPreflightResponse(req);
-  if (preflightResponse) return preflightResponse;
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     const authHeader = req.headers.get('Authorization');

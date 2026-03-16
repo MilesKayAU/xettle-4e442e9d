@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SYSTEM_PROMPT = `You are Xettle's accounting assistant for Australian marketplace sellers.
 You help small business owners understand their settlement data, reconciliation gaps, Xero invoices, and marketplace fees.
@@ -220,9 +220,11 @@ async function executeTool(
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  const preflightResponse = handleCorsPreflightResponse(req);
-  if (preflightResponse) return preflightResponse;
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     const authHeader = req.headers.get("Authorization");

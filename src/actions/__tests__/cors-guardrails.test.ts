@@ -52,7 +52,6 @@ describe('CORS Guardrails', () => {
     
     const content = fs.readFileSync(sharedPath, 'utf-8');
     expect(content).toContain('export function getCorsHeaders');
-    expect(content).toContain('export function handleCorsPreflightResponse');
   });
 
   it('shared cors.ts must NOT contain wildcard origin', () => {

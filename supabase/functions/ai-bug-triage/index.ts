@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SYSTEM_PROMPT = `You are a QA analyst for Xettle, an Australian marketplace accounting automation tool that connects Amazon, Shopify and other marketplaces to Xero. A user has submitted a bug report. Analyse it and respond in JSON only — no markdown, no preamble:
 {
@@ -13,9 +13,11 @@ const SYSTEM_PROMPT = `You are a QA analyst for Xettle, an Australian marketplac
 }`;
 
 serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  const preflightResponse = handleCorsPreflightResponse(req);
-  if (preflightResponse) return preflightResponse;
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     // Auth check

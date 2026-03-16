@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 const SP_API_ENDPOINTS: Record<string, string> = {
   na: 'https://sellingpartnerapi-na.amazon.com',
@@ -8,23 +8,23 @@ const SP_API_ENDPOINTS: Record<string, string> = {
 };
 
 interface AuditResult {
-  marketplace: string;
-  total_headers: number;
-  already_recorded: number;
-  missing: number;
-  missing_settlements: Array<{
-    id: string;
-    date: string;
-    amount: number;
-    status: string;
-  }>;
+  settlement_id: string;
+  period: string;
+  deposit_date: string;
+  amounts: {
+    sales: number; refunds: number; fees: number;
+    fba_fees: number; other: number; advertising: number;
+    net: number; gst_income: number; gst_expense: number;
+  };
   reconciled_pct: number;
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  const preflightResponse = handleCorsPreflightResponse(req);
-  if (preflightResponse) return preflightResponse;
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
