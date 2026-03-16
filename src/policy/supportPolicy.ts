@@ -30,8 +30,8 @@ export type TaxMode = typeof TAX_MODES[number];
 export type SupportTier = 'SUPPORTED' | 'EXPERIMENTAL' | 'UNSUPPORTED';
 
 /** AU-validated rails (known formats, tested parsers, validated GST) */
-const AU_VALIDATED_RAIL_CODES = new Set(
-  PHASE_1_RAILS.map(r => r.code)
+const AU_VALIDATED_RAIL_CODES: Set<string> = new Set(
+  PHASE_1_RAILS.map(r => r.code as string)
 );
 
 /** Currencies we've validated GST handling for */
