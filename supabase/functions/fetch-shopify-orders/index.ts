@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log("[fetch-shopify-orders] Token query result:", { found: !!tokenRow, error: tokenError?.message });
+    logger.debug("[fetch-shopify-orders] Token query result:", { found: !!tokenRow, error: tokenError?.message });
 
     if (tokenError || !tokenRow) {
       return new Response(
