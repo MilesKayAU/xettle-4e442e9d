@@ -260,8 +260,8 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const colIdx: Record<string, number> = {};
   columnHeaders.forEach((h, i) => { colIdx[h] = i; });
 
-  console.info('[Parser] Column headers:', columnHeaders);
-  console.info('[Parser] Has marketplace-name column:', 'marketplace-name' in colIdx);
+  logger.info('[Parser] Column headers:', columnHeaders);
+  logger.info('[Parser] Has marketplace-name column:', 'marketplace-name' in colIdx);
 
   const getField = (row: string[], col: string): string => {
     const idx = colIdx[col.toLowerCase()];
