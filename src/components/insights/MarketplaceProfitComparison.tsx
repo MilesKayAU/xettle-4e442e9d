@@ -261,6 +261,7 @@ export default function MarketplaceProfitComparison() {
         {data.length > 1 && (
           <p className="text-[10px] text-muted-foreground mt-2">
             Based on {data.reduce((s, d) => s + d.periods, 0)} settlement periods across {data.length} marketplaces.
+            {data.some(d => !d.has_cost_data) && ' Marketplaces marked "payout margin" use net payout ÷ gross sales (add SKU costs for true profit).'}
           </p>
         )}
       </CardContent>
