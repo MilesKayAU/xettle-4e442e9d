@@ -244,7 +244,51 @@ Deno.serve(async (req) => {
       }
 
       for (const [userId, rails] of userRails) {
-        const railCodes = rails.map(r => r.rail);
+        // Load org tax profile for tier computation
+        const { data: taxProfileSetting } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', userId)
+          .eq('key', 'tax_profile')
+          .maybeSingle();
+        const orgTaxProfile = taxProfileSetting?.value || 'AU_GST';
+
+        // Filter rails by tier eligibility
+        const eligibleRails = rails.filter(r => {
+          const tier = computeTierServer(r.rail, orgTaxProfile);
+
+          // UNSUPPORTED: always block autopost
+          if (tier === 'UNSUPPORTED') {
+            console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: UNSUPPORTED tier`);
+            return false;
+          }
+
+          // EXPERIMENTAL: only if acknowledged + force DRAFT
+          if (tier === 'EXPERIMENTAL') {
+            if (!r.support_acknowledged_at) {
+              console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: EXPERIMENTAL not acknowledged`);
+              return false;
+            }
+            // Force DRAFT for experimental rails
+            r.invoice_status = 'DRAFT';
+          }
+
+          // REVIEW_EACH_SETTLEMENT blocks autopost
+          if (r.tax_mode === 'REVIEW_EACH_SETTLEMENT') {
+            console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: REVIEW_EACH_SETTLEMENT tax mode`);
+            return false;
+          }
+
+          // SUPPORTED but AUTHORISED: only for SUPPORTED tier
+          if (tier !== 'SUPPORTED' && r.invoice_status === 'AUTHORISED') {
+            r.invoice_status = 'DRAFT';
+          }
+
+          return true;
+        });
+
+        const railCodes = eligibleRails.map(r => r.rail);
+        if (railCodes.length === 0) continue;
 
         // BLOCKER #1: require reconciliation_status = 'matched'
         const { data: settlements } = await supabase
@@ -263,20 +307,13 @@ Deno.serve(async (req) => {
 
         // Filter to only postable settlements
         const postable = settlements.filter(s => {
-          // Skip already posted
           if (s.posting_state === 'posted') return false;
-          // Skip actively posting (unless stale — already recovered above)
           if (s.posting_state === 'posting') return false;
-          // Skip manual_hold (repost waiting for manual push)
           if (s.posting_state === 'manual_hold') return false;
-          // Skip if over retry limit
           if (s.posting_state === 'failed' && (s.push_retry_count || 0) >= MAX_RETRY_COUNT) return false;
-          // Only allow null or failed posting_state
           if (s.posting_state !== null && s.posting_state !== 'failed') return false;
-          // Check bank match requirement
-          const railConfig = rails.find(r => r.rail === s.marketplace);
+          const railConfig = eligibleRails.find(r => r.rail === s.marketplace);
           if (railConfig?.require_bank_match && !s.bank_verified) return false;
-          // ── DATE GATE (Option A): only auto-post settlements created AFTER auto_post_enabled_at ──
           if (railConfig?.auto_post_enabled_at) {
             const enabledAt = new Date(railConfig.auto_post_enabled_at).getTime();
             const createdAt = new Date(s.created_at).getTime();
@@ -289,11 +326,10 @@ Deno.serve(async (req) => {
         const BATCH_SLEEP_MS = 2000;
         for (let i = 0; i < postable.length; i++) {
           const s = postable[i];
-          const railConfig = rails.find(r => r.rail === s.marketplace);
+          const railConfig = eligibleRails.find(r => r.rail === s.marketplace);
           const invoiceStatus = railConfig?.invoice_status || 'DRAFT';
           const result = await processSettlement(supabase, s.id, userId, invoiceStatus);
           results.push(result);
-          // Throttle: sleep between pushes (not after last one)
           if (i < postable.length - 1) {
             await new Promise(resolve => setTimeout(resolve, BATCH_SLEEP_MS));
           }
