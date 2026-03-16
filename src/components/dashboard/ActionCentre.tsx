@@ -142,6 +142,8 @@ export default function ActionCentre({
     period_start: string; period_end: string; bank_deposit: number | null;
   }>>([]);
   const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
+  // Settlement-level pipeline fallback: marketplace+month → stage summary
+  const [settlementPipeline, setSettlementPipeline] = useState<Map<string, PipelineStage>>(new Map());
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
