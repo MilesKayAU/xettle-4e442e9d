@@ -245,6 +245,24 @@
 
 | Create account in Xero | `AccountMapperCard.tsx` → `createXeroAccounts()` | Xero API (PUT /Accounts), `xero_chart_of_accounts`, `system_events` | dedup-check (code vs cached COA) | ✅ `createXeroAccounts()` |
 
+### COA Clone Flow (Sitewide Guided)
+
+| Entry Point | File | Canonical Actions Used | Tables Written | Notes |
+|---|---|---|---|---|
+| Settings → Account Mapper | `AccountMapperCard.tsx` | `buildClonePreview()`, `executeCoaClone()`, `logCloneEvent()` | Xero API, `xero_chart_of_accounts`, `system_events` | PIN-gated, original path |
+| PushSafetyPreview (MAPPING_REQUIRED) | `PushSafetyPreview.tsx` → `CoaBlockerCta` | Same canonical actions | Same | Inline CTA when push blocked |
+| Onboarding connect flow | `SetupStepConnectStores.tsx` → `CoaBlockerCta` | `getMarketplaceCoverage()` + clone | Same | Post-provision gap detection |
+| Compare drawer (BLOCKED) | `SettlementDetailDrawer.tsx` → `CoaBlockerCta` | Same | Same | Future: wire when BLOCKED verdict surfaces |
+
+### Clone Safety Invariants
+
+- Clone always requires PIN verification (client-side gate)
+- Clone always shows preview before executing (no automatic creation)
+- `buildClonePreview()` is pure logic — no side effects
+- `executeCoaClone()` calls `createXeroAccounts()` canonical action (admin-gated server-side)
+- Auto-map after clone writes to `app_settings` (draft mappings only)
+- All events logged to `system_events`: `coa_clone_previewed`, `coa_clone_executed`, `coa_clone_failed`, `coa_clone_cancelled`
+
 ### Canonical Action: `src/actions/xeroAccounts.ts`
 
 - `refreshXeroCOA()` — invokes `refresh-xero-coa` edge function
@@ -260,3 +278,4 @@
 - No component may write directly to `xero_chart_of_accounts` or `xero_tax_rates`
 - Account codes validated against cached COA before save
 - Account creation gated server-side by admin role check
+- COA clone reachable from multiple surfaces via `CoaBlockerCta` shared component (all use same canonical path)
