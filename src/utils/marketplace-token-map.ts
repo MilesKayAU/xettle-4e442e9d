@@ -134,7 +134,7 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
       // Channel alerts alone are NOT sufficient — a Xero contact or bank narration
       // doesn't prove the user sells on that platform. Only actual settlement data does.
       if (conn.connection_type === 'auto_detected') {
-        console.log(`[ghost-cleanup] Removing auto_detected connection with no settlements: ${conn.marketplace_code}`);
+        logger.debug(`[ghost-cleanup] Removing auto_detected connection with no settlements: ${conn.marketplace_code}`);
         await supabase.from('marketplace_connections').delete().eq('id', conn.id);
         continue;
       }
