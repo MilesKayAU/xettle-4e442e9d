@@ -130,7 +130,11 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [showBookkeeperInfo, setShowBookkeeperInfo] = useState(false);
   const [pushStats, setPushStats] = useState<{ invoiceCount: number; totalRevenue: number; totalGst: number } | null>(null);
-  const [aiSuggestions, setAiSuggestions] = useState<Record<number, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>({}); 
+  const [aiSuggestions, setAiSuggestions] = useState<Record<number, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>({});
+
+  // PushSafetyPreview state — Golden Rule enforcement
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
 
   // Profit engine
   const [profitResult, setProfitResult] = useState<ProfitEngineResult | null>(null);
