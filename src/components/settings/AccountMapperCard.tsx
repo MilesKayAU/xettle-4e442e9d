@@ -304,26 +304,29 @@ export default function AccountMapperCard() {
   }, [splitByMarketplace]);
 
   const handleSplitToggle = async (enabled: boolean) => {
-    setSplitByMarketplace(enabled);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'accounting_split_by_marketplace',
-        value: enabled ? 'true' : 'false',
-      } as any, { onConflict: 'user_id,key' });
+    const doToggle = async () => {
+      setSplitByMarketplace(enabled);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        await supabase.from('app_settings').upsert({
+          user_id: user.id,
+          key: 'accounting_split_by_marketplace',
+          value: enabled ? 'true' : 'false',
+        } as any, { onConflict: 'user_id,key' });
 
-      if (!enabled) {
-        const cleaned = { ...editableMapping };
-        for (const key of Object.keys(cleaned)) {
-          if (key.includes(':')) delete cleaned[key];
+        if (!enabled) {
+          const cleaned = { ...editableMapping };
+          for (const key of Object.keys(cleaned)) {
+            if (key.includes(':')) delete cleaned[key];
+          }
+          setEditableMapping(cleaned);
         }
-        setEditableMapping(cleaned);
+      } catch (e) {
+        console.error('Failed to save split toggle:', e);
       }
-    } catch (e) {
-      console.error('Failed to save split toggle:', e);
-    }
+    };
+    settingsPin.requirePin(doToggle);
   };
 
   const handleConfirm = async () => {
