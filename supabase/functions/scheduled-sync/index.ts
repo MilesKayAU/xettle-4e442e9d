@@ -413,6 +413,7 @@ Deno.serve(async (req) => {
       pipeline: 'xero_first_v1',
       sync_from: userSyncFromMap[userId] || defaultSyncFrom,
       amazon: results.amazon?.results?.find((r: any) => r.user_id === userId) || (results.amazon?.error ? { error: results.amazon.error, timed_out: results.amazon.timed_out || false } : null),
+      ebay: results.ebay?.results?.find((r: any) => r.user_id === userId) || (results.ebay?.error ? { error: results.ebay.error, timed_out: results.ebay.timed_out || false } : null),
       shopify: results.shopify?.results?.find((r: any) => r.user_id === userId) || (results.shopify?.error ? { error: results.shopify.error, timed_out: results.shopify.timed_out || false } : null),
       xero_push: results.xero_push?.results?.find((r: any) => r.userId === userId) || null,
       xero_audit: results.xero_audit?.results?.find((r: any) => r.user_id === userId) || null,
