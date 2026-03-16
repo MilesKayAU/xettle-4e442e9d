@@ -149,3 +149,10 @@ export {
   mergeIntoConfirmedMappings,
   type AccountMappings,
 } from './accountMappings';
+
+// ─── Sync Actions ────────────────────────────────────────────────────────────
+export {
+  runXeroSync,
+  runMarketplaceSync,
+  type SyncActionResult,
+} from './sync';
