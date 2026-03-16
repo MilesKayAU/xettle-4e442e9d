@@ -23,6 +23,7 @@
 
 import type { StandardSettlement } from './settlement-engine';
 import { parseDateOrEmpty } from './date-parser';
+import { TOL_PAYOUT_MATCH } from '@/constants/reconciliation-tolerance';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
