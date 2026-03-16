@@ -3,11 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle2, AlertTriangle, Loader2, ArrowRight, Search, PartyPopper, SkipForward, Upload, Clock3 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2, ArrowRight, Search, PartyPopper, SkipForward, Upload, Clock3, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 import { detectCapabilities, callEdgeFunctionSafe, type SyncCapabilities } from '@/utils/sync-capabilities';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
+import BackfillHorizonSelector from './BackfillHorizonSelector';
+import SettlementCoverageMap, { type CoverageData } from './SettlementCoverageMap';
+import OnboardingTodos from './OnboardingTodos';
 
 interface Props {
   onNext: () => void;
@@ -37,15 +40,16 @@ interface PhaseBData {
 }
 
 const SCAN_TIMEOUT_MS = 180_000; // 3 minutes
-const POLL_INTERVAL_MS = 5_000;
 
 export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopify }: Props) {
-  const [phase, setPhase] = useState<'scanning' | 'complete'>('scanning');
+  const [phase, setPhase] = useState<'horizon' | 'scanning' | 'complete'>('horizon');
+  const [lookbackDays, setLookbackDays] = useState(45);
   const [stepStatuses, setStepStatuses] = useState<StepStatus[]>([]);
   const [stepMessages, setStepMessages] = useState<string[]>([]);
   const [progressPercent, setProgressPercent] = useState(0);
   const [phaseBData, setPhaseBData] = useState<PhaseBData | null>(null);
   const [timedOut, setTimedOut] = useState(false);
+  const [coverageData, setCoverageData] = useState<CoverageData | null>(null);
   const hasStarted = useRef(false);
   const scanStartTime = useRef(Date.now());
   const stepStatusesRef = useRef<StepStatus[]>([]);
@@ -65,25 +69,20 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
     { label: 'Building your marketplace picture…', fn: 'run-validation-sweep' },
   ];
 
-  // Initialize statuses
-  useEffect(() => {
-    setStepStatuses(allSteps.map(() => 'pending'));
-    setStepMessages(allSteps.map(() => ''));
-  }, []);
-
   const updateStep = useCallback((idx: number, status: StepStatus, message?: string) => {
     setStepStatuses(prev => { const n = [...prev]; n[idx] = status; stepStatusesRef.current = n; return n; });
     if (message) setStepMessages(prev => { const n = [...prev]; n[idx] = message; return n; });
   }, []);
 
-  // Run scans
-  useEffect(() => {
+  const startScans = useCallback(() => {
     if (hasStarted.current) return;
     hasStarted.current = true;
     scanStartTime.current = Date.now();
+    setPhase('scanning');
+    setStepStatuses(allSteps.map(() => 'pending'));
+    setStepMessages(allSteps.map(() => ''));
 
     if (!hasAnyApi) {
-      // No APIs - skip straight to complete
       setStepStatuses(allSteps.map(() => 'success'));
       setProgressPercent(100);
       loadPhaseBData().then(() => setPhase('complete'));
@@ -103,7 +102,6 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           if (cancelled) return;
           const step = allSteps[i];
 
-          // Check capability
           if (step.requiresCapability && !caps[step.requiresCapability]) {
             updateStep(i, 'skipped', 'Not connected');
             updateProgress(i + 1);
@@ -132,6 +130,12 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           if (step.fn) {
             const body: Record<string, unknown> = {};
             const headers: Record<string, string> = {};
+
+            // Pass lookback_days to edge functions
+            if (step.fn === 'fetch-amazon-settlements' || step.fn === 'fetch-shopify-payouts') {
+              body.lookback_days = lookbackDays;
+            }
+
             if (step.fn === 'fetch-shopify-orders' && caps.shopDomain) {
               body.shopDomain = caps.shopDomain;
               body.channelDetectionOnly = true;
@@ -145,14 +149,13 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
             if (result.ok) {
               updateStep(i, 'success');
               if (step.fn === 'fetch-shopify-orders') shopifyOrdersFetched = true;
-              // Write completion flag
               if (step.flagKey) {
-            try {
-                await supabase.from('app_settings').upsert(
-                  { user_id: caps.userId!, key: step.flagKey, value: 'true' },
-                  { onConflict: 'user_id,key' }
-                );
-              } catch {}
+                try {
+                  await supabase.from('app_settings').upsert(
+                    { user_id: caps.userId!, key: step.flagKey, value: 'true' },
+                    { onConflict: 'user_id,key' }
+                  );
+                } catch {}
               }
             } else if (result.rateLimited || result.statusCode === 429) {
               updateStep(i, 'rate_limited', 'Waiting for API — will retry automatically');
@@ -167,7 +170,6 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           updateProgress(i + 1);
         }
 
-        // Write remaining flags
         const writeFlag = async (key: string) => {
           try {
             await supabase.from('app_settings').upsert(
@@ -183,17 +185,24 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
         }
         if (caps.hasXero) await writeFlag('xero_scan_completed');
 
-        // Check if any step ended in rate_limited — don't mark as fully complete
         const hasRateLimited = stepStatusesRef.current.some(s => s === 'rate_limited');
         if (caps.hasAmazon && !hasRateLimited) {
           await writeFlag('amazon_scan_completed');
         }
 
+        // Mark onboarding completed
+        await writeFlag('onboarding_completed_at');
+        try {
+          await supabase.from('app_settings').upsert(
+            { user_id: caps.userId!, key: 'onboarding_completed_at', value: new Date().toISOString() },
+            { onConflict: 'user_id,key' }
+          );
+        } catch {}
+
         if (!cancelled) {
           setProgressPercent(100);
           await loadPhaseBData();
           if (hasRateLimited) {
-            // Stay in scanning phase but show a "still syncing" message
             setTimedOut(true);
           } else {
             setPhase('complete');
@@ -211,7 +220,6 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
 
     runScans();
 
-    // 3 minute timeout
     const timeout = setTimeout(() => {
       if (!cancelled && phase === 'scanning') {
         setTimedOut(true);
@@ -221,7 +229,7 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
     }, SCAN_TIMEOUT_MS);
 
     return () => { cancelled = true; clearTimeout(timeout); };
-  }, []);
+  }, [lookbackDays]);
 
   const updateProgress = (completedSteps: number) => {
     const total = allSteps.length;
@@ -263,6 +271,24 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
     }
   };
 
+  const handleIgnoreMarketplace = async (code: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: existing } = await supabase.from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'ignored_marketplaces')
+        .maybeSingle();
+      const list: string[] = existing?.value ? JSON.parse(existing.value) : [];
+      if (!list.includes(code)) list.push(code);
+      await supabase.from('app_settings').upsert(
+        { user_id: user.id, key: 'ignored_marketplaces', value: JSON.stringify(list) },
+        { onConflict: 'user_id,key' }
+      );
+    } catch { /* silent */ }
+  };
+
   const getStepIcon = (status: StepStatus) => {
     switch (status) {
       case 'success': return <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />;
@@ -273,6 +299,32 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
       default: return <div className="h-4 w-4 rounded-full border border-muted-foreground/30 flex-shrink-0" />;
     }
   };
+
+  // ═══════════════════════════════════════════
+  // Phase 0 — Horizon selection
+  // ═══════════════════════════════════════════
+  if (phase === 'horizon') {
+    return (
+      <div className="space-y-6">
+        <div className="text-center space-y-2">
+          <Search className="h-8 w-8 text-primary mx-auto" />
+          <h2 className="text-xl font-bold text-foreground">Before we scan…</h2>
+          <p className="text-sm text-muted-foreground">
+            Choose how far back to check for settlement coverage. You can always backfill more later.
+          </p>
+        </div>
+
+        <BackfillHorizonSelector
+          defaultDays={lookbackDays}
+          onSelect={setLookbackDays}
+        />
+
+        <Button onClick={startScans} className="w-full">
+          Start scanning <ArrowRight className="h-4 w-4 ml-1" />
+        </Button>
+      </div>
+    );
+  }
 
   // ═══════════════════════════════════════════
   // Phase A — Scanning in progress
@@ -298,13 +350,11 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           )}
         </div>
 
-        {/* Progress bar */}
         <div className="space-y-1">
           <Progress value={progressPercent} className="h-2" />
           <p className="text-xs text-muted-foreground text-right">{progressPercent}%</p>
         </div>
 
-        {/* Scan steps */}
         <div className="max-w-sm mx-auto space-y-3">
           {allSteps.map((step, i) => (
             <div
@@ -332,7 +382,6 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           ))}
         </div>
 
-        {/* Action buttons */}
         <div className="flex gap-3">
           <Button variant="outline" onClick={onNext} className="flex-1">
             Go to Dashboard — I'll watch it update <ArrowRight className="h-4 w-4 ml-1" />
@@ -361,6 +410,15 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
             Most scans complete — some may still be finishing. Your dashboard will update automatically.
           </p>
         )}
+      </div>
+
+      {/* "Ready from today" message */}
+      <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+        <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">You're ready to go from today onward.</span>{' '}
+          Backfill items below are optional — only fill gaps where you see evidence of activity.
+        </p>
       </div>
 
       {/* Summary stats */}
@@ -411,12 +469,6 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
             <span className="text-foreground">Xero: {data!.xeroRecords} existing record{data!.xeroRecords > 1 ? 's' : ''} found</span>
           </div>
         )}
-        {(data?.uploadNeeded || 0) > 0 && (
-          <div className="flex items-center gap-3 text-sm">
-            <Upload className="h-4 w-4 text-amber-500 flex-shrink-0" />
-            <span className="text-muted-foreground">Upload needed: {data!.uploadNeeded} marketplace{data!.uploadNeeded > 1 ? 's' : ''}</span>
-          </div>
-        )}
         {!hasResults && hasAnyApi && (
           <Card className="border-primary/20 bg-primary/5">
             <CardContent className="p-3">
@@ -432,6 +484,21 @@ export default function SetupStepResults({ onNext, hasXero, hasAmazon, hasShopif
           </p>
         )}
       </div>
+
+      {/* Settlement Coverage Map */}
+      <SettlementCoverageMap
+        lookbackDays={lookbackDays}
+        onIgnoreMarketplace={handleIgnoreMarketplace}
+        onCoverageComputed={setCoverageData}
+      />
+
+      {/* Onboarding To-Dos */}
+      <OnboardingTodos
+        coverageData={coverageData}
+        onUpload={() => onNext()}
+        onConnect={() => onNext()}
+        onReview={() => onNext()}
+      />
 
       <Button onClick={onNext} className="w-full">
         Go to Dashboard <ArrowRight className="h-4 w-4 ml-1" />
