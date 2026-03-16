@@ -482,6 +482,13 @@ export default function AccountMapperCard() {
       );
     }
 
+    // Determine suggested account type for creation
+    const suggestedType = isRevenue ? 'REVENUE' : 'EXPENSE';
+    // Extract marketplace name from key if it's a split key like "Sales:Amazon AU"
+    const keyParts = key.split(':');
+    const marketplaceName = keyParts.length > 1 ? keyParts[1] : undefined;
+    const baseCategory = keyParts[0];
+
     return (
       <AccountCombobox
         accounts={relevantAccounts}
@@ -489,6 +496,22 @@ export default function AccountMapperCard() {
         value={currentValue}
         onChange={(v) => setEditableMapping(prev => ({ ...prev, [key]: v }))}
         placeholder={placeholder}
+        isAdmin={isAdmin}
+        suggestedType={suggestedType}
+        suggestedNameContext={marketplaceName ? `${marketplaceName} ${baseCategory}` : baseCategory}
+        existingCodes={allAccounts.map(a => a.account_code || '').filter(Boolean)}
+        onAccountCreated={async () => {
+          // Refresh COA after account creation
+          const [accounts, lastSynced] = await Promise.all([
+            getCachedXeroAccounts(),
+            getCoaLastSyncedAt(),
+          ]);
+          setCoaAccounts(accounts);
+          setCoaLastSynced(lastSynced);
+        }}
+        onSelectCreated={(code) => {
+          setEditableMapping(prev => ({ ...prev, [key]: code }));
+        }}
       />
     );
   };
