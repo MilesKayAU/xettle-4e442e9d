@@ -163,8 +163,9 @@ describe('Canonical action guardrails', () => {
   });
 
   it('no UI files implement their own tier computation (must use supportPolicy)', () => {
-    // Guard against local tier/gating logic in components
-    const violations = scanForPattern(/computeSupportTier|AU_VALIDATED_RAILS/, ['actions', 'policy']);
+    // Guard against local tier/gating logic — reimplementing AU_VALIDATED_RAILS locally
+    // Importing from @/policy/supportPolicy is allowed (that's the canonical source)
+    const violations = scanForPattern(/AU_VALIDATED_RAILS/, ['actions', 'policy']);
     expect(violations, `Local tier computation found outside policy module:\n${formatViolations(violations)}`).toEqual([]);
   });
 });
