@@ -1215,7 +1215,7 @@ serve(async (req) => {
     const railNormalised = (marketplace || '').toLowerCase();
     const pushTier = (AU_VALIDATED_RAILS.has(railNormalised) && orgTaxProfile === 'AU_GST')
       ? 'SUPPORTED'
-      : AU_VALIDATED_RAILS.has(railNormalised) ? 'EXPERIMENTAL' : 'EXPERIMENTAL';
+      : AU_VALIDATED_RAILS.has(railNormalised) ? 'EXPERIMENTAL' : 'UNSUPPORTED';
 
     const requestedStatus = body.invoiceStatus || 'DRAFT';
     let finalInvoiceStatus = 'DRAFT';

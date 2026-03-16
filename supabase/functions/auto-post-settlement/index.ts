@@ -269,8 +269,16 @@ Deno.serve(async (req) => {
               console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: EXPERIMENTAL not acknowledged`);
               return false;
             }
-            // Force DRAFT for experimental rails
+            // Force DRAFT for experimental rails — log for audit trail
+            const originalStatus = r.invoice_status;
             r.invoice_status = 'DRAFT';
+            await supabase.from('system_events').insert({
+              user_id: userId,
+              event_type: 'experimental_draft_forced',
+              severity: 'info',
+              marketplace_code: r.rail,
+              details: { tier: 'EXPERIMENTAL', original_status: originalStatus, enforced: 'DRAFT' },
+            });
           }
 
           // REVIEW_EACH_SETTLEMENT blocks autopost
