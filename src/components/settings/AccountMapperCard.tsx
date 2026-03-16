@@ -965,6 +965,7 @@ export default function AccountMapperCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         {renderCoaRefreshStrip()}
+        {renderCloneBanner()}
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           {CATEGORIES.map((cat) => {
