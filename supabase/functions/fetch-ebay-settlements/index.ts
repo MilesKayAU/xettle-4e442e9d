@@ -616,7 +616,26 @@ Deno.serve(async (req) => {
           continue
         }
 
-        if (isUpdate) {
+        // ─── Persist settlement_lines (non-fatal) ────────────────
+        const payoutDateStr = (payout.payoutDate || '').split('T')[0]
+        const linesResult = await persistSettlementLines(
+          userAdminClient, userId, settlementId, transactions, payoutDateStr,
+        )
+        if (linesResult.error) {
+          console.warn(`[fetch-ebay-settlements] settlement_lines partial/failed for ${settlementId}: ${linesResult.error}`)
+          await userAdminClient.from('system_events').insert({
+            user_id: userId,
+            event_type: 'settlement_lines_write_failed',
+            severity: 'warning',
+            marketplace_code: 'ebay_au',
+            settlement_id: settlementId,
+            details: { error: linesResult.error, lines_written: linesResult.count },
+          })
+        } else {
+          console.log(`[fetch-ebay-settlements] Wrote ${linesResult.count} settlement_lines for ${settlementId}`)
+        }
+
+
           const prev = existing[0]
           const changed = prev.bank_deposit !== settlement.bank_deposit || prev.sales_principal !== settlement.sales_principal
           if (changed) {
