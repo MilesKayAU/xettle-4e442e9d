@@ -1011,7 +1011,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
             sync_origin: 'xettle',
             posted_at: new Date().toISOString(),
           } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
-          console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
+          logger.debug(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
         } else {
           console.log(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking`);
         }
