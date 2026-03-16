@@ -50,6 +50,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
           readyToPush,
           awaitingReconciliation,
           reconAlerts: reconAlerts.count ?? 0,
+          backfillGaps: 0, // Will be populated by coverage map logic post-onboarding
         });
       } catch {
         // silent

@@ -598,13 +598,27 @@ Deno.serve(async (req) => {
     }
 
     let result;
+    // Parse optional lookback_days from request body
+    let parsedLookbackDays: number | undefined;
+    let syncFromOverride: string | undefined;
+    try {
+      const body = await req.json();
+      if (body?.lookback_days && typeof body.lookback_days === 'number') {
+        parsedLookbackDays = body.lookback_days;
+        const lookbackDate = new Date(Date.now() - parsedLookbackDays * 24 * 60 * 60 * 1000);
+        syncFromOverride = lookbackDate.toISOString().split('T')[0];
+        console.log(`[fetch-shopify-payouts] lookback_days=${parsedLookbackDays} → sync_from=${syncFromOverride}`);
+      }
+    } catch { /* no body */ }
+
     try {
       result = await syncPayoutsForUser(
         supabase,
         userId,
         tokenRow.access_token,
         tokenRow.shop_domain,
-        false // enforce cooldown for manual syncs
+        false, // enforce cooldown for manual syncs
+        syncFromOverride,
       );
     } finally {
       // Always release lock
