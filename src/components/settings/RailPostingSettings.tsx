@@ -251,7 +251,7 @@ export default function RailPostingSettings() {
                         </label>
                         {!defaultBankMatch && !setting.require_bank_match && (
                           <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
-                            <Shield className="h-2.5 w-2.5" /> Settlement-confirmed
+                            <Shield className="h-2.5 w-2.5" /> Settlement confirms payout (bank match optional)
                           </span>
                         )}
                       </div>
