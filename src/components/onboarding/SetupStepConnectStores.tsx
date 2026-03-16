@@ -611,8 +611,33 @@ export default function SetupStepConnectStores({
             Every platform is optional. You can add or remove marketplaces anytime.
           </p>
 
+          {/* COA gap resolution prompt */}
+          {coaGapMarketplace && (
+            <div className="space-y-3">
+              <CoaBlockerCta
+                marketplace={coaGapMarketplace}
+                onResolved={() => {
+                  setCoaGapMarketplace(null);
+                  toast.success('COA gap resolved — continuing setup.');
+                  onNext();
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={() => {
+                  setCoaGapMarketplace(null);
+                  onNext();
+                }}
+              >
+                Skip — I'll set up accounts later
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-col items-center gap-2">
-            <Button onClick={handleContinueFromMarketplaceStep} className="w-full" disabled={persistingSelections}>
+            <Button onClick={handleContinueFromMarketplaceStep} className="w-full" disabled={persistingSelections || !!coaGapMarketplace}>
               {persistingSelections ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving selections...</> : 'Continue'}
             </Button>
             <div className="flex items-center justify-between w-full">
