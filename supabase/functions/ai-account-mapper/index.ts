@@ -647,7 +647,7 @@ Return JSON with this structure:
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error: any) {
-    console.error('[ai-account-mapper] Error:', error.message)
+    logger.error('[ai-account-mapper] Error:', error.message)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

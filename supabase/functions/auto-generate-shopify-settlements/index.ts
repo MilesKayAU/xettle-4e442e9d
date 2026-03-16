@@ -419,7 +419,7 @@ Deno.serve(async (req) => {
         .from("settlements")
         .insert(settlementRecord);
       if (!error) settlementsCreated++;
-      else console.error(`[auto-gen-settlements] insert error for ${settlementId}:`, error);
+      else logger.error(`[auto-gen-settlements] insert error for ${settlementId}:`, error);
     }
 
     // ══════════════════════════════════════════════════════════════

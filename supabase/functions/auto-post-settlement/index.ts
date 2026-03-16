@@ -772,7 +772,7 @@ async function processSettlement(
     return { settlement_id: sid, result: 'posted' };
 
   } catch (err: any) {
-    console.error(`[auto-post-settlement] Error posting ${sid}:`, err);
+    logger.error(`[auto-post-settlement] Error posting ${sid}:`, err);
 
     await supabase.from('settlements').update({
       posting_state: 'failed',

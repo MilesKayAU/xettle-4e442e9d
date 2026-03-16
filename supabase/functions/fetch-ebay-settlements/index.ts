@@ -56,7 +56,7 @@ async function getEbayAccessToken(
 
   const refreshData = await refreshResponse.json()
   if (!refreshResponse.ok || !refreshData.access_token) {
-    console.error('[fetch-ebay-settlements] Token refresh failed:', refreshData)
+    logger.error('[fetch-ebay-settlements] Token refresh failed:', refreshData)
     return { access_token: '', error: 'Token refresh failed' }
   }
 
