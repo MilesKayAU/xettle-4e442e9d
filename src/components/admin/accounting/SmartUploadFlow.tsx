@@ -1010,7 +1010,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 userId: user.id,
                 marketplaceCode: marketplace,
                 columnSignature: extracted.headers,
-                columnMapping: df.detection?.columnMapping || {},
+                columnMapping: (df.detection?.columnMapping || {}) as Record<string, string>,
                 parserType: 'generic',
                 confidence: df.detection?.confidence || undefined,
                 filePattern: df.file.name.replace(/\d+/g, '*'),
