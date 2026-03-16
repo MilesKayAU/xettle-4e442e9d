@@ -296,11 +296,11 @@ export default function Dashboard() {
             .select('key')
             .like('key', 'payout_account:%')
             .limit(1),
-          // Fetch marketplace account mappings to compute blocking count
+          // Fetch confirmed mapping timestamp from app_settings
           supabase
-            .from('marketplace_account_mapping')
-            .select('marketplace_code, category, updated_at')
-            .order('updated_at', { ascending: false }),
+            .from('app_settings')
+            .select('key, value, updated_at')
+            .eq('key', 'accounting_xero_account_codes'),
           supabase.auth.getUser(),
         ]);
         const flagMap = new Map(flagsResp.data?.map(f => [f.key, f.value]) || []);
