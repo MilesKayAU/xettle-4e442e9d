@@ -543,7 +543,7 @@ export default function Landing() {
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
               <p className="text-4xl font-bold text-primary mb-3">✓</p>
               <p className="text-sm text-muted-foreground">
-                Fingerprint-based dedup and idempotent syncing guard against duplicate invoices
+                Fingerprint-based deduplication and idempotent syncing help guard against duplicate invoices
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
