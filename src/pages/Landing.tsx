@@ -428,7 +428,7 @@ export default function Landing() {
               </div>
               <h3 className="text-base font-semibold text-foreground mb-2">Coverage tracking</h3>
               <p className="text-sm text-muted-foreground">
-                See which periods have settlements, which are missing, and which have gaps — across every marketplace, on one screen.
+                See which periods have settlements, which are missing, and which have gaps — across every marketplace, on one screen. Some marketplace exports may not include transaction-level drilldown. Xettle warns you when drilldown is unavailable.
               </p>
             </div>
           </div>
