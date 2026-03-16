@@ -305,6 +305,12 @@ export default function RailPostingSettings() {
 
   return (
     <>
+      <SettingsPinDialog
+        open={settingsPin.showDialog}
+        onVerify={settingsPin.verifyPin}
+        onSuccess={settingsPin.unlock}
+        onCancel={settingsPin.cancelDialog}
+      />
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
