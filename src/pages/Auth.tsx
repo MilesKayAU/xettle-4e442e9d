@@ -362,7 +362,43 @@ export default function Auth() {
                         placeholder="Confirm your password" required disabled={isLoading}
                         autoComplete="new-password" maxLength={128} />
                     </div>
-                    <Button type="submit" className="w-full" disabled={isLoading || !signUpData.email || !signUpData.password || !signUpData.confirmPassword}>
+
+                    {/* Settings PIN */}
+                    <div className="border-t pt-4 mt-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Shield className="h-4 w-4 text-primary" />
+                        <Label className="text-sm font-medium">Settings PIN</Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Create a 4-digit PIN to protect sensitive settings like Xero account changes.
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="signup-pin" className="text-xs">PIN</Label>
+                          <Input id="signup-pin" type="password" inputMode="numeric"
+                            value={signUpData.settingsPin}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                              setSignUpData(prev => ({ ...prev, settingsPin: v }));
+                            }}
+                            placeholder="••••" required disabled={isLoading}
+                            autoComplete="off" maxLength={4} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="signup-pin-confirm" className="text-xs">Confirm PIN</Label>
+                          <Input id="signup-pin-confirm" type="password" inputMode="numeric"
+                            value={signUpData.confirmSettingsPin}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                              setSignUpData(prev => ({ ...prev, confirmSettingsPin: v }));
+                            }}
+                            placeholder="••••" required disabled={isLoading}
+                            autoComplete="off" maxLength={4} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button type="submit" className="w-full" disabled={isLoading || !signUpData.email || !signUpData.password || !signUpData.confirmPassword || signUpData.settingsPin.length !== 4}>
                       {isLoading ? <LoadingSpinner size="sm" text="Creating Account..." /> : "Create Account"}
                     </Button>
                   </form>
