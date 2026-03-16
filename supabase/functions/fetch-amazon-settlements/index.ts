@@ -604,7 +604,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
               } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
               logger.debug(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
             } else {
-              console.log(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking (requires user review)`);
+              logger.debug(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking (requires user review)`);
             }
           }
 
