@@ -683,7 +683,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
 
     // ─── Fingerprint Lifecycle Gate ─────────────────────────────────
     if (settlement.fingerprint_id) {
-      const { validateDraftGates, getFingerprintById } = await import('./fingerprint-lifecycle');
+      const { validateDraftGates, validateFormatGates, getFingerprintById, logDriftDetected, autoDemoteFingerprint } = await import('./fingerprint-lifecycle');
       const fp = await getFingerprintById(settlement.fingerprint_id);
 
       if (fp && fp.status === 'rejected') {
@@ -692,6 +692,45 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
           error: 'This format has been rejected. Please re-map columns or contact support.',
           blockedGates: ['Format rejected'],
         };
+      }
+
+      // ─── Active Fingerprint Drift Detection ──────────────────────
+      if (fp && fp.status === 'active') {
+        const driftResult = validateFormatGates(settlement, fp);
+
+        if (!driftResult.passed) {
+          // Get user for logging
+          let actorUserId = 'unknown';
+          try {
+            const { data: { user: driftUser } } = await supabase.auth.getUser();
+            if (driftUser) actorUserId = driftUser.id;
+          } catch {}
+
+          // Always log drift detection
+          await logDriftDetected({
+            userId: actorUserId,
+            fingerprintId: fp.id,
+            marketplaceCode: settlement.marketplace,
+            failedGates: driftResult.failedGates,
+            settlementId: settlement.settlement_id,
+          });
+
+          // Auto-demote on hard failures (missing dates, sanity_failed, payout mismatch)
+          if (driftResult.hardFailure) {
+            await autoDemoteFingerprint({
+              fingerprintId: fp.id,
+              marketplaceCode: settlement.marketplace,
+              userId: actorUserId,
+              failedGates: driftResult.failedGates,
+            });
+          }
+
+          return {
+            success: false,
+            error: 'This settlement format appears to have changed. Please re-map columns.',
+            blockedGates: driftResult.failedGates,
+          };
+        }
       }
 
       if (fp && fp.status === 'draft') {

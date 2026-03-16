@@ -34,7 +34,70 @@ export interface DraftValidationResult {
   warnings: string[];
 }
 
-// ─── Validation Gates ───────────────────────────────────────────────────────
+// ─── Shared Format Gate Validation ──────────────────────────────────────────
+
+export interface FormatGateResult {
+  passed: boolean;
+  failedGates: string[];
+  hardFailure: boolean; // true = missing dates, sanity_failed, payout mismatch
+}
+
+/**
+ * Run the core validation gates against a settlement + fingerprint.
+ * Used by both draft promotion and active-fingerprint drift detection.
+ */
+export function validateFormatGates(
+  settlement: StandardSettlement,
+  fingerprint: FingerprintRecord,
+): FormatGateResult {
+  const failedGates: string[] = [];
+  let hardFailure = false;
+
+  // Gate 1: Dates must be present (NO fallback to today)
+  if (!settlement.period_start || !settlement.period_end) {
+    failedGates.push('missing_dates');
+    hardFailure = true;
+  }
+
+  // Gate 2: Net payout exists and is non-zero (or computable)
+  if (settlement.net_payout === 0 && Math.abs(settlement.sales_ex_gst) > 100) {
+    failedGates.push('payout_mismatch');
+    hardFailure = true;
+  }
+
+  // Gate 3: Not all-zero
+  if (settlement.sales_ex_gst === 0 && settlement.fees_ex_gst === 0 && settlement.net_payout === 0) {
+    failedGates.push('all_zero_values');
+  }
+
+  // Gate 4: Mapping completeness (sales + fees + net OR equivalent)
+  const mapping = fingerprint.column_mapping || {};
+  const hasSales = !!mapping.gross_sales;
+  const hasFees = !!mapping.fees;
+  const hasNet = !!mapping.net_payout;
+  if (!((hasSales && hasFees) || (hasSales && hasNet) || (hasNet && hasFees))) {
+    failedGates.push('incomplete_mapping');
+  }
+
+  // Gate 5: Sanity check
+  if (settlement.metadata?.sanity_failed) {
+    failedGates.push('sanity_failed');
+    hardFailure = true;
+  }
+
+  // Gate 6: Reconciliation must pass
+  if (!settlement.reconciles) {
+    failedGates.push('reconciliation_failed');
+  }
+
+  return {
+    passed: failedGates.length === 0,
+    failedGates,
+    hardFailure,
+  };
+}
+
+// ─── Draft Validation Gates ─────────────────────────────────────────────────
 
 /**
  * Validate whether a draft fingerprint's settlement can be saved.
@@ -62,45 +125,27 @@ export function validateDraftGates(
     };
   }
 
-  // Gate 1: Dates must be present (NO fallback to today)
-  if (!settlement.period_start || !settlement.period_end) {
-    missingGates.push('Settlement dates (period_start/period_end) are missing. Map a date column or enter dates manually.');
-  }
+  // Run shared gates
+  const gateResult = validateFormatGates(settlement, fingerprint);
 
-  // Gate 2: Net payout exists and is non-zero (or computable)
-  if (settlement.net_payout === 0 && Math.abs(settlement.sales_ex_gst) > 100) {
-    missingGates.push('Net payout is $0 despite having sales — likely incorrect column mapping.');
-  }
+  // Convert gate codes to human-readable messages
+  const gateMessages: Record<string, string> = {
+    missing_dates: 'Settlement dates (period_start/period_end) are missing. Map a date column or enter dates manually.',
+    payout_mismatch: 'Net payout is $0 despite having sales — likely incorrect column mapping.',
+    all_zero_values: 'All financial values are $0 — likely incorrect column mapping.',
+    incomplete_mapping: 'Column mapping is incomplete. Need at least two of: sales, fees, net payout.',
+    sanity_failed: 'Data sanity check failed — values appear implausible for the mapped columns.',
+    reconciliation_failed: 'Reconciliation failed — calculated net differs from reported net beyond tolerance.',
+  };
 
-  // Gate 3: Not all-zero
-  if (settlement.sales_ex_gst === 0 && settlement.fees_ex_gst === 0 && settlement.net_payout === 0) {
-    missingGates.push('All financial values are $0 — likely incorrect column mapping.');
-  }
-
-  // Gate 4: Mapping completeness (sales + fees + net OR equivalent)
-  const mapping = fingerprint.column_mapping || {};
-  const hasSales = !!mapping.gross_sales;
-  const hasFees = !!mapping.fees;
-  const hasNet = !!mapping.net_payout;
-  if (!((hasSales && hasFees) || (hasSales && hasNet) || (hasNet && hasFees))) {
-    missingGates.push('Column mapping is incomplete. Need at least two of: sales, fees, net payout.');
-  }
-
-  // Gate 5: Sanity check
-  if (settlement.metadata?.sanity_failed) {
-    missingGates.push('Data sanity check failed — values appear implausible for the mapped columns.');
-  }
-
-  // Gate 6: Reconciliation must pass (no warning state for auto-trust)
-  if (!settlement.reconciles) {
-    missingGates.push('Reconciliation failed — calculated net differs from reported net beyond tolerance.');
+  for (const gate of gateResult.failedGates) {
+    missingGates.push(gateMessages[gate] || gate);
   }
 
   // Auto-promote constraints
   let canAutoPromote = missingGates.length === 0;
 
   if (canAutoPromote) {
-    // Only auto-promote CSV/TSV/XLSX with generic parser
     const fmt = (fileFormat || '').toLowerCase();
     const isGenericFormat = ['csv', 'tsv', 'xlsx', 'xls'].some(f => fmt.includes(f));
     if (!isGenericFormat) {
@@ -113,7 +158,6 @@ export function validateDraftGates(
       warnings.push(`Parser type "${fingerprint.parser_type}" requires manual promotion.`);
     }
 
-    // AI-created with low confidence cannot auto-promote
     if (fingerprint.parser_type === 'ai' || fingerprint.confidence !== null) {
       if ((fingerprint.confidence || 0) < 80) {
         canAutoPromote = false;
@@ -128,6 +172,68 @@ export function validateDraftGates(
     missingGates,
     warnings,
   };
+}
+
+// ─── Drift Detection Helpers ────────────────────────────────────────────────
+
+/**
+ * Log a format_drift_detected system event.
+ */
+export async function logDriftDetected(params: {
+  userId: string;
+  fingerprintId: string;
+  marketplaceCode: string;
+  failedGates: string[];
+  settlementId: string;
+}): Promise<void> {
+  try {
+    await supabase.from('system_events').insert({
+      user_id: params.userId,
+      event_type: 'format_drift_detected',
+      severity: 'warning',
+      marketplace_code: params.marketplaceCode,
+      settlement_id: params.settlementId,
+      details: {
+        fingerprint_id: params.fingerprintId,
+        marketplace_code: params.marketplaceCode,
+        failed_gates: params.failedGates,
+        settlement_id: params.settlementId,
+        actor_user_id: params.userId,
+      },
+    } as any);
+  } catch { /* non-blocking */ }
+}
+
+/**
+ * Auto-demote an active fingerprint to draft on hard failure.
+ * Logs format_auto_demoted_to_draft event for FormatInspector visibility.
+ */
+export async function autoDemoteFingerprint(params: {
+  fingerprintId: string;
+  marketplaceCode: string;
+  userId: string;
+  failedGates: string[];
+}): Promise<void> {
+  try {
+    await supabase
+      .from('marketplace_file_fingerprints')
+      .update({ status: 'draft' } as any)
+      .eq('id', params.fingerprintId);
+
+    await supabase.from('system_events').insert({
+      user_id: params.userId,
+      event_type: 'format_auto_demoted_to_draft',
+      severity: 'warning',
+      marketplace_code: params.marketplaceCode,
+      details: {
+        fingerprint_id: params.fingerprintId,
+        marketplace_code: params.marketplaceCode,
+        failed_gates: params.failedGates,
+        actor_user_id: params.userId,
+        reason: 'drift_hard_failure',
+      },
+    } as any);
+  } catch { /* non-blocking */ }
 }
 
 // ─── Fingerprint Lookup ─────────────────────────────────────────────────────
