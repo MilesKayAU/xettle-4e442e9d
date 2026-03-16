@@ -1,7 +1,27 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts";
 
-// ... keep existing code
+interface ShopifyOrder {
+  id: number;
+  name: string;
+  created_at: string;
+  processed_at: string;
+  financial_status: string;
+  total_price: string;
+  total_tax: string;
+  total_discounts: string;
+  gateway: string;
+  source_name: string;
+  tags: string;
+  note_attributes: Array<{ name: string; value: string }>;
+}
+
+Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+  console.log("[fetch-shopify-orders] Handler invoked", req.method);
+
+  const preflightResponse = handleCorsPreflightResponse(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
     const authHeader = req.headers.get("Authorization");
