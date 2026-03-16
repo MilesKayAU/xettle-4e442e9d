@@ -299,17 +299,38 @@ export default function SetupStepConnectStores({
       .in('source_name', codesToResolve as any);
   };
 
+  // ─── Post-provision COA coverage check ───
+  const [coaGapMarketplace, setCoaGapMarketplace] = useState<string | null>(null);
+
   const handleContinueFromMarketplaceStep = async () => {
     setPersistingSelections(true);
     try {
       await persistSelectedMarketplaces();
+
+      // Run COA coverage check for newly selected marketplaces
+      if (hasXero && selectedMarketplaces.length > 0) {
+        try {
+          const accounts = await getCachedXeroAccounts();
+          if (accounts.length > 0) {
+            const coverage = getMarketplaceCoverage(selectedMarketplaces, accounts);
+            const firstUncovered = coverage.uncovered[0] || coverage.partial[0];
+            if (firstUncovered) {
+              setCoaGapMarketplace(firstUncovered);
+              setPersistingSelections(false);
+              return; // Don't advance — show COA gap resolution
+            }
+          }
+        } catch {
+          // Non-critical — proceed without COA check
+        }
+      }
     } catch (err) {
       console.error('[setup] failed to persist selected marketplaces:', err);
       toast.error('Could not fully save marketplace selections, but setup will continue.');
     } finally {
       setPersistingSelections(false);
-      onNext();
     }
+    onNext();
   };
 
   // Back within sub-steps goes to previous sub-step, or to wizard back
