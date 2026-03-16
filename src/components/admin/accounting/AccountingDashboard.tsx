@@ -1126,42 +1126,6 @@ export default function AccountingDashboard() {
               />
             </TabsContent>
 
-            {/* SETTINGS TAB */}
-            <TabsContent value="settings">
-              <div className="space-y-4">
-              {/* API Connections — unified panel */}
-              <ApiConnectionsPanel
-                isPaid={isPaidUser}
-                gstRate={settingsGstRate}
-                syncCutoffDate={syncCutoffDate}
-                onSettlementsAutoFetched={async () => {
-                  loadSettlements();
-                  try {
-                    await supabase.functions.invoke('match-bank-deposits', { body: {} });
-                    loadSettlements();
-                  } catch { /* silent */ }
-                }}
-                onRequestSettings={() => {
-                  setTimeout(() => {
-                    document.getElementById('sync-cutoff-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }, 100);
-                }}
-                onFetchStateChange={(fetching, status) => {
-                  setAmazonFetching(fetching);
-                  setAmazonFetchStatus(status);
-                }}
-              />
-
-              <DestinationAccountMapper />
-              <AccountMapperCard />
-              <TrackingCategoriesToggle />
-              <AutomationSettingsPanel userTier={userTier} />
-              <ReconciliationSettingsCard />
-              <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />
-              <SyncHistoryCard />
-              <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
-              </div>
-            </TabsContent>
 
             {/* PERIOD CLOSE TAB */}
             <TabsContent value="period-close">
