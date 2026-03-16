@@ -66,6 +66,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [hasSnapshot, setHasSnapshot] = useState(true);
   const [externalCandidate, setExternalCandidate] = useState<any>(null);
   const [dismissingCandidate, setDismissingCandidate] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !settlementId) return;
