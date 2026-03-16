@@ -31,6 +31,9 @@ export interface StandardSettlement {
 
 export const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
+  amazon_us: 'Amazon.com',
+  amazon_uk: 'Amazon.co.uk',
+  amazon_ca: 'Amazon.ca',
   bunnings: 'Bunnings Marketplace',
   bigw: 'Big W Marketplace',
   shopify_payments: 'Shopify Payments',
@@ -40,6 +43,10 @@ export const MARKETPLACE_CONTACTS: Record<string, string> = {
   kogan: 'Kogan Marketplace',
   woolworths: 'Woolworths Marketplace',
   woolworths_marketplus: 'Woolworths MarketPlus',
+  ebay_au: 'eBay Australia',
+  everyday_market: 'Everyday Market',
+  theiconic: 'THE ICONIC',
+  etsy: 'Etsy',
 };
 
 export const MARKETPLACE_LABELS: Record<string, string> = {

@@ -940,6 +940,8 @@ serve(async (req) => {
       woolworths_marketplus: 'Woolworths MarketPlus',
       ebay_au: 'eBay Australia',
       everyday_market: 'Everyday Market',
+      theiconic: 'THE ICONIC',
+      etsy: 'Etsy',
     };
 
     const marketplace = body.settlementData?.marketplace || body.marketplace || '';
