@@ -90,6 +90,7 @@ export default function AccountMapperCard() {
   // Clone COA state
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [cloneTarget, setCloneTarget] = useState('');
+  const [taxProfile, setTaxProfile] = useState<string | null>(null);
 
   // Build CoA lookup map
   const coaMap = useMemo(() => {
