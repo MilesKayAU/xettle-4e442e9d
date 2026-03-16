@@ -732,7 +732,7 @@ serve(async (req) => {
       if (!pushEvent || pushEvent.length === 0) {
         // No push event found — treat as external candidate, not Xettle-posted
         console.warn(`[step-4] Xettle-prefixed ref "${ref}" but NO xero_push_success event for ${settlementId} — treating as external_candidate`);
-        await supabase.from('xero_accounting_matches').upsert({
+        await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: settlementId,
           marketplace_code: detectedMarketplace,
@@ -748,7 +748,7 @@ serve(async (req) => {
           matched_reference: ref,
           reference_hash: ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
           notes: 'Xettle-prefixed but no push event found — possible external creation. Requires user review.',
-        }, { onConflict: 'user_id,settlement_id' });
+        });
         continue;
       }
 
