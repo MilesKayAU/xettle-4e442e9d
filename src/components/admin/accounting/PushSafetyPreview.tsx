@@ -541,7 +541,7 @@ function SettlementPreviewCard({ preview, index, total, onReloadPreviews }: {
                   compact
                   onResolved={() => {
                     // Reload previews after clone resolves mappings
-                    loadPreviews();
+                    onReloadPreviews?.();
                   }}
                 />
               )}
