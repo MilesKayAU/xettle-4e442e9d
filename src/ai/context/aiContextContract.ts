@@ -148,8 +148,8 @@ export function sanitizeContext(ctx: AiPageContext): AiPageContext {
   // Sanitize pageStateSummary values
   for (const [k, v] of Object.entries(ctx.pageStateSummary)) {
     const clean = redactValue(k, v);
-    if (clean === null || typeof clean === 'string' || typeof clean === 'number' || typeof clean === 'boolean') {
-      sanitized.pageStateSummary[k] = clean as string | number | boolean;
+    if (typeof clean === 'string' || typeof clean === 'number' || typeof clean === 'boolean') {
+      sanitized.pageStateSummary[k] = clean;
     }
   }
 
