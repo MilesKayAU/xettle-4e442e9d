@@ -10,6 +10,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import type { StandardSettlement } from './settlement-engine';
 import { parseDateOrEmpty } from './date-parser';
+import { TOL_BUNNINGS_PDF } from '@/constants/reconciliation-tolerance';
 
 // Configure worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
