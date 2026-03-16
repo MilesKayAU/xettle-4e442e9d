@@ -235,7 +235,9 @@ Deno.serve(async (req) => {
       if (settlements) {
         const unique = [...new Set(settlements.map((s: any) => s.marketplace).filter(Boolean))]
         const labelMap: Record<string, string> = {
-          amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
+          amazon_au: 'Amazon AU', amazon_us: 'Amazon USA', amazon_jp: 'Amazon JP',
+          amazon_sg: 'Amazon SG', amazon_uk: 'Amazon UK',
+          bunnings: 'Bunnings', shopify_payments: 'Shopify',
           shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
           kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
           etsy: 'Etsy', theiconic: 'The Iconic', bigw: 'BigW',
@@ -253,6 +255,10 @@ Deno.serve(async (req) => {
     // This catches accounts like "Kogan Sales AU" (203), "Bunnings Sales" (209), etc. that AI may miss.
     const MARKETPLACE_KEYWORDS: Record<string, string[]> = {
       'Amazon AU': ['amazon'],
+      'Amazon USA': ['amazon'],
+      'Amazon JP': ['amazon'],
+      'Amazon SG': ['amazon'],
+      'Amazon UK': ['amazon'],
       'Shopify': ['shopify'],
       'Bunnings': ['bunnings'],
       'eBay AU': ['ebay', 'e-bay'],
@@ -268,7 +274,7 @@ Deno.serve(async (req) => {
     const CATEGORY_KEYWORDS: Record<string, string[]> = {
       'Sales': ['sales', 'revenue', 'income'],
       'Shipping': ['shipping', 'freight', 'postage', 'delivery'],
-      'Seller Fees': ['seller fee', 'referral fee', 'commission', 'selling fee'],
+      'Seller Fees': ['seller fee', 'seller fees', 'referral fee', 'commission', 'selling fee', 'fees'],
       'FBA Fees': ['fba', 'fulfilment', 'fulfillment', 'pick and pack'],
       'Storage Fees': ['storage', 'warehouse', 'inventory fee'],
       'Refunds': ['refund', 'return'],
@@ -282,7 +288,7 @@ Deno.serve(async (req) => {
     const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
       'Sales': ['shipping', 'freight', 'postage', 'delivery', 'fee', 'refund', 'reimbursement'],
       'Shipping': ['sales', 'fee', 'refund'],
-      'Seller Fees': ['fba', 'storage', 'advertising', 'shipping'],
+      'Seller Fees': ['fba', 'storage', 'advertising', 'shipping', 'transaction service'],
       'FBA Fees': ['seller', 'storage', 'advertising'],
       'Storage Fees': ['seller', 'fba', 'advertising'],
       'Refunds': ['fee', 'reimbursement'],
@@ -304,17 +310,20 @@ Deno.serve(async (req) => {
       const countryMatch = mp.name.match(/\b(AU|US|UK|NZ|SG|CA|DE|FR|IT|ES|JP|IN)\b/i)
       const countryHint = countryMatch ? countryMatch[1].toLowerCase() : null
       const countryLongForms: Record<string, string[]> = {
-        au: ['australia', 'australian'],
+        au: ['australia', 'australian', ' au'],
         us: ['usa', 'united states', 'america'],
         uk: ['united kingdom', 'britain'],
         nz: ['new zealand'],
-        sg: ['singapore'],
+        sg: ['singapore', 'singapre'],
+        jp: ['japan', 'japanese'],
+        ca: ['canada', 'canadian'],
+        de: ['germany', 'german'],
       }
       
       for (const [cat, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
         const exclusions = CATEGORY_EXCLUSIONS[cat] || []
         // Find ALL accounts matching marketplace + category (not just the first)
-        const candidates = revenueAccounts.filter((a: any) => {
+        const candidates = allActiveAccounts.filter((a: any) => {
           const nameLower = (a.name || '').toLowerCase()
           const hasMarketplace = mpKeywords.some((kw: string) => nameLower.includes(kw))
           const hasCategory = catKeywords.some((kw: string) => nameLower.includes(kw))

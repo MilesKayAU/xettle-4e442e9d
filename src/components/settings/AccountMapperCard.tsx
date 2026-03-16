@@ -35,7 +35,7 @@ type MapperState = 'unmapped' | 'scanning' | 'review' | 'confirmed';
 
 const CATEGORIES = [
   'Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements',
-  'Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees',
+  'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees',
 ] as const;
 
 /** Categories that support per-marketplace overrides */
@@ -50,11 +50,13 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   'Seller Fees': 'Referral & selling fees charged by marketplace',
   'FBA Fees': 'Fulfilment, pick & pack, delivery fees',
   'Storage Fees': 'Warehouse & inventory storage fees',
+  'Advertising Costs': 'Sponsored products, PPC ads & campaign spend',
   'Other Fees': 'Miscellaneous marketplace charges',
 };
 
 const KNOWN_MARKETPLACES = [
-  'Amazon AU', 'Shopify', 'Bunnings', 'eBay AU', 'Catch',
+  'Amazon AU', 'Amazon USA', 'Amazon JP', 'Amazon SG', 'Amazon UK',
+  'Shopify', 'Bunnings', 'eBay AU', 'Catch',
   'MyDeal', 'Kogan', 'Everyday Market', 'The Iconic', 'Etsy',
 ];
 
