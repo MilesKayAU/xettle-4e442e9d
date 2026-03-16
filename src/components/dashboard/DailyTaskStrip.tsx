@@ -1,69 +1,107 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { FileText, Send, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
+import { useDashboardTaskCounts, type SetupWarning } from '@/hooks/useDashboardTaskCounts';
+import { Settings, FileText, Send, CheckCircle2, AlertTriangle, ArrowRight, Info } from 'lucide-react';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 interface DailyTaskStripProps {
   onNavigate: (view: string, subTab?: string) => void;
   onScrollToActionCentre?: () => void;
 }
 
-interface TaskCounts {
-  filesToReview: number;
-  readyToPush: number;
-  awaitingReconciliation: number;
-  reconAlerts: number;
-  backfillGaps: number;
+const STAGES = [
+  {
+    key: 'setup',
+    label: 'Setup required',
+    icon: Settings,
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/10',
+    borderColor: 'border-destructive/30',
+    tooltip: 'Configuration steps blocking Xero posting — connect Xero, acknowledge scope, complete account mappings.',
+  },
+  {
+    key: 'review',
+    label: 'Needs review',
+    icon: FileText,
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-500/10',
+    borderColor: 'border-amber-500/30',
+    tooltip: 'Settlements ingested but not yet marked ready to push. Review data and confirm before posting.',
+  },
+  {
+    key: 'post',
+    label: 'Ready to post',
+    icon: Send,
+    color: 'text-primary',
+    bgColor: 'bg-primary/10',
+    borderColor: 'border-primary/30',
+    tooltip: 'Settlements verified and eligible to push to Xero. Open the Action Centre to review and send.',
+  },
+  {
+    key: 'recon',
+    label: 'Awaiting reconciliation',
+    icon: CheckCircle2,
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-500/10',
+    borderColor: 'border-blue-500/30',
+    tooltip: 'Settlements pushed to Xero — waiting for bank feed match and payment verification.',
+  },
+  {
+    key: 'alerts',
+    label: 'Alerts',
+    icon: AlertTriangle,
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/10',
+    borderColor: 'border-destructive/30',
+    tooltip: 'Reconciliation mismatches, missing settlements, or partial matches that need attention.',
+  },
+] as const;
+
+function SetupWarningList({ warnings }: { warnings: SetupWarning[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <div className="col-span-full rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
+      <p className="text-xs font-semibold text-destructive mb-1.5">Setup issues blocking posting:</p>
+      <ul className="space-y-1">
+        {warnings.map(w => (
+          <li key={w.key} className="text-xs text-muted-foreground flex items-start gap-1.5">
+            <span className={w.severity === 'blocking' ? 'text-destructive' : 'text-amber-500'}>•</span>
+            <span>{w.message}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: DailyTaskStripProps) {
-  const [counts, setCounts] = useState<TaskCounts>({ filesToReview: 0, readyToPush: 0, awaitingReconciliation: 0, reconAlerts: 0, backfillGaps: 0 });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function load() {
-      try {
-        // Use marketplace_validation as source of truth (same as Overview page)
-        const [valRes, reconAlerts] = await Promise.all([
-          supabase.from('marketplace_validation').select('overall_status, settlement_id'),
-          supabase.from('marketplace_validation').select('id', { count: 'exact', head: true })
-            .in('overall_status', ['missing', 'partial']),
-        ]);
-
-        // Filter out already_recorded and shopify_auto analytics-only records (same as ValidationSweep)
-        const valRows = (valRes.data || []).filter(r =>
-          r.overall_status !== 'already_recorded' &&
-          !(r.settlement_id && r.settlement_id.startsWith('shopify_auto_'))
-        );
-        // Count using same logic as ValidationSweep
-        let filesToReview = 0;
-        let readyToPush = 0;
-        let awaitingReconciliation = 0;
-        valRows.forEach(r => {
-          const s = r.overall_status;
-          if (s === 'settlement_needed' || s === 'missing') filesToReview++;
-          else if (s === 'ready_to_push') readyToPush++;
-          else if (s === 'pushed_to_xero' || s === 'synced_external') awaitingReconciliation++;
-        });
-
-        setCounts({
-          filesToReview,
-          readyToPush,
-          awaitingReconciliation,
-          reconAlerts: reconAlerts.count ?? 0,
-          backfillGaps: 0, // Will be populated by coverage map logic post-onboarding
-        });
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
+  const {
+    setupRequired,
+    setupWarnings,
+    needsReview,
+    readyToPost,
+    awaitingReconciliation,
+    alerts,
+    loading,
+  } = useDashboardTaskCounts();
 
   if (loading) return null;
 
-  const totalActions = counts.filesToReview + counts.readyToPush + counts.awaitingReconciliation + counts.reconAlerts;
+  const countMap: Record<string, number> = {
+    setup: setupRequired,
+    review: needsReview,
+    post: readyToPost,
+    recon: awaitingReconciliation,
+    alerts,
+  };
+
+  const clickMap: Record<string, () => void> = {
+    setup: () => onNavigate('settings'),
+    review: () => onNavigate('settlements', 'overview'),
+    post: () => onScrollToActionCentre?.() ?? onNavigate('dashboard'),
+    recon: () => onNavigate('outstanding'),
+    alerts: () => onNavigate('settlements', 'reconciliation'),
+  };
+
+  const totalActions = Object.values(countMap).reduce((a, b) => a + b, 0);
   if (totalActions === 0) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3">
@@ -73,80 +111,48 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
     );
   }
 
-  const tasks = [
-    {
-      key: 'review',
-      label: 'Settlement required',
-      count: counts.filesToReview,
-      icon: FileText,
-      color: 'text-amber-500',
-      bgColor: 'bg-amber-500/10',
-      borderColor: 'border-amber-500/30',
-      onClick: () => onNavigate('settlements', 'overview'),
-    },
-    {
-      key: 'push',
-      label: 'Verified — ready to post',
-      count: counts.readyToPush,
-      icon: Send,
-      color: 'text-primary',
-      bgColor: 'bg-primary/10',
-      borderColor: 'border-primary/30',
-      onClick: () => onScrollToActionCentre?.() ?? onNavigate('dashboard'),
-    },
-    {
-      key: 'recon',
-      label: 'Awaiting reconciliation',
-      count: counts.awaitingReconciliation,
-      icon: CheckCircle2,
-      color: 'text-blue-500',
-      bgColor: 'bg-blue-500/10',
-      borderColor: 'border-blue-500/30',
-      onClick: () => onNavigate('outstanding'),
-    },
-    {
-      key: 'alerts',
-      label: 'Reconciliation alerts',
-      count: counts.reconAlerts,
-      icon: AlertTriangle,
-      color: 'text-destructive',
-      bgColor: 'bg-destructive/10',
-      borderColor: 'border-destructive/30',
-      onClick: () => onNavigate('settlements', 'reconciliation'),
-    },
-  ];
-
   return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Today's Tasks</h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {tasks.map(task => {
-          const Icon = task.icon;
-          const hasItems = task.count > 0;
-          return (
-            <button
-              key={task.key}
-              onClick={task.onClick}
-              className={`group relative flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all hover:shadow-sm ${
-                hasItems
-                  ? `${task.bgColor} ${task.borderColor} hover:shadow-md`
-                  : 'bg-card border-border opacity-60'
-              }`}
-            >
-              <Icon className={`h-5 w-5 shrink-0 ${hasItems ? task.color : 'text-green-500'}`} />
-              <div className="min-w-0 flex-1">
-                <div className={`text-lg font-bold leading-none ${hasItems ? 'text-foreground' : 'text-muted-foreground'}`}>
-                  {hasItems ? task.count : '✓'}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5 truncate">{task.label}</div>
-              </div>
-              {hasItems && (
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-              )}
-            </button>
-          );
-        })}
+    <TooltipProvider delayDuration={300}>
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Today's Tasks</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {STAGES.map(stage => {
+            const count = countMap[stage.key];
+            const hasItems = count > 0;
+            const Icon = stage.icon;
+            return (
+              <Tooltip key={stage.key}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={clickMap[stage.key]}
+                    className={`group relative flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all hover:shadow-sm ${
+                      hasItems
+                        ? `${stage.bgColor} ${stage.borderColor} hover:shadow-md`
+                        : 'bg-card border-border opacity-60'
+                    }`}
+                  >
+                    <Icon className={`h-5 w-5 shrink-0 ${hasItems ? stage.color : 'text-green-500'}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-lg font-bold leading-none ${hasItems ? 'text-foreground' : 'text-muted-foreground'}`}>
+                        {hasItems ? count : '✓'}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate">{stage.label}</div>
+                    </div>
+                    {hasItems && (
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    )}
+                    <Info className="h-3 w-3 text-muted-foreground/40 absolute top-1.5 right-1.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs text-xs">
+                  {stage.tooltip}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+        {setupWarnings.length > 0 && <SetupWarningList warnings={setupWarnings} />}
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
