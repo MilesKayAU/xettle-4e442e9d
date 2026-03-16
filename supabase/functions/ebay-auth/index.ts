@@ -218,7 +218,7 @@ serve(async (req) => {
 
       const refreshData = await refreshResponse.json()
       if (!refreshResponse.ok || !refreshData.access_token) {
-        console.error('eBay token refresh failed:', refreshData)
+        logger.error('eBay token refresh failed:', refreshData)
         return new Response(JSON.stringify({ error: 'Token refresh failed' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
