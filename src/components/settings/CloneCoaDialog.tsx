@@ -14,6 +14,8 @@ import {
   getCoaLastSyncedAt,
   buildClonePreview,
   executeCoaClone,
+  validateTemplateEligibility,
+  logCloneEvent,
   type CachedXeroAccount,
   type CloneAccountRow,
 } from '@/actions';

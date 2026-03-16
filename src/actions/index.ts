@@ -129,9 +129,12 @@ export {
 export {
   buildClonePreview,
   executeCoaClone,
+  validateTemplateEligibility,
+  logCloneEvent,
   CLONE_CATEGORIES,
   type CloneAccountRow,
   type ClonePreviewInput,
   type CloneExecuteInput,
   type CloneResult,
+  type CloneSystemEvent,
 } from './coaClone';
