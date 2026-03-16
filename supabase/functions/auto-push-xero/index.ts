@@ -18,6 +18,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// ⚠️ DEAD CODE: This function is permanently blocked at L66 (golden_rule_enforced).
+// This contact map is never reached. Canonical source: sync-settlement-to-xero/index.ts
 const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
   shopify_payments: 'Shopify',

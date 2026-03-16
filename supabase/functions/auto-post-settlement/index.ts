@@ -44,9 +44,13 @@ const STALE_LOCK_MINUTES = 15;
 // ══════════════════════════════════════════════════════════════
 const CANONICAL_VERSION = 'v2-10cat';
 
+// ⚠️ STALE: This contact map may drift from the canonical source in sync-settlement-to-xero/index.ts.
+// If this function is ever re-enabled, sync this map with the canonical version first.
 const MARKETPLACE_CONTACTS: Record<string, string> = {
   amazon_au: 'Amazon.com.au',
   amazon_us: 'Amazon.com',
+  amazon_uk: 'Amazon.co.uk',
+  amazon_ca: 'Amazon.ca',
   shopify_payments: 'Shopify',
   kogan: 'Kogan.com',
   bigw: 'Big W Marketplace',
@@ -56,7 +60,10 @@ const MARKETPLACE_CONTACTS: Record<string, string> = {
   ebay_au: 'eBay Australia',
   ebay: 'eBay Australia',
   woolworths: 'Woolworths Everyday Market',
+  woolworths_marketplus: 'Woolworths MarketPlus',
   everyday_market: 'Everyday Market',
+  theiconic: 'THE ICONIC',
+  etsy: 'Etsy',
   temu: 'Temu',
 };
 
