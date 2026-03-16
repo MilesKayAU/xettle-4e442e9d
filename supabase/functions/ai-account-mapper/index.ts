@@ -238,7 +238,8 @@ Deno.serve(async (req) => {
           amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
           shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
           kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
-          etsy: 'Etsy', theiconic: 'The Iconic', bigw: 'bigw',
+          etsy: 'Etsy', theiconic: 'The Iconic', bigw: 'BigW',
+          everyday_market: 'Everyday Market',
         }
         activeMarketplaces = unique.map(code => ({
           name: labelMap[code || ''] || code || '',
@@ -246,6 +247,56 @@ Deno.serve(async (req) => {
         })).filter(m => m.name)
       }
     }
+
+    // ─── STEP 1d: Deterministic keyword pre-scan ─────────────────────
+    // Before sending to AI, do a keyword scan to find obvious marketplace-specific accounts.
+    // This catches accounts like "Kogan Sales AU" (203), "Bunnings Sales" (209), etc. that AI may miss.
+    const MARKETPLACE_KEYWORDS: Record<string, string[]> = {
+      'Amazon AU': ['amazon'],
+      'Shopify': ['shopify'],
+      'Bunnings': ['bunnings'],
+      'eBay AU': ['ebay', 'e-bay'],
+      'Catch': ['catch'],
+      'MyDeal': ['mydeal', 'my deal'],
+      'Kogan': ['kogan'],
+      'Everyday Market': ['everyday', 'woolworths marketplus', 'everyday market'],
+      'The Iconic': ['iconic', 'theiconic'],
+      'Etsy': ['etsy'],
+      'BigW': ['bigw', 'big w'],
+    }
+
+    const CATEGORY_KEYWORDS: Record<string, string[]> = {
+      'Sales': ['sales', 'revenue', 'income'],
+      'Shipping': ['shipping', 'freight', 'postage', 'delivery'],
+    }
+
+    // Pre-scan: find marketplace-specific accounts by keyword matching
+    const deterministicOverrides: Record<string, string> = {}
+    const revenueAccounts = xeroAccounts.filter((a: any) => {
+      const type = (a.type || '').toUpperCase()
+      return ['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS'].includes(type)
+    })
+
+    for (const mp of activeMarketplaces) {
+      const mpKeywords = MARKETPLACE_KEYWORDS[mp.name] || [mp.name.toLowerCase().replace(/[^a-z0-9]/g, '')]
+      
+      for (const [cat, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
+        // Find accounts whose name contains BOTH a marketplace keyword AND a category keyword
+        const match = revenueAccounts.find((a: any) => {
+          const nameLower = (a.name || '').toLowerCase()
+          const hasMarketplace = mpKeywords.some((kw: string) => nameLower.includes(kw))
+          const hasCategory = catKeywords.some((kw: string) => nameLower.includes(kw))
+          return hasMarketplace && hasCategory
+        })
+        if (match && match.code) {
+          const key = `${cat}:${mp.name}`
+          deterministicOverrides[key] = match.code
+          console.log(`[ai-account-mapper] Deterministic match: ${key} → ${match.code} (${match.name})`)
+        }
+      }
+    }
+
+    console.log(`[ai-account-mapper] Deterministic pre-scan found ${Object.keys(deterministicOverrides).length} marketplace overrides`)
 
     // ─── STEP 2: AI Matching via Lovable AI ──────────────────────────
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
@@ -256,12 +307,31 @@ Deno.serve(async (req) => {
     }
 
     const marketplaceNames = activeMarketplaces.map(m => m.name)
+    
+    // Build a highlighted section showing accounts that contain marketplace names
+    const marketplaceAccountHints: string[] = []
+    for (const mp of activeMarketplaces) {
+      const mpKeywords = MARKETPLACE_KEYWORDS[mp.name] || [mp.name.toLowerCase().replace(/[^a-z0-9]/g, '')]
+      const matchingAccounts = xeroAccounts.filter((a: any) => {
+        const nameLower = (a.name || '').toLowerCase()
+        return mpKeywords.some((kw: string) => nameLower.includes(kw))
+      })
+      if (matchingAccounts.length > 0) {
+        marketplaceAccountHints.push(
+          `  ${mp.name}: ${matchingAccounts.map((a: any) => `${a.code} "${a.name}"`).join(', ')}`
+        )
+      }
+    }
+    
     const perRailPromptSection = marketplaceNames.length > 0
       ? `\n\nThe business sells on these marketplaces: ${marketplaceNames.join(', ')}.
 For the "Sales" and "Shipping" categories, ALSO look for marketplace-specific accounts.
 For example, if there's an account called "Shopify Sales" or "Amazon Revenue", map it to that marketplace's Sales.
 Return per-marketplace overrides in "marketplace_overrides" keyed as "Sales:<Marketplace Name>" or "Shipping:<Marketplace Name>".
-Only include overrides where you find a SPECIFIC account for that marketplace — don't repeat the global mapping.`
+Only include overrides where you find a SPECIFIC account for that marketplace — don't repeat the global mapping.
+
+IMPORTANT: I've pre-identified these accounts that appear to be marketplace-specific. USE THEM:
+${marketplaceAccountHints.length > 0 ? marketplaceAccountHints.join('\n') : '  (none found by keyword scan)'}`
       : ''
 
     const systemPrompt = `You are an Australian ecommerce accounting assistant.
@@ -271,13 +341,16 @@ Australian GST applies — revenue accounts use OUTPUT tax, expense/fee accounts
 Advertising Costs (Sponsored Products, PPC ads) MUST be separated from Other Fees for BAS accuracy.
 
 IMPORTANT MATCHING RULES:
+- SCAN EVERY SINGLE ACCOUNT in the list — there are ${xeroAccounts.length} accounts, do not skip any
 - Look at account NAMES carefully for keywords like "sales", "revenue", "fees", "commission", "fulfilment", "shipping", "freight", "refund", "advertising", "storage", "reimbursement"
+- Also look for MARKETPLACE NAMES in account names: amazon, shopify, ebay, bunnings, kogan, mydeal, catch, everyday, iconic, etsy, bigw
 - Match by semantic meaning, not just exact text
 - If multiple accounts could match, prefer the one that is most specific (e.g. "Marketplace Fees" over "Other Expenses")
 - If no specific match exists, look for general-purpose accounts of the right type (Revenue for income, Expense for costs)
 - NEVER guess codes that don't exist in the provided list
 - Revenue categories (Sales, Shipping, Promotional Discounts, Refunds, Reimbursements) should map to REVENUE, SALES, or OTHERINCOME type accounts
 - Expense categories (Seller Fees, FBA Fees, Storage Fees, Advertising Costs, Other Fees) should map to EXPENSE, OVERHEADS, or DIRECTCOSTS type accounts
+- For marketplace_overrides: if an account like "209 Bunnings Sales" exists, map "Sales:Bunnings" to "209" — DO NOT leave it out
 Return only valid JSON, no explanation.`
 
     const userPrompt = `Here are ALL ${xeroAccounts.length} Xero accounts for this business (code, name, type):
@@ -446,6 +519,15 @@ Return JSON with this structure:
       if (!existingCodes.has(code)) {
         console.warn(`[ai-account-mapper] Removing invalid override ${key}: ${code}`)
         delete marketplaceOverrides[key]
+      }
+    }
+
+    // Merge deterministic overrides INTO marketplace overrides (deterministic wins)
+    // This ensures accounts found by keyword scan are always included
+    for (const [key, code] of Object.entries(deterministicOverrides)) {
+      if (existingCodes.has(code) && !marketplaceOverrides[key]) {
+        marketplaceOverrides[key] = code
+        console.log(`[ai-account-mapper] Applied deterministic override: ${key} → ${code}`)
       }
     }
 
