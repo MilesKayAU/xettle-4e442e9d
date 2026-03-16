@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
         .eq('is_active', true)
         .not('xero_account_id', 'in', `(${currentIds.join(',')})`);
 
-      console.log(`[ai-account-mapper] Cached ${xeroAccountRows.length} CoA accounts for user ${userId}`);
+      logger.debug(`[ai-account-mapper] Cached ${xeroAccountRows.length} CoA accounts for user ${userId}`);
     } catch (coaErr: any) {
       console.warn('[ai-account-mapper] CoA cache failed (non-fatal):', coaErr.message);
     }
