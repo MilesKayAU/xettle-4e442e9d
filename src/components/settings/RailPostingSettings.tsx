@@ -5,7 +5,11 @@
  * This is an org-level accounting workflow setting, not a personal preference.
  * When multi-user orgs are added, this will be scoped by org_id.
  *
- * Shows each connected marketplace rail with manual/auto toggle + bank match checkbox.
+ * Shows each connected marketplace rail with:
+ *   - manual/auto toggle
+ *   - bank match checkbox
+ *   - Draft vs Authorised invoice status selector
+ *   - Auto-repost after rollback toggle (advanced)
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -14,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +29,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Zap, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Zap, Shield, AlertTriangle, RefreshCw, ChevronDown, FileCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { PHASE_1_RAILS, isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
@@ -35,6 +45,8 @@ interface RailSetting {
   posting_mode: 'manual' | 'auto';
   require_bank_match: boolean;
   auto_post_enabled_at: string | null;
+  invoice_status: 'DRAFT' | 'AUTHORISED';
+  auto_repost_after_rollback: boolean;
 }
 
 interface FailedSettlement {
@@ -54,6 +66,7 @@ export default function RailPostingSettings() {
   const [loading, setLoading] = useState(true);
   const [confirmRail, setConfirmRail] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -75,6 +88,8 @@ export default function RailPostingSettings() {
             posting_mode: s.posting_mode as 'manual' | 'auto',
             require_bank_match: s.require_bank_match,
             auto_post_enabled_at: s.auto_post_enabled_at,
+            invoice_status: (s as any).invoice_status === 'AUTHORISED' ? 'AUTHORISED' : 'DRAFT',
+            auto_repost_after_rollback: (s as any).auto_repost_after_rollback ?? false,
           });
         }
         setSettings(map);
@@ -102,6 +117,8 @@ export default function RailPostingSettings() {
       posting_mode: 'manual',
       require_bank_match: isBankMatchRequired(rail),
       auto_post_enabled_at: null,
+      invoice_status: 'DRAFT',
+      auto_repost_after_rollback: false,
     };
   };
 
@@ -126,6 +143,14 @@ export default function RailPostingSettings() {
     await saveRailSetting(rail, { require_bank_match: required });
   };
 
+  const handleChangeInvoiceStatus = async (rail: string, status: 'DRAFT' | 'AUTHORISED') => {
+    await saveRailSetting(rail, { invoice_status: status });
+  };
+
+  const handleToggleAutoRepost = async (rail: string, enabled: boolean) => {
+    await saveRailSetting(rail, { auto_repost_after_rollback: enabled });
+  };
+
   const saveRailSetting = async (rail: string, updates: Partial<RailSetting> & { auto_post_enabled_at?: string }) => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) return;
@@ -142,8 +167,10 @@ export default function RailPostingSettings() {
         require_bank_match: newSetting.require_bank_match,
         auto_post_enabled_at: updates.auto_post_enabled_at || current.auto_post_enabled_at || null,
         auto_post_enabled_by: updates.posting_mode === 'auto' ? userData.user.id : null,
+        invoice_status: newSetting.invoice_status,
+        auto_repost_after_rollback: newSetting.auto_repost_after_rollback,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,rail' });
+      } as any, { onConflict: 'user_id,rail' });
 
     if (error) {
       toast.error('Failed to save setting');
@@ -157,11 +184,17 @@ export default function RailPostingSettings() {
       return next;
     });
 
-    toast.success(
-      newSetting.posting_mode === 'auto'
-        ? `Auto-post enabled for ${getRailLabel(rail)}`
-        : `Auto-post disabled for ${getRailLabel(rail)}`
-    );
+    if ('posting_mode' in updates) {
+      toast.success(
+        newSetting.posting_mode === 'auto'
+          ? `Auto-post enabled for ${getRailLabel(rail)}`
+          : `Auto-post disabled for ${getRailLabel(rail)}`
+      );
+    } else if ('invoice_status' in updates) {
+      toast.success(`${getRailLabel(rail)} invoices will be created as ${updates.invoice_status}`);
+    } else if ('auto_repost_after_rollback' in updates) {
+      toast.success(updates.auto_repost_after_rollback ? 'Auto-repost after rollback enabled' : 'Auto-repost after rollback disabled');
+    }
   };
 
   const handleRetry = async (settlementId: string) => {
@@ -169,8 +202,6 @@ export default function RailPostingSettings() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       if (userData?.user) {
-        // Don't reset posting_state client-side — let the edge function handle the CAS
-        // from 'failed' state directly, avoiding race conditions with batch mode
         await supabase.functions.invoke('auto-post-settlement', {
           body: { settlement_id: settlementId, user_id: userData.user.id },
         });
@@ -227,48 +258,124 @@ export default function RailPostingSettings() {
                   <div
                     key={rail}
                     className={cn(
-                      "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                      "p-3 rounded-lg border transition-colors",
                       isAuto ? "border-primary/30 bg-primary/5" : "border-border"
                     )}
                   >
-                    <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{getRailLabel(rail)}</span>
+                          {isAuto && (
+                            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
+                              <Zap className="h-2.5 w-2.5 mr-0.5" /> Auto
+                            </Badge>
+                          )}
+                          {setting.invoice_status === 'AUTHORISED' && (
+                            <Badge variant="outline" className="text-[10px] border-amber-400/60 text-amber-700">
+                              <FileCheck className="h-2.5 w-2.5 mr-0.5" /> Authorised
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{getRailLabel(rail)}</span>
-                        {isAuto && (
-                          <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
-                            <Zap className="h-2.5 w-2.5 mr-0.5" /> Auto
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                          <Checkbox
-                            checked={setting.require_bank_match}
-                            onCheckedChange={(checked) => handleToggleBankMatch(rail, !!checked)}
-                            className="h-3.5 w-3.5"
-                          />
-                          Require payout confirmation before posting
-                        </label>
-                        {!defaultBankMatch && !setting.require_bank_match && (
-                          <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
-                            <Shield className="h-2.5 w-2.5" /> Settlement verifies payout (bank confirmation optional)
-                          </span>
-                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {isAuto ? 'Auto' : 'Manual'}
+                        </span>
+                        <Switch
+                          checked={isAuto}
+                          onCheckedChange={(checked) => handleToggleAutoPost(rail, checked)}
+                        />
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {isAuto ? 'Auto' : 'Manual'}
-                      </span>
-                      <Switch
-                        checked={isAuto}
-                        onCheckedChange={(checked) => handleToggleAutoPost(rail, checked)}
-                      />
+
+                    {/* Sub-settings row */}
+                    <div className="flex items-center gap-4 mt-2 flex-wrap">
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                        <Checkbox
+                          checked={setting.require_bank_match}
+                          onCheckedChange={(checked) => handleToggleBankMatch(rail, !!checked)}
+                          className="h-3.5 w-3.5"
+                        />
+                        Require payout confirmation
+                      </label>
+                      {!defaultBankMatch && !setting.require_bank_match && (
+                        <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
+                          <Shield className="h-2.5 w-2.5" /> Settlement verifies payout
+                        </span>
+                      )}
+
+                      {/* Invoice status selector */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">Invoice as:</span>
+                        <Select
+                          value={setting.invoice_status}
+                          onValueChange={(v) => handleChangeInvoiceStatus(rail, v as 'DRAFT' | 'AUTHORISED')}
+                        >
+                          <SelectTrigger className="h-6 w-[110px] text-[11px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DRAFT">Draft (safe)</SelectItem>
+                            <SelectItem value="AUTHORISED">Authorised</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
+
+                    {/* Authorised mode warning */}
+                    {setting.invoice_status === 'AUTHORISED' && (
+                      <div className="mt-2 flex items-start gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-1.5">
+                        <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                        <span>
+                          Authorised invoices are immediately live in Xero. Only enabled when all safety gates pass
+                          (reconciliation matched, mappings complete, contact mapped, attachment created, tax validated).
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Auto-post enabled date */}
+                    {isAuto && setting.auto_post_enabled_at && (
+                      <p className="text-[10px] text-muted-foreground mt-1.5">
+                        Auto-posting since {new Date(setting.auto_post_enabled_at).toLocaleDateString()} — only settlements created after this date are auto-posted.
+                      </p>
+                    )}
                   </div>
                 );
               })}
             </div>
+          )}
+
+          {/* Advanced toggles */}
+          {visibleRails.length > 0 && (
+            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1 h-7 px-2">
+                  <ChevronDown className={cn("h-3 w-3 transition-transform", advancedOpen && "rotate-180")} />
+                  Advanced
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 space-y-2">
+                {visibleRails.map(rail => {
+                  const setting = getSettingForRail(rail);
+                  return (
+                    <div key={`adv-${rail}`} className="flex items-center justify-between p-2 rounded border border-border text-xs">
+                      <div>
+                        <span className="font-medium">{getRailLabel(rail)}</span>
+                        <span className="text-muted-foreground ml-2">— Auto-repost after rollback</span>
+                      </div>
+                      <Switch
+                        checked={setting.auto_repost_after_rollback}
+                        onCheckedChange={(checked) => handleToggleAutoRepost(rail, checked)}
+                      />
+                    </div>
+                  );
+                })}
+                <p className="text-[10px] text-muted-foreground px-1">
+                  When enabled, voided settlements reset to auto-post queue. When disabled (default), voided settlements require manual push.
+                </p>
+              </CollapsibleContent>
+            </Collapsible>
           )}
         </CardContent>
       </Card>
@@ -338,7 +445,7 @@ export default function RailPostingSettings() {
                 Auto-post will send settlements to Xero automatically once they pass all validations.
               </p>
               <p className="font-medium text-foreground">
-                Only enable after confirming your account mappings and tax settings are correct.
+                Only settlements created after enabling will be auto-posted — your historical data is safe.
               </p>
               <p className="text-xs">
                 This setting applies to your entire organisation. Auto-post does not bypass any validation checks — it only removes the manual "Send to Xero" click.
