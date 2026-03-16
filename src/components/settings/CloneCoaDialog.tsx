@@ -7,43 +7,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Copy, AlertTriangle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Loader2, Copy, AlertTriangle, CheckCircle2, ArrowRight, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  createXeroAccounts,
   getCachedXeroAccounts,
   getCoaLastSyncedAt,
+  buildClonePreview,
+  executeCoaClone,
   type CachedXeroAccount,
+  type CloneAccountRow,
 } from '@/actions';
-
-const CLONE_CATEGORIES = [
-  'Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements',
-  'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees',
-] as const;
-
-const REVENUE_CATEGORIES = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
+import { validateAccountCode } from '@/policy/accountCodePolicy';
 
 /** Categories that are typically Amazon-specific */
 const AMAZON_SPECIFIC = new Set(['FBA Fees', 'Storage Fees']);
-
-interface TemplateAccount {
-  category: string;
-  code: string;
-  name: string;
-  type: string;
-  taxType: string | null;
-}
-
-interface CloneRow {
-  category: string;
-  enabled: boolean;
-  templateCode: string;
-  templateName: string;
-  newCode: string;
-  newName: string;
-  type: string;
-  taxType: string | null;
-}
 
 interface CloneCoaDialogProps {
   open: boolean;
@@ -51,97 +28,9 @@ interface CloneCoaDialogProps {
   targetMarketplace: string;
   coveredMarketplaces: string[];
   coaAccounts: CachedXeroAccount[];
+  /** Current org tax profile from app_settings */
+  taxProfile: string | null;
   onComplete: (createdCodes: Record<string, string>) => void;
-}
-
-/**
- * Detect which COA accounts belong to a given marketplace, grouped by category.
- * Uses keyword matching similar to the AI mapper.
- */
-function findTemplateAccounts(
-  marketplace: string,
-  coaAccounts: CachedXeroAccount[]
-): TemplateAccount[] {
-  const mpLower = marketplace.toLowerCase();
-  const results: TemplateAccount[] = [];
-
-  // Build keyword variants for the marketplace
-  const keywords = [mpLower];
-  if (mpLower.includes('amazon')) {
-    keywords.push('amazon');
-    if (mpLower.includes('au')) keywords.push('amazon au', 'amazon sales au');
-    if (mpLower.includes('usa')) keywords.push('amazon usa', 'amazon sales usa');
-  }
-
-  for (const acc of coaAccounts) {
-    if (!acc.account_code || !acc.is_active) continue;
-    const nameLower = acc.account_name.toLowerCase();
-
-    // Check if this account matches the marketplace
-    const matchesMarketplace = keywords.some(kw => nameLower.includes(kw));
-    if (!matchesMarketplace) continue;
-
-    // Determine category from account name
-    const category = detectCategory(nameLower);
-    if (category) {
-      results.push({
-        category,
-        code: acc.account_code,
-        name: acc.account_name,
-        type: acc.account_type || 'REVENUE',
-        taxType: acc.tax_type || null,
-      });
-    }
-  }
-
-  return results;
-}
-
-function detectCategory(nameLower: string): string | null {
-  if (/advertis/i.test(nameLower)) return 'Advertising Costs';
-  if (/storage/i.test(nameLower)) return 'Storage Fees';
-  if (/fba|fulfilment|fulfillment/i.test(nameLower)) return 'FBA Fees';
-  if (/refund/i.test(nameLower)) return 'Refunds';
-  if (/reimburse/i.test(nameLower)) return 'Reimbursements';
-  if (/shipping|freight|delivery/i.test(nameLower) && /revenue|income|sales/i.test(nameLower)) return 'Shipping';
-  if (/promotional|promo|discount|voucher/i.test(nameLower)) return 'Promotional Discounts';
-  if (/seller fee|commission|referral/i.test(nameLower)) return 'Seller Fees';
-  if (/\bfee/i.test(nameLower) && !/fba|storage|advertis|shipping/i.test(nameLower)) return 'Seller Fees';
-  if (/other.*fee|miscellaneous/i.test(nameLower)) return 'Other Fees';
-  if (/sales|revenue|income/i.test(nameLower)) return 'Sales';
-  if (/shipping/i.test(nameLower)) return 'Shipping';
-  return null;
-}
-
-function suggestNextCode(existingCodes: string[], rangeStart: number): string {
-  const numericCodes = existingCodes
-    .map(c => parseInt(c, 10))
-    .filter(n => !isNaN(n))
-    .sort((a, b) => a - b);
-
-  const rangeEnd = rangeStart + 199;
-  const codesInRange = numericCodes.filter(c => c >= rangeStart && c <= rangeEnd);
-  if (codesInRange.length === 0) return String(rangeStart);
-  return String(Math.max(...codesInRange) + 1);
-}
-
-function generateNewName(templateName: string, templateMarketplace: string, targetMarketplace: string): string {
-  // Replace the template marketplace name with the target marketplace name
-  // Handle various formats: "Amazon Sales AU" → "BigW Sales AU"
-  const escapedMp = templateMarketplace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(escapedMp, 'gi');
-  const replaced = templateName.replace(regex, targetMarketplace);
-  if (replaced !== templateName) return replaced;
-
-  // Fallback: replace first word cluster that matches
-  const mpWords = templateMarketplace.split(/\s+/);
-  let result = templateName;
-  for (const word of mpWords) {
-    const wordRegex = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    result = result.replace(wordRegex, targetMarketplace);
-    if (result !== templateName) break;
-  }
-  return result !== templateName ? result : `${targetMarketplace} ${templateName}`;
 }
 
 export default function CloneCoaDialog({
@@ -150,10 +39,11 @@ export default function CloneCoaDialog({
   targetMarketplace,
   coveredMarketplaces,
   coaAccounts,
+  taxProfile,
   onComplete,
 }: CloneCoaDialogProps) {
   const [templateMarketplace, setTemplateMarketplace] = useState('');
-  const [cloneRows, setCloneRows] = useState<CloneRow[]>([]);
+  const [cloneRows, setCloneRows] = useState<CloneAccountRow[]>([]);
   const [creating, setCreating] = useState(false);
 
   const allCodes = useMemo(() =>
@@ -161,41 +51,18 @@ export default function CloneCoaDialog({
     [coaAccounts]
   );
 
-  // When template changes, rebuild the clone rows
+  const isNonAuGst = taxProfile && taxProfile !== 'AU_GST';
+
+  // When template changes, rebuild the clone rows via canonical action
   useEffect(() => {
     if (!templateMarketplace || !open) return;
 
-    const templateAccounts = findTemplateAccounts(templateMarketplace, coaAccounts);
-    const usedCodes = new Set(allCodes);
-    const rows: CloneRow[] = [];
-
-    for (const cat of CLONE_CATEGORIES) {
-      const templateAcc = templateAccounts.find(ta => ta.category === cat);
-      if (!templateAcc) continue;
-
-      const isRevenue = REVENUE_CATEGORIES.has(cat);
-      const rangeStart = isRevenue ? 200 : 400;
-
-      // Find next available code
-      let nextCode = parseInt(suggestNextCode([...usedCodes], rangeStart), 10);
-      while (usedCodes.has(String(nextCode))) nextCode++;
-      usedCodes.add(String(nextCode));
-
-      const newName = generateNewName(templateAcc.name, templateMarketplace, targetMarketplace);
-      const isAmazonSpecific = AMAZON_SPECIFIC.has(cat);
-      const targetIsAmazon = targetMarketplace.toLowerCase().includes('amazon');
-
-      rows.push({
-        category: cat,
-        enabled: isAmazonSpecific ? targetIsAmazon : true,
-        templateCode: templateAcc.code,
-        templateName: templateAcc.name,
-        newCode: String(nextCode),
-        newName: newName,
-        type: templateAcc.type,
-        taxType: templateAcc.taxType,
-      });
-    }
+    const rows = buildClonePreview({
+      templateMarketplace,
+      targetMarketplace,
+      coaAccounts,
+      existingCodes: allCodes,
+    });
 
     setCloneRows(rows);
   }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace]);
@@ -217,45 +84,20 @@ export default function CloneCoaDialog({
 
     setCreating(true);
     try {
-      // Batch in groups of 10
-      const batches: CloneRow[][] = [];
-      for (let i = 0; i < enabledRows.length; i += 10) {
-        batches.push(enabledRows.slice(i, i + 10));
-      }
+      const result = await executeCoaClone({ rows: cloneRows });
 
-      const allCreated: Record<string, string> = {};
-      for (const batch of batches) {
-        const accounts = batch.map(row => ({
-          code: row.newCode,
-          name: row.newName,
-          type: row.type,
-          tax_type: row.taxType || undefined,
-        }));
-
-        const result = await createXeroAccounts(accounts);
-        if (!result.success) {
-          toast.error(`Failed: ${result.error}`);
-          return;
-        }
-        if (result.errors && result.errors.length > 0) {
-          for (const err of result.errors) {
-            toast.error(`${err.code}: ${err.error}`);
-          }
-        }
-        if (result.created) {
-          for (const created of result.created) {
-            const matchingRow = batch.find(r => r.newCode === created.code);
-            if (matchingRow) {
-              allCreated[matchingRow.category] = created.code;
-            }
-          }
+      if (result.errors.length > 0) {
+        for (const err of result.errors) {
+          toast.error(err.code ? `${err.code}: ${err.error}` : err.error);
         }
       }
 
-      const count = Object.keys(allCreated).length;
-      toast.success(`Created ${count} account${count !== 1 ? 's' : ''} in Xero for ${targetMarketplace}`);
-      onOpenChange(false);
-      onComplete(allCreated);
+      if (result.success) {
+        const count = Object.keys(result.createdMappings).length;
+        toast.success(`Created ${count} account${count !== 1 ? 's' : ''} in Xero for ${targetMarketplace}`);
+        onOpenChange(false);
+        onComplete(result.createdMappings);
+      }
     } catch (err: any) {
       toast.error(`Error: ${err.message}`);
     } finally {
@@ -281,14 +123,15 @@ export default function CloneCoaDialog({
     ));
   };
 
-  // Check for code conflicts
+  // Check for code conflicts using policy
   const codeConflicts = useMemo(() => {
     const conflicts = new Set<number>();
     const usedInRows = new Map<string, number>();
     for (let i = 0; i < cloneRows.length; i++) {
       const row = cloneRows[i];
       if (!row.enabled) continue;
-      if (allCodes.includes(row.newCode)) {
+      const validation = validateAccountCode(row.newCode, allCodes, row.type);
+      if (!validation.valid) {
         conflicts.add(i);
       }
       if (usedInRows.has(row.newCode)) {
@@ -315,6 +158,18 @@ export default function CloneCoaDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Tax profile warning */}
+          {isNonAuGst && (
+            <Alert className="border-amber-300 bg-amber-50">
+              <ShieldAlert className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-xs text-amber-900">
+                Your tax profile is <strong>{taxProfile}</strong>. Template accounts use AU GST tax types.
+                Verify these tax types are correct for your setup before proceeding.
+                Clone does not change your support tier — push gating still applies.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Template selector */}
           <div>
             <Label className="text-xs font-medium">Clone structure from</Label>
@@ -359,7 +214,7 @@ export default function CloneCoaDialog({
                       <td className="p-2">
                         <span className="font-medium">{row.category}</span>
                         {AMAZON_SPECIFIC.has(row.category) && !targetMarketplace.toLowerCase().includes('amazon') && (
-                          <Badge variant="outline" className="ml-1 text-[9px] text-amber-700 border-amber-300">Amazon-specific</Badge>
+                          <Badge variant="outline" className="ml-1 text-[9px]">Amazon-specific</Badge>
                         )}
                       </td>
                       <td className="p-2 text-muted-foreground">
@@ -376,7 +231,7 @@ export default function CloneCoaDialog({
                           disabled={!row.enabled}
                         />
                         {codeConflicts.has(idx) && (
-                          <span className="text-[9px] text-destructive">Code exists</span>
+                          <span className="text-[9px] text-destructive">Code conflict</span>
                         )}
                       </td>
                       <td className="p-2">
@@ -414,10 +269,11 @@ export default function CloneCoaDialog({
             </div>
           )}
 
-          <Alert variant="destructive" className="border-amber-300 bg-amber-50 text-amber-900">
+          <Alert className="border-amber-300 bg-amber-50">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-xs">
-              This will create new accounts in your Xero Chart of Accounts. Tax types will be inherited from the template accounts. Review codes and names before proceeding.
+            <AlertDescription className="text-xs text-amber-900">
+              This will create new accounts in your Xero Chart of Accounts. Tax types are inherited from the template.
+              Cloning accounts does not change support tier — push gating still applies per marketplace.
             </AlertDescription>
           </Alert>
         </div>

@@ -110,3 +110,26 @@ export {
   type CreateXeroAccountInput,
   type CreateXeroAccountsResult,
 } from './xeroAccounts';
+
+// ─── COA Coverage (gap detection) ───────────────────────────────────────────
+export {
+  getMarketplaceCoverage,
+  findTemplateAccounts,
+  generateNewAccountName,
+  detectCategoryFromName,
+  type CoverageResult,
+  type CoverageStatus,
+  type MarketplaceCoverage,
+  type TemplateAccount,
+} from './coaCoverage';
+
+// ─── COA Clone (canonical action) ───────────────────────────────────────────
+export {
+  buildClonePreview,
+  executeCoaClone,
+  CLONE_CATEGORIES,
+  type CloneAccountRow,
+  type ClonePreviewInput,
+  type CloneExecuteInput,
+  type CloneResult,
+} from './coaClone';

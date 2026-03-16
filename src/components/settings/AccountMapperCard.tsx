@@ -20,6 +20,7 @@ import {
   getCachedXeroAccounts,
   getCoaLastSyncedAt,
   createXeroAccounts,
+  getMarketplaceCoverage,
   type CachedXeroAccount,
 } from '@/actions';
 import { Save, Upload, Copy } from 'lucide-react';
@@ -89,6 +90,7 @@ export default function AccountMapperCard() {
   // Clone COA state
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [cloneTarget, setCloneTarget] = useState('');
+  const [taxProfile, setTaxProfile] = useState<string | null>(null);
 
   // Build CoA lookup map
   const coaMap = useMemo(() => {
@@ -105,36 +107,17 @@ export default function AccountMapperCard() {
     return map;
   }, [coaAccounts]);
 
-  // ─── Gap detection: find uncovered marketplaces ───────────────────
+  // ─── Gap detection: find uncovered marketplaces (via canonical action) ──
   const { uncoveredMarketplaces, coveredMarketplaces } = useMemo(() => {
     if (!splitByMarketplace || coaAccounts.length === 0 || activeMarketplaces.length === 0) {
       return { uncoveredMarketplaces: [] as string[], coveredMarketplaces: [] as string[] };
     }
 
-    const covered: string[] = [];
-    const uncovered: string[] = [];
-
-    for (const mp of activeMarketplaces) {
-      const mpLower = mp.toLowerCase();
-      // Check if any COA account name contains this marketplace name
-      const hasMatch = coaAccounts.some(acc => {
-        if (!acc.account_code || !acc.is_active) return false;
-        const nameLower = acc.account_name.toLowerCase();
-        // Check for marketplace name in account name
-        if (nameLower.includes(mpLower)) return true;
-        // Check individual words (e.g., "BigW" in "BigW Sales AU")
-        const mpWords = mpLower.split(/\s+/);
-        return mpWords.length > 0 && mpWords.every(w => nameLower.includes(w));
-      });
-
-      if (hasMatch) {
-        covered.push(mp);
-      } else {
-        uncovered.push(mp);
-      }
-    }
-
-    return { uncoveredMarketplaces: uncovered, coveredMarketplaces: covered };
+    const coverage = getMarketplaceCoverage(activeMarketplaces, coaAccounts);
+    return {
+      uncoveredMarketplaces: [...coverage.uncovered, ...coverage.partial],
+      coveredMarketplaces: coverage.covered,
+    };
   }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
 
   // ─── Clone COA banner renderer ───────────────────────────────────
@@ -161,8 +144,11 @@ export default function AccountMapperCard() {
               size="sm"
               className="h-6 text-xs gap-1"
               onClick={() => {
-                setCloneTarget(mp);
-                setCloneDialogOpen(true);
+                // PIN gate for COA clone
+                settingsPin.requirePin(() => {
+                  setCloneTarget(mp);
+                  setCloneDialogOpen(true);
+                });
               }}
             >
               <Copy className="h-3 w-3" />
@@ -181,16 +167,14 @@ export default function AccountMapperCard() {
       targetMarketplace={cloneTarget}
       coveredMarketplaces={coveredMarketplaces}
       coaAccounts={coaAccounts}
+      taxProfile={taxProfile}
       onComplete={async (createdCodes) => {
-        // Refresh COA
         const [accounts, lastSynced] = await Promise.all([
           getCachedXeroAccounts(),
           getCoaLastSyncedAt(),
         ]);
         setCoaAccounts(accounts);
         setCoaLastSynced(lastSynced);
-
-        // Auto-map the created codes as per-marketplace overrides
         const updated = { ...editableMapping };
         for (const [category, code] of Object.entries(createdCodes)) {
           const key = `${category}:${cloneTarget}`;
@@ -220,6 +204,14 @@ export default function AccountMapperCard() {
         .maybeSingle();
       setIsAdmin(!!roleRow);
 
+      // Load tax profile
+      const { data: taxSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'org_tax_profile')
+        .maybeSingle();
+      setTaxProfile(taxSetting?.value || 'AU_GST');
       // Load cached COA + last sync in parallel
       const [accounts, lastSynced] = await Promise.all([
         getCachedXeroAccounts(),
