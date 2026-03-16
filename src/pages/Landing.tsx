@@ -237,18 +237,18 @@ export default function Landing() {
         <div className="container-custom max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              What Xettle actually does.
+              Not upload → push.<br />Verify → reconcile → approve → post.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              A complete settlement engine — from marketplace to Xero, with verification at every step.
+              A complete settlement engine — from marketplace to Xero, with verification and reconciliation at every step.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[
               { step: '01', icon: Store, title: 'Connect marketplace', desc: 'API for Amazon & Shopify. File upload for Bunnings, eBay, Kogan, BigW, Catch, MyDeal and more.' },
-              { step: '02', icon: Search, title: 'Parse settlement', desc: 'Auto-detect format, split mixed files, extract every fee category. 10 standardised line items.' },
-              { step: '03', icon: CheckCircle, title: 'Verify totals', desc: 'Sales, fees, refunds and GST are validated against the settlement. Nothing posts until the numbers check out.' },
-              { step: '04', icon: Receipt, title: 'Match bank deposit', desc: 'Compare settlement payout to your Xero bank feed. Confirm the money actually arrived.' },
+              { step: '02', icon: Search, title: 'Parse & verify settlement', desc: 'Auto-detect format, split mixed files, validate every line item. Sales + fees + refunds must balance.' },
+              { step: '03', icon: DollarSign, title: 'Reconcile bank deposit', desc: 'Match the settlement payout to a real bank transaction. Tolerance-based matching handles rounding.' },
+              { step: '04', icon: AlertTriangle, title: 'Surface exceptions', desc: 'Missing contacts, duplicate settlements, fee changes, locked periods — caught and surfaced before posting.' },
             ].map((item) => {
               const Icon = item.icon;
               return (
@@ -266,8 +266,8 @@ export default function Landing() {
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { step: '05', icon: FileSpreadsheet, title: 'Generate correct invoice', desc: 'Sales, shipping, commission, FBA, storage, refunds, reimbursements — each on the right Xero account code.' },
-              { step: '06', icon: ShieldCheck, title: 'Post to Xero safely', desc: 'Always DRAFT. Duplicate prevention built in. Audit CSV and raw source attached to every invoice.' },
-              { step: '07', icon: Lock, title: 'Keep audit history', desc: 'Every posting is logged with a full payload snapshot. Void and repost with a complete chain of custody.' },
+              { step: '06', icon: ShieldCheck, title: 'Post safely as DRAFT', desc: 'Duplicate guard active. Audit CSV attached. Raw payload stored. Your accountant reviews before authorising.' },
+              { step: '07', icon: Lock, title: 'Full audit history', desc: 'Every posting logged. Void and repost with replacement chain. Period locks respected. Nothing lost.' },
             ].map((item) => {
               const Icon = item.icon;
               return (
