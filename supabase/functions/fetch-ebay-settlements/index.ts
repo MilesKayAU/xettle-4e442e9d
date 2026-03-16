@@ -212,6 +212,117 @@ function extractTransactionGst(
   return { taxAmount: 0, mode: 'none' }
 }
 
+// ─── Settlement Lines Persistence ────────────────────────────────────────
+// Writes per-transaction rows to settlement_lines so the UI drilldown
+// and Xero raw-source attachment have data.  Uses delete-before-insert
+// for idempotency (same pattern as Amazon / Shopify).
+//
+// INTERNAL FINANCIAL CATEGORIES (canonical)
+// Source: src/constants/financial-categories.ts
+//   revenue, marketplace_fee, payment_fee, shipping_income, shipping_cost,
+//   refund, gst_income, gst_expense, promotion, adjustment, fba_fee,
+//   storage_fee, advertising
+
+function mapEbayTxType(type: string): { transaction_type: string; amount_type: string; accounting_category: string } {
+  switch (type) {
+    case 'SALE':
+      return { transaction_type: 'Order', amount_type: 'ItemPrice', accounting_category: 'revenue' }
+    case 'REFUND':
+      return { transaction_type: 'Refund', amount_type: 'ItemPrice', accounting_category: 'refund' }
+    case 'CREDIT':
+      return { transaction_type: 'Order', amount_type: 'ItemPrice', accounting_category: 'revenue' }
+    case 'SHIPPING_LABEL':
+      return { transaction_type: 'Fee', amount_type: 'ShippingLabel', accounting_category: 'shipping_cost' }
+    case 'DISPUTE':
+      return { transaction_type: 'Adjustment', amount_type: 'Dispute', accounting_category: 'adjustment' }
+    case 'TRANSFER':
+      return { transaction_type: 'Adjustment', amount_type: 'Transfer', accounting_category: 'adjustment' }
+    case 'NON_SALE_CHARGE':
+      return { transaction_type: 'Fee', amount_type: 'NonSaleCharge', accounting_category: 'marketplace_fee' }
+    default:
+      return { transaction_type: 'Other', amount_type: 'Other', accounting_category: 'adjustment' }
+  }
+}
+
+async function persistSettlementLines(
+  supabase: any,
+  userId: string,
+  settlementId: string,
+  transactions: EbayTransaction[],
+  payoutDate: string,
+): Promise<{ count: number; error?: string }> {
+  try {
+    // 1. Delete existing lines (idempotent)
+    await supabase
+      .from('settlement_lines')
+      .delete()
+      .eq('user_id', userId)
+      .eq('settlement_id', settlementId)
+
+    if (transactions.length === 0) return { count: 0 }
+
+    // 2. Map transactions to settlement_lines rows
+    const lineRows: any[] = []
+
+    for (const tx of transactions) {
+      const amount = parseFloat(tx.amount?.value || '0')
+      const feeAmount = parseFloat(tx.totalFeeAmount?.value || '0')
+      const txDate = (tx.transactionDate || payoutDate || '').split('T')[0]
+      const txType = tx.transactionType || 'UNKNOWN'
+      const mapped = mapEbayTxType(txType)
+
+      // Primary transaction row (sale/refund/credit amount)
+      lineRows.push({
+        user_id: userId,
+        settlement_id: settlementId,
+        order_id: tx.orderId || null,
+        sku: tx.orderLineItems?.[0]?.sku || null,
+        amount: round2(amount),
+        amount_description: txType,
+        transaction_type: mapped.transaction_type,
+        amount_type: mapped.amount_type,
+        accounting_category: mapped.accounting_category,
+        marketplace_name: 'eBay AU',
+        posted_date: txDate,
+      })
+
+      // Separate fee row if fees exist on this transaction
+      if (feeAmount !== 0) {
+        lineRows.push({
+          user_id: userId,
+          settlement_id: settlementId,
+          order_id: tx.orderId || null,
+          sku: null,
+          amount: round2(-Math.abs(feeAmount)),
+          amount_description: `${txType}_FEE`,
+          transaction_type: 'Fee',
+          amount_type: 'Commission',
+          accounting_category: 'marketplace_fee',
+          marketplace_name: 'eBay AU',
+          posted_date: txDate,
+        })
+      }
+    }
+
+    // 3. Batch insert in chunks of 500
+    for (let i = 0; i < lineRows.length; i += 500) {
+      const chunk = lineRows.slice(i, i + 500)
+      const { error: insertErr } = await supabase
+        .from('settlement_lines')
+        .insert(chunk)
+      if (insertErr) {
+        console.error(`[fetch-ebay-settlements] settlement_lines insert chunk failed:`, insertErr)
+        return { count: i, error: insertErr.message }
+      }
+    }
+
+    return { count: lineRows.length }
+  } catch (err: any) {
+    console.error(`[fetch-ebay-settlements] settlement_lines write failed:`, err)
+    return { count: 0, error: err.message || 'unknown' }
+  }
+}
+
 // ─── Settlement Builder ─────────────────────────────────────────────────
 
 function buildSettlementFromPayout(
