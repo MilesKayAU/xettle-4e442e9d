@@ -225,53 +225,55 @@ export default function RailPostingSettings() {
   };
 
   const saveRailSetting = async (rail: string, updates: Partial<RailSetting> & { auto_post_enabled_at?: string }) => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return;
+    settingsPin.requirePin(async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) return;
 
-    const current = getSettingForRail(rail);
-    const newSetting = { ...current, ...updates };
+      const current = getSettingForRail(rail);
+      const newSetting = { ...current, ...updates };
 
-    const { error } = await supabase
-      .from('rail_posting_settings')
-      .upsert({
-        user_id: userData.user.id,
-        rail,
-        posting_mode: newSetting.posting_mode,
-        require_bank_match: newSetting.require_bank_match,
-        auto_post_enabled_at: updates.auto_post_enabled_at || current.auto_post_enabled_at || null,
-        auto_post_enabled_by: updates.posting_mode === 'auto' ? userData.user.id : null,
-        invoice_status: newSetting.invoice_status,
-        auto_repost_after_rollback: newSetting.auto_repost_after_rollback,
-        tax_mode: newSetting.tax_mode,
-        support_acknowledged_at: newSetting.support_acknowledged_at,
-        updated_at: new Date().toISOString(),
-      } as any, { onConflict: 'user_id,rail' });
+      const { error } = await supabase
+        .from('rail_posting_settings')
+        .upsert({
+          user_id: userData.user.id,
+          rail,
+          posting_mode: newSetting.posting_mode,
+          require_bank_match: newSetting.require_bank_match,
+          auto_post_enabled_at: updates.auto_post_enabled_at || current.auto_post_enabled_at || null,
+          auto_post_enabled_by: updates.posting_mode === 'auto' ? userData.user.id : null,
+          invoice_status: newSetting.invoice_status,
+          auto_repost_after_rollback: newSetting.auto_repost_after_rollback,
+          tax_mode: newSetting.tax_mode,
+          support_acknowledged_at: newSetting.support_acknowledged_at,
+          updated_at: new Date().toISOString(),
+        } as any, { onConflict: 'user_id,rail' });
 
-    if (error) {
-      toast.error('Failed to save setting');
-      console.error(error);
-      return;
-    }
+      if (error) {
+        toast.error('Failed to save setting');
+        console.error(error);
+        return;
+      }
 
-    setSettings(prev => {
-      const next = new Map(prev);
-      next.set(rail, newSetting as RailSetting);
-      return next;
+      setSettings(prev => {
+        const next = new Map(prev);
+        next.set(rail, newSetting as RailSetting);
+        return next;
+      });
+
+      if ('posting_mode' in updates) {
+        toast.success(
+          newSetting.posting_mode === 'auto'
+            ? `Auto-post enabled for ${getRailLabel(rail)}`
+            : `Auto-post disabled for ${getRailLabel(rail)}`
+        );
+      } else if ('invoice_status' in updates) {
+        toast.success(`${getRailLabel(rail)} invoices will be created as ${updates.invoice_status}`);
+      } else if ('tax_mode' in updates) {
+        toast.success(`Tax mode updated for ${getRailLabel(rail)}`);
+      } else if ('auto_repost_after_rollback' in updates) {
+        toast.success(updates.auto_repost_after_rollback ? 'Auto-repost after rollback enabled' : 'Auto-repost after rollback disabled');
+      }
     });
-
-    if ('posting_mode' in updates) {
-      toast.success(
-        newSetting.posting_mode === 'auto'
-          ? `Auto-post enabled for ${getRailLabel(rail)}`
-          : `Auto-post disabled for ${getRailLabel(rail)}`
-      );
-    } else if ('invoice_status' in updates) {
-      toast.success(`${getRailLabel(rail)} invoices will be created as ${updates.invoice_status}`);
-    } else if ('tax_mode' in updates) {
-      toast.success(`Tax mode updated for ${getRailLabel(rail)}`);
-    } else if ('auto_repost_after_rollback' in updates) {
-      toast.success(updates.auto_repost_after_rollback ? 'Auto-repost after rollback enabled' : 'Auto-repost after rollback disabled');
-    }
   };
 
   const handleRetry = async (settlementId: string) => {
