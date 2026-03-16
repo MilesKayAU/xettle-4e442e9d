@@ -1,8 +1,9 @@
 /**
  * Canonical Xero Invoice Actions
  * 
- * ALL client-side calls to fetch-xero-invoice and rescan-xero-invoice-match
- * MUST go through these functions. No component may invoke these edge functions directly.
+ * ALL client-side calls to fetch-xero-invoice, rescan-xero-invoice-match,
+ * and preview-xettle-invoice-payload MUST go through these functions.
+ * No component may invoke these edge functions directly.
  * 
  * Tables written: xero_invoice_cache, xero_accounting_matches, system_events (via edge fns)
  * Idempotency: upsert (user_id, xero_invoice_id) for cache; upsert for matches
@@ -56,6 +57,63 @@ export interface RescanResult {
   error?: string;
 }
 
+export interface PayloadDifference {
+  field: string;
+  xero_value: any;
+  xettle_value: any;
+  severity: 'info' | 'warning' | 'error';
+}
+
+export type CompareVerdict = 'PASS' | 'WARN' | 'FAIL' | 'BLOCKED';
+
+export interface XettlePreviewPayload {
+  Type: string;
+  Contact: { Name: string };
+  Date: string;
+  DueDate: string;
+  CurrencyCode: string;
+  Status: string;
+  LineAmountTypes: string;
+  Reference: string;
+  LineItems: Array<{
+    Description: string;
+    AccountCode: string;
+    TaxType: string;
+    UnitAmount: number;
+    Quantity: number;
+    Tracking?: any[];
+  }>;
+}
+
+export interface CompareResult {
+  xeroSide: {
+    status: string | null;
+    currency: string | null;
+    total: number | null;
+    sub_total: number | null;
+    total_tax: number | null;
+    reference: string | null;
+    contact_name: string | null;
+    line_items: XeroLineItem[];
+    fetched_at: string | null;
+  } | null;
+  xettleSide: {
+    payload: XettlePreviewPayload;
+    total: number;
+    tier: string;
+    tax_mode: string;
+    enforced_status: string;
+    canonical_version: string;
+    blockers: string[];
+    warnings: string[];
+    tracking: any;
+  } | null;
+  differences: PayloadDifference[];
+  verdict: CompareVerdict;
+  recommendation: string;
+}
+
+// ─── Legacy compat types (still exported for existing consumers) ──────────
 export interface PayloadDiffResult {
   xeroSide: {
     status: string | null;
@@ -79,13 +137,6 @@ export interface PayloadDiffResult {
     }>;
   } | null;
   differences: PayloadDifference[];
-}
-
-export interface PayloadDifference {
-  field: string;
-  xero_value: any;
-  xettle_value: any;
-  severity: 'info' | 'warning' | 'error';
 }
 
 // ─── Refresh Invoice Details ─────────────────────────────────────────────────
@@ -133,37 +184,45 @@ export async function rescanMatchForInvoice(xeroInvoiceId: string): Promise<Resc
   };
 }
 
-// ─── Compare Xero vs Xettle Payload ──────────────────────────────────────────
+// ─── Compare Xero vs Xettle (Server Canonical Builder) ──────────────────────
 
 /**
- * Build a diff between cached Xero invoice and what Xettle would post for the settlement.
- * This is a client-side comparison using cached data — no Xero API calls.
+ * Full orchestrator: fetch Xero invoice + generate server-side preview + deep diff.
+ * Uses canonical builder (preview-xettle-invoice-payload edge function).
  */
-export async function getXeroVsXettlePayloadDiff(
-  settlementId: string,
-  xeroInvoiceId: string,
-): Promise<PayloadDiffResult> {
+export async function compareXeroInvoiceToSettlement({
+  xeroInvoiceId,
+  settlementId,
+  forceRefresh = false,
+}: {
+  xeroInvoiceId: string;
+  settlementId: string;
+  forceRefresh?: boolean;
+}): Promise<CompareResult> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { xeroSide: null, xettleSide: null, differences: [] };
+  if (!user) {
+    return emptyCompareResult('FAIL', 'Not authenticated');
+  }
 
-  // Fetch both in parallel
-  const [cacheRes, settlementRes] = await Promise.all([
+  // 1) Refresh Xero invoice (respect cooldown unless forceRefresh)
+  // We always call refresh — the server handles cooldown
+  await refreshXeroInvoiceDetails(xeroInvoiceId);
+
+  // 2) Fetch cached Xero invoice + call preview in parallel
+  const [cacheRes, previewRes] = await Promise.all([
     supabase
       .from('xero_invoice_cache')
       .select('*')
       .eq('user_id', user.id)
       .eq('xero_invoice_id', xeroInvoiceId)
       .maybeSingle(),
-    supabase
-      .from('settlements')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('settlement_id', settlementId)
-      .maybeSingle(),
+    supabase.functions.invoke('preview-xettle-invoice-payload', {
+      body: { settlementId },
+    }),
   ]);
 
   const cached = cacheRes.data;
-  const settlement = settlementRes.data;
+  const preview = previewRes.data;
 
   // Build Xero side
   const xeroSide = cached ? {
@@ -173,109 +232,256 @@ export async function getXeroVsXettlePayloadDiff(
     sub_total: cached.sub_total,
     total_tax: cached.total_tax,
     reference: cached.reference,
+    contact_name: cached.contact_name,
     line_items: (cached.line_items as unknown as XeroLineItem[]) || [],
+    fetched_at: cached.fetched_at,
   } : null;
 
-  // Build Xettle side (what we would send)
-  const xettleSide = settlement ? buildXettlePreviewPayload(settlement) : null;
+  // Build Xettle side
+  if (!preview?.success || !preview?.payload) {
+    const blockerMsg = preview?.blockers?.length ? preview.blockers.join('; ') : preview?.error || 'Preview generation failed';
+    return {
+      xeroSide,
+      xettleSide: null,
+      differences: [],
+      verdict: 'BLOCKED',
+      recommendation: `Cannot generate preview: ${blockerMsg}`,
+    };
+  }
 
-  // Compute differences
-  const differences: PayloadDifference[] = [];
+  const xettlePayload = preview.payload as XettlePreviewPayload;
+  const xettleTotal = xettlePayload.LineItems.reduce((s, li) => s + (li.UnitAmount || 0), 0);
 
-  if (xeroSide && xettleSide) {
-    // Total comparison
-    if (xeroSide.total != null && Math.abs((xeroSide.total || 0) - xettleSide.total) > 0.01) {
-      differences.push({
+  const xettleSide = {
+    payload: xettlePayload,
+    total: Math.round(xettleTotal * 100) / 100,
+    tier: preview.tier || 'UNKNOWN',
+    tax_mode: preview.tax_mode || 'UNKNOWN',
+    enforced_status: preview.enforced_status || 'DRAFT',
+    canonical_version: preview.canonical_version || 'unknown',
+    blockers: preview.blockers || [],
+    warnings: preview.warnings || [],
+    tracking: preview.tracking || null,
+  };
+
+  // Check for blockers
+  if (xettleSide.blockers.length > 0) {
+    return {
+      xeroSide,
+      xettleSide,
+      differences: [],
+      verdict: 'BLOCKED',
+      recommendation: `Posting blocked: ${xettleSide.blockers.join('; ')}. Fix blockers before replacing.`,
+    };
+  }
+
+  if (!xeroSide) {
+    return {
+      xeroSide: null,
+      xettleSide,
+      differences: [],
+      verdict: 'WARN',
+      recommendation: 'No cached Xero invoice — refresh first to enable comparison.',
+    };
+  }
+
+  // 3) Deep diff
+  const differences = computeDeepDiff(xeroSide, xettleSide);
+
+  // 4) Verdict
+  const verdict = computeVerdict(xeroSide, xettleSide, differences);
+
+  // 5) Recommendation
+  const recommendation = getRecommendation(verdict);
+
+  // 6) Log diff event
+  await supabase.from('system_events').insert({
+    user_id: user.id,
+    event_type: 'xero_vs_xettle_diff_generated',
+    severity: 'info',
+    settlement_id: settlementId,
+    details: {
+      xero_invoice_id: xeroInvoiceId,
+      verdict,
+      difference_count: differences.length,
+      canonical_version: xettleSide.canonical_version,
+      tier: xettleSide.tier,
+      xero_total: xeroSide.total,
+      xettle_total: xettleSide.total,
+    },
+  } as any);
+
+  return { xeroSide, xettleSide, differences, verdict, recommendation };
+}
+
+// ─── Legacy compat: getXeroVsXettlePayloadDiff ──────────────────────────────
+// Redirects to compareXeroInvoiceToSettlement for backward compatibility.
+
+export async function getXeroVsXettlePayloadDiff(
+  settlementId: string,
+  xeroInvoiceId: string,
+): Promise<PayloadDiffResult> {
+  const result = await compareXeroInvoiceToSettlement({ xeroInvoiceId, settlementId });
+
+  return {
+    xeroSide: result.xeroSide ? {
+      status: result.xeroSide.status,
+      currency: result.xeroSide.currency,
+      total: result.xeroSide.total,
+      sub_total: result.xeroSide.sub_total,
+      total_tax: result.xeroSide.total_tax,
+      reference: result.xeroSide.reference,
+      line_items: result.xeroSide.line_items,
+    } : null,
+    xettleSide: result.xettleSide ? {
+      status: result.xettleSide.enforced_status,
+      currency: result.xettleSide.payload.CurrencyCode,
+      total: result.xettleSide.total,
+      reference: result.xettleSide.payload.Reference,
+      line_items: result.xettleSide.payload.LineItems.map(li => ({
+        description: li.Description,
+        account_code: li.AccountCode,
+        tax_type: li.TaxType,
+        amount: li.UnitAmount,
+      })),
+    } : null,
+    differences: result.differences,
+  };
+}
+
+// ─── Deep Diff ──────────────────────────────────────────────────────────────
+
+function computeDeepDiff(
+  xero: NonNullable<CompareResult['xeroSide']>,
+  xettle: NonNullable<CompareResult['xettleSide']>,
+): PayloadDifference[] {
+  const diffs: PayloadDifference[] = [];
+  const payload = xettle.payload;
+
+  // Currency
+  if (xero.currency && xero.currency !== payload.CurrencyCode) {
+    diffs.push({ field: 'Currency', xero_value: xero.currency, xettle_value: payload.CurrencyCode, severity: 'error' });
+  }
+
+  // Total
+  if (xero.total != null) {
+    const totalDiff = Math.abs((xero.total || 0) - xettle.total);
+    if (totalDiff > 0.01) {
+      diffs.push({
         field: 'Total',
-        xero_value: xeroSide.total,
-        xettle_value: xettleSide.total,
-        severity: Math.abs((xeroSide.total || 0) - xettleSide.total) > 1 ? 'error' : 'warning',
-      });
-    }
-
-    // Currency
-    if (xeroSide.currency && xeroSide.currency !== xettleSide.currency) {
-      differences.push({ field: 'Currency', xero_value: xeroSide.currency, xettle_value: xettleSide.currency, severity: 'error' });
-    }
-
-    // Status
-    if (xeroSide.status && xeroSide.status !== xettleSide.status) {
-      differences.push({ field: 'Status', xero_value: xeroSide.status, xettle_value: xettleSide.status, severity: 'info' });
-    }
-
-    // Reference
-    if (xeroSide.reference && xeroSide.reference !== xettleSide.reference) {
-      differences.push({ field: 'Reference', xero_value: xeroSide.reference, xettle_value: xettleSide.reference, severity: 'info' });
-    }
-
-    // Line item count
-    if (xeroSide.line_items.length !== xettleSide.line_items.length) {
-      differences.push({ field: 'Line item count', xero_value: xeroSide.line_items.length, xettle_value: xettleSide.line_items.length, severity: 'warning' });
-    }
-
-    // Tax type comparison (aggregate)
-    const xeroTaxTypes = new Set(xeroSide.line_items.map(l => l.tax_type));
-    const xettleTaxTypes = new Set(xettleSide.line_items.map(l => l.tax_type));
-    const missingTax = [...xettleTaxTypes].filter(t => !xeroTaxTypes.has(t));
-    const extraTax = [...xeroTaxTypes].filter(t => !xettleTaxTypes.has(t));
-    if (missingTax.length || extraTax.length) {
-      differences.push({
-        field: 'Tax types',
-        xero_value: [...xeroTaxTypes].join(', '),
-        xettle_value: [...xettleTaxTypes].join(', '),
-        severity: 'warning',
-      });
-    }
-
-    // Account code comparison
-    const xeroAccounts = new Set(xeroSide.line_items.map(l => l.account_code).filter(Boolean));
-    const xettleAccounts = new Set(xettleSide.line_items.map(l => l.account_code).filter(Boolean));
-    const missingAccounts = [...xettleAccounts].filter(a => !xeroAccounts.has(a));
-    if (missingAccounts.length) {
-      differences.push({
-        field: 'Account codes',
-        xero_value: [...xeroAccounts].join(', '),
-        xettle_value: [...xettleAccounts].join(', '),
-        severity: 'warning',
+        xero_value: xero.total,
+        xettle_value: xettle.total,
+        severity: totalDiff > 1.0 ? 'error' : 'warning',
       });
     }
   }
 
-  return { xeroSide, xettleSide, differences };
+  // Status
+  if (xero.status && xero.status !== xettle.enforced_status) {
+    diffs.push({ field: 'Status', xero_value: xero.status, xettle_value: xettle.enforced_status, severity: 'info' });
+  }
+
+  // Reference
+  if (xero.reference && xero.reference !== payload.Reference) {
+    diffs.push({ field: 'Reference', xero_value: xero.reference, xettle_value: payload.Reference, severity: 'info' });
+  }
+
+  // Contact
+  if (xero.contact_name && xero.contact_name !== payload.Contact.Name) {
+    diffs.push({ field: 'Contact', xero_value: xero.contact_name, xettle_value: payload.Contact.Name, severity: 'warning' });
+  }
+
+  // Line item count
+  if (xero.line_items.length !== payload.LineItems.length) {
+    diffs.push({ field: 'Line item count', xero_value: xero.line_items.length, xettle_value: payload.LineItems.length, severity: 'warning' });
+  }
+
+  // Per-line comparison (match by description)
+  const xeroByDesc = new Map(xero.line_items.map(li => [li.description.toLowerCase().trim(), li]));
+
+  for (const xettleLine of payload.LineItems) {
+    const key = xettleLine.Description.toLowerCase().trim();
+    const xeroLine = xeroByDesc.get(key);
+
+    if (!xeroLine) {
+      // Try partial match
+      const partialMatch = [...xeroByDesc.entries()].find(([k]) => k.includes(key) || key.includes(k));
+      if (!partialMatch) {
+        diffs.push({ field: `Line: ${xettleLine.Description}`, xero_value: 'MISSING', xettle_value: xettleLine.UnitAmount, severity: 'warning' });
+        continue;
+      }
+    }
+
+    const matched = xeroLine || null;
+    if (matched) {
+      // Amount comparison (tolerance 0.01)
+      const xeroAmt = matched.unit_amount || matched.line_amount || 0;
+      if (Math.abs(xeroAmt - xettleLine.UnitAmount) > 0.01) {
+        diffs.push({ field: `Amount: ${xettleLine.Description}`, xero_value: xeroAmt, xettle_value: xettleLine.UnitAmount, severity: 'warning' });
+      }
+
+      // Account code
+      if (matched.account_code && xettleLine.AccountCode && matched.account_code !== xettleLine.AccountCode) {
+        diffs.push({ field: `Account: ${xettleLine.Description}`, xero_value: matched.account_code, xettle_value: xettleLine.AccountCode, severity: 'warning' });
+      }
+
+      // Tax type
+      if (matched.tax_type && xettleLine.TaxType && matched.tax_type !== xettleLine.TaxType) {
+        diffs.push({ field: `Tax: ${xettleLine.Description}`, xero_value: matched.tax_type, xettle_value: xettleLine.TaxType, severity: 'warning' });
+      }
+
+      // Tracking
+      if (xettleLine.Tracking?.length && (!matched.tracking?.length)) {
+        diffs.push({ field: `Tracking: ${xettleLine.Description}`, xero_value: 'none', xettle_value: JSON.stringify(xettleLine.Tracking), severity: 'info' });
+      }
+    }
+  }
+
+  // Check for Xero lines not in Xettle
+  const xettleDescs = new Set(payload.LineItems.map(li => li.Description.toLowerCase().trim()));
+  for (const xeroLine of xero.line_items) {
+    const key = xeroLine.description.toLowerCase().trim();
+    if (!xettleDescs.has(key)) {
+      const partialMatch = [...xettleDescs].find(k => k.includes(key) || key.includes(k));
+      if (!partialMatch) {
+        diffs.push({ field: `Extra Xero line: ${xeroLine.description}`, xero_value: xeroLine.line_amount, xettle_value: 'MISSING', severity: 'info' });
+      }
+    }
+  }
+
+  return diffs;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+function computeVerdict(
+  xero: NonNullable<CompareResult['xeroSide']>,
+  xettle: NonNullable<CompareResult['xettleSide']>,
+  diffs: PayloadDifference[],
+): CompareVerdict {
+  // BLOCKED already handled upstream
+  if (xettle.blockers.length > 0) return 'BLOCKED';
 
-function buildXettlePreviewPayload(settlement: any) {
-  const categories = [
-    { name: 'Sales (Principal)', field: 'sales_principal', taxType: 'OUTPUT', code: '200' },
-    { name: 'Shipping Revenue', field: 'sales_shipping', taxType: 'OUTPUT', code: '206' },
-    { name: 'Promotional Discounts', field: 'promotional_discounts', taxType: 'OUTPUT', code: '200' },
-    { name: 'Refunds', field: 'refunds', taxType: 'OUTPUT', code: '205' },
-    { name: 'Reimbursements', field: 'reimbursements', taxType: 'BASEXCLUDED', code: '271' },
-    { name: 'Seller Fees', field: 'seller_fees', taxType: 'INPUT', code: '407' },
-    { name: 'FBA Fees', field: 'fba_fees', taxType: 'INPUT', code: '408' },
-    { name: 'Storage Fees', field: 'storage_fees', taxType: 'INPUT', code: '409' },
-    { name: 'Advertising', field: 'advertising_costs', taxType: 'INPUT', code: '410' },
-    { name: 'Other Fees', field: 'other_fees', taxType: 'INPUT', code: '405' },
-  ];
+  // FAIL: currency mismatch or total diff > $1
+  const hasCurrencyMismatch = diffs.some(d => d.field === 'Currency');
+  const totalDiff = xero.total != null ? Math.abs((xero.total || 0) - xettle.total) : 0;
+  if (hasCurrencyMismatch || totalDiff > 1.0) return 'FAIL';
 
-  const lineItems = categories
-    .map(c => ({
-      description: c.name,
-      account_code: c.code,
-      tax_type: c.taxType,
-      amount: Math.round((settlement[c.field] || 0) * 100) / 100,
-    }))
-    .filter(l => Math.abs(l.amount) > 0.01);
+  // WARN: any warning/error severity diffs exist
+  const hasWarningsOrErrors = diffs.some(d => d.severity === 'warning' || d.severity === 'error');
+  if (hasWarningsOrErrors) return 'WARN';
 
-  const total = lineItems.reduce((s, l) => s + l.amount, 0);
+  // PASS: totals match, no code/tax diffs
+  return 'PASS';
+}
 
-  return {
-    status: 'DRAFT',
-    currency: 'AUD',
-    total: Math.round(total * 100) / 100,
-    reference: `Xettle-${settlement.settlement_id}`,
-    line_items: lineItems,
-  };
+function getRecommendation(verdict: CompareVerdict): string {
+  switch (verdict) {
+    case 'PASS': return 'Xettle matches the existing invoice — safe parity confirmed.';
+    case 'WARN': return 'Differences detected — investigate before replacing.';
+    case 'FAIL': return 'Significant mismatch — do not replace without review.';
+    case 'BLOCKED': return 'Posting is blocked — fix blockers before any replacement.';
+  }
+}
+
+function emptyCompareResult(verdict: CompareVerdict, recommendation: string): CompareResult {
+  return { xeroSide: null, xettleSide: null, differences: [], verdict, recommendation };
 }
