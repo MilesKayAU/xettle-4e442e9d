@@ -182,10 +182,10 @@ Deno.serve(async (req) => {
       }
 
       // Group by user
-      const userRails = new Map<string, Array<{ rail: string; require_bank_match: boolean }>>();
+      const userRails = new Map<string, Array<{ rail: string; require_bank_match: boolean; auto_post_enabled_at: string | null; invoice_status: string }>>();
       for (const r of autoRails) {
         const existing = userRails.get(r.user_id) || [];
-        existing.push({ rail: r.rail, require_bank_match: r.require_bank_match });
+        existing.push({ rail: r.rail, require_bank_match: r.require_bank_match, auto_post_enabled_at: r.auto_post_enabled_at, invoice_status: r.invoice_status || 'DRAFT' });
         userRails.set(r.user_id, existing);
       }
 
