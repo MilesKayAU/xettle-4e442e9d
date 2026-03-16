@@ -30,7 +30,8 @@ export interface StandardSettlement {
 // ─── Marketplace Contact Names (for Xero invoices) ──────────────────────────
 // Re-exported from canonical source. Do NOT define contacts here.
 // To add a marketplace: update src/constants/marketplace-contacts.ts
-export { MARKETPLACE_CONTACTS } from '@/constants/marketplace-contacts';
+import { MARKETPLACE_CONTACTS } from '@/constants/marketplace-contacts';
+export { MARKETPLACE_CONTACTS };
 
 export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
