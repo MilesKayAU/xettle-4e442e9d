@@ -488,7 +488,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     gstOnIncome,
   });
 
-  console.info('[GST Calculation]', {
+  logger.info('[GST Calculation]', {
     settlementId: header.settlementId,
     auIncomeGstBase: auIncome,
     intlSalesExcludedFromGstBase: round2(intlSalesExcludedFromGstBase),
