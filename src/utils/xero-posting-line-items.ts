@@ -150,8 +150,14 @@ export interface SettlementForPosting {
   [key: string]: any; // Allow extra fields from DB row
 }
 
-/** Resolver function: (categoryName, marketplace?) → accountCode */
-export type AccountCodeResolver = (categoryName: string, marketplace?: string) => string;
+/** Resolver function: (categoryName, marketplace?) → accountCode | null */
+export type AccountCodeResolver = (categoryName: string, marketplace?: string) => string | null;
+
+/**
+ * Required categories that MUST have explicit mappings per marketplace.
+ * If any of these resolve to null, the push is blocked.
+ */
+export const REQUIRED_MAPPING_CATEGORIES = ['Sales', 'Seller Fees', 'Refunds', 'Other Fees', 'Shipping'] as const;
 
 // ─── Builder ────────────────────────────────────────────────────────────
 
