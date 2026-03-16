@@ -55,7 +55,8 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
 };
 
 const KNOWN_MARKETPLACES = [
-  'Amazon AU', 'Shopify', 'Bunnings', 'eBay AU', 'Catch',
+  'Amazon AU', 'Amazon USA', 'Amazon JP', 'Amazon SG', 'Amazon UK',
+  'Shopify', 'Bunnings', 'eBay AU', 'Catch',
   'MyDeal', 'Kogan', 'Everyday Market', 'The Iconic', 'Etsy',
 ];
 

@@ -235,7 +235,9 @@ Deno.serve(async (req) => {
       if (settlements) {
         const unique = [...new Set(settlements.map((s: any) => s.marketplace).filter(Boolean))]
         const labelMap: Record<string, string> = {
-          amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
+          amazon_au: 'Amazon AU', amazon_us: 'Amazon USA', amazon_jp: 'Amazon JP',
+          amazon_sg: 'Amazon SG', amazon_uk: 'Amazon UK',
+          bunnings: 'Bunnings', shopify_payments: 'Shopify',
           shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
           kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
           etsy: 'Etsy', theiconic: 'The Iconic', bigw: 'BigW',
