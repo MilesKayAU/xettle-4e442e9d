@@ -482,7 +482,7 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Net Received</p>
+              <p className="text-xs text-muted-foreground">Net Payout</p>
               <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totalAllNet)}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{netPctOfSales}% of total sales</p>
             </CardContent>
