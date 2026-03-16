@@ -501,7 +501,7 @@ export default function Landing() {
             Not just uploads.<br />A full settlement engine.
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-12">
-            Xettle doesn't just create invoices. It tracks every settlement, verifies payouts, matches deposits, handles exceptions, and keeps your accounting clean across every marketplace — with a complete audit trail.
+            Xettle doesn't just create Xero invoices. It tracks each settlement, verifies payouts, matches deposits, handles exceptions, and keeps your accounting clean across every marketplace — with a complete audit trail. Every invoice is traceable back to the original settlement ID.
           </p>
           <div className="grid md:grid-cols-4 gap-4 text-left">
             {[
