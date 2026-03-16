@@ -168,7 +168,7 @@ serve(async (req) => {
         connection_type: 'api',
         connection_status: 'active',
         country_code: 'AU',
-      }, { onConflict: 'user_id,marketplace_code' })
+      }, { onConflict: 'user_id,marketplace_code,country_code' })
 
       // Log sync event
       await adminClient.from('sync_history').insert({
