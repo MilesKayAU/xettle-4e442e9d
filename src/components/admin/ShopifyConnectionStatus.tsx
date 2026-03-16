@@ -146,19 +146,10 @@ const ShopifyConnectionStatus = () => {
   const handleCreateTabs = async (selectedCodes: string[]) => {
     setCreatingTabs(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { data: existing } = await supabase
-        .from('marketplace_connections')
-        .select('marketplace_code');
-      const existingCodes = new Set((existing || []).map((e: any) => e.marketplace_code));
-
       const { provisionMarketplace } = await import('@/actions/marketplaces');
       let created = 0;
       for (const code of selectedCodes) {
         const mpCode = `shopify_orders_${code}`;
-        if (existingCodes.has(mpCode)) continue;
         const mp = discoveryResult?.marketplaces.find(m => m.code === code);
         const result = await provisionMarketplace({
           marketplaceCode: mpCode,
