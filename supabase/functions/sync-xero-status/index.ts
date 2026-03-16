@@ -531,7 +531,7 @@ serve(async (req) => {
           }
         }
 
-        await supabase.from('xero_accounting_matches').upsert({
+        await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: sid,
           marketplace_code: detectedMarketplace,
@@ -549,7 +549,7 @@ serve(async (req) => {
           notes: confirmedXettle
             ? 'Pre-seeded from Xettle-created Xero invoice (push event verified)'
             : 'External invoice detected — requires user review before linking',
-        }, { onConflict: 'user_id,settlement_id' });
+        });
 
         seededCount++;
       }
