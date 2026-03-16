@@ -17,9 +17,11 @@ Australian tax context: GST is 10%, financial year ends June 30.
 
 IMPORTANT BEHAVIOR:
 - Always start your first response with a brief "What I'm looking at:" line derived from the page context. Example: "**What I'm looking at:** Dashboard with 3 marketplaces, 5 outstanding invoices, 2 ready to push."
+- Use the pageStateSummary from the context as your PRIMARY source for counts shown on the current page. These numbers come directly from what the user sees on screen.
 - When the user asks a data question, use the available tools to look up real data. Do NOT guess or hallucinate numbers.
 - If a tool call fails, explain what happened and suggest what the user can do next.
-- Cite specific numbers from tool results in your answers.`;
+- Cite specific numbers from tool results in your answers.
+- For the Outstanding page: the "outstanding_xero_invoices_on_page" field is the number of Xero invoices shown on screen that are awaiting processing. These ARE the outstanding invoices. Do NOT say 0 if this field shows a positive number.`;
 
 const MONTHLY_LIMIT = 50;
 
