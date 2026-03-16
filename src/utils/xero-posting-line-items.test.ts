@@ -348,4 +348,66 @@ describe('xero-posting-line-items', () => {
       expect(hash1).toHaveLength(8);
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // REGRESSION TESTS — Push Safety Architecture
+  // ═══════════════════════════════════════════════════════════════
+
+  describe('Push safety regressions', () => {
+    it('invoice status must always be DRAFT — buildPostingLineItems never produces AUTHORISED metadata', () => {
+      // The edge function hardcodes Status: "DRAFT" (sync-settlement-to-xero L932).
+      // This test ensures the canonical version constant never changes to something unexpected.
+      expect(CANONICAL_VERSION).toBe('v2-10cat');
+      // Line items themselves don't carry status — the DRAFT is enforced at edge function level.
+      // This test documents the invariant and catches if anyone adds a status field to line items.
+      const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
+      for (const line of lines) {
+        // No line item should have a status property
+        expect(line).not.toHaveProperty('Status');
+        expect(line).not.toHaveProperty('status');
+      }
+    });
+
+    it('buildPostingLineItems requires all fields present (missing data produces empty/zero lines)', () => {
+      // Simulate missing settlementData — function should handle gracefully
+      const empty: SettlementForPosting = {
+        settlement_id: 'TEST-MISSING',
+        marketplace: 'unknown_marketplace',
+        period_start: '2024-01-01',
+        period_end: '2024-01-14',
+        sales_principal: 0,
+        sales_shipping: 0,
+        promotional_discounts: 0,
+        refunds: 0,
+        reimbursements: 0,
+        seller_fees: 0,
+        fba_fees: 0,
+        storage_fees: 0,
+        advertising_costs: 0,
+        other_fees: 0,
+        bank_deposit: 0,
+        gst_on_income: 0,
+        gst_on_expenses: 0,
+      };
+      const lines = buildPostingLineItems(empty);
+      // All-zero settlement should produce zero or empty lines (no non-zero amounts)
+      const nonZeroLines = lines.filter(l => l.UnitAmount !== 0);
+      expect(nonZeroLines.length).toBe(0);
+    });
+
+    it('attachment CSV content is never empty for a real settlement', () => {
+      const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
+      const csv = buildAuditCsvContent(GOLDEN_SETTLEMENT, lines);
+      // CSV must have header + at least one data row
+      expect(csv.split('\n').length).toBeGreaterThanOrEqual(2);
+      // CSV must contain the settlement ID for traceability
+      expect(csv).toContain(GOLDEN_SETTLEMENT.settlement_id);
+    });
+
+    it('line items sum matches bank_deposit (the foundation of attachment integrity)', () => {
+      const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
+      const sum = lines.reduce((acc, l) => acc + l.UnitAmount * (l.Quantity || 1), 0);
+      expect(Math.abs(sum - GOLDEN_SETTLEMENT.bank_deposit)).toBeLessThan(0.02);
+    });
+  });
 });

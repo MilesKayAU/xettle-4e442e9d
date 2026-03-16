@@ -923,9 +923,43 @@ serve(async (req) => {
       finalLineItems = lineItems;
     }
 
+    // ─── SERVER-SIDE CONTACT MAPPING (no silent fallback) ─────────────
+    const SERVER_MARKETPLACE_CONTACTS: Record<string, string> = {
+      amazon_au: 'Amazon.com.au',
+      amazon_us: 'Amazon.com',
+      amazon_uk: 'Amazon.co.uk',
+      amazon_ca: 'Amazon.ca',
+      shopify_payments: 'Shopify Payments',
+      shopify_orders: 'Shopify',
+      bunnings: 'Bunnings Marketplace',
+      bigw: 'Big W Marketplace',
+      catch: 'Catch Marketplace',
+      mydeal: 'MyDeal Marketplace',
+      kogan: 'Kogan Marketplace',
+      woolworths: 'Woolworths Marketplace',
+      woolworths_marketplus: 'Woolworths MarketPlus',
+      ebay_au: 'eBay Australia',
+      everyday_market: 'Everyday Market',
+    };
+
+    const marketplace = body.settlementData?.marketplace || body.marketplace || '';
+    const resolvedContact = contactName || SERVER_MARKETPLACE_CONTACTS[marketplace];
+    if (!resolvedContact) {
+      // Hard error: refuse to create an invoice with no contact mapping
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_push_blocked',
+        settlement_id: settlementId,
+        marketplace_code: marketplace,
+        severity: 'error',
+        details: { reason: 'missing_contact_mapping', marketplace },
+      });
+      throw new Error(`missing_contact_mapping: No Xero contact mapping for marketplace "${marketplace}". Add a mapping before pushing.`);
+    }
+
     const invoiceData: Record<string, any> = {
       Type: invoiceType,
-      Contact: { Name: contactName || "Amazon.com.au" },
+      Contact: { Name: resolvedContact },
       Date: date,
       DueDate: dueDate || date,
       CurrencyCode: "AUD",

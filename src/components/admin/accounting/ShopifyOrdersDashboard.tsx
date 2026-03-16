@@ -61,6 +61,7 @@ import {
   formatSettlementDate,
   formatAUD,
 } from '@/utils/settlement-engine';
+import PushSafetyPreview from './PushSafetyPreview';
 import {
   extractUniqueSKUs,
   calculateProfit,
@@ -130,7 +131,11 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [showBookkeeperInfo, setShowBookkeeperInfo] = useState(false);
   const [pushStats, setPushStats] = useState<{ invoiceCount: number; totalRevenue: number; totalGst: number } | null>(null);
-  const [aiSuggestions, setAiSuggestions] = useState<Record<number, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>({}); 
+  const [aiSuggestions, setAiSuggestions] = useState<Record<number, { marketplace_name: string; marketplace_code: string; confidence: number; reasoning: string; loading: boolean }>>({});
+
+  // PushSafetyPreview state — Golden Rule enforcement
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
 
   // Profit engine
   const [profitResult, setProfitResult] = useState<ProfitEngineResult | null>(null);
@@ -394,45 +399,35 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
     loadHistory();
   };
 
-  // ─── Push All to Xero ──────────────────────────────────────────────
-
-  const handlePushAllToXero = async () => {
+  // Golden Rule: Open PushSafetyPreview for batch push
+  const handlePushAllToXero = () => {
     const toPush = settlements.filter(s => savedIds.has(s.settlement_id));
     if (toPush.length === 0) {
       toast.warning('Save clearing invoices first before pushing to Xero.');
       return;
     }
+    setPreviewSettlements(toPush.map(s => ({
+      settlementId: s.settlement_id,
+      marketplace: s.marketplace,
+    })));
+    setPreviewOpen(true);
+  };
+
+  const handlePreviewConfirm = async () => {
+    setPreviewOpen(false);
     setPushing(true);
     let pushed = 0;
-    let totalRevenue = 0;
-    let totalGst = 0;
 
-    for (const s of toPush) {
-      const lineItems = buildShopifyOrdersInvoiceLines(s);
-      const meta = s.metadata || {};
-
-      // Verify $0.00 balance before pushing
-      const lineTotal = lineItems.reduce((sum, l) => sum + round2(l.UnitAmount * l.Quantity) + (l.TaxAmount || 0), 0);
-      if (Math.abs(lineTotal) > 0.02) {
-        toast.error(`Invoice balancing error for ${meta.displayName} — please contact support`);
-        continue;
-      }
-
-      const result = await syncSettlementToXero(s.settlement_id, s.marketplace, {
-        lineItems,
-        contactName: meta.contactName || meta.displayName || 'Marketplace',
-      });
-      if (result.success) {
-        pushed++;
-        totalRevenue += (meta.salesInclGst || 0) + (meta.shippingInclGst || 0);
-        totalGst += (meta.gstOnSales || 0) + (meta.gstOnShipping || 0);
-      }
+    for (const s of previewSettlements) {
+      const result = await syncSettlementToXero(s.settlementId, s.marketplace);
+      if (result.success) pushed++;
     }
 
     setPushing(false);
-    setPushStats({ invoiceCount: pushed, totalRevenue, totalGst });
-    toast.success(`Pushed ${pushed} of ${toPush.length} clearing invoices to Xero`);
+    setPushStats({ invoiceCount: pushed, totalRevenue: 0, totalGst: 0 });
+    toast.success(`Pushed ${pushed} of ${previewSettlements.length} clearing invoices to Xero`);
     setShowBookkeeperInfo(true);
+    setPreviewSettlements([]);
     loadHistory();
   };
 
@@ -559,18 +554,10 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
 
   // ─── Push single from history ──────────────────────────────────────
 
-  const handlePushToXero = async (settlementId: string, marketplace: string) => {
-    setPushing(true);
-    const result = await syncSettlementToXero(settlementId, marketplace, {
-      contactName: marketplace.replace('shopify_orders_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-    });
-    if (result.success) {
-      toast.success('Clearing invoice created in Xero!');
-      loadHistory();
-    } else {
-      toast.error(result.error || 'Failed to push to Xero');
-    }
-    setPushing(false);
+  // Golden Rule: Open PushSafetyPreview for single push from history
+  const handlePushToXero = (settlementId: string, marketplace: string) => {
+    setPreviewSettlements([{ settlementId, marketplace }]);
+    setPreviewOpen(true);
   };
 
   // ─── Delete ─────────────────────────────────────────────────────────
@@ -1627,6 +1614,14 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
           }
           setUnknownEntities([]);
         }}
+      />
+
+      {/* Golden Rule: All pushes go through PushSafetyPreview */}
+      <PushSafetyPreview
+        open={previewOpen}
+        onClose={() => { setPreviewOpen(false); setPreviewSettlements([]); }}
+        onConfirm={handlePreviewConfirm}
+        settlements={previewSettlements}
       />
     </div>
   );

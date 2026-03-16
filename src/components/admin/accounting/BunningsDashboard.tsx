@@ -21,6 +21,7 @@ import {
   formatSettlementDate,
   formatAUD,
 } from '@/utils/settlement-engine';
+import PushSafetyPreview from './PushSafetyPreview';
 import { runUniversalReconciliation, type UniversalReconciliationResult } from '@/utils/universal-reconciliation';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import MarketplaceInfoPanel from '@/components/MarketplaceInfoPanel';
@@ -192,6 +193,10 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // PushSafetyPreview state — Golden Rule enforcement
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -470,34 +475,33 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setSaving(false);
   };
 
-  const handlePushToXero = async (settlementId?: string, settlementData?: StandardSettlement) => {
+  // Golden Rule: All pushes go through PushSafetyPreview modal
+  const openPushPreview = (settlementId?: string) => {
     const targetId = settlementId || savedSettlementId || parsed?.settlement_id;
     if (!targetId) return;
+    setPreviewSettlements([{ settlementId: targetId, marketplace: 'bunnings' }]);
+    setPreviewOpen(true);
+  };
 
-    // Run reconciliation check before sync
-    const dataToCheck = settlementData || parsed;
-    if (dataToCheck) {
-      const reconResult = runUniversalReconciliation(dataToCheck);
-      if (!reconResult.canSync) {
-        toast.error('Critical reconciliation issues detected — resolve before syncing to Xero.');
-        return;
-      }
-      if (reconResult.overallStatus === 'warn') {
-        toast.warning('Reconciliation warnings exist — proceeding with sync.');
+  const handlePreviewConfirm = async () => {
+    setPreviewOpen(false);
+    setPushing(true);
+    let ok = 0;
+    for (const s of previewSettlements) {
+      const result = await syncSettlementToXero(s.settlementId, s.marketplace);
+      if (result.success) {
+        ok++;
+        clearParsedStorage();
+      } else {
+        toast.error(result.error || 'Failed to push to Xero');
       }
     }
-
-    setPushing(true);
-    // syncSettlementToXero now builds canonical 10-category lines internally
-    const result = await syncSettlementToXero(targetId, 'bunnings');
-    if (result.success) {
-      clearParsedStorage();
-      toast.success('Invoice created in Xero!');
+    if (ok > 0) {
+      toast.success(`${ok} invoice${ok > 1 ? 's' : ''} created in Xero!`);
       loadHistory();
-    } else {
-      toast.error(result.error || 'Failed to push to Xero');
     }
     setPushing(false);
+    setPreviewSettlements([]);
   };
 
   const handleDelete = async (id: string) => {
@@ -1118,7 +1122,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                   </Button>
                 ) : (
                   <>
-                    <Button onClick={() => handlePushToXero()} disabled={pushing} className="flex-1">
+                    <Button onClick={() => openPushPreview()} disabled={pushing} className="flex-1">
                       {pushing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
                       Send to Xero
                     </Button>
@@ -1235,7 +1239,7 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                                 <Button
                                   size="sm"
                                   variant="default"
-                                  onClick={() => handlePushToXero(s.settlement_id)}
+                                  onClick={() => openPushPreview(s.settlement_id)}
                                   disabled={pushing}
                                 >
                                   {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
@@ -1270,6 +1274,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Golden Rule: All pushes go through PushSafetyPreview */}
+      <PushSafetyPreview
+        open={previewOpen}
+        onClose={() => { setPreviewOpen(false); setPreviewSettlements([]); }}
+        onConfirm={handlePreviewConfirm}
+        settlements={previewSettlements}
+      />
     </div>
   );
 }

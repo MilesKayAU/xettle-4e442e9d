@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { syncSettlementToXero, syncXeroStatus, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
 import { type UserMarketplace, MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
+import PushSafetyPreview from './PushSafetyPreview';
 
 interface MonthlyReconciliationStatusProps {
   userMarketplaces: UserMarketplace[];
@@ -52,6 +53,10 @@ export default function MonthlyReconciliationStatus({
   const [pushingAll, setPushingAll] = useState(false);
   const [pushProgress, setPushProgress] = useState({ current: 0, total: 0 });
   const [syncing, setSyncing] = useState(false);
+
+  // PushSafetyPreview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
 
   const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
   const monthEnd = new Date(year, month + 1, 0).toISOString().split('T')[0];
@@ -108,38 +113,36 @@ export default function MonthlyReconciliationStatus({
   const pushed = settlements.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
   const failed = settlements.filter(s => s.status === 'push_failed').length;
 
-  const handlePushAll = async () => {
-    const toPush = settlements.filter(s => s.status === 'saved' || s.status === 'parsed');
+  // Golden Rule: Open PushSafetyPreview instead of pushing directly
+  const handlePushAll = () => {
+    const toPush = settlements.filter(s =>
+      (s.status === 'saved' || s.status === 'parsed') && !s.xero_journal_id
+    );
     if (toPush.length === 0) return;
 
-    const confirmed = window.confirm(
-      `Push ${toPush.length} settlement${toPush.length > 1 ? 's' : ''} to Xero?\n\n` +
-      toPush.map(s => {
-        const cat = MARKETPLACE_CATALOG.find(m => m.code === s.marketplace);
-        return `• ${cat?.name || s.marketplace}: ${formatAUD(s.bank_deposit || 0)}`;
-      }).join('\n')
-    );
-    if (!confirmed) return;
+    setPreviewSettlements(toPush.map(s => ({
+      settlementId: s.settlement_id,
+      marketplace: s.marketplace,
+    })));
+    setPreviewOpen(true);
+  };
 
+  const handlePreviewConfirm = async () => {
+    setPreviewOpen(false);
     setPushingAll(true);
-    setPushProgress({ current: 0, total: toPush.length });
-    let ok = 0, skipped = 0, fail = 0;
+    setPushProgress({ current: 0, total: previewSettlements.length });
+    let ok = 0, fail = 0;
 
-    for (let i = 0; i < toPush.length; i++) {
-      setPushProgress({ current: i + 1, total: toPush.length });
-      const s = toPush[i];
-
-      // Skip if already has xero_journal_id (duplicate)
-      if (s.xero_journal_id) { skipped++; continue; }
-
-      // syncSettlementToXero now builds canonical 10-category lines internally
-      const result = await syncSettlementToXero(s.settlement_id, s.marketplace);
+    for (let i = 0; i < previewSettlements.length; i++) {
+      setPushProgress({ current: i + 1, total: previewSettlements.length });
+      const s = previewSettlements[i];
+      const result = await syncSettlementToXero(s.settlementId, s.marketplace);
       if (result.success) ok++;
       else fail++;
     }
 
     setPushingAll(false);
-    toast.success(`✅ ${ok} pushed · ${skipped > 0 ? `⚠️ ${skipped} skipped · ` : ''}${fail > 0 ? `❌ ${fail} failed` : ''}`);
+    toast.success(`✅ ${ok} pushed${fail > 0 ? ` · ❌ ${fail} failed` : ''}`);
 
     // Sync back from Xero and reload
     await syncXeroStatus();
@@ -215,6 +218,14 @@ export default function MonthlyReconciliationStatus({
           </>
         )}
       </CardContent>
+
+      {/* Golden Rule: All pushes go through PushSafetyPreview */}
+      <PushSafetyPreview
+        open={previewOpen}
+        onClose={() => { setPreviewOpen(false); setPreviewSettlements([]); }}
+        onConfirm={handlePreviewConfirm}
+        settlements={previewSettlements}
+      />
     </Card>
   );
 }
