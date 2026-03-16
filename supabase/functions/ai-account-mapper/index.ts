@@ -344,7 +344,7 @@ Deno.serve(async (req) => {
           
           const key = `${cat}:${mp.name}`
           deterministicOverrides[key] = best.code
-          console.log(`[ai-account-mapper] Deterministic match: ${key} → ${best.code} (${best.name})`)
+          logger.debug(`[ai-account-mapper] Deterministic match: ${key} → ${best.code} (${best.name})`)
         }
       }
     }
