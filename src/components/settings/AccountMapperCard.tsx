@@ -69,6 +69,7 @@ export default function AccountMapperCard() {
   const [notes, setNotes] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const settingsPin = useSettingsPin();
 
   // Xero COA state
   const [coaAccounts, setCoaAccounts] = useState<CachedXeroAccount[]>([]);
