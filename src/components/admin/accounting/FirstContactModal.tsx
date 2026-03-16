@@ -51,9 +51,11 @@ interface FirstContactModalProps {
   confidence: number;
   confidenceTier: ConfidenceTier;
   detectedMarketplace: string;
-  /** Callback when user confirms — returns the confirmed marketplace code */
-  onConfirm: (marketplaceCode: string, marketplaceName: string) => void;
+  /** Callback when user confirms — returns the confirmed marketplace code and fingerprint ID */
+  onConfirm: (marketplaceCode: string, marketplaceName: string, fingerprintId?: string) => void;
   onCancel: () => void;
+  /** Whether this detection came from AI (Level 3) */
+  isAiDetected?: boolean;
 }
 
 export default function FirstContactModal({
