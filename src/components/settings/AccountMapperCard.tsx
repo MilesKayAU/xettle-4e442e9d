@@ -264,12 +264,27 @@ export default function AccountMapperCard() {
         editable[cat] = (entry as MappingEntry).code;
       }
       setEditableMapping(editable);
+
+      // Auto-enable split mode if AI found per-rail suggestions
+      const hasOverrides = Object.keys(data.mapping || {}).some((k: string) => k.includes(':'));
+      if (hasOverrides && !splitByMarketplace) {
+        setSplitByMarketplace(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('app_settings').upsert({
+            user_id: user.id,
+            key: 'accounting_split_by_marketplace',
+            value: 'true',
+          } as any, { onConflict: 'user_id,key' });
+        }
+      }
+
       setState('review');
     } catch (err: any) {
       toast.error(`AI mapper failed: ${err.message}`);
       setState('unmapped');
     }
-  }, []);
+  }, [splitByMarketplace]);
 
   const handleSplitToggle = async (enabled: boolean) => {
     setSplitByMarketplace(enabled);
@@ -352,11 +367,22 @@ export default function AccountMapperCard() {
   };
 
   const handleApplySuggestionsToMissing = () => {
-    // For each category that has no mapping, apply the AI suggestion
     const updated = { ...editableMapping };
+    // Apply global category suggestions
     for (const cat of CATEGORIES) {
       if (!updated[cat] && mapping[cat]?.code) {
         updated[cat] = mapping[cat].code;
+      }
+    }
+    // Apply per-marketplace override suggestions from AI
+    if (splitByMarketplace) {
+      for (const mp of getEffectiveMarketplaces()) {
+        for (const cat of SPLITTABLE_CATEGORIES) {
+          const key = `${cat}:${mp}`;
+          if (!updated[key] && mapping[key]?.code) {
+            updated[key] = mapping[key].code;
+          }
+        }
       }
     }
     setEditableMapping(updated);
@@ -462,15 +488,23 @@ export default function AccountMapperCard() {
       const key = `${baseCat}:${mp}`;
       const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
       const overrideCode = editableMapping[key] || '';
+      const aiSuggestion = mapping[key]; // AI-suggested per-rail mapping
       return (
         <tr key={key} className="border-b last:border-b-0 bg-muted/20">
           <td className="p-2 pl-6">
             <div className="text-xs text-muted-foreground">↳ {mp} {baseCat}</div>
           </td>
           <td className="p-2">
-            <span className="text-xs text-muted-foreground">
-              Fallback: <span className="font-mono">{baseCode}</span>
-            </span>
+            {aiSuggestion?.code ? (
+              <span className="text-xs">
+                <span className="font-mono">{aiSuggestion.code}</span>
+                <span className="text-muted-foreground ml-1">— {aiSuggestion.name}</span>
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Fallback: <span className="font-mono">{baseCode}</span>
+              </span>
+            )}
           </td>
           <td className="p-2">
             {renderStatusBadge(overrideCode || baseCode, baseCat)}
