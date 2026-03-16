@@ -166,7 +166,8 @@ Deno.serve(async (req) => {
 
     // ─── Single settlement mode ──────────────────────────────────
     if (targetSettlementId && targetUserId) {
-      const result = await processSettlement(supabase, targetSettlementId, targetUserId);
+      // Load rail setting for invoice_status in single mode
+      const result = await processSettlement(supabase, targetSettlementId, targetUserId, 'DRAFT');
       results.push(result);
     } else {
       // ─── Batch mode: scan all users with auto-post rails ───────
