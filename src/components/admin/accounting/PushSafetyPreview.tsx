@@ -362,6 +362,20 @@ function SettlementPreviewCard({ preview, index, total }: {
         </div>
       </div>
 
+      {/* Repost Banner */}
+      {isRepost && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-xs text-amber-800 flex items-start gap-2">
+          <RefreshCw className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">This is a repost</p>
+            <p className="text-amber-700">
+              Previous invoice: <span className="font-mono">{repostOfInvoiceId?.substring(0, 12)}…</span> (voided)
+              {repostReason && <span className="ml-1">— Reason: "{repostReason}"</span>}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Line Items */}
       <div className="px-4 py-3 space-y-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Line Items</p>
