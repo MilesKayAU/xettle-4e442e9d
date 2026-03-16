@@ -246,9 +246,21 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <span className="text-xl">{def?.icon || '📋'}</span>
             {marketplaceName} Settlements
+            {isApiConnected ? (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                <Zap className="h-2.5 w-2.5" /> API
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-0.5">
+                <FileText className="h-2.5 w-2.5" /> File upload
+              </Badge>
+            )}
           </h3>
           <p className="text-sm text-muted-foreground mt-0.5">
-            View saved settlements, reconcile, and sync to Xero.
+            {isApiConnected
+              ? 'Settlements are fetched automatically via API. You can also upload manually.'
+              : 'Upload settlement files to view, reconcile, and sync to Xero.'
+            }
           </p>
         </div>
         <div className="flex items-center gap-2">
