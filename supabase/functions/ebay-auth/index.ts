@@ -159,6 +159,25 @@ serve(async (req) => {
 
       if (upsertError) throw upsertError
 
+      // Auto-provision marketplace_connections row so eBay appears in the marketplace switcher
+      const adminClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      await adminClient.from('marketplace_connections').upsert({
+        user_id: userId,
+        marketplace_code: 'ebay_au',
+        marketplace_name: 'eBay Australia',
+        connection_type: 'api',
+        connection_status: 'active',
+        country_code: 'AU',
+      }, { onConflict: 'user_id,marketplace_code,country_code' })
+
+      // Log sync event
+      await adminClient.from('sync_history').insert({
+        user_id: userId,
+        event_type: 'ebay_connected',
+        status: 'success',
+        details: { ebay_username: tokenData.user_id || null },
+      })
+
       return new Response(JSON.stringify({
         success: true,
         ebay_username: tokenData.user_id || null,

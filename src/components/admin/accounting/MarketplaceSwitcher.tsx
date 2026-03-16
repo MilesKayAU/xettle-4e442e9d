@@ -103,6 +103,16 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     description: 'MyDeal by Woolworths — manual CSV upload.',
   },
   {
+    code: 'ebay_au',
+    name: 'eBay Australia',
+    icon: '🏷️',
+    country: 'AU',
+    countryFlag: '🇦🇺',
+    connectionMethods: ['manual_csv'],
+    phase: 'live',
+    description: 'eBay Australia — API auto-fetch or manual Transaction/Order Proceeds CSV upload.',
+  },
+  {
     code: 'shopify_payments',
     name: 'Shopify Payments',
     icon: '💳',
