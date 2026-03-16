@@ -79,3 +79,16 @@ export {
   setOrgTaxProfile,
   acknowledgeRailSupport,
 } from './scopeConsent';
+
+// ─── Xero Invoice (Refresh / Rescan / Compare) ──────────────────────────────
+export {
+  refreshXeroInvoiceDetails,
+  rescanMatchForInvoice,
+  getXeroVsXettlePayloadDiff,
+  type XeroInvoiceDetail,
+  type XeroLineItem,
+  type RefreshResult,
+  type RescanResult,
+  type PayloadDiffResult,
+  type PayloadDifference,
+} from './xeroInvoice';

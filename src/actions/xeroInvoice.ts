@@ -173,7 +173,7 @@ export async function getXeroVsXettlePayloadDiff(
     sub_total: cached.sub_total,
     total_tax: cached.total_tax,
     reference: cached.reference,
-    line_items: (cached.line_items as XeroLineItem[]) || [],
+    line_items: (cached.line_items as unknown as XeroLineItem[]) || [],
   } : null;
 
   // Build Xettle side (what we would send)
