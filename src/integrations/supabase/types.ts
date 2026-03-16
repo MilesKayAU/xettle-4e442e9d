@@ -2342,6 +2342,69 @@ export type Database = {
         }
         Relationships: []
       }
+      xero_invoice_cache: {
+        Row: {
+          contact_id: string | null
+          contact_name: string | null
+          created_at: string
+          currency_code: string | null
+          date: string | null
+          due_date: string | null
+          fetched_at: string
+          id: string
+          line_items: Json | null
+          raw_json: Json | null
+          reference: string | null
+          status: string | null
+          sub_total: number | null
+          total: number | null
+          total_tax: number | null
+          user_id: string
+          xero_invoice_id: string
+          xero_invoice_number: string | null
+        }
+        Insert: {
+          contact_id?: string | null
+          contact_name?: string | null
+          created_at?: string
+          currency_code?: string | null
+          date?: string | null
+          due_date?: string | null
+          fetched_at?: string
+          id?: string
+          line_items?: Json | null
+          raw_json?: Json | null
+          reference?: string | null
+          status?: string | null
+          sub_total?: number | null
+          total?: number | null
+          total_tax?: number | null
+          user_id: string
+          xero_invoice_id: string
+          xero_invoice_number?: string | null
+        }
+        Update: {
+          contact_id?: string | null
+          contact_name?: string | null
+          created_at?: string
+          currency_code?: string | null
+          date?: string | null
+          due_date?: string | null
+          fetched_at?: string
+          id?: string
+          line_items?: Json | null
+          raw_json?: Json | null
+          reference?: string | null
+          status?: string | null
+          sub_total?: number | null
+          total?: number | null
+          total_tax?: number | null
+          user_id?: string
+          xero_invoice_id?: string
+          xero_invoice_number?: string | null
+        }
+        Relationships: []
+      }
       xero_tokens: {
         Row: {
           access_token: string
