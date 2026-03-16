@@ -146,39 +146,31 @@ const ShopifyConnectionStatus = () => {
   const handleCreateTabs = async (selectedCodes: string[]) => {
     setCreatingTabs(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { data: existing } = await supabase
-        .from('marketplace_connections')
-        .select('marketplace_code');
-      const existingCodes = new Set((existing || []).map((e: any) => e.marketplace_code));
-
+      const { provisionMarketplace } = await import('@/actions/marketplaces');
       let created = 0;
       for (const code of selectedCodes) {
         const mpCode = `shopify_orders_${code}`;
-        if (existingCodes.has(mpCode)) continue;
         const mp = discoveryResult?.marketplaces.find(m => m.code === code);
-        await supabase.from('marketplace_connections').insert({
-          user_id: user.id,
-          marketplace_code: mpCode,
-          marketplace_name: mp?.name || code,
-          country_code: 'AU',
-          connection_type: 'auto_detected',
-          connection_status: 'active',
-        } as any);
-        created++;
+        const result = await provisionMarketplace({
+          marketplaceCode: mpCode,
+          marketplaceName: mp?.name || code,
+          connectionType: 'auto_detected',
+        });
+        if (result.action === 'created') created++;
       }
 
       toast.success(`${created > 0 ? created : selectedCodes.length} marketplace tab${created !== 1 ? 's' : ''} created`);
       setDiscoveryOpen(false);
 
       // Update last_fetched_at
-      await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'shopify_last_fetched_at',
-        value: new Date().toISOString(),
-      }, { onConflict: 'user_id,key' });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('app_settings').upsert({
+          user_id: user.id,
+          key: 'shopify_last_fetched_at',
+          value: new Date().toISOString(),
+        }, { onConflict: 'user_id,key' });
+      }
 
     } catch (err: any) {
       toast.error(err.message || 'Failed to create tabs');

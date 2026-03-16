@@ -51,9 +51,6 @@ const ALLOWED_FILES = [
   'actions/repost.ts',
   'actions/xeroReadiness.ts',
   'actions/index.ts',
-  // Legacy files (allowlisted for incremental migration)
-  'utils/settlement-engine.ts',
-  'utils/marketplace-token-map.ts',
   // Integration files (auto-generated, read-only)
   'integrations/',
 ];

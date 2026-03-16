@@ -1116,6 +1116,10 @@ export interface SyncResult {
  * Push a settlement to Xero as an invoice using the sync-settlement-to-xero edge function.
  * For simple marketplaces (Bunnings, Catch, etc.) uses the 2-line invoice model.
  * Amazon uses its own multi-line logic in AccountingDashboard.
+ * 
+ * DELEGATES TO: pushSettlementToXero() in src/actions/xeroPush.ts for the actual edge function call.
+ * This function remains the high-level orchestrator for line item building, post-push status
+ * updates, marketplace_validation upserts, and system_events logging.
  */
 export async function syncSettlementToXero(
   settlementId: string,
@@ -1143,15 +1147,12 @@ export async function syncSettlementToXero(
     const s = settlement as any;
     const contactName = options?.contactName || MARKETPLACE_CONTACTS[marketplace] || `${marketplace} Marketplace`;
     
-    // Reference is now generated server-side from settlementId
-    const reference = `Xettle-${s.settlement_id}`; // For local display/logging only
     const periodLabel = `${formatSettlementDate(s.period_start)} – ${formatSettlementDate(s.period_end)}`;
     const label = MARKETPLACE_LABELS[marketplace] || marketplace;
     const description = `${label} Settlement ${periodLabel}`;
 
     // Build line items using canonical 10-category builder (always, ignoring options.lineItems)
-    const { buildPostingLineItems, createAccountCodeResolver, buildAuditCsvContent, hashCsvContent, CANONICAL_VERSION } = await import('@/utils/xero-posting-line-items');
-    const getCode = await loadUserAccountCodes();
+    const { buildPostingLineItems, createAccountCodeResolver } = await import('@/utils/xero-posting-line-items');
     const resolver = createAccountCodeResolver(await loadUserAccountCodesRaw());
     const mpLabel = MARKETPLACE_LABELS[marketplace] || marketplace;
     let lineItems = buildPostingLineItems(s, resolver, mpLabel);
@@ -1196,23 +1197,19 @@ export async function syncSettlementToXero(
       status: s.status || 'pushed',
     };
 
-    const { data: result, error: fnErr } = await supabase.functions.invoke('sync-settlement-to-xero', {
-      body: {
-        userId: user.id,
-        action: 'create',
-        settlementId: s.settlement_id,
-        description,
-        date: s.period_end,
-        dueDate: s.period_end,
-        lineItems,
-        contactName,
-        netAmount,
-        settlementData,
-      },
+    // ── DELEGATE to canonical action for the actual edge function invoke ──
+    const { pushSettlementToXero } = await import('@/actions/xeroPush');
+    const result = await pushSettlementToXero({
+      settlementId,
+      marketplace,
+      invoiceStatus: 'DRAFT',
+      settlementData,
+      lineItems,
     });
 
-    if (fnErr) return { success: false, error: fnErr.message };
-    if (!result?.success) return { success: false, error: result?.error || 'Xero push failed' };
+    if (!result.success) {
+      return { success: false, error: result.error || 'Xero push failed' };
+    }
 
     // Update settlement status with invoice number and xero_type
     await supabase
@@ -1222,7 +1219,7 @@ export async function syncSettlementToXero(
         xero_journal_id: result.invoiceId,
         xero_invoice_number: result.invoiceNumber || null,
         xero_status: 'AUTHORISED',
-        xero_type: result.xeroType || 'invoice',
+        xero_type: 'invoice',
       } as any)
       .eq('settlement_id', settlementId)
       .eq('user_id', user.id);
@@ -1237,11 +1234,11 @@ export async function syncSettlementToXero(
 
     if (settlementRow) {
       const s2 = settlementRow as any;
-      const periodLabel = `${s2.period_start} → ${s2.period_end}`;
+      const pLabel = `${s2.period_start} → ${s2.period_end}`;
       supabase.from('marketplace_validation' as any).upsert({
         user_id: user.id,
         marketplace_code: marketplace,
-        period_label: periodLabel,
+        period_label: pLabel,
         period_start: s2.period_start,
         period_end: s2.period_end,
         xero_pushed: true,
@@ -1259,7 +1256,6 @@ export async function syncSettlementToXero(
     triggerBankMatch(settlementId);
 
     // Fire-and-forget: log Xero push event
-    // Build immutable snapshot of what was posted to Xero
     const normalizedLineItems = (lineItems || []).slice(0, 200).map((li: any) => ({
       description: li.Description || li.description || '',
       account_code: li.AccountCode || li.account_code || '',
@@ -1281,7 +1277,7 @@ export async function syncSettlementToXero(
         invoice_id: result.invoiceId,
         invoice_number: result.invoiceNumber,
         xero_status: 'AUTHORISED',
-        xero_type: result.xeroType || 'invoice',
+        xero_type: 'invoice',
       },
       normalized: {
         net_amount: netAmount,
@@ -1326,50 +1322,32 @@ export interface RollbackResult {
   error?: string;
 }
 
+/**
+ * @deprecated Use rollbackFromXero() from '@/actions/xeroPush' or
+ * rollbackSettlement() from '@/actions/repost' instead.
+ * 
+ * Delegates to canonical action. Kept for backward compatibility.
+ */
 export async function rollbackSettlementFromXero(
   settlementId: string,
   marketplace: string,
   invoiceIds: string[],
   rollbackScope: 'all' | 'journal_1' | 'journal_2' = 'all'
 ): Promise<RollbackResult> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: 'Not authenticated' };
-
-    const { data: result, error: fnErr } = await supabase.functions.invoke('sync-settlement-to-xero', {
-      body: {
-        userId: user.id,
-        action: 'rollback',
-        invoiceIds,
-        settlementId,
-        rollbackScope,
-      },
-    });
-
-    if (fnErr) return { success: false, error: fnErr.message };
-    if (!result?.success) return { success: false, error: result?.error || 'Rollback failed' };
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Unknown error' };
-  }
+  const { rollbackFromXero } = await import('@/actions/xeroPush');
+  return rollbackFromXero({ settlementId, marketplace, invoiceIds });
 }
 
 // ─── Delete Settlement ──────────────────────────────────────────────────────
 
+/**
+ * @deprecated Use deleteSettlement() from '@/actions/settlements' instead.
+ * 
+ * Delegates to canonical action. Kept for backward compatibility.
+ */
 export async function deleteSettlement(id: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    // Look up the settlement_id (text) so we can clean related tables
-    const { data: row } = await supabase.from('settlements').select('settlement_id, user_id').eq('id', id).single();
-    if (row) {
-      await supabase.from('settlement_lines').delete().eq('settlement_id', row.settlement_id).eq('user_id', row.user_id);
-      await supabase.from('settlement_unmapped').delete().eq('settlement_id', row.settlement_id).eq('user_id', row.user_id);
-    }
-    const { error } = await supabase.from('settlements').delete().eq('id', id);
-    if (error) return { success: false, error: error.message };
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
+  const { deleteSettlement: canonicalDelete } = await import('@/actions/settlements');
+  return canonicalDelete(id);
 }
 
 // ─── Xero Sync Back ─────────────────────────────────────────────────────────

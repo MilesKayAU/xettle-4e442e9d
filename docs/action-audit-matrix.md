@@ -10,10 +10,10 @@
 
 | Entry Point | File | Tables Written | Idempotency | Canonical Path |
 |---|---|---|---|---|
-| Shopify auto-provision | `src/components/admin/ShopifyConnectionStatus.tsx:162` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
-| Shopify orders auto-provision | `src/components/admin/accounting/ShopifyOrdersDashboard.tsx:701` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
-| Shopify onboarding | `src/components/admin/accounting/ShopifyOnboarding.tsx:197` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
-| SmartUploadFlow detect new marketplace | `src/components/admin/accounting/SmartUploadFlow.tsx:2656` | `marketplace_connections` | ⚠️ **none** | ❌ → `provisionMarketplace()` |
+| Shopify auto-provision | `src/components/admin/ShopifyConnectionStatus.tsx:157` | `marketplace_connections` | via `provisionMarketplace()` | ✅ `provisionMarketplace()` |
+| Shopify orders auto-provision | `src/components/admin/accounting/ShopifyOrdersDashboard.tsx:691` | `marketplace_connections` | via `provisionMarketplace()` | ✅ `provisionMarketplace()` |
+| Shopify onboarding | `src/components/admin/accounting/ShopifyOnboarding.tsx:184` | `marketplace_connections` | via `provisionMarketplace()` | ✅ `provisionMarketplace()` |
+| SmartUploadFlow detect new marketplace | `src/components/admin/accounting/SmartUploadFlow.tsx:2641` | `marketplace_connections` | via `provisionMarketplace()` | ✅ `provisionMarketplace()` |
 | CoA detected panel confirm | `src/components/dashboard/CoaDetectedPanel.tsx:33` | `marketplace_connections` | n/a (update only) | ✅ (update, not provision) |
 | CoA detected panel dismiss | `src/components/dashboard/CoaDetectedPanel.tsx:49` | `marketplace_connections` | n/a (delete) | ✅ (dismiss) |
 | MarketplaceSwitcher delete | `src/components/admin/accounting/MarketplaceSwitcher.tsx` | `marketplace_connections`, `settlements`, `settlement_lines`, fees, fingerprints, ad_spend, shipping_costs | cascade delete | ✅ `removeMarketplace()` |
@@ -22,10 +22,7 @@
 | Shopify OAuth callback | `supabase/functions/shopify-auth/index.ts` | `shopify_tokens`, `marketplace_connections` | `upsert` | ✅ (server-side) |
 | Ghost cleanup | `src/utils/marketplace-token-map.ts:115,138` | `marketplace_connections` | n/a (cleanup delete) | ✅ (allowed utility) |
 
-**Invariant risks:**
-- SmartUploadFlow has NO dedup check before insert — can create duplicate connections
-- 3 Shopify components do identical "check existingCodes then insert" independently
-- No normalisation of marketplace_code at insert time in non-canonical paths
+**Invariant risks:** None — all client-side provisioning now goes through `provisionMarketplace()` with dedup, normalisation, and race-condition handling.
 
 ---
 
@@ -51,12 +48,11 @@
 | AutoImportedTab single delete | `AutoImportedTab.tsx:460` | (same cascade) | ✅ `deleteSettlement()` |
 | AutoImportedTab bulk delete | `AutoImportedTab.tsx:496` | (same cascade) | ✅ `deleteSettlement()` |
 | MarketplaceSwitcher cascade | `MarketplaceSwitcher.tsx` | (via `removeMarketplace()`) | ✅ `removeMarketplace()` |
-| settlement-engine.deleteSettlement | `settlement-engine.ts:1364` | `settlement_lines`, `settlement_unmapped`, `settlements` | ⚠️ legacy (still direct, allowed in allowlist) |
+| settlement-engine.deleteSettlement | `settlement-engine.ts:1359` | `settlement_lines`, `settlement_unmapped`, `settlements` | Delegates to `deleteSettlement()` | ✅ thin wrapper → `@/actions/settlements` |
 | admin-manage-users reset | `supabase/functions/admin-manage-users/` | `settlement_lines`, `settlement_unmapped`, `settlements` | ✅ (admin, server-side, service-role) |
 
 **Invariant risks:**
-- `settlement-engine.ts` still has a direct delete (in allowlist, will consolidate later)
-- Client-side delete cascades are RLS-protected but could leave orphan rows if RLS blocks a child delete silently — mitigated by always filtering by `user_id`
+- Client-side delete cascades are RLS-protected and always filter by `user_id`
 
 ---
 
@@ -81,8 +77,8 @@
 | `auto-post-settlement` | `src/actions/xeroPush.ts` only | ✅ `triggerAutoPost()` |
 
 **Invariant risks:**
-- ⚠️ `settlement-engine.ts` still calls `functions.invoke('sync-settlement-to-xero')` directly — legacy, in allowlist
-- GenericMarketplaceDashboard reset-failed was direct, now uses ✅ `resetFailedSettlements()`
+- `settlement-engine.ts` now delegates to `pushSettlementToXero()` from `@/actions/xeroPush` for the actual edge function invoke
+- The legacy `syncSettlementToXero` wrapper is retained as the high-level orchestrator (line item building, post-push status updates, validation upserts, event logging)
 
 ---
 
@@ -151,11 +147,13 @@ System events are always written by the code that performs the action (edge fn o
 | Auto-post trigger | `triggerAutoPost()` | auto-post-settlement | ✅ invoke guard test |
 | Readiness check | `checkXeroReadinessForMarketplace()` | sync-settlement-to-xero | ✅ REQUIRED_CATEGORIES sync test |
 
-### Remaining Migration Targets (allowlisted, non-blocking)
+### Remaining Migration Targets
 
-| File | Pattern | Plan |
+| File | Pattern | Status |
 |---|---|---|
-| `settlement-engine.ts` | direct `functions.invoke('sync-settlement-to-xero')` | Migrate to `xeroPush.ts` when PushSafetyPreview is refactored |
-| `settlement-engine.ts` | direct delete cascade | Migrate to `deleteSettlement()` |
-| 3 Shopify components | direct `marketplace_connections.insert` | Migrate to `provisionMarketplace()` |
-| SmartUploadFlow | direct `marketplace_connections.insert` (no dedup) | Migrate to `provisionMarketplace()` |
+| `settlement-engine.ts` | `syncSettlementToXero()` orchestrator | ✅ Delegates to `pushSettlementToXero()` for invoke |
+| `settlement-engine.ts` | `rollbackSettlementFromXero()` | ✅ Thin wrapper → `rollbackFromXero()` |
+| `settlement-engine.ts` | `deleteSettlement()` | ✅ Thin wrapper → `@/actions/settlements.deleteSettlement()` |
+| `marketplace-token-map.ts` | Ghost cleanup (delete only) | ✅ Cleanup utility, no provisioning |
+
+**No allowlisted legacy bypasses remain.** All client-side paths route through canonical actions.
