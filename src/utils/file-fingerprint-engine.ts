@@ -36,6 +36,16 @@ export interface FileDetectionResult {
   detectionLevel: 1 | 2 | 3;    // which level detected it
   recordCount?: number;          // estimated number of data rows
   fileFormat?: string;           // 'csv' | 'tsv' | 'xlsx' | 'pdf'
+  /** Data completeness assessment */
+  dataCompleteness?: 'full' | 'partial' | 'orders_only';
+  /** Which critical fields are missing */
+  missingFields?: string[];
+  /** Human-readable completeness warning */
+  completenessWarning?: string;
+  /** Marketplace-specific advice on where to get the full report */
+  upgradeAdvice?: string;
+  /** Metadata extracted from file preamble (e.g. date range, seller info) */
+  preambleMetadata?: { periodStart?: string; periodEnd?: string; sellerName?: string };
 }
 
 // ─── Known Format Fingerprints ──────────────────────────────────────────────
