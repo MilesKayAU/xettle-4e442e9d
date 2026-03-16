@@ -578,6 +578,15 @@ export default function AccountMapperCard() {
     );
   }
 
+  const renderPinDialog = () => (
+    <SettingsPinDialog
+      open={settingsPin.showDialog}
+      onVerify={settingsPin.verifyPin}
+      onSuccess={settingsPin.unlock}
+      onCancel={settingsPin.cancelDialog}
+    />
+  );
+
   // ─── Shared COA refresh strip ──────────────────────────────────────
   const renderCoaRefreshStrip = () => (
     <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
