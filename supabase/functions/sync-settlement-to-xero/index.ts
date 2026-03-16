@@ -131,10 +131,11 @@ function buildServerLineItems(
     if (Math.abs(amount) < 0.01) continue;
 
     const legacyKey = LEGACY_ACCOUNT_KEY_MAP[cat.name] || cat.name;
+    const resolvedCode = getCode(legacyKey, marketplace);
 
     lines.push({
       Description: cat.name,
-      AccountCode: getCode(legacyKey, marketplace),
+      AccountCode: resolvedCode || '', // Empty string signals unmapped — checked after build
       TaxType: cat.taxType,
       UnitAmount: amount,
       Quantity: 1,
