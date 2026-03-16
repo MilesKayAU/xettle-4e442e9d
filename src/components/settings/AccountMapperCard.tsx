@@ -167,16 +167,14 @@ export default function AccountMapperCard() {
       targetMarketplace={cloneTarget}
       coveredMarketplaces={coveredMarketplaces}
       coaAccounts={coaAccounts}
+      taxProfile={taxProfile}
       onComplete={async (createdCodes) => {
-        // Refresh COA
         const [accounts, lastSynced] = await Promise.all([
           getCachedXeroAccounts(),
           getCoaLastSyncedAt(),
         ]);
         setCoaAccounts(accounts);
         setCoaLastSynced(lastSynced);
-
-        // Auto-map the created codes as per-marketplace overrides
         const updated = { ...editableMapping };
         for (const [category, code] of Object.entries(createdCodes)) {
           const key = `${category}:${cloneTarget}`;
