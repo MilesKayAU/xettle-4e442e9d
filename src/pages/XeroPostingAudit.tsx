@@ -379,6 +379,84 @@ export default function XeroPostingAudit() {
         open={!!drawerSettlementId}
         onClose={() => setDrawerSettlementId(null)}
       />
+
+      {/* Export filter dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-4 w-4" />
+              Export Audit Log (CSV)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Date from</Label>
+                <Input
+                  type="date"
+                  value={exportFilters.date_from || ''}
+                  onChange={e => setExportFilters(f => ({ ...f, date_from: e.target.value || undefined }))}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Date to</Label>
+                <Input
+                  type="date"
+                  value={exportFilters.date_to || ''}
+                  onChange={e => setExportFilters(f => ({ ...f, date_to: e.target.value || undefined }))}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Settlement ID (optional)</Label>
+              <Input
+                value={exportFilters.settlement_id || ''}
+                onChange={e => setExportFilters(f => ({ ...f, settlement_id: e.target.value || undefined }))}
+                placeholder="e.g. AMZ-2026-03"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Marketplace (optional)</Label>
+              <Input
+                value={exportFilters.marketplace_code || ''}
+                onChange={e => setExportFilters(f => ({ ...f, marketplace_code: e.target.value || undefined }))}
+                placeholder="e.g. amazon_au"
+                className="h-8 text-xs"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Exports system events from your audit log. Max 5,000 rows. Sensitive data is excluded.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setExportDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={exporting}
+              onClick={async () => {
+                setExporting(true);
+                const result = await exportAuditCsv(exportFilters);
+                setExporting(false);
+                if (result.success) {
+                  toast.success('Audit log exported');
+                  setExportDialogOpen(false);
+                } else {
+                  toast.error(result.error || 'Export failed');
+                }
+              }}
+            >
+              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Download className="h-3.5 w-3.5 mr-1.5" />}
+              {exporting ? 'Exporting…' : 'Download CSV'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
