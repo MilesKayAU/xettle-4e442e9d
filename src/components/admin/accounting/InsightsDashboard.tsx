@@ -89,8 +89,9 @@ export default function InsightsDashboard() {
       const [settlementsRes, adSpendRes, shippingRes] = await Promise.all([
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start')
+          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden')
           .eq('is_hidden', false)
+          .eq('is_pre_boundary', false)
           .is('duplicate_of_settlement_id', null)
           .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")')
           .order('period_end', { ascending: false }),
