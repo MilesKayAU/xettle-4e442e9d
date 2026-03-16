@@ -44,15 +44,15 @@ const SEVERITY_MAP: Record<string, 'error' | 'warning'> = {
 };
 
 const ERROR_TYPE_LABELS: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  attachment_failed: { label: 'Attachment Failed', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
+  attachment_failed: { label: 'Attachment Exception', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
   missing_contact: { label: 'Missing Contact Mapping', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
-  duplicate_blocked: { label: 'Duplicate Blocked', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
-  push_failed: { label: 'Push Failed', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
-  push_failed_permanent: { label: 'Push Failed (Permanent)', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
-  settlement_mismatch: { label: 'Settlement Mismatch', icon: <AlertTriangle className="h-4 w-4" />, color: 'text-amber-600' },
-  xero_attachment_failed: { label: 'Attachment Failed', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
-  xero_push_error: { label: 'Push Error', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
-  unknown: { label: 'Unknown Error', icon: <AlertTriangle className="h-4 w-4" />, color: 'text-muted-foreground' },
+  duplicate_blocked: { label: 'Duplicate Detected', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
+  push_failed: { label: 'Posting Prevented', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
+  push_failed_permanent: { label: 'Posting Blocked (Permanent)', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
+  settlement_mismatch: { label: 'Settlement Needs Review', icon: <AlertTriangle className="h-4 w-4" />, color: 'text-amber-600' },
+  xero_attachment_failed: { label: 'Attachment Exception', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
+  xero_push_error: { label: 'Posting Exception', icon: <XCircle className="h-4 w-4" />, color: 'text-destructive' },
+  unknown: { label: 'Needs Review', icon: <AlertTriangle className="h-4 w-4" />, color: 'text-muted-foreground' },
 };
 
 function classifyPostingError(posting_state: string | null, posting_error: string | null): string {

@@ -247,11 +247,11 @@ export default function RailPostingSettings() {
                             onCheckedChange={(checked) => handleToggleBankMatch(rail, !!checked)}
                             className="h-3.5 w-3.5"
                           />
-                          Require bank match
+                          Require payout confirmation before posting
                         </label>
                         {!defaultBankMatch && !setting.require_bank_match && (
                           <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
-                            <Shield className="h-2.5 w-2.5" /> Settlement confirms payout (bank match optional)
+                            <Shield className="h-2.5 w-2.5" /> Settlement verifies payout (bank confirmation optional)
                           </span>
                         )}
                       </div>

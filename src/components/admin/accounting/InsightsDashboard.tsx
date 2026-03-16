@@ -453,9 +453,9 @@ export default function InsightsDashboard() {
 
         {/* Header */}
         <div>
-          <h2 className="text-xl font-bold text-foreground">Marketplace Insights</h2>
+          <h2 className="text-xl font-bold text-foreground">Marketplace Profitability</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            How much each marketplace actually pays you — based on {stats.reduce((sum, s) => sum + s.settlementCount, 0)} analysed settlements.
+            Settlement revenue, fees and margins — based on {stats.reduce((sum, s) => sum + s.settlementCount, 0)} verified settlements.
           </p>
         </div>
 
@@ -468,7 +468,7 @@ export default function InsightsDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Total Sales</p>
+              <p className="text-xs text-muted-foreground">Settlement Revenue</p>
               <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totalAllSales)}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{stats.length} marketplace{stats.length !== 1 ? 's' : ''}</p>
             </CardContent>
@@ -482,7 +482,7 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Net Received</p>
+              <p className="text-xs text-muted-foreground">Net Payout</p>
               <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totalAllNet)}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{netPctOfSales}% of total sales</p>
             </CardContent>

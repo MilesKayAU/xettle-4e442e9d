@@ -76,7 +76,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
   const tasks = [
     {
       key: 'review',
-      label: 'Upload needed',
+      label: 'Settlement required',
       count: counts.filesToReview,
       icon: FileText,
       color: 'text-amber-500',
@@ -86,7 +86,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
     },
     {
       key: 'push',
-      label: 'Ready to push',
+      label: 'Verified — ready to post',
       count: counts.readyToPush,
       icon: Send,
       color: 'text-primary',
@@ -106,7 +106,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
     },
     {
       key: 'alerts',
-      label: 'Recon alerts',
+      label: 'Reconciliation alerts',
       count: counts.reconAlerts,
       icon: AlertTriangle,
       color: 'text-destructive',
