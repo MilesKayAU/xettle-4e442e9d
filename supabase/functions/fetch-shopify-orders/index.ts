@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
       }
       authenticatedUserId = user.id;
     }
-    console.log("[fetch-shopify-orders] Auth OK, isServiceRole:", isServiceRole);
+    logger.debug("[fetch-shopify-orders] Auth OK, isServiceRole:", isServiceRole);
 
     let body: any = {};
     try {
