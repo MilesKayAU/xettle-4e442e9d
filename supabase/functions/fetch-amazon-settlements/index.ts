@@ -811,7 +811,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
   const listStartDate = smartSyncFrom
     ? new Date(Math.max(new Date(smartSyncFrom).getTime(), Date.now() - 90 * 24 * 60 * 60 * 1000))
     : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-  console.log(`[smart-sync] Report listing window: ${listStartDate.toISOString()} (sync_from: ${smartSyncFrom || 'none'})`);
+  logger.debug(`[smart-sync] Report listing window: ${listStartDate.toISOString()} (sync_from: ${smartSyncFrom || 'none'})`);
   const params = new URLSearchParams({
     reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
     processingStatuses: 'DONE',
