@@ -1659,16 +1659,18 @@ serve(async (req) => {
     });
 
     } finally {
-      // ─── RELEASE IDEMPOTENCY LOCK ──────────────────────────────────
-      try {
-        await supabase.rpc('release_sync_lock', {
-          p_user_id: userId,
-          p_integration: 'xero_push',
-          p_lock_key: pushLockKey,
-        });
-        console.log(`[idempotency-lock] Released push lock for ${cacheSettlementKey}`);
-      } catch (relErr: any) {
-        console.warn(`[idempotency-lock] Failed to release lock (will auto-expire): ${relErr.message}`);
+      // ─── RELEASE IDEMPOTENCY LOCK (only if we actually acquired it) ──
+      if (lockAcquired) {
+        try {
+          await supabase.rpc('release_sync_lock', {
+            p_user_id: userId,
+            p_integration: 'xero_push',
+            p_lock_key: pushLockKey,
+          });
+          console.log(`[idempotency-lock] Released push lock for ${cacheSettlementKey}`);
+        } catch (relErr: any) {
+          console.warn(`[idempotency-lock] Failed to release lock (will auto-expire in 120s): ${relErr.message}`);
+        }
       }
     }
 
