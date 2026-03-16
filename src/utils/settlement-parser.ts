@@ -482,7 +482,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const gstOnIncome = round2(auIncome / gstDivisor);
   const gstOnExpenses = round2(expenseTotal / gstDivisor); // negative result (expenses are negative)
 
-  console.info('[GST Base]', {
+  logger.info('[GST Base]', {
     auSalesGstBase: auIncome,
     intlSalesExcluded: round2(intlSalesExcludedFromGstBase),
     gstOnIncome,
