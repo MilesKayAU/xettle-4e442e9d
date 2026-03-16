@@ -760,7 +760,7 @@ Deno.serve(async (req) => {
       }
     } catch { /* best effort */ }
 
-    console.error('[fetch-ebay-settlements] error:', err)
+    logger.error('[fetch-ebay-settlements] error:', err)
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
