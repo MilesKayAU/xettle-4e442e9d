@@ -376,7 +376,7 @@ export default function AccountMapperCard() {
     }
   };
 
-
+  const handleConfirm = async () => {
     settingsPin.requirePin(async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
