@@ -45,6 +45,82 @@ interface GenericMarketplaceDashboardProps {
   onSwitchToUpload?: () => void;
 }
 
+/** Maps marketplace codes to their sync edge function names */
+const SYNC_FUNCTION_MAP: Record<string, string> = {
+  amazon_au: 'fetch-amazon-settlements',
+  ebay_au: 'fetch-ebay-settlements',
+  shopify_payments: 'fetch-shopify-payouts',
+  shopify_orders: 'fetch-shopify-orders',
+};
+
+function SyncNowButton({ marketplaceCode }: { marketplaceCode: string }) {
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<{ time: string; status: string } | null>(null);
+
+  useEffect(() => {
+    async function fetchLastSync() {
+      const fnName = SYNC_FUNCTION_MAP[marketplaceCode];
+      if (!fnName) return;
+      const { data } = await supabase
+        .from('sync_history')
+        .select('created_at, status, event_type')
+        .or(`event_type.eq.${fnName},event_type.eq.scheduled_sync`)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) {
+        const d = new Date(data[0].created_at);
+        setLastSync({
+          time: d.toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+          status: data[0].status,
+        });
+      }
+    }
+    fetchLastSync();
+  }, [marketplaceCode]);
+
+  const handleSync = async () => {
+    const fnName = SYNC_FUNCTION_MAP[marketplaceCode];
+    if (!fnName) return;
+    setSyncing(true);
+    try {
+      const { error } = await supabase.functions.invoke(fnName);
+      if (error) throw error;
+      toast.success('Sync completed successfully');
+      // Refresh last sync time
+      const d = new Date();
+      setLastSync({
+        time: d.toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+        status: 'success',
+      });
+    } catch (err: any) {
+      toast.error(`Sync failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        disabled={syncing}
+        onClick={handleSync}
+      >
+        {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+        Sync Now
+      </Button>
+      {lastSync && (
+        <span className="text-[11px] text-muted-foreground">
+          Last: {lastSync.time}
+          {lastSync.status === 'success' ? ' ✅' : lastSync.status === 'error' ? ' ⚠️' : ''}
+        </span>
+      )}
+    </div>
+  );
+}
+
 interface SettlementRow {
   id: string;
   settlement_id: string;
