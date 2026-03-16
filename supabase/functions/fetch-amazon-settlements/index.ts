@@ -874,7 +874,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
     if (smartSyncFrom && report.dataEndTime) {
       const reportEnd = report.dataEndTime.split('T')[0];
       if (reportEnd < smartSyncFrom) {
-        console.log(`[smart-sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${smartSyncFrom}`);
+        logger.debug(`[smart-sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${smartSyncFrom}`);
         continue;
       }
     }
