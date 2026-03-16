@@ -299,6 +299,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [lastBankSyncResult, setLastBankSyncResult] = useState<BankSyncDiagnostics | null>(null);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
+  const [compareDrawer, setCompareDrawer] = useState<{ open: boolean; settlementId: string | null; xeroInvoiceId: string | null }>({ open: false, settlementId: null, xeroInvoiceId: null });
   const [depositCoverage, setDepositCoverage] = useState<Record<string, {
     siblings: Array<{ settlement_id: string; match_amount: number; confidence_score: number; period_start?: string; period_end?: string; marketplace?: string }>;
     depositAmount: number;
