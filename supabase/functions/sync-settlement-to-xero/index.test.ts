@@ -35,9 +35,10 @@ Deno.test("Rejects request without userId", async () => {
     action: "create",
     settlementId: "test-123",
   });
-  assertEquals(json?.success, undefined);
-  // Should fail with auth error or missing userId
-  assertStringIncludes(String(json?.error || ""), "");
+  assertEquals(json?.success, false);
+  const errorStr = String(json?.error || "");
+  // Should fail with auth/userId error
+  assertEquals(errorStr.length > 0, true);
 });
 
 Deno.test("Rejects create without settlementId", async () => {
@@ -45,14 +46,12 @@ Deno.test("Rejects create without settlementId", async () => {
     action: "create",
     userId: "00000000-0000-0000-0000-000000000000",
   });
-  // Should error — settlementId is required
-  const errorStr = String(json?.error || json?.message || "");
-  // The function should reject this before attempting Xero API calls
-  assertEquals(json?.success, undefined);
+  assertEquals(json?.success, false);
+  const errorStr = String(json?.error || "");
+  assertEquals(errorStr.length > 0, true);
 });
 
 Deno.test("Missing contact mapping returns missing_contact_mapping error", async () => {
-  // Use an unknown marketplace that has no contact mapping
   const { json } = await invokeFunction({
     action: "create",
     userId: "00000000-0000-0000-0000-000000000000",
@@ -70,7 +69,7 @@ Deno.test("Missing contact mapping returns missing_contact_mapping error", async
       { Description: "Test", AccountCode: "200", TaxType: "OUTPUT", UnitAmount: 100, Quantity: 1 },
     ],
   });
-  // Should contain missing_contact_mapping error
+  assertEquals(json?.success, false);
   const errorStr = String(json?.error || "");
   assertStringIncludes(errorStr, "missing_contact_mapping");
 });
