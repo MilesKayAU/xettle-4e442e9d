@@ -664,6 +664,8 @@ export default function AccountMapperCard() {
       : [...CATEGORIES];
 
     return (
+      <>
+      {renderPinDialog()}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
