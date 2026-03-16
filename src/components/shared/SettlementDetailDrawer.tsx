@@ -433,6 +433,16 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               </div>
             </div>
 
+            {/* COA Mapping Blocker CTA — shown for unpushed settlements with mapping gaps */}
+            {mappingBlocked && settlement.marketplace && (
+              <CoaBlockerCta
+                marketplace={settlement.marketplace}
+                missingCategories={missingCategories}
+                compact
+                onResolved={() => setReadinessKey(k => k + 1)}
+              />
+            )}
+
             {/* Bank deposit comparison */}
             {bankDeposit != null && (
               <div className="flex items-center justify-between text-xs p-2.5 rounded-md bg-muted/30 border border-border">
