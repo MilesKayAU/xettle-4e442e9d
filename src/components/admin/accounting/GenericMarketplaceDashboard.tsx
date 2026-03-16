@@ -152,6 +152,17 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       setCurrentUserId(user.id);
       const { data } = await supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1);
       setHasShopify(!!(data && data.length > 0));
+
+      // Check if this marketplace has an active API connection
+      let apiConnected = false;
+      if (code === 'amazon_au') {
+        const { data: tokens } = await supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1);
+        apiConnected = !!(tokens && tokens.length > 0);
+      } else if (code === 'shopify_payments' || code === 'shopify_orders') {
+        apiConnected = !!(data && data.length > 0); // reuse shopify_tokens check
+      }
+      setIsApiConnected(apiConnected);
+
       // Fetch accounting boundary
       const { data: boundaryRow } = await supabase
         .from('app_settings')
