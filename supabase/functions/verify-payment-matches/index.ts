@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
           allCandidates[gateway.code].sort((a, b) => b.score - a.score)
         }
       } catch (err) {
-        console.error(`[verify-payment-matches] Error processing ${gateway.code}:`, err)
+        logger.error(`[verify-payment-matches] Error processing ${gateway.code}:`, err)
       }
     }
 
