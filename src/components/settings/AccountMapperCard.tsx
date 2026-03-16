@@ -204,6 +204,14 @@ export default function AccountMapperCard() {
         .maybeSingle();
       setIsAdmin(!!roleRow);
 
+      // Load tax profile
+      const { data: taxSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'org_tax_profile')
+        .maybeSingle();
+      setTaxProfile(taxSetting?.value || 'AU_GST');
       // Load cached COA + last sync in parallel
       const [accounts, lastSynced] = await Promise.all([
         getCachedXeroAccounts(),
