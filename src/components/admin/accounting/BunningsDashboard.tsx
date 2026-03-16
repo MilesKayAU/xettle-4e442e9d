@@ -475,34 +475,33 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
     setSaving(false);
   };
 
-  const handlePushToXero = async (settlementId?: string, settlementData?: StandardSettlement) => {
+  // Golden Rule: All pushes go through PushSafetyPreview modal
+  const openPushPreview = (settlementId?: string) => {
     const targetId = settlementId || savedSettlementId || parsed?.settlement_id;
     if (!targetId) return;
+    setPreviewSettlements([{ settlementId: targetId, marketplace: 'bunnings' }]);
+    setPreviewOpen(true);
+  };
 
-    // Run reconciliation check before sync
-    const dataToCheck = settlementData || parsed;
-    if (dataToCheck) {
-      const reconResult = runUniversalReconciliation(dataToCheck);
-      if (!reconResult.canSync) {
-        toast.error('Critical reconciliation issues detected — resolve before syncing to Xero.');
-        return;
-      }
-      if (reconResult.overallStatus === 'warn') {
-        toast.warning('Reconciliation warnings exist — proceeding with sync.');
+  const handlePreviewConfirm = async () => {
+    setPreviewOpen(false);
+    setPushing(true);
+    let ok = 0;
+    for (const s of previewSettlements) {
+      const result = await syncSettlementToXero(s.settlementId, s.marketplace);
+      if (result.success) {
+        ok++;
+        clearParsedStorage();
+      } else {
+        toast.error(result.error || 'Failed to push to Xero');
       }
     }
-
-    setPushing(true);
-    // syncSettlementToXero now builds canonical 10-category lines internally
-    const result = await syncSettlementToXero(targetId, 'bunnings');
-    if (result.success) {
-      clearParsedStorage();
-      toast.success('Invoice created in Xero!');
+    if (ok > 0) {
+      toast.success(`${ok} invoice${ok > 1 ? 's' : ''} created in Xero!`);
       loadHistory();
-    } else {
-      toast.error(result.error || 'Failed to push to Xero');
     }
     setPushing(false);
+    setPreviewSettlements([]);
   };
 
   const handleDelete = async (id: string) => {
