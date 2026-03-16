@@ -18,7 +18,7 @@ export default function EbayCallback() {
       const errorParam = searchParams.get('error');
       const errorDesc = searchParams.get('error_description');
 
-      console.log('[eBay Callback] Params:', { code: code ? `${code.substring(0, 10)}...` : null, error: errorParam });
+      logger.debug('[eBay Callback] Params:', { code: code ? `${code.substring(0, 10)}...` : null, error: errorParam });
 
       if (errorParam) {
         setStatus('error');
