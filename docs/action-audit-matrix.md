@@ -51,9 +51,6 @@
 | settlement-engine.deleteSettlement | `settlement-engine.ts:1359` | `settlement_lines`, `settlement_unmapped`, `settlements` | Delegates to `deleteSettlement()` | ✅ thin wrapper → `@/actions/settlements` |
 | admin-manage-users reset | `supabase/functions/admin-manage-users/` | `settlement_lines`, `settlement_unmapped`, `settlements` | ✅ (admin, server-side, service-role) |
 
-**Invariant risks:**
-- Client-side delete cascades are RLS-protected and always filter by `user_id`
-
 ---
 
 ## C) Push to Xero (Manual + Autopost)
@@ -64,10 +61,17 @@
 | settlement-engine.pushSettlementBatch | `settlement-engine.ts:1339` | same as above | `CAS` | ✅ `pushSettlementToXero()` |
 | SafeRepostModal rollback | `SafeRepostModal.tsx:173` | `settlements` (via edge fn) | server-side void | ✅ `rollbackFromXero()` in `xeroPush.ts` |
 | auto-post-settlement batch | `supabase/functions/auto-post-settlement/` | `settlements`, `system_events`, `sync_locks`, `xero_accounting_matches` | `CAS` (atomic claim L446-498) | ✅ (server-side orchestrator) |
-| auto-post-settlement single | `supabase/functions/auto-post-settlement/` | same | `CAS` | ✅ (server-side) |
 | sync-settlement-to-xero | `supabase/functions/sync-settlement-to-xero/` | `settlements`, `xero_accounting_matches`, `system_events`, `sync_locks` | `CAS` + retry-safe backfill | ✅ (server-side push engine) |
 | auto-push-xero (DEPRECATED) | `supabase/functions/auto-push-xero/` | hard-blocked (early return) | n/a | ✅ (disabled) |
 | RailPostingSettings retry | `RailPostingSettings.tsx:205` | via edge fn | delegates to server | ✅ `triggerAutoPost()` in `xeroPush.ts` |
+
+### Support Tier Enforcement (Push)
+
+| Tier | Auto-post | Manual Push | AUTHORISED | Server Enforced |
+|---|---|---|---|---|
+| SUPPORTED | ✅ Allowed | ✅ Allowed | ✅ Allowed (all gates) | ✅ `sync-settlement-to-xero` |
+| EXPERIMENTAL | ⚠️ DRAFT only (acknowledged) | ✅ DRAFT only | ❌ Blocked | ✅ Both edge functions |
+| UNSUPPORTED | ❌ Blocked | ⚠️ DRAFT + ack required | ❌ Blocked | ✅ `auto-post-settlement` |
 
 ### Client → Server Invoke Guard
 
@@ -75,10 +79,6 @@
 |---|---|---|
 | `sync-settlement-to-xero` | `src/actions/xeroPush.ts` only | ✅ `pushSettlementToXero()`, `rollbackFromXero()` |
 | `auto-post-settlement` | `src/actions/xeroPush.ts` only | ✅ `triggerAutoPost()` |
-
-**Invariant risks:**
-- `settlement-engine.ts` now delegates to `pushSettlementToXero()` from `@/actions/xeroPush` for the actual edge function invoke
-- The legacy `syncSettlementToXero` wrapper is retained as the high-level orchestrator (line item building, post-push status updates, validation upserts, event logging)
 
 ---
 
@@ -89,8 +89,6 @@
 | SafeRepostModal void+repost | `SafeRepostModal.tsx:173-207` | `settlements` (posting_state, xero fields) | server-side void | ✅ (uses rollbackFromXero internally) |
 | use-xero-sync.handleRollback | `use-xero-sync.ts:102` | `settlements` | via canonical action | ✅ `rollbackSettlement()` in `repost.ts` |
 
-**Key invariant enforced:** `rollbackSettlement()` always checks `rail_posting_settings.auto_repost_after_rollback` and sets `manual_hold` when auto-repost is OFF. Previously `use-xero-sync` skipped this check.
-
 ---
 
 ## E) Mapping / Readiness Checks
@@ -100,8 +98,7 @@
 | PushSafetyPreview validation | via `xero-mapping-readiness.ts` | `REQUIRED_CATEGORIES` L27 | ✅ `checkXeroReadinessForMarketplace()` |
 | sync-settlement-to-xero server gate | `sync-settlement-to-xero/index.ts:787` | `REQUIRED_CATEGORIES` (server copy) | ✅ (server-side, sync-tested) |
 | auto-post-settlement mapping check | `auto-post-settlement/index.ts` | queries `marketplace_account_mapping` | ✅ (server-side, same 5 categories) |
-
-**Sync guard:** `canonical-actions.test.ts` extracts `REQUIRED_CATEGORIES` from both client and server files and fails if they diverge.
+| Rail posting eligibility | `src/actions/xeroReadiness.ts` | `getRailPostingEligibility()` | ✅ canonical action |
 
 ---
 
@@ -119,18 +116,38 @@
 
 ---
 
-## G) System Events (Audit Trail)
+## G) Support Scope & Tier Management
+
+| Entry Point | File | Tables Written | Idempotency | Canonical Path |
+|---|---|---|---|---|
+| Scope acknowledgement | `ScopeBanner.tsx` | `app_settings` (scope_acknowledged_at, scope_version) | `upsert` | ✅ `acknowledgeScopeConsent()` in `scopeConsent.ts` |
+| Org tax profile | Settings UI | `app_settings` (tax_profile) | `upsert` | ✅ `setOrgTaxProfile()` in `scopeConsent.ts` |
+| Rail support acknowledgement | `RailPostingSettings.tsx` | `rail_posting_settings` (support_acknowledged_at), `system_events` | `upsert` | ✅ `acknowledgeRailSupport()` in `scopeConsent.ts` |
+| Tier computation | All push/settings UI | (read-only computation) | n/a | ✅ `computeSupportTier()` in `policy/supportPolicy.ts` |
+| Rail posting eligibility | PushSafetyPreview, RailPostingSettings | (read-only computation) | n/a | ✅ `getRailPostingEligibility()` in `xeroReadiness.ts` |
+
+### Tier Enforcement Points
+
+| Location | Enforcement | Server-side |
+|---|---|---|
+| `RailPostingSettings.tsx` | Auto-post toggle disabled for unsupported; AUTHORISED disabled for non-SUPPORTED | Client UX gate |
+| `PushSafetyPreview.tsx` | Shows tier warning; blocks push for unacknowledged experimental/unsupported | Client UX gate |
+| `auto-post-settlement` edge fn | Skips UNSUPPORTED rails; forces DRAFT for EXPERIMENTAL; blocks REVIEW_EACH_SETTLEMENT | ✅ Server enforced |
+| `sync-settlement-to-xero` edge fn | Forces DRAFT for non-SUPPORTED; blocks AUTHORISED for non-SUPPORTED | ✅ Server enforced |
+
+---
+
+## H) System Events (Audit Trail)
 
 | Entry Point | File | Event Types | Notes |
 |---|---|---|---|
 | auto-post-settlement | edge fn | `auto_post_*` (claimed, success, failed, skipped, stale_lock) | ✅ comprehensive |
-| sync-settlement-to-xero | edge fn | `xero_push_success`, `xero_push_failed` | ✅ |
+| sync-settlement-to-xero | edge fn | `xero_push_success`, `xero_push_failed`, `authorised_blocked_by_tier` | ✅ |
+| scope consent | `scopeConsent.ts` | `rail_support_acknowledged` | ✅ |
 | fetch-outstanding | edge fn | `xero_api_call` | ✅ |
 | match-bank-deposits | edge fn | `bank_match_*` | ✅ |
 | ExceptionsInbox | component | `posting_retry_requested`, `exception_resolved`, `exception_snoozed` | ✅ |
 | run-validation-sweep | edge fn | `validation_sweep_*` | ✅ |
-
-System events are always written by the code that performs the action (edge fn or component). No canonical wrapper needed — the pattern is: "whoever does the work logs the event."
 
 ---
 
@@ -146,6 +163,11 @@ System events are always written by the code that performs the action (edge fn o
 | Rollback | `rollbackSettlement()` | sync-settlement-to-xero (void) | manual_hold always checked |
 | Auto-post trigger | `triggerAutoPost()` | auto-post-settlement | ✅ invoke guard test |
 | Readiness check | `checkXeroReadinessForMarketplace()` | sync-settlement-to-xero | ✅ REQUIRED_CATEGORIES sync test |
+| Scope consent | `acknowledgeScopeConsent()` | n/a (app_settings) | ✅ canonical action |
+| Tax profile | `setOrgTaxProfile()` | n/a (app_settings) | ✅ canonical action |
+| Rail support ack | `acknowledgeRailSupport()` | n/a (rail_posting_settings) | ✅ canonical action |
+| Tier computation | `computeSupportTier()` | duplicated in edge fns | ✅ tier unit tests |
+| Rail eligibility | `getRailPostingEligibility()` | n/a | ✅ canonical action |
 
 ### Remaining Migration Targets
 
