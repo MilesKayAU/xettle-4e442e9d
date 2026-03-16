@@ -185,14 +185,26 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
 
       setVoidedInvoiceIds(invoiceIds);
 
-      // Step 2: Update settlement for repost (Model A — same row)
+      // Step 2: Check if auto_repost_after_rollback is enabled for this marketplace
+      const { data: railSetting } = await supabase
+        .from('rail_posting_settings')
+        .select('auto_repost_after_rollback, posting_mode')
+        .eq('user_id', user.id)
+        .eq('rail', settlement.marketplace)
+        .maybeSingle();
+
+      // If auto-post is ON but auto_repost_after_rollback is OFF, use manual_hold
+      // This prevents the auto-poster from picking up the settlement immediately
+      const useManualHold = railSetting?.posting_mode === 'auto' && !railSetting?.auto_repost_after_rollback;
+
+      // Step 3: Update settlement for repost (Model A — same row)
       const { error: updateErr } = await supabase
         .from('settlements')
         .update({
           repost_of_invoice_id: invoiceIds[0], // Primary voided invoice
           repost_reason: reason.trim(),
           status: 'ready_to_push',
-          posting_state: null,
+          posting_state: useManualHold ? 'manual_hold' : null,
           posting_error: null,
           // Clear old invoice links so PushSafetyPreview doesn't block
           xero_invoice_id: null,

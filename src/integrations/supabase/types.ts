@@ -1293,8 +1293,10 @@ export type Database = {
         Row: {
           auto_post_enabled_at: string | null
           auto_post_enabled_by: string | null
+          auto_repost_after_rollback: boolean
           created_at: string
           id: string
+          invoice_status: string
           posting_mode: string
           rail: string
           require_bank_match: boolean
@@ -1304,8 +1306,10 @@ export type Database = {
         Insert: {
           auto_post_enabled_at?: string | null
           auto_post_enabled_by?: string | null
+          auto_repost_after_rollback?: boolean
           created_at?: string
           id?: string
+          invoice_status?: string
           posting_mode?: string
           rail: string
           require_bank_match?: boolean
@@ -1315,8 +1319,10 @@ export type Database = {
         Update: {
           auto_post_enabled_at?: string | null
           auto_post_enabled_by?: string | null
+          auto_repost_after_rollback?: boolean
           created_at?: string
           id?: string
+          invoice_status?: string
           posting_mode?: string
           rail?: string
           require_bank_match?: boolean

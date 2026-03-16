@@ -166,13 +166,14 @@ Deno.serve(async (req) => {
 
     // ─── Single settlement mode ──────────────────────────────────
     if (targetSettlementId && targetUserId) {
-      const result = await processSettlement(supabase, targetSettlementId, targetUserId);
+      // Load rail setting for invoice_status in single mode
+      const result = await processSettlement(supabase, targetSettlementId, targetUserId, 'DRAFT');
       results.push(result);
     } else {
       // ─── Batch mode: scan all users with auto-post rails ───────
       const { data: autoRails } = await supabase
         .from('rail_posting_settings')
-        .select('user_id, rail, require_bank_match')
+        .select('user_id, rail, require_bank_match, auto_post_enabled_at, invoice_status')
         .eq('posting_mode', 'auto');
 
       if (!autoRails || autoRails.length === 0) {
@@ -182,10 +183,10 @@ Deno.serve(async (req) => {
       }
 
       // Group by user
-      const userRails = new Map<string, Array<{ rail: string; require_bank_match: boolean }>>();
+      const userRails = new Map<string, Array<{ rail: string; require_bank_match: boolean; auto_post_enabled_at: string | null; invoice_status: string }>>();
       for (const r of autoRails) {
         const existing = userRails.get(r.user_id) || [];
-        existing.push({ rail: r.rail, require_bank_match: r.require_bank_match });
+        existing.push({ rail: r.rail, require_bank_match: r.require_bank_match, auto_post_enabled_at: r.auto_post_enabled_at, invoice_status: r.invoice_status || 'DRAFT' });
         userRails.set(r.user_id, existing);
       }
 
@@ -195,7 +196,7 @@ Deno.serve(async (req) => {
         // BLOCKER #1: require reconciliation_status = 'matched'
         const { data: settlements } = await supabase
           .from('settlements')
-          .select('id, settlement_id, marketplace, status, posting_state, posting_claimed_at, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id, push_retry_count, reconciliation_status, bank_verified')
+          .select('id, settlement_id, marketplace, status, posting_state, posting_claimed_at, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id, push_retry_count, reconciliation_status, bank_verified, created_at')
           .eq('user_id', userId)
           .eq('status', 'ready_to_push')
           .eq('is_hidden', false)
@@ -213,6 +214,8 @@ Deno.serve(async (req) => {
           if (s.posting_state === 'posted') return false;
           // Skip actively posting (unless stale — already recovered above)
           if (s.posting_state === 'posting') return false;
+          // Skip manual_hold (repost waiting for manual push)
+          if (s.posting_state === 'manual_hold') return false;
           // Skip if over retry limit
           if (s.posting_state === 'failed' && (s.push_retry_count || 0) >= MAX_RETRY_COUNT) return false;
           // Only allow null or failed posting_state
@@ -220,12 +223,27 @@ Deno.serve(async (req) => {
           // Check bank match requirement
           const railConfig = rails.find(r => r.rail === s.marketplace);
           if (railConfig?.require_bank_match && !s.bank_verified) return false;
+          // ── DATE GATE (Option A): only auto-post settlements created AFTER auto_post_enabled_at ──
+          if (railConfig?.auto_post_enabled_at) {
+            const enabledAt = new Date(railConfig.auto_post_enabled_at).getTime();
+            const createdAt = new Date(s.created_at).getTime();
+            if (createdAt < enabledAt) return false;
+          }
           return true;
         });
 
-        for (const s of postable) {
-          const result = await processSettlement(supabase, s.id, userId);
+        // ── Batch throttling: sleep between pushes to avoid Xero rate limits ──
+        const BATCH_SLEEP_MS = 2000;
+        for (let i = 0; i < postable.length; i++) {
+          const s = postable[i];
+          const railConfig = rails.find(r => r.rail === s.marketplace);
+          const invoiceStatus = railConfig?.invoice_status || 'DRAFT';
+          const result = await processSettlement(supabase, s.id, userId, invoiceStatus);
           results.push(result);
+          // Throttle: sleep between pushes (not after last one)
+          if (i < postable.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, BATCH_SLEEP_MS));
+          }
         }
       }
     }
@@ -249,7 +267,8 @@ Deno.serve(async (req) => {
 async function processSettlement(
   supabase: any,
   settlementDbId: string,
-  userId: string
+  userId: string,
+  invoiceStatus: string = 'DRAFT'
 ): Promise<{ settlement_id: string; result: string; error?: string }> {
   // Load settlement
   const { data: settlement, error: loadErr } = await supabase
@@ -546,6 +565,7 @@ async function processSettlement(
         lineItems,
         contactName,
         netAmount,
+        invoiceStatus,
         settlementData: {
           settlement_id: sid,
           period_start: settlement.period_start,

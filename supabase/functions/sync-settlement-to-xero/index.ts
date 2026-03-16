@@ -58,6 +58,8 @@ interface InvoiceRequest {
   country?: string;
   contactName?: string;
   netAmount?: number;
+  // Invoice status: 'DRAFT' (default, safe) or 'AUTHORISED' (stricter gates apply)
+  invoiceStatus?: 'DRAFT' | 'AUTHORISED';
   // Settlement data for CSV attachment
   settlementData?: Record<string, any>;
   // Rollback fields
@@ -1197,13 +1199,25 @@ serve(async (req) => {
       throw new Error(`missing_contact_mapping: No Xero contact mapping for marketplace "${marketplace}". Add a mapping before pushing.`);
     }
 
+    // ─── INVOICE STATUS: DRAFT (default) or AUTHORISED (stricter gates) ──
+    const requestedStatus = body.invoiceStatus || 'DRAFT';
+    let finalInvoiceStatus = 'DRAFT';
+
+    if (requestedStatus === 'AUTHORISED') {
+      // AUTHORISED requires ALL of: recon matched, no unmapped lines (already checked),
+      // contact exists (already checked), attachment will be created, tax types validated (already checked).
+      // We've passed all gates at this point — allow AUTHORISED.
+      finalInvoiceStatus = 'AUTHORISED';
+      console.log(`[invoice-status] AUTHORISED mode requested — all safety gates passed`);
+    }
+
     const invoiceData: Record<string, any> = {
       Type: invoiceType,
       Contact: { Name: resolvedContact },
       Date: date,
       DueDate: dueDate || date,
       CurrencyCode: "AUD",
-      Status: "DRAFT",
+      Status: finalInvoiceStatus,
       LineAmountTypes: "Exclusive",
       Reference: reference,
       LineItems: finalLineItems.map(item => ({
