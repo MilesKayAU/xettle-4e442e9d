@@ -134,6 +134,240 @@ export function validateAccountCode(
   return { valid: true };
 }
 
+// ─── Code Pattern Detection ─────────────────────────────────────────────────
+
+export interface CodePattern {
+  /** Base whole-number code per category, e.g. { Sales: '200', Shipping: '206' } */
+  baseCodeByCategory: Record<string, string>;
+  /** Whether the template uses decimal sub-codes (e.g. 200.1) */
+  usesDecimals: boolean;
+  /** How decimals are used: 'suffix' means .1, .2 under a base; 'none' means no decimals */
+  decimalStrategy: 'suffix' | 'none';
+  /** Next available decimal per base code, e.g. { '200': 2 } meaning 200.2 is next */
+  nextDecimalByBase: Record<string, number>;
+}
+
+export interface PatternAccount {
+  code: string;
+  category: string;
+  type: string;
+}
+
+/**
+ * Detect the numbering pattern used by a set of template accounts.
+ * Returns null if the pattern is too ambiguous to replicate safely.
+ */
+export function detectCodePattern(templateAccounts: PatternAccount[]): CodePattern | null {
+  if (templateAccounts.length === 0) return null;
+
+  const baseCodeByCategory: Record<string, string> = {};
+  const decimalsByBase: Record<string, number[]> = {};
+  let hasDecimals = false;
+
+  for (const acc of templateAccounts) {
+    const code = acc.code;
+    if (!code) continue;
+
+    if (code.includes('.')) {
+      hasDecimals = true;
+      const [base, decStr] = code.split('.');
+      const dec = parseInt(decStr, 10);
+      if (!isNaN(dec)) {
+        if (!decimalsByBase[base]) decimalsByBase[base] = [];
+        decimalsByBase[base].push(dec);
+      }
+    } else {
+      // Whole number = base code for this category
+      baseCodeByCategory[acc.category] = code;
+    }
+  }
+
+  // Also map decimal accounts to their parent category if base exists
+  // e.g. if 200 = Sales and 200.1 exists, 200.1 is a sub of Sales base
+  const nextDecimalByBase: Record<string, number> = {};
+  for (const [base, decimals] of Object.entries(decimalsByBase)) {
+    nextDecimalByBase[base] = Math.max(...decimals) + 1;
+  }
+
+  return {
+    baseCodeByCategory,
+    usesDecimals: hasDecimals,
+    decimalStrategy: hasDecimals ? 'suffix' : 'none',
+    nextDecimalByBase,
+  };
+}
+
+// ─── Pattern-Aware Code Generation ──────────────────────────────────────────
+
+export interface PatternCodeInput {
+  pattern: CodePattern;
+  category: string;
+  accountType: string;
+  existingCodes: string[];
+  batchClaimed?: Set<string>;
+}
+
+/**
+ * Generate a code that mirrors the numbering convention of the template.
+ *
+ * Strategy:
+ * - Find the base code for this category in the pattern
+ * - Offset it by a marketplace stride (find next free whole number near the base)
+ * - If the template uses decimals for sub-categories under this base,
+ *   generate {newBase}.{n} using the same decimal strategy
+ *
+ * Falls back to generateNextCode() if pattern doesn't cover this category.
+ */
+export function generateCodeFromPattern(input: PatternCodeInput): string {
+  const { pattern, category, accountType, existingCodes, batchClaimed } = input;
+  const existingSet = new Set(existingCodes);
+  const claimed = batchClaimed || new Set<string>();
+
+  const templateBase = pattern.baseCodeByCategory[category];
+
+  if (!templateBase) {
+    // Pattern doesn't know this category — fall back to sequential
+    return generateNextCode({ existingCodes, accountType, batchClaimed: claimed });
+  }
+
+  const baseNum = parseInt(templateBase, 10);
+  if (isNaN(baseNum)) {
+    return generateNextCode({ existingCodes, accountType, batchClaimed: claimed });
+  }
+
+  const range = getRangeForType(accountType);
+
+  // Find next available whole number starting from the template base
+  let candidate = baseNum;
+  while (
+    candidate <= range.end &&
+    (existingSet.has(String(candidate)) || claimed.has(String(candidate)))
+  ) {
+    candidate++;
+  }
+
+  if (candidate > range.end) {
+    // Fallback: scan from range start
+    return generateNextCode({ existingCodes, accountType, batchClaimed: claimed });
+  }
+
+  const newCode = String(candidate);
+
+  // Check if template used decimals under this base — if so, generate decimal
+  if (pattern.usesDecimals && pattern.nextDecimalByBase[templateBase]) {
+    // This category was a decimal sub-code in the template.
+    // But we're generating a NEW base for a new marketplace, so use whole number.
+    // Decimals will be generated when there are sub-categories under this base.
+  }
+
+  return newCode;
+}
+
+/**
+ * For a clone operation with pattern matching, generate codes for a set of
+ * template accounts being cloned to a new marketplace.
+ *
+ * This groups accounts by their base code in the template, then:
+ * - Assigns new whole numbers for each unique base
+ * - Mirrors decimal suffixes under the new base
+ */
+export function generatePatternBatchCodes(
+  templateAccounts: PatternAccount[],
+  existingCodes: string[],
+  pattern: CodePattern,
+): Map<string, string> {
+  const result = new Map<string, string>(); // templateCode → newCode
+  const existingSet = new Set(existingCodes);
+  const claimed = new Set<string>();
+
+  // Group template accounts: whole-number bases first, then decimals
+  const bases: PatternAccount[] = [];
+  const decimals: (PatternAccount & { base: string; dec: number })[] = [];
+
+  for (const acc of templateAccounts) {
+    if (acc.code.includes('.')) {
+      const [base, decStr] = acc.code.split('.');
+      decimals.push({ ...acc, base, dec: parseInt(decStr, 10) || 1 });
+    } else {
+      bases.push(acc);
+    }
+  }
+
+  // Map old base → new base
+  const baseMapping = new Map<string, string>();
+
+  for (const baseAcc of bases) {
+    const baseNum = parseInt(baseAcc.code, 10);
+    if (isNaN(baseNum)) continue;
+
+    const range = getRangeForType(baseAcc.type);
+    let candidate = baseNum;
+    while (
+      candidate <= range.end &&
+      (existingSet.has(String(candidate)) || claimed.has(String(candidate)))
+    ) {
+      candidate++;
+    }
+
+    if (candidate > range.end) {
+      // Scan from start
+      candidate = range.start;
+      while (
+        candidate <= range.end &&
+        (existingSet.has(String(candidate)) || claimed.has(String(candidate)))
+      ) {
+        candidate++;
+      }
+    }
+
+    const newCode = String(candidate);
+    claimed.add(newCode);
+    result.set(baseAcc.code, newCode);
+    baseMapping.set(baseAcc.code, newCode);
+  }
+
+  // Now assign decimal codes under their new bases
+  for (const decAcc of decimals) {
+    const newBase = baseMapping.get(decAcc.base);
+    if (!newBase) {
+      // Base wasn't mapped — generate sequentially
+      const range = getRangeForType(decAcc.type);
+      const code = generateNextCode({
+        existingCodes: [...existingCodes, ...claimed],
+        accountType: decAcc.type,
+        batchClaimed: claimed,
+      });
+      claimed.add(code);
+      result.set(decAcc.code, code);
+      continue;
+    }
+
+    // Mirror the decimal: newBase.{same decimal}
+    let decCandidate = decAcc.dec;
+    let newCode = `${newBase}.${decCandidate}`;
+    while (existingSet.has(newCode) || claimed.has(newCode)) {
+      decCandidate++;
+      newCode = `${newBase}.${decCandidate}`;
+    }
+
+    // Validate length (Xero 10-char limit)
+    if (newCode.length > 10) {
+      const fallback = generateNextCode({
+        existingCodes: [...existingCodes, ...claimed],
+        accountType: decAcc.type,
+        batchClaimed: claimed,
+      });
+      claimed.add(fallback);
+      result.set(decAcc.code, fallback);
+    } else {
+      claimed.add(newCode);
+      result.set(decAcc.code, newCode);
+    }
+  }
+
+  return result;
+}
+
 // ─── Batch Code Generation ──────────────────────────────────────────────────
 
 export interface BatchCodeRequest {

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
 import { Loader2, Copy, AlertTriangle, CheckCircle2, ArrowRight, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -47,6 +48,7 @@ export default function CloneCoaDialog({
   const [templateMarketplace, setTemplateMarketplace] = useState('');
   const [cloneRows, setCloneRows] = useState<CloneAccountRow[]>([]);
   const [creating, setCreating] = useState(false);
+  const [matchPattern, setMatchPattern] = useState(true);
 
   const allCodes = useMemo(() =>
     coaAccounts.filter(a => a.account_code).map(a => a.account_code!),
@@ -74,10 +76,11 @@ export default function CloneCoaDialog({
       targetMarketplace,
       coaAccounts,
       existingCodes: allCodes,
+      matchPattern,
     });
 
     setCloneRows(rows);
-  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible]);
+  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern]);
 
   // Reset on open
   useEffect(() => {
@@ -230,7 +233,18 @@ export default function CloneCoaDialog({
             </Select>
           </div>
 
-          {/* Template eligibility warning (prevents clone loops) */}
+          {/* Match numbering style toggle */}
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <div>
+              <Label className="text-xs font-medium">Match numbering style</Label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Replicate decimal conventions (e.g. 200 → 200.1) from the template
+              </p>
+            </div>
+            <Switch checked={matchPattern} onCheckedChange={setMatchPattern} />
+          </div>
+
+
           {templateMarketplace && !templateEligibility.eligible && (
             <Alert className="border-destructive/50 bg-destructive/5">
               <AlertTriangle className="h-4 w-4 text-destructive" />

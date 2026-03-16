@@ -25,7 +25,10 @@ import {
 import {
   generateNextCode,
   getAccountTypeForCategory,
+  detectCodePattern,
+  generatePatternBatchCodes,
   type CodeGenerationInput,
+  type PatternAccount,
 } from '@/policy/accountCodePolicy';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -136,11 +139,28 @@ export async function logCloneEvent(event: CloneSystemEvent): Promise<void> {
  * Build preview rows for a COA clone operation.
  * Pure function — no side effects, no API calls.
  */
-export function buildClonePreview(input: ClonePreviewInput): CloneAccountRow[] {
+export function buildClonePreview(input: ClonePreviewInput & { matchPattern?: boolean }): CloneAccountRow[] {
   const templateAccounts = findTemplateAccounts(
     input.templateMarketplace,
     input.coaAccounts as any,
   );
+
+  const usePattern = input.matchPattern !== false; // default ON
+
+  // Try pattern detection when enabled
+  const patternAccounts: PatternAccount[] = templateAccounts.map(ta => ({
+    code: ta.code,
+    category: ta.category,
+    type: ta.type,
+  }));
+
+  const pattern = usePattern ? detectCodePattern(patternAccounts) : null;
+
+  // If pattern detected and has decimals, use pattern-aware batch generation
+  let codeMap: Map<string, string> | null = null;
+  if (pattern && pattern.usesDecimals) {
+    codeMap = generatePatternBatchCodes(patternAccounts, input.existingCodes, pattern);
+  }
 
   const claimed = new Set<string>();
   const rows: CloneAccountRow[] = [];
@@ -149,12 +169,17 @@ export function buildClonePreview(input: ClonePreviewInput): CloneAccountRow[] {
     const templateAcc = templateAccounts.find(ta => ta.category === cat);
     if (!templateAcc) continue;
 
-    // Generate code via policy
-    const newCode = generateNextCode({
-      existingCodes: input.existingCodes,
-      accountType: templateAcc.type,
-      batchClaimed: claimed,
-    });
+    // Use pattern-mapped code if available, otherwise sequential
+    let newCode: string;
+    if (codeMap && codeMap.has(templateAcc.code)) {
+      newCode = codeMap.get(templateAcc.code)!;
+    } else {
+      newCode = generateNextCode({
+        existingCodes: input.existingCodes,
+        accountType: templateAcc.type,
+        batchClaimed: claimed,
+      });
+    }
     claimed.add(newCode);
 
     const newName = generateNewAccountName(
