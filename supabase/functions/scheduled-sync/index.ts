@@ -395,7 +395,7 @@ Deno.serve(async (req) => {
   const totalSynced = totalAmazonSynced + totalShopifySynced + totalEbaySynced;
 
   // ─── Determine overall status ─────────────────────────────────
-  const totalSteps = 9;
+  const totalSteps = 10;
   const uniqueStepErrors = [...new Set(stepErrors)];
   let overallStatus: string;
   if (uniqueStepErrors.length === 0) {
