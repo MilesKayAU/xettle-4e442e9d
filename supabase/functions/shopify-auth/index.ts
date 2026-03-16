@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
       const tokenData = await tokenResponse.json()
       const { access_token, scope } = tokenData
 
-      console.log('Token exchange successful, storing in database...')
+      logger.debug('Token exchange successful, storing in database...')
 
       // Upsert shopify_tokens (supabaseAdmin already created above)
       const { error: tokenError } = await supabaseAdmin
