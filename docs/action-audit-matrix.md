@@ -1,126 +1,161 @@
 # Cross-App Action Audit Matrix
 
 > Generated: 2026-03-16 | Status: **Live document — update on every PR that touches key actions**
+> 
+> **Legend:** Idempotency methods: `upsert` = ON CONFLICT DO UPDATE | `CAS` = Compare-And-Swap atomic claim | `dedup-check` = SELECT then INSERT | `delete+insert` = DELETE existing then INSERT
 
 ---
 
 ## A) Marketplace Provisioning / Add Marketplace
 
-| Entry Point | File | Tables Written | Method | Canonical? |
+| Entry Point | File | Tables Written | Idempotency | Canonical Path |
 |---|---|---|---|---|
-| Shopify auto-provision | `src/components/admin/ShopifyConnectionStatus.tsx:162` | `marketplace_connections` | `insert` (with manual dedup check) | ❌ → `provisionMarketplace()` |
-| Shopify orders auto-provision | `src/components/admin/accounting/ShopifyOrdersDashboard.tsx:701` | `marketplace_connections` | `insert` (with `existingCodes` Set check) | ❌ → `provisionMarketplace()` |
-| Shopify onboarding | `src/components/admin/accounting/ShopifyOnboarding.tsx:197` | `marketplace_connections` | `insert` (with `existingCodes` Set check) | ❌ → `provisionMarketplace()` |
-| SmartUploadFlow detect new marketplace | `src/components/admin/accounting/SmartUploadFlow.tsx:2656` | `marketplace_connections` | `insert` (no dedup) | ❌ → `provisionMarketplace()` |
-| CoA detected panel confirm | `src/components/dashboard/CoaDetectedPanel.tsx:33` | `marketplace_connections` | `update` (set active) | ✅ (update only, no provision) |
-| CoA detected panel dismiss | `src/components/dashboard/CoaDetectedPanel.tsx:49` | `marketplace_connections` | `delete` | ✅ (dismiss action) |
-| MarketplaceSwitcher delete | `src/components/admin/accounting/MarketplaceSwitcher.tsx:262` | `marketplace_connections` | `delete` (+ cascade deletes) | ❌ → `removeMarketplace()` |
-| eBay OAuth callback | `supabase/functions/ebay-auth/index.ts:164` | `marketplace_connections` | `upsert` | ✅ (server-side, idempotent) |
-| Ghost cleanup | `src/utils/marketplace-token-map.ts:115,138` | `marketplace_connections` | `delete` | ✅ (cleanup utility) |
+| Shopify auto-provision | `src/components/admin/ShopifyConnectionStatus.tsx:162` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
+| Shopify orders auto-provision | `src/components/admin/accounting/ShopifyOrdersDashboard.tsx:701` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
+| Shopify onboarding | `src/components/admin/accounting/ShopifyOnboarding.tsx:197` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
+| SmartUploadFlow detect new marketplace | `src/components/admin/accounting/SmartUploadFlow.tsx:2656` | `marketplace_connections` | ⚠️ **none** | ❌ → `provisionMarketplace()` |
+| CoA detected panel confirm | `src/components/dashboard/CoaDetectedPanel.tsx:33` | `marketplace_connections` | n/a (update only) | ✅ (update, not provision) |
+| CoA detected panel dismiss | `src/components/dashboard/CoaDetectedPanel.tsx:49` | `marketplace_connections` | n/a (delete) | ✅ (dismiss) |
+| MarketplaceSwitcher delete | `src/components/admin/accounting/MarketplaceSwitcher.tsx` | `marketplace_connections`, `settlements`, `settlement_lines`, fees, fingerprints, ad_spend, shipping_costs | cascade delete | ✅ `removeMarketplace()` |
+| eBay OAuth callback | `supabase/functions/ebay-auth/index.ts:164` | `marketplace_connections` | `upsert` (user_id+marketplace_code) | ✅ (server-side, idempotent) |
+| Amazon OAuth callback | `supabase/functions/amazon-auth/index.ts` | `amazon_tokens`, `marketplace_connections` | `upsert` | ✅ (server-side) |
+| Shopify OAuth callback | `supabase/functions/shopify-auth/index.ts` | `shopify_tokens`, `marketplace_connections` | `upsert` | ✅ (server-side) |
+| Ghost cleanup | `src/utils/marketplace-token-map.ts:115,138` | `marketplace_connections` | n/a (cleanup delete) | ✅ (allowed utility) |
 
 **Invariant risks:**
 - SmartUploadFlow has NO dedup check before insert — can create duplicate connections
-- ShopifyConnectionStatus, ShopifyOrdersDashboard, ShopifyOnboarding all do the same "check existingCodes then insert" pattern independently
-- No normalisation of marketplace_code at insert time (some use `shopify_orders_${g.marketplaceKey}`)
+- 3 Shopify components do identical "check existingCodes then insert" independently
+- No normalisation of marketplace_code at insert time in non-canonical paths
 
 ---
 
 ## B) Settlement Ingestion
 
-| Entry Point | File | Tables Written | Method | Canonical? |
+| Entry Point | File | Tables Written | Idempotency | Canonical Path |
 |---|---|---|---|---|
-| SmartUploadFlow CSV parse | `src/components/admin/accounting/SmartUploadFlow.tsx:854-857` | `settlements`, `settlement_lines` | `insert` | ❌ → `saveIngestedSettlement()` |
-| AccountingDashboard save | `src/components/admin/accounting/AccountingDashboard.tsx:142,235` | `settlements`, `settlement_lines` | `insert` | ❌ → `saveIngestedSettlement()` |
-| ShopifyOrdersDashboard save | `src/components/admin/accounting/ShopifyOrdersDashboard.tsx:387-390` | `settlements`, `settlement_lines` | `insert` | ❌ → `saveIngestedSettlement()` |
-| settlement-engine.saveSettlement | `src/utils/settlement-engine.ts:847,913` | `settlements` | `insert` (two code paths: pre-boundary vs normal) | ❌ → consolidate |
-| settlement-engine.promote_and_save_settlement | DB function `promote_and_save_settlement` | `settlements`, `marketplace_file_fingerprints`, `system_events` | `insert` (atomic RPC) | ✅ (server-side atomic) |
-| fetch-amazon-settlements | `supabase/functions/fetch-amazon-settlements/index.ts:639,1049,1473` | `settlements`, `settlement_lines`, `settlement_components` | `insert` + `upsert` | ✅ (server-side) |
-| fetch-shopify-payouts | `supabase/functions/fetch-shopify-payouts/` | `settlements`, `settlement_lines` | `insert` | ✅ (server-side) |
+| SmartUploadFlow CSV parse | `SmartUploadFlow.tsx:854` | `settlements`, `settlement_lines` | `dedup-check` (UI flow only) | ❌ → future `saveIngestedSettlement()` |
+| AccountingDashboard save | `AccountingDashboard.tsx:142,235` | `settlements`, `settlement_lines` | `dedup-check` (UI flow only) | ❌ → future `saveIngestedSettlement()` |
+| ShopifyOrdersDashboard save | `ShopifyOrdersDashboard.tsx:387` | `settlements`, `settlement_lines` | `dedup-check` | ❌ → future `saveIngestedSettlement()` |
+| settlement-engine.saveSettlement | `settlement-engine.ts:847,913` | `settlements` | `dedup-check` (2 code paths) | ❌ → consolidate |
+| promote_and_save_settlement (RPC) | DB function | `settlements`, `marketplace_file_fingerprints`, `system_events` | atomic RPC | ✅ (server-side atomic) |
+| fetch-amazon-settlements | `supabase/functions/fetch-amazon-settlements/` | `settlements`, `settlement_lines`, `settlement_components`, `marketplace_validation`, `system_events` | `upsert` (settlement_id) | ✅ (server-side) |
+| fetch-shopify-payouts | `supabase/functions/fetch-shopify-payouts/` | `settlements`, `settlement_lines` | `upsert` | ✅ (server-side) |
+| fetch-ebay-settlements | `supabase/functions/fetch-ebay-settlements/` | `settlements`, `settlement_lines` | `upsert` | ✅ (server-side) |
+| auto-generate-shopify-settlements | `supabase/functions/auto-generate-shopify-settlements/` | `settlements` | `upsert` | ✅ (server-side) |
 
-**Delete paths (must also be canonical):**
+### Settlement Delete Paths
 
-| Entry Point | File | Tables Deleted | Canonical? |
+| Entry Point | File | Tables Deleted | Canonical Path |
 |---|---|---|---|
-| settlement-engine.deleteSettlement | `src/utils/settlement-engine.ts:1364-1368` | `settlement_lines`, `settlement_unmapped`, `settlements` | ❌ → `deleteSettlement()` |
-| use-settlement-manager.handleDelete | `src/hooks/use-settlement-manager.ts:99-101` | `settlement_lines`, `settlement_unmapped`, `settlements` | ❌ duplicate of above |
-| AutoImportedTab single delete | `src/components/admin/accounting/AutoImportedTab.tsx:466-468` | `settlement_lines`, `settlement_unmapped`, `settlements` | ❌ duplicate of above |
-| AutoImportedTab bulk delete | `src/components/admin/accounting/AutoImportedTab.tsx:505-507` | `settlement_lines`, `settlement_unmapped`, `settlements` | ❌ duplicate of above |
-| MarketplaceSwitcher cascade | `src/components/admin/accounting/MarketplaceSwitcher.tsx:243` | `settlement_lines` (then settlements) | ❌ |
-| admin-manage-users reset | `supabase/functions/admin-manage-users/index.ts:47-49` | `settlement_lines`, `settlement_unmapped`, `settlements` | ✅ (admin, server-side) |
+| use-settlement-manager.handleDelete | `use-settlement-manager.ts:93` | `settlement_lines`, `settlement_unmapped`, `settlements` | ✅ `deleteSettlement()` |
+| AutoImportedTab single delete | `AutoImportedTab.tsx:460` | (same cascade) | ✅ `deleteSettlement()` |
+| AutoImportedTab bulk delete | `AutoImportedTab.tsx:496` | (same cascade) | ✅ `deleteSettlement()` |
+| MarketplaceSwitcher cascade | `MarketplaceSwitcher.tsx` | (via `removeMarketplace()`) | ✅ `removeMarketplace()` |
+| settlement-engine.deleteSettlement | `settlement-engine.ts:1364` | `settlement_lines`, `settlement_unmapped`, `settlements` | ⚠️ legacy (still direct, allowed in allowlist) |
+| admin-manage-users reset | `supabase/functions/admin-manage-users/` | `settlement_lines`, `settlement_unmapped`, `settlements` | ✅ (admin, server-side, service-role) |
 
 **Invariant risks:**
-- 4 independent delete implementations that each delete `settlement_lines` → `settlement_unmapped` → `settlements` separately
-- No post-ingestion duplicate check in AccountingDashboard (relies on UI flow only)
-- settlement_lines not always written on CSV upload (some parsers skip if no line data)
+- `settlement-engine.ts` still has a direct delete (in allowlist, will consolidate later)
+- Client-side delete cascades are RLS-protected but could leave orphan rows if RLS blocks a child delete silently — mitigated by always filtering by `user_id`
 
 ---
 
 ## C) Push to Xero (Manual + Autopost)
 
-| Entry Point | File | Tables Written | Method | Canonical? |
+| Entry Point | File | Tables Written | Idempotency | Canonical Path |
 |---|---|---|---|---|
-| settlement-engine.syncSettlementToXero | `src/utils/settlement-engine.ts:1199` | `settlements` (via edge fn) | `functions.invoke('sync-settlement-to-xero')` | ✅ canonical client path |
-| settlement-engine.pushSettlementBatch | `src/utils/settlement-engine.ts:1339` | `settlements` (via edge fn) | `functions.invoke('sync-settlement-to-xero')` | ✅ canonical client path |
-| SafeRepostModal rollback | `src/components/admin/accounting/SafeRepostModal.tsx:173` | `settlements` (via edge fn) | `functions.invoke('sync-settlement-to-xero')` rollback action | ✅ |
-| auto-post-settlement batch | `supabase/functions/auto-post-settlement/index.ts` | `settlements`, `system_events`, `sync_locks` | direct table writes | ✅ (server-side) |
-| auto-push-xero (DEPRECATED) | `supabase/functions/auto-push-xero/index.ts` | `settlements`, `system_events` | direct writes + early return block | ✅ (hard-blocked) |
-| RailPostingSettings retry | `src/components/settings/RailPostingSettings.tsx:205` | via `functions.invoke('auto-post-settlement')` | single-mode invoke | ✅ |
+| PushSafetyPreview (manual) | via `settlement-engine.ts:1199` | `settlements`, `xero_accounting_matches`, `system_events` (via edge fn) | `CAS` (acquire_sync_lock) | ✅ `pushSettlementToXero()` in `xeroPush.ts` |
+| settlement-engine.pushSettlementBatch | `settlement-engine.ts:1339` | same as above | `CAS` | ✅ `pushSettlementToXero()` |
+| SafeRepostModal rollback | `SafeRepostModal.tsx:173` | `settlements` (via edge fn) | server-side void | ✅ `rollbackFromXero()` in `xeroPush.ts` |
+| auto-post-settlement batch | `supabase/functions/auto-post-settlement/` | `settlements`, `system_events`, `sync_locks`, `xero_accounting_matches` | `CAS` (atomic claim L446-498) | ✅ (server-side orchestrator) |
+| auto-post-settlement single | `supabase/functions/auto-post-settlement/` | same | `CAS` | ✅ (server-side) |
+| sync-settlement-to-xero | `supabase/functions/sync-settlement-to-xero/` | `settlements`, `xero_accounting_matches`, `system_events`, `sync_locks` | `CAS` + retry-safe backfill | ✅ (server-side push engine) |
+| auto-push-xero (DEPRECATED) | `supabase/functions/auto-push-xero/` | hard-blocked (early return) | n/a | ✅ (disabled) |
+| RailPostingSettings retry | `RailPostingSettings.tsx:205` | via edge fn | delegates to server | ✅ `triggerAutoPost()` in `xeroPush.ts` |
+
+### Client → Server Invoke Guard
+
+| Invoke Target | Allowed Callers | Canonical Path |
+|---|---|---|
+| `sync-settlement-to-xero` | `src/actions/xeroPush.ts` only | ✅ `pushSettlementToXero()`, `rollbackFromXero()` |
+| `auto-post-settlement` | `src/actions/xeroPush.ts` only | ✅ `triggerAutoPost()` |
 
 **Invariant risks:**
-- GenericMarketplaceDashboard resets failed settlements directly: `update({ status: 'ready_to_push', push_retry_count: 0 })` — bypasses any canonical action
-- use-xero-sync rollback does its own `settlements.update` after `rollbackSettlementFromXero` — should be inside the rollback function
+- ⚠️ `settlement-engine.ts` still calls `functions.invoke('sync-settlement-to-xero')` directly — legacy, in allowlist
+- GenericMarketplaceDashboard reset-failed was direct, now uses ✅ `resetFailedSettlements()`
 
 ---
 
 ## D) Safe Repost / Rollback
 
-| Entry Point | File | Tables Written | Method | Canonical? |
+| Entry Point | File | Tables Written | Idempotency | Canonical Path |
 |---|---|---|---|---|
-| SafeRepostModal void+repost | `SafeRepostModal.tsx:173-207` | `settlements` (posting_state, xero fields) | `functions.invoke` + update | ✅ canonical |
-| use-xero-sync.handleRollback | `src/hooks/use-xero-sync.ts:104-108` | `settlements` (status, xero_journal_id, etc.) | `rollbackSettlementFromXero()` + manual update | ❌ → should use canonical repost action |
+| SafeRepostModal void+repost | `SafeRepostModal.tsx:173-207` | `settlements` (posting_state, xero fields) | server-side void | ✅ (uses rollbackFromXero internally) |
+| use-xero-sync.handleRollback | `use-xero-sync.ts:102` | `settlements` | via canonical action | ✅ `rollbackSettlement()` in `repost.ts` |
 
-**Invariant risks:**
-- use-xero-sync does NOT set `manual_hold` even when `auto_repost_after_rollback=false` — SafeRepostModal does
-- Two rollback paths with different post-rollback state handling
+**Key invariant enforced:** `rollbackSettlement()` always checks `rail_posting_settings.auto_repost_after_rollback` and sets `manual_hold` when auto-repost is OFF. Previously `use-xero-sync` skipped this check.
 
 ---
 
 ## E) Mapping / Readiness Checks
 
-| Entry Point | File | Constant Source | Canonical? |
+| Entry Point | File | Constant Source | Canonical Path |
 |---|---|---|---|
-| PushSafetyPreview validation | via `xero-mapping-readiness.ts` | `REQUIRED_CATEGORIES` in `xero-mapping-readiness.ts:27` | ✅ |
-| sync-settlement-to-xero server gate | `sync-settlement-to-xero/index.ts:787` | `REQUIRED_CATEGORIES` (hardcoded duplicate) | ❌ → should import from shared constant |
-| auto-post-settlement mapping check | `auto-post-settlement/index.ts` | queries `marketplace_account_mapping` directly | ❌ → should use same category list |
+| PushSafetyPreview validation | via `xero-mapping-readiness.ts` | `REQUIRED_CATEGORIES` L27 | ✅ `checkXeroReadinessForMarketplace()` |
+| sync-settlement-to-xero server gate | `sync-settlement-to-xero/index.ts:787` | `REQUIRED_CATEGORIES` (server copy) | ✅ (server-side, sync-tested) |
+| auto-post-settlement mapping check | `auto-post-settlement/index.ts` | queries `marketplace_account_mapping` | ✅ (server-side, same 5 categories) |
 
-**Invariant risks:**
-- `REQUIRED_CATEGORIES` defined in TWO places: client (`xero-mapping-readiness.ts:27`) and server (`sync-settlement-to-xero:787`)
-- If a new category is added to one but not the other, manual push may accept what autopost rejects (or vice versa)
-- Edge functions can't import from `src/`, so server must duplicate — but needs a sync check
+**Sync guard:** `canonical-actions.test.ts` extracts `REQUIRED_CATEGORIES` from both client and server files and fails if they diverge.
 
 ---
 
-## F) Settlement Status Updates (Scattered)
+## F) Settlement Status Updates
 
-| Entry Point | File | Update Pattern | Canonical? |
+| Entry Point | File | Update Pattern | Canonical Path |
 |---|---|---|---|
-| Hide settlement | `RecentSettlements.tsx:476` | `update({ is_hidden: true })` | ❌ → `updateSettlementVisibility()` |
-| Unhide settlement | `RecentSettlements.tsx:482` | `update({ is_hidden: false })` | ❌ → `updateSettlementVisibility()` |
-| Revert to saved | `AccountingDashboard.tsx:2199` | `update({ status: 'saved' })` | ❌ → `revertSettlementStatus()` |
-| Reset failed | `GenericMarketplaceDashboard.tsx:532` | `update({ status: 'ready_to_push', push_retry_count: 0 })` | ❌ → `resetFailedSettlement()` |
-| Bank verify | `use-xero-sync.ts:72` | `update({ bank_verified: true, ... })` | ❌ → `markBankVerified()` |
-| match-bank-deposits auto-verify | `match-bank-deposits/index.ts:323,509` | `update({ status: 'bank_verified', ... })` | ✅ (server-side) |
+| Hide settlement | `RecentSettlements.tsx` | `is_hidden: true` | ✅ `updateSettlementVisibility()` |
+| Unhide settlement | `RecentSettlements.tsx` | `is_hidden: false` | ✅ `updateSettlementVisibility()` |
+| Revert to saved | `AccountingDashboard.tsx` | `status: 'saved'` | ✅ `revertSettlementToSaved()` |
+| Reset failed | `GenericMarketplaceDashboard.tsx` | `status: 'ready_to_push'` | ✅ `resetFailedSettlements()` |
+| Bank verify | `use-xero-sync.ts` | `bank_verified: true` | ✅ `markBankVerified()` |
+| match-bank-deposits auto-verify | `supabase/functions/match-bank-deposits/` | `status: 'bank_verified'` | ✅ (server-side, service-role) |
+| apply-xero-payment | `supabase/functions/apply-xero-payment/` | `status: 'reconciled_in_xero'` | ✅ (server-side) |
 
 ---
 
-## Summary: Divergent Patterns Found
+## G) System Events (Audit Trail)
 
-| Issue | Severity | Fix |
+| Entry Point | File | Event Types | Notes |
+|---|---|---|---|
+| auto-post-settlement | edge fn | `auto_post_*` (claimed, success, failed, skipped, stale_lock) | ✅ comprehensive |
+| sync-settlement-to-xero | edge fn | `xero_push_success`, `xero_push_failed` | ✅ |
+| fetch-outstanding | edge fn | `xero_api_call` | ✅ |
+| match-bank-deposits | edge fn | `bank_match_*` | ✅ |
+| ExceptionsInbox | component | `posting_retry_requested`, `exception_resolved`, `exception_snoozed` | ✅ |
+| run-validation-sweep | edge fn | `validation_sweep_*` | ✅ |
+
+System events are always written by the code that performs the action (edge fn or component). No canonical wrapper needed — the pattern is: "whoever does the work logs the event."
+
+---
+
+## Summary: Post-Refactor Status
+
+| Action | Client Canonical | Server Canonical | Guardrail Test |
+|---|---|---|---|
+| Marketplace provision | `provisionMarketplace()` | OAuth edge fns (upsert) | grep: direct insert guard |
+| Marketplace remove | `removeMarketplace()` | admin-manage-users | grep: cascade delete guard |
+| Settlement delete | `deleteSettlement()` | admin-manage-users | ✅ cascade grep test |
+| Settlement status | `revertToSaved()`, `resetFailed()`, `markBankVerified()`, `updateVisibility()` | edge fns (direct) | ✅ status update grep test |
+| Push to Xero | `pushSettlementToXero()` | sync-settlement-to-xero | ✅ invoke guard test |
+| Rollback | `rollbackSettlement()` | sync-settlement-to-xero (void) | manual_hold always checked |
+| Auto-post trigger | `triggerAutoPost()` | auto-post-settlement | ✅ invoke guard test |
+| Readiness check | `checkXeroReadinessForMarketplace()` | sync-settlement-to-xero | ✅ REQUIRED_CATEGORIES sync test |
+
+### Remaining Migration Targets (allowlisted, non-blocking)
+
+| File | Pattern | Plan |
 |---|---|---|
-| 4 independent settlement delete implementations | 🔴 High | Consolidate to `deleteSettlement()` in actions |
-| 5 independent marketplace provision inserts | 🔴 High | Consolidate to `provisionMarketplace()` |
-| `REQUIRED_CATEGORIES` duplicated client/server | 🟡 Medium | Add sync test |
-| SmartUploadFlow provision has no dedup | 🔴 High | Use canonical upsert |
-| use-xero-sync rollback skips `manual_hold` | 🟡 Medium | Route through canonical repost action |
-| GenericMarketplaceDashboard direct status reset | 🟡 Medium | Use canonical `resetFailedSettlement()` |
-| Hide/unhide scattered across components | 🟢 Low | Optional consolidation |
+| `settlement-engine.ts` | direct `functions.invoke('sync-settlement-to-xero')` | Migrate to `xeroPush.ts` when PushSafetyPreview is refactored |
+| `settlement-engine.ts` | direct delete cascade | Migrate to `deleteSettlement()` |
+| 3 Shopify components | direct `marketplace_connections.insert` | Migrate to `provisionMarketplace()` |
+| SmartUploadFlow | direct `marketplace_connections.insert` (no dedup) | Migrate to `provisionMarketplace()` |
