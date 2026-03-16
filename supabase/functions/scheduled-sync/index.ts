@@ -446,7 +446,7 @@ Deno.serve(async (req) => {
     console.log("[scheduled-sync] No users with API tokens found. Nothing to sync.");
   }
 
-  console.log(`[scheduled-sync] Complete (${overallStatus}) in ${durationMs}ms. Amazon: ${totalAmazonSynced}, Shopify: ${totalShopifySynced}, Xero pushed: ${totalXeroPushed}, Xero audited: ${xeroUserIds.length} users. Errors: ${uniqueStepErrors.length > 0 ? uniqueStepErrors.join(', ') : 'none'}`);
+  console.log(`[scheduled-sync] Complete (${overallStatus}) in ${durationMs}ms. Amazon: ${totalAmazonSynced}, eBay: ${totalEbaySynced}, Shopify: ${totalShopifySynced}, Xero pushed: ${totalXeroPushed}, Xero audited: ${xeroUserIds.length} users. Errors: ${uniqueStepErrors.length > 0 ? uniqueStepErrors.join(', ') : 'none'}`);
 
   return new Response(
     JSON.stringify({
@@ -455,6 +455,7 @@ Deno.serve(async (req) => {
       pipeline: 'xero_first_v1',
       duration_ms: durationMs,
       amazon_synced: totalAmazonSynced,
+      ebay_synced: totalEbaySynced,
       shopify_synced: totalShopifySynced,
       xero_pushed: totalXeroPushed,
       xero_audited_users: xeroUserIds.length,
