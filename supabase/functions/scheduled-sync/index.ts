@@ -233,6 +233,11 @@ Deno.serve(async (req) => {
   // 4.5. Fetch eBay settlements (per-user lock/cooldown)
   console.log("[scheduled-sync] Step 4.5: eBay fetch (per-user locks)...");
   const ebayUserIds = [...new Set((ebayTokens || []).map(t => t.user_id))];
+  // Shuffle eBay users to add jitter and avoid stampeding the same user first every cycle
+  for (let i = ebayUserIds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [ebayUserIds[i], ebayUserIds[j]] = [ebayUserIds[j], ebayUserIds[i]];
+  }
   {
     const eligibleEbayUsers: string[] = [];
     for (const uid of ebayUserIds) {
