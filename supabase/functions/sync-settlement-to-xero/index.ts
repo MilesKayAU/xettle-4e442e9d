@@ -871,6 +871,39 @@ serve(async (req) => {
 
     token = await refreshXeroToken(supabase, token);
 
+    // ─── REPOST GUARD: if settlement has repost_of_invoice_id, verify old invoice is VOIDED ──
+    let isRepostPush = false;
+    let repostOfInvoiceId: string | null = null;
+    {
+      const { data: settRow } = await supabase
+        .from('settlements')
+        .select('repost_of_invoice_id, repost_reason')
+        .eq('settlement_id', settlementId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (settRow?.repost_of_invoice_id) {
+        isRepostPush = true;
+        repostOfInvoiceId = settRow.repost_of_invoice_id;
+
+        // Verify old invoice is actually VOIDED in our cache
+        const { data: oldMatch } = await supabase
+          .from('xero_accounting_matches')
+          .select('xero_status')
+          .eq('user_id', userId)
+          .eq('xero_invoice_id', settRow.repost_of_invoice_id)
+          .maybeSingle();
+
+        if (oldMatch && oldMatch.xero_status !== 'VOIDED') {
+          throw new Error(
+            `Repost blocked: previous invoice ${settRow.repost_of_invoice_id} is not VOIDED (status: ${oldMatch.xero_status}). ` +
+            `Void it first via Safe Repost before pushing a replacement.`
+          );
+        }
+        console.log(`[repost-guard] Repost allowed: old invoice ${settRow.repost_of_invoice_id} is VOIDED`);
+      }
+    }
+
     // ─── CACHE-FIRST DUPLICATE CHECK ─────────────────────────────────
     {
       const { data: cachedMatch } = await supabase
@@ -881,15 +914,27 @@ serve(async (req) => {
         .maybeSingle();
 
       if (cachedMatch?.xero_invoice_id) {
-        const cachedRef = cachedMatch.matched_reference || '';
-        const refInfo = cachedRef && cachedRef !== reference
-          ? ` (matched reference: "${cachedRef}")`
-          : '';
-        console.log(`[duplicate-guard] Cache hit: settlement ${cacheSettlementKey} already in Xero as ${cachedMatch.xero_invoice_id}`);
-        throw new Error(
-          `An invoice for this settlement already exists in Xero${refInfo} (ID: ${cachedMatch.xero_invoice_id}, Status: ${cachedMatch.xero_status}). ` +
-          `Void it in Xero first if you need to re-push.`
-        );
+        // Allow if the cached match is VOIDED (repost scenario)
+        if (cachedMatch.xero_status === 'VOIDED') {
+          console.log(`[duplicate-guard] Cache hit but VOIDED — allowing repost for ${cacheSettlementKey}`);
+          // Delete the VOIDED match so we can insert the new one after push
+          await supabase
+            .from('xero_accounting_matches')
+            .delete()
+            .eq('user_id', userId)
+            .eq('settlement_id', cacheSettlementKey)
+            .eq('xero_status', 'VOIDED');
+        } else {
+          const cachedRef = cachedMatch.matched_reference || '';
+          const refInfo = cachedRef && cachedRef !== reference
+            ? ` (matched reference: "${cachedRef}")`
+            : '';
+          console.log(`[duplicate-guard] Cache hit: settlement ${cacheSettlementKey} already in Xero as ${cachedMatch.xero_invoice_id}`);
+          throw new Error(
+            `An invoice for this settlement already exists in Xero${refInfo} (ID: ${cachedMatch.xero_invoice_id}, Status: ${cachedMatch.xero_status}). ` +
+            `Void it in Xero first if you need to re-push.`
+          );
+        }
       }
     }
 
