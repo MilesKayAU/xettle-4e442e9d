@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
         `state=${encodeURIComponent(stateValue)}`
 
-      console.log('Generated Shopify auth URL for shop:', shop)
+      logger.debug('Generated Shopify auth URL for shop:', shop)
 
       return new Response(
         JSON.stringify({ authUrl }),
