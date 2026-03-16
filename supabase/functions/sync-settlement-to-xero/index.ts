@@ -1092,7 +1092,7 @@ serve(async (req) => {
 
         // Backfill xero_accounting_matches cache
         const sd = body.settlementData || {};
-        await supabase.from('xero_accounting_matches').upsert({
+        const backfillResult = await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: cacheSettlementKey,
           marketplace_code: sd.marketplace || 'unknown',
@@ -1107,7 +1107,10 @@ serve(async (req) => {
           matched_contact: contactName || null,
           matched_reference: existing.matchedReference || reference,
           reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
-        }, { onConflict: 'user_id,settlement_id' });
+        });
+        if (!backfillResult.success) {
+          console.warn(`[retry-recovery] XAM upsert conflict: ${backfillResult.message}`);
+        }
 
         // Log recovery event
         await supabase.from('system_events').insert({
