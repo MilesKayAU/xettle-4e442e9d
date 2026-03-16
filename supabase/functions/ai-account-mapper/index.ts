@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
 
       // GUARD: Never soft-delete if Xero returns empty (API timeout, token issue, etc.)
       if (xeroAccountRows.length === 0) {
-        console.warn('[ai-account-mapper] No accounts returned from Xero — skipping soft delete');
+        logger.warn('[ai-account-mapper] No accounts returned from Xero — skipping soft delete');
         return;
       }
 
