@@ -696,7 +696,7 @@ serve(async (req) => {
       // External invoices are stored as candidates for user review, not auto-linked.
       if (!isXettleFormat) {
         const refHash = ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null;
-        await supabase.from('xero_accounting_matches').upsert({
+        await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: settlementId,
           marketplace_code: detectedMarketplace,
@@ -712,7 +712,7 @@ serve(async (req) => {
           matched_reference: ref,
           reference_hash: refHash,
           notes: 'External invoice detected — requires user review before linking',
-        }, { onConflict: 'user_id,settlement_id' });
+        });
         console.log(`[step-4] External invoice ${inv.InvoiceNumber || inv.InvoiceID} stored as candidate for settlement ${settlementId}`);
         continue;
       }
