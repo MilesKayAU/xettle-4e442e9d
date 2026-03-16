@@ -46,6 +46,7 @@ import SafeRepostModal from '@/components/admin/accounting/SafeRepostModal';
 import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
 import ExceptionsInbox from '@/components/admin/accounting/ExceptionsInbox';
 import PeriodLockManager from '@/components/admin/accounting/PeriodLockManager';
+import FormatInspector from '@/components/admin/accounting/FormatInspector';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
@@ -903,6 +904,9 @@ export default function AccountingDashboard() {
               <TabsTrigger value="gst-audit" className="gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5" /> GST Audit
               </TabsTrigger>
+              <TabsTrigger value="formats" className="gap-1.5">
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Formats
+              </TabsTrigger>
             </TabsList>
 
             {/* UPLOAD TAB */}
@@ -1140,6 +1144,11 @@ export default function AccountingDashboard() {
             {/* GST AUDIT TAB */}
             <TabsContent value="gst-audit">
               <GstAuditTab />
+            </TabsContent>
+
+            {/* FORMATS TAB */}
+            <TabsContent value="formats">
+              <FormatInspector />
             </TabsContent>
 
             {/* Upgrade nudge dialog */}

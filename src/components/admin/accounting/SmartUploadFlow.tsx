@@ -81,6 +81,8 @@ interface DetectedFile {
   fingerprintStatus?: string;
   /** Parser type from fingerprint */
   fingerprintParserType?: string;
+  /** Fingerprint ID for linking to inspector */
+  fingerprintId?: string;
 }
 
 interface SmartUploadFlowProps {
@@ -1724,16 +1726,36 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                       </div>
                     </div>
                     {df.fingerprintStatus && (
-                      <Badge
-                        variant="outline"
-                        className={df.fingerprintStatus === 'active' ? 'text-green-600 border-green-300' :
-                                   df.fingerprintStatus === 'rejected' ? 'text-destructive border-destructive/30' :
-                                   'text-amber-600 border-amber-300'}
-                        title={df.fingerprintStatus === 'draft' ? 'New format — verified before saving' :
-                               df.fingerprintStatus === 'active' ? 'Trusted format' : 'Rejected format'}
-                      >
-                        {df.fingerprintStatus.toUpperCase()}{df.fingerprintParserType ? ` · ${df.fingerprintParserType}` : ''}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge
+                          variant="outline"
+                          className={df.fingerprintStatus === 'active' ? 'text-green-600 border-green-300' :
+                                     df.fingerprintStatus === 'rejected' ? 'text-destructive border-destructive/30' :
+                                     'text-amber-600 border-amber-300'}
+                          title={df.fingerprintStatus === 'draft' ? 'New format — verified before saving' :
+                                 df.fingerprintStatus === 'active' ? 'Trusted format' : 'Rejected format'}
+                        >
+                          {df.fingerprintStatus.toUpperCase()}{df.fingerprintParserType ? ` · ${df.fingerprintParserType}` : ''}
+                        </Badge>
+                        {df.fingerprintId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground gap-0.5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Navigate to formats tab with fingerprint deep-link
+                              const params = new URLSearchParams(window.location.search);
+                              params.set('tab', 'formats');
+                              params.set('fingerprint', df.fingerprintId!);
+                              window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                              window.dispatchEvent(new CustomEvent('xettle-open-formats-tab', { detail: { fingerprintId: df.fingerprintId } }));
+                            }}
+                          >
+                            View format
+                          </Button>
+                        )}
+                      </div>
                     )}
                     {detection.recordCount && (
                       <div className="flex items-center gap-1">
