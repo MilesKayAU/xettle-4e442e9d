@@ -200,12 +200,8 @@ export default function RailPostingSettings() {
   const handleRetry = async (settlementId: string) => {
     setRetrying(prev => new Set(prev).add(settlementId));
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData?.user) {
-        await supabase.functions.invoke('auto-post-settlement', {
-          body: { settlement_id: settlementId, user_id: userData.user.id },
-        });
-      }
+      const { triggerAutoPost } = await import('@/actions/xeroPush');
+      await triggerAutoPost(settlementId);
 
       toast.success('Retry queued');
       setTimeout(loadData, 2000);
