@@ -39,7 +39,7 @@ const CATEGORIES = [
 ] as const;
 
 /** Categories that support per-marketplace overrides */
-const SPLITTABLE_CATEGORIES = ['Sales', 'Shipping'] as const;
+const SPLITTABLE_CATEGORIES = ['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees'] as const;
 
 const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   'Sales': 'Gross product sales revenue',
