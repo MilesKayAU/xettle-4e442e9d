@@ -33,7 +33,7 @@ export default function EbayCallback() {
       }
 
       try {
-        console.log('[eBay Callback] Exchanging code for tokens...');
+        logger.debug('[eBay Callback] Exchanging code for tokens...');
         const { data, error } = await supabase.functions.invoke('ebay-auth', {
           headers: { 'x-action': 'connect' },
           body: { code },
