@@ -568,7 +568,7 @@ export default function Landing() {
             {[
               { step: '01', title: 'Connect your marketplaces', desc: 'Amazon and Shopify connect via API. Bunnings, eBay, Kogan, Catch and others — upload the settlement file.' },
               { step: '02', title: 'We verify everything', desc: 'Xettle parses every format, validates totals, matches bank deposits, and flags exceptions before anything reaches Xero.' },
-              { step: '03', title: 'Xero stays clean', desc: 'Every verified settlement becomes a correctly coded DRAFT invoice with full audit trail. No duplicates. No broken books.' },
+              { step: '03', title: 'Xero stays clean', desc: 'Every verified settlement becomes a correctly coded DRAFT Xero invoice with full audit trail. Deduplication safeguards and clean books.' },
             ].map((item) => (
               <div key={item.step} className="text-center">
                 <div className="text-5xl font-bold text-primary/20 mb-4">{item.step}</div>
