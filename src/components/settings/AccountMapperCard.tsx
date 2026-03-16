@@ -22,7 +22,8 @@ import {
   createXeroAccounts,
   type CachedXeroAccount,
 } from '@/actions';
-import { Save, Upload } from 'lucide-react';
+import { Save, Upload, Copy } from 'lucide-react';
+import CloneCoaDialog from './CloneCoaDialog';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
 
@@ -85,6 +86,10 @@ export default function AccountMapperCard() {
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
   const [globalMappingFlags, setGlobalMappingFlags] = useState<Record<string, boolean>>({});
 
+  // Clone COA state
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [cloneTarget, setCloneTarget] = useState('');
+
   // Build CoA lookup map
   const coaMap = useMemo(() => {
     const map = new Map<string, { name: string; type: string; active: boolean }>();
@@ -99,6 +104,102 @@ export default function AccountMapperCard() {
     }
     return map;
   }, [coaAccounts]);
+
+  // ─── Gap detection: find uncovered marketplaces ───────────────────
+  const { uncoveredMarketplaces, coveredMarketplaces } = useMemo(() => {
+    if (!splitByMarketplace || coaAccounts.length === 0 || activeMarketplaces.length === 0) {
+      return { uncoveredMarketplaces: [] as string[], coveredMarketplaces: [] as string[] };
+    }
+
+    const covered: string[] = [];
+    const uncovered: string[] = [];
+
+    for (const mp of activeMarketplaces) {
+      const mpLower = mp.toLowerCase();
+      // Check if any COA account name contains this marketplace name
+      const hasMatch = coaAccounts.some(acc => {
+        if (!acc.account_code || !acc.is_active) return false;
+        const nameLower = acc.account_name.toLowerCase();
+        // Check for marketplace name in account name
+        if (nameLower.includes(mpLower)) return true;
+        // Check individual words (e.g., "BigW" in "BigW Sales AU")
+        const mpWords = mpLower.split(/\s+/);
+        return mpWords.length > 0 && mpWords.every(w => nameLower.includes(w));
+      });
+
+      if (hasMatch) {
+        covered.push(mp);
+      } else {
+        uncovered.push(mp);
+      }
+    }
+
+    return { uncoveredMarketplaces: uncovered, coveredMarketplaces: covered };
+  }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
+
+  // ─── Clone COA banner renderer ───────────────────────────────────
+  const renderCloneBanner = () => {
+    if (!splitByMarketplace || uncoveredMarketplaces.length === 0 || coveredMarketplaces.length === 0 || !isAdmin) {
+      return null;
+    }
+
+    return (
+      <div className="flex items-center justify-between text-xs bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
+        <div className="flex items-center gap-2">
+          <Copy className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span>
+            <strong>{uncoveredMarketplaces.join(', ')}</strong>
+            {uncoveredMarketplaces.length === 1 ? ' has' : ' have'} no accounts in your COA.
+            Clone structure from an existing marketplace?
+          </span>
+        </div>
+        <div className="flex gap-1.5 shrink-0">
+          {uncoveredMarketplaces.map(mp => (
+            <Button
+              key={mp}
+              variant="outline"
+              size="sm"
+              className="h-6 text-xs gap-1"
+              onClick={() => {
+                setCloneTarget(mp);
+                setCloneDialogOpen(true);
+              }}
+            >
+              <Copy className="h-3 w-3" />
+              {uncoveredMarketplaces.length > 1 ? mp : 'Clone COA'}
+            </Button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCloneDialog = () => (
+    <CloneCoaDialog
+      open={cloneDialogOpen}
+      onOpenChange={setCloneDialogOpen}
+      targetMarketplace={cloneTarget}
+      coveredMarketplaces={coveredMarketplaces}
+      coaAccounts={coaAccounts}
+      onComplete={async (createdCodes) => {
+        // Refresh COA
+        const [accounts, lastSynced] = await Promise.all([
+          getCachedXeroAccounts(),
+          getCoaLastSyncedAt(),
+        ]);
+        setCoaAccounts(accounts);
+        setCoaLastSynced(lastSynced);
+
+        // Auto-map the created codes as per-marketplace overrides
+        const updated = { ...editableMapping };
+        for (const [category, code] of Object.entries(createdCodes)) {
+          const key = `${category}:${cloneTarget}`;
+          updated[key] = code;
+        }
+        setEditableMapping(updated);
+      }}
+    />
+  );
 
   useEffect(() => {
     loadCurrentState();
@@ -730,8 +831,7 @@ export default function AccountMapperCard() {
         </CardHeader>
         <CardContent className="space-y-4">
           {renderCoaRefreshStrip()}
-
-          {/* Top controls */}
+          {renderCloneBanner()}
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={handleApplySuggestionsToMissing} className="h-7 text-xs gap-1">
               <CheckCircle2 className="h-3 w-3" />
@@ -842,6 +942,7 @@ export default function AccountMapperCard() {
           </p>
         </CardContent>
       </Card>
+      {renderCloneDialog()}
       </>
     );
   }
@@ -864,6 +965,7 @@ export default function AccountMapperCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         {renderCoaRefreshStrip()}
+        {renderCloneBanner()}
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           {CATEGORIES.map((cat) => {
@@ -969,6 +1071,7 @@ export default function AccountMapperCard() {
         </div>
       </CardContent>
     </Card>
+    {renderCloneDialog()}
     </>
   );
 }
