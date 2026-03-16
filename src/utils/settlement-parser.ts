@@ -404,7 +404,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
 
       // Track AU vs international totals
       if (isIntlOrder && debugRowCount < 50) {
-        console.info(`[Intl Order Hit] order=${orderId || '(none)'}, orderKeys=${orderIdentifiers.join('|') || '(none)'}, category=${category}, amount=${amount}, marketplace="${marketplaceName}"`);
+        logger.info(`[Intl Order Hit] order=${orderId || '(none)'}, orderKeys=${orderIdentifiers.join('|') || '(none)'}, category=${category}, amount=${amount}, marketplace="${marketplaceName}"`);
       }
       if (INCOME_CATEGORIES.has(category)) {
         if (isIntlOrder) intlIncomeTotal += amount;
