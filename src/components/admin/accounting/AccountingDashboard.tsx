@@ -1131,34 +1131,37 @@ export default function AccountingDashboard() {
             {/* SETTINGS TAB */}
             <TabsContent value="settings">
               <div className="space-y-4">
-              <DestinationAccountMapper />
-              <AmazonConnectionPanel isPaid={isPaidUser} gstRate={settingsGstRate} syncCutoffDate={syncCutoffDate} onSettlementsAutoFetched={async () => {
-                  // Xero audit already ran inside AmazonConnectionPanel (Xero-First).
-                  // Just reload settlements and run bank matching.
+              {/* API Connections — unified panel */}
+              <ApiConnectionsPanel
+                isPaid={isPaidUser}
+                gstRate={settingsGstRate}
+                syncCutoffDate={syncCutoffDate}
+                onSettlementsAutoFetched={async () => {
                   loadSettlements();
                   try {
                     await supabase.functions.invoke('match-bank-deposits', { body: {} });
                     loadSettlements();
                   } catch { /* silent */ }
-                }} onRequestSettings={() => {
+                }}
+                onRequestSettings={() => {
                   setTimeout(() => {
                     document.getElementById('sync-cutoff-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }, 100);
-                }} onFetchStateChange={(fetching, status) => {
+                }}
+                onFetchStateChange={(fetching, status) => {
                   setAmazonFetching(fetching);
                   setAmazonFetchStatus(status);
-                }} />
-                <XeroConnectionStatus />
-                <AccountMapperCard />
-                <ShopifyConnectionStatus />
-                <EbayConnectionStatus />
-                <ChannelManagement />
-                <TrackingCategoriesToggle />
-                <AutomationSettingsPanel userTier={userTier} />
-                <ReconciliationSettingsCard />
-                <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />
-                <SyncHistoryCard />
-                <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
+                }}
+              />
+
+              <DestinationAccountMapper />
+              <AccountMapperCard />
+              <TrackingCategoriesToggle />
+              <AutomationSettingsPanel userTier={userTier} />
+              <ReconciliationSettingsCard />
+              <CurrentPlanCard isPaid={isPaidUser} userTier={userTier} />
+              <SyncHistoryCard />
+              <SettlementSettings onGstRateChanged={(rate) => setSettingsGstRate(rate)} onSyncCutoffChanged={(date) => setSyncCutoffDate(date)} />
               </div>
             </TabsContent>
 
