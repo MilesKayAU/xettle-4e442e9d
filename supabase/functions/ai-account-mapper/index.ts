@@ -370,9 +370,9 @@ Deno.serve(async (req) => {
     
     const perRailPromptSection = marketplaceNames.length > 0
       ? `\n\nThe business sells on these marketplaces: ${marketplaceNames.join(', ')}.
-For the "Sales" and "Shipping" categories, ALSO look for marketplace-specific accounts.
-For example, if there's an account called "Shopify Sales" or "Amazon Revenue", map it to that marketplace's Sales.
-Return per-marketplace overrides in "marketplace_overrides" keyed as "Sales:<Marketplace Name>" or "Shipping:<Marketplace Name>".
+For ALL categories (Sales, Shipping, Seller Fees, FBA Fees, Storage Fees, Refunds, Reimbursements, Promotional Discounts, Advertising Costs, Other Fees), look for marketplace-specific accounts.
+For example, "Amazon Seller Fees AU" should map to "Seller Fees:Amazon AU", "Bunnings Refunds" to "Refunds:Bunnings".
+Return per-marketplace overrides in "marketplace_overrides" keyed as "<Category>:<Marketplace Name>".
 Only include overrides where you find a SPECIFIC account for that marketplace — don't repeat the global mapping.
 
 IMPORTANT: I've pre-identified these accounts that appear to be marketplace-specific. USE THEM:
