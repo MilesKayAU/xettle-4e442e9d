@@ -561,7 +561,7 @@ Return JSON with this structure:
     // Remove any AI-suggested codes that don't exist in the user's COA
     for (const [cat, code] of Object.entries(mapping)) {
       if (!existingCodes.has(code)) {
-        console.warn(`[ai-account-mapper] Removing invalid code for ${cat}: ${code}`)
+        logger.warn(`[ai-account-mapper] Removing invalid code for ${cat}: ${code}`)
         delete mapping[cat]
         confidence = 'low'
       }
