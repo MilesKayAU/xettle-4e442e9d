@@ -308,11 +308,14 @@ Deno.serve(async (req) => {
       const countryMatch = mp.name.match(/\b(AU|US|UK|NZ|SG|CA|DE|FR|IT|ES|JP|IN)\b/i)
       const countryHint = countryMatch ? countryMatch[1].toLowerCase() : null
       const countryLongForms: Record<string, string[]> = {
-        au: ['australia', 'australian'],
+        au: ['australia', 'australian', ' au'],
         us: ['usa', 'united states', 'america'],
         uk: ['united kingdom', 'britain'],
         nz: ['new zealand'],
-        sg: ['singapore'],
+        sg: ['singapore', 'singapre'],
+        jp: ['japan', 'japanese'],
+        ca: ['canada', 'canadian'],
+        de: ['germany', 'german'],
       }
       
       for (const [cat, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
