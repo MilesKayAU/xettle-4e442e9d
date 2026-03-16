@@ -76,7 +76,7 @@ const XeroCallback = () => {
             });
 
             if (mapResult?.success) {
-              console.log('[XeroCallback] AI mapper complete — running CoA intelligence');
+              logger.debug('[XeroCallback] AI mapper complete — running CoA intelligence');
             }
           }
 
