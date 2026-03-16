@@ -315,7 +315,7 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
     if (supabase && userId) {
       const retryAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       await upsertSetting(supabase, userId, 'amazon_rate_limit_until', retryAt);
-      console.warn(`[downloadReport] 429 fail-fast: cooldown set until ${retryAt} for user ${userId}`);
+      logger.warn(`[downloadReport] 429 fail-fast: cooldown set until ${retryAt} for user ${userId}`);
     }
     throw new Error('RATE_LIMITED: Amazon API rate limited — cooldown set');
   }
