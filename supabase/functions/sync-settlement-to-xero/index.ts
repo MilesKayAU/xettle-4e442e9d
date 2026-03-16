@@ -639,6 +639,41 @@ serve(async (req) => {
     const reference = `Xettle-${settlementId}${splitSuffix}`;
     const cacheSettlementKey = `${settlementId}${splitSuffix}`;
 
+    // ─── IDEMPOTENCY LOCK — prevents double-click / retry / concurrent push ──
+    // Acquires a per-settlement mutex via acquire_sync_lock RPC.
+    // TTL of 120s covers the full push cycle (Xero API + attachment + DB writes).
+    // If the lock is already held, the request is rejected immediately.
+    const pushLockKey = `xero_push_${cacheSettlementKey}`;
+    const { data: lockResult, error: lockError } = await supabase.rpc('acquire_sync_lock', {
+      p_user_id: userId,
+      p_integration: 'xero_push',
+      p_lock_key: pushLockKey,
+      p_ttl_seconds: 120,
+    });
+
+    if (lockError) {
+      console.error('[idempotency-lock] Failed to acquire lock:', lockError);
+      throw new Error('Failed to acquire push lock — please try again');
+    }
+
+    if (lockResult && !lockResult.acquired) {
+      console.warn(`[idempotency-lock] Push already in progress for ${cacheSettlementKey}, expires: ${lockResult.expires_at}`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'PUSH_IN_PROGRESS',
+        message: `A push for this settlement is already in progress. Please wait and try again.`,
+        expiresAt: lockResult.expires_at,
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`[idempotency-lock] Acquired push lock for ${cacheSettlementKey}`);
+
+    // Wrap the rest in try/finally to guarantee lock release
+    try {
+
     // ─── SERVER-DERIVED NET AMOUNT (never trust client-provided netAmount) ──
     // Derive from settlementData fields (bank_deposit preferred, then net_ex_gst)
     const sd = body.settlementData || {};
