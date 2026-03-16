@@ -308,7 +308,7 @@ async function persistSettlementLines(
         .from('settlement_lines')
         .insert(chunk)
       if (insertErr) {
-        console.error(`[fetch-ebay-settlements] settlement_lines insert chunk failed:`, insertErr)
+        logger.error(`[fetch-ebay-settlements] settlement_lines insert chunk failed:`, insertErr)
         return { count: i, error: insertErr.message }
       }
     }
