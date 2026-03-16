@@ -45,8 +45,10 @@ import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
-import { saveSettlement, validateSettlementSanity, type StandardSettlement } from '@/utils/settlement-engine';
+import { saveSettlement, validateSettlementSanity, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
+import { validateBookkeeperMinimumData, type BookkeeperReadinessResult } from '@/utils/bookkeeper-readiness';
+import { checkXeroReadinessForMarketplace, type XeroReadinessResult } from '@/utils/xero-mapping-readiness';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import {
   detectMultiMarketplace,
@@ -83,6 +85,10 @@ interface DetectedFile {
   fingerprintParserType?: string;
   /** Fingerprint ID for linking to inspector */
   fingerprintId?: string;
+  /** Bookkeeper readiness result (computed during review) */
+  readiness?: BookkeeperReadinessResult;
+  /** Xero readiness result (computed post-save for first marketplace settlement) */
+  xeroReadiness?: XeroReadinessResult;
 }
 
 interface SmartUploadFlowProps {
@@ -1063,6 +1069,28 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         return updated;
       });
 
+      // Xero readiness check for first settlement of a new marketplace
+      if (savedCount > 0 && marketplace && user) {
+        try {
+          const { count: mktCount } = await supabase
+            .from('settlements')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('marketplace', marketplace);
+          if (mktCount === savedCount) {
+            // First-ever settlement(s) for this marketplace — check Xero readiness
+            const xeroResult = await checkXeroReadinessForMarketplace({ marketplaceCode: marketplace, userId: user.id });
+            if (xeroResult.xeroConnected) {
+              setFiles(prev => {
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], xeroReadiness: xeroResult };
+                return updated;
+              });
+            }
+          }
+        } catch { /* non-blocking */ }
+      }
+
       onSettlementsSaved?.();
       onMarketplacesChanged?.();
     } catch (err: any) {
@@ -1642,6 +1670,42 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
   const marketplace = df.overrideMarketplace || detection?.marketplace;
   const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
   const colorDot = MARKETPLACE_COLORS[marketplace || ''] || 'bg-muted-foreground';
+  const [readinessOpen, setReadinessOpen] = useState(false);
+
+  // Compute bookkeeper readiness for review mode
+  const readiness = useMemo(() => {
+    if (status !== 'reviewing' || !settlements || settlements.length === 0) return null;
+    // Aggregate check across all settlements in this file
+    const aggregated: StandardSettlement = {
+      ...settlements[0],
+      sales_ex_gst: settlements.reduce((s, x) => s + x.sales_ex_gst, 0),
+      fees_ex_gst: settlements.reduce((s, x) => s + x.fees_ex_gst, 0),
+      net_payout: settlements.reduce((s, x) => s + x.net_payout, 0),
+      gst_on_sales: settlements.reduce((s, x) => s + x.gst_on_sales, 0),
+      gst_on_fees: settlements.reduce((s, x) => s + x.gst_on_fees, 0),
+      reconciles: settlements.every(s => s.reconciles),
+      period_start: settlements.reduce((a, s) => s.period_start < a ? s.period_start : a, settlements[0].period_start),
+      period_end: settlements.reduce((a, s) => s.period_end > a ? s.period_end : a, settlements[0].period_end),
+    };
+    // Determine hasLineItems based on marketplace type
+    const mp = marketplace || '';
+    const hasLineItems = ['woolworths_marketplus', 'shopify_orders', 'shopify_payments'].includes(mp)
+      || (detection?.recordCount != null && detection.recordCount > 1)
+      || mp === 'bunnings'; // Bunnings writes summary lines
+    return validateBookkeeperMinimumData({
+      settlement: aggregated,
+      hasLineItems,
+      lineItemsExplicitlyNone: aggregated.metadata?.line_items === 'none',
+      reconciles: aggregated.reconciles,
+    });
+  }, [status, settlements, marketplace, detection]);
+
+  // Auto-expand readiness panel when there are failures/warnings
+  useEffect(() => {
+    if (readiness && (!readiness.canSave || readiness.checks.some(c => c.status === 'warn'))) {
+      setReadinessOpen(true);
+    }
+  }, [readiness]);
 
   // Aggregate settlement preview
   const previewData = settlements && settlements.length > 0
@@ -1958,6 +2022,38 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                           </div>
                         </div>
                       )}
+
+                      {/* Bookkeeper readiness checklist — collapsed by default, auto-expands on issues */}
+                      {readiness && (
+                        <Collapsible open={readinessOpen} onOpenChange={setReadinessOpen}>
+                          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-1.5 hover:bg-muted/30 rounded px-2 -mx-2 transition-colors">
+                            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${readinessOpen ? '' : '-rotate-90'}`} />
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {!readiness.canSave ? '⛔ Bookkeeper readiness' : readiness.checks.some(c => c.status === 'warn') ? '⚠ Bookkeeper readiness' : '✓ Bookkeeper readiness'}
+                            </span>
+                            {!readinessOpen && (
+                              <span className="text-[10px] text-muted-foreground/70 ml-auto">Show details</span>
+                            )}
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-1.5">
+                            <div className="bg-muted/30 rounded-lg p-2.5 space-y-1">
+                              {readiness.checks.map(check => (
+                                <div key={check.key} className="flex items-start gap-2">
+                                  {check.status === 'pass' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />}
+                                  {check.status === 'fail' && <XCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0 mt-0.5" />}
+                                  {check.status === 'warn' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />}
+                                  <div>
+                                    <span className="text-xs font-medium text-foreground">{check.label}</span>
+                                    {check.message && (
+                                      <p className="text-[10px] text-muted-foreground">{check.message}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
                     </div>
                   )}
 
@@ -2052,11 +2148,74 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
 
               {/* Saved */}
               {status === 'saved' && df.savedCount !== undefined && (
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                    {df.savedCount} settlement{df.savedCount !== 1 ? 's' : ''} saved — review in Settlements tab
-                  </p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                      {df.savedCount} settlement{df.savedCount !== 1 ? 's' : ''} saved — review in Settlements tab
+                    </p>
+                  </div>
+
+                  {/* Xero readiness card (shows only for first settlement of a new marketplace) */}
+                  {df.xeroReadiness && df.xeroReadiness.xeroConnected && (
+                    <div className="bg-muted/40 rounded-lg p-3 space-y-2 border border-border/50">
+                      <div className="flex items-center gap-2">
+                        <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-xs font-semibold text-foreground">Xero Push Readiness</span>
+                      </div>
+                      <div className="space-y-1">
+                        {df.xeroReadiness.checks.map(check => (
+                          <div key={check.key} className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              {check.status === 'pass' && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                              {check.status === 'fail' && <XCircle className="h-3 w-3 text-destructive" />}
+                              {check.status === 'warn' && <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                              <span className="text-xs text-foreground">{check.label}</span>
+                            </div>
+                            {check.message && (
+                              <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{check.message}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {df.xeroReadiness.checks.some(c => c.status === 'fail' || c.status === 'warn') && (
+                        <div className="flex gap-2 mt-1">
+                          {df.xeroReadiness.checks.some(c => c.cta === 'open_mapper') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 gap-1"
+                              onClick={() => {
+                                const params = new URLSearchParams(window.location.search);
+                                params.set('tab', 'settings');
+                                window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                                window.dispatchEvent(new CustomEvent('xettle-open-settings-tab'));
+                              }}
+                            >
+                              <MapPin className="h-3 w-3" />
+                              Open Account Mapper
+                            </Button>
+                          )}
+                          {df.xeroReadiness.checks.some(c => c.cta === 'refresh_coa') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 gap-1"
+                              onClick={() => {
+                                const params = new URLSearchParams(window.location.search);
+                                params.set('tab', 'settings');
+                                window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                                window.dispatchEvent(new CustomEvent('xettle-open-settings-tab'));
+                              }}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              Refresh CoA
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2082,10 +2241,26 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
             {/* Reviewing: show Save + Collapse */}
             {isReviewing && (
               <div className="flex flex-col gap-1.5">
-                <Button size="default" className="gap-2 font-semibold" onClick={() => onProcess(idx)}>
-                  <CheckCircle2 className="h-4 w-4" />
-                  Confirm & Save
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        size="default"
+                        className="gap-2 font-semibold"
+                        disabled={readiness ? !readiness.canSave : false}
+                        onClick={() => onProcess(idx)}
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Confirm & Save
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {readiness && !readiness.canSave && (
+                    <TooltipContent side="left" className="max-w-xs text-xs">
+                      {readiness.errorMessage}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
                 <Button size="sm" variant="ghost" className="text-xs" onClick={() => onSetStatus(idx, 'detected')}>
                   Collapse
                 </Button>
