@@ -193,7 +193,7 @@
 | Rail eligibility | `getRailPostingEligibility()` | n/a | ✅ canonical action |
 | Invoice refresh | `refreshXeroInvoiceDetails()` | fetch-xero-invoice | ✅ invoke guard test |
 | Invoice rescan | `rescanMatchForInvoice()` | rescan-xero-invoice-match | ✅ invoke guard test |
-| Invoice compare | `getXeroVsXettlePayloadDiff()` | n/a (read-only) | ✅ canonical action |
+| Invoice compare | `compareXeroInvoiceToSettlement()` | fetch-xero-invoice, preview-xettle-invoice-payload | ✅ invoke guard test + local builder guard |
 
 ### Remaining Migration Targets
 
