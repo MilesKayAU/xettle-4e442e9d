@@ -27,6 +27,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   CheckCircle2, AlertTriangle, XCircle, Loader2, Send, ArrowLeft, FileText, RefreshCw,
 } from 'lucide-react';
+import CoaBlockerCta from '@/components/shared/CoaBlockerCta';
 import { supabase } from '@/integrations/supabase/client';
 import {
   formatAUD, MARKETPLACE_LABELS, MARKETPLACE_CONTACTS,
