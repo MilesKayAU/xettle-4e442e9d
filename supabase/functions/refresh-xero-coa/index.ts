@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
         { onConflict: 'user_id,xero_account_id' }
       )
       if (upsertErr) {
-        console.error('COA upsert error:', upsertErr)
+        logger.error('COA upsert error:', upsertErr)
       } else {
         accountsUpserted = coaRows.length
       }
