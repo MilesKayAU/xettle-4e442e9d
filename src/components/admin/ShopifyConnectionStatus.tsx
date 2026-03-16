@@ -163,11 +163,14 @@ const ShopifyConnectionStatus = () => {
       setDiscoveryOpen(false);
 
       // Update last_fetched_at
-      await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'shopify_last_fetched_at',
-        value: new Date().toISOString(),
-      }, { onConflict: 'user_id,key' });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('app_settings').upsert({
+          user_id: user.id,
+          key: 'shopify_last_fetched_at',
+          value: new Date().toISOString(),
+        }, { onConflict: 'user_id,key' });
+      }
 
     } catch (err: any) {
       toast.error(err.message || 'Failed to create tabs');
