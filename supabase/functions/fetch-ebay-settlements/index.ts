@@ -150,7 +150,7 @@ async function fetchTransactionsForPayout(
 
     if (!res.ok) {
       const text = await res.text()
-      console.error(`[fetch-ebay-settlements] getTransactions failed for payout ${payoutId} (${res.status}):`, text)
+      logger.error(`[fetch-ebay-settlements] getTransactions failed for payout ${payoutId} (${res.status}):`, text)
       break
     }
 
