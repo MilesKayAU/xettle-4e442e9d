@@ -318,14 +318,20 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       settlement_ids: (data?.rows || []).filter(r => r.settlement_id).slice(0, 20).map(r => r.settlement_id!),
     },
     pageStateSummary: {
-      invoice_count: data?.invoice_count ?? 0,
-      total_outstanding: data?.total_outstanding ?? 0,
-      matched_with_settlement: data?.matched_with_settlement ?? 0,
+      outstanding_xero_invoices_on_page: data?.invoice_count ?? 0,
+      total_outstanding_amount: data?.total_outstanding ?? 0,
+      invoices_matched_with_settlement: data?.matched_with_settlement ?? 0,
       bank_deposit_found: data?.bank_deposit_found ?? 0,
       ready_to_reconcile: data?.ready_to_reconcile ?? 0,
       non_marketplace_count: nonMarketplaceCount,
+      description: 'This page shows Xero invoices that are still outstanding (unpaid). The invoice_count here is the number of invoices visible on this page awaiting settlement matching.',
     },
     capabilities: ['compare_invoice', 'bank_match', 'payment_verification'],
+    suggestedPrompts: [
+      'What invoices need attention?',
+      'Explain what settlement matching means',
+      'Why are these invoices outstanding?',
+    ],
   }));
 
   const filteredRows = useMemo(() => {
