@@ -7,13 +7,17 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle, Search, ChevronsUpDown, Filter } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle, Search, ChevronsUpDown, Filter, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   refreshXeroCOA,
   getCachedXeroAccounts,
   getCoaLastSyncedAt,
+  createXeroAccounts,
   type CachedXeroAccount,
 } from '@/actions';
 
