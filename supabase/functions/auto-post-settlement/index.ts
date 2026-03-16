@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
         // BLOCKER #1: require reconciliation_status = 'matched'
         const { data: settlements } = await supabase
           .from('settlements')
-          .select('id, settlement_id, marketplace, status, posting_state, posting_claimed_at, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id, push_retry_count, reconciliation_status, bank_verified')
+          .select('id, settlement_id, marketplace, status, posting_state, posting_claimed_at, xero_invoice_id, is_hidden, is_pre_boundary, duplicate_of_settlement_id, push_retry_count, reconciliation_status, bank_verified, created_at')
           .eq('user_id', userId)
           .eq('status', 'ready_to_push')
           .eq('is_hidden', false)
