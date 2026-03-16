@@ -904,6 +904,9 @@ export default function AccountingDashboard() {
               <TabsTrigger value="gst-audit" className="gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5" /> GST Audit
               </TabsTrigger>
+              <TabsTrigger value="formats" className="gap-1.5">
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Formats
+              </TabsTrigger>
             </TabsList>
 
             {/* UPLOAD TAB */}
