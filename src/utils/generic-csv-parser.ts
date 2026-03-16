@@ -8,7 +8,7 @@
  */
 
 import type { StandardSettlement } from './settlement-engine';
-import { TOL_BUNNINGS_PDF } from '@/constants/reconciliation-tolerance';
+import { TOL_GENERIC_PARSER } from '@/constants/reconciliation-tolerance';
 import type { ColumnMapping } from './file-fingerprint-engine';
 import { findHeaderRow } from './file-fingerprint-engine';
 import { parseDateOrEmpty, detectDateColumn } from './date-parser';
