@@ -467,6 +467,13 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
         )}
       </SheetContent>
     </Sheet>
+    <XeroInvoiceCompareDrawer
+      open={compareOpen}
+      onClose={() => setCompareOpen(false)}
+      settlementId={settlementId}
+      xeroInvoiceId={settlement?.xero_invoice_id || settlement?.xero_journal_id || null}
+    />
+    </>
   );
 }
 
