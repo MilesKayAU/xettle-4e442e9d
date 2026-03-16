@@ -388,7 +388,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
 
     if (!lockResult?.acquired) {
       details.push(`User ${userId}: Skipped — sync lock held until ${lockResult?.expires_at}`);
-      console.log(`[Sync] Amazon sync skipped for ${userId} — lock held`);
+      logger.debug(`[Sync] Amazon sync skipped for ${userId} — lock held`);
       continue;
     }
 
