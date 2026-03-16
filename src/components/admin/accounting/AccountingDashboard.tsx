@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon, BarChart3, ShieldAlert, RefreshCw } from "lucide-react";
+import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon, BarChart3, ShieldAlert, RefreshCw, Lock } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseSettlementTSV, formatDisplayDate, formatAUD, XERO_ACCOUNT_MAP, round2, PARSER_VERSION, type ParsedSettlement, type DebugBreakdownRow, type ParserOptions, type SplitMonthData } from '@/utils/settlement-parser';
@@ -43,6 +43,7 @@ import SafeRepostModal from '@/components/admin/accounting/SafeRepostModal';
 
 import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
 import ExceptionsInbox from '@/components/admin/accounting/ExceptionsInbox';
+import PeriodLockManager from '@/components/admin/accounting/PeriodLockManager';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
@@ -897,6 +898,9 @@ export default function AccountingDashboard() {
               <TabsTrigger value="exceptions" className="gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5" /> Exceptions
               </TabsTrigger>
+              <TabsTrigger value="period-close" className="gap-1.5">
+                <Lock className="h-3.5 w-3.5" /> Period Close
+              </TabsTrigger>
               <TabsTrigger value="gst-audit" className="gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5" /> GST Audit
               </TabsTrigger>
@@ -1156,6 +1160,10 @@ export default function AccountingDashboard() {
               </div>
             </TabsContent>
 
+            {/* PERIOD CLOSE TAB */}
+            <TabsContent value="period-close">
+              <PeriodLockManager />
+            </TabsContent>
 
             {/* EXCEPTIONS TAB */}
             <TabsContent value="exceptions">
