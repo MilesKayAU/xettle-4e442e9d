@@ -270,6 +270,12 @@ Deno.serve(async (req) => {
       'Shipping': ['shipping', 'freight', 'postage', 'delivery'],
     }
 
+    // Negative keywords: if account name contains these, exclude from the category
+    const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
+      'Sales': ['shipping', 'freight', 'postage', 'delivery'],
+      'Shipping': ['sales'],
+    }
+
     // Pre-scan: find marketplace-specific accounts by keyword matching
     const deterministicOverrides: Record<string, string> = {}
     const revenueAccounts = xeroAccounts.filter((a: any) => {
@@ -281,12 +287,15 @@ Deno.serve(async (req) => {
       const mpKeywords = MARKETPLACE_KEYWORDS[mp.name] || [mp.name.toLowerCase().replace(/[^a-z0-9]/g, '')]
       
       for (const [cat, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        // Find accounts whose name contains BOTH a marketplace keyword AND a category keyword
+        const exclusions = CATEGORY_EXCLUSIONS[cat] || []
+        // Find accounts whose name contains a marketplace keyword AND a category keyword
+        // but does NOT contain any exclusion keyword for that category
         const match = revenueAccounts.find((a: any) => {
           const nameLower = (a.name || '').toLowerCase()
           const hasMarketplace = mpKeywords.some((kw: string) => nameLower.includes(kw))
           const hasCategory = catKeywords.some((kw: string) => nameLower.includes(kw))
-          return hasMarketplace && hasCategory
+          const hasExclusion = exclusions.some((kw: string) => nameLower.includes(kw))
+          return hasMarketplace && hasCategory && !hasExclusion
         })
         if (match && match.code) {
           const key = `${cat}:${mp.name}`
