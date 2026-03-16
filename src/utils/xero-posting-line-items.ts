@@ -46,6 +46,7 @@
  */
 
 export const CANONICAL_VERSION = 'v2-10cat';
+import { TOL_LINE_SUM } from '@/constants/reconciliation-tolerance';
 
 // ─── Category Definitions ───────────────────────────────────────────────
 
