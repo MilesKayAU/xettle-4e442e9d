@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { upsertMarketplaceConnection } from '@/utils/marketplace-connections';
 
 export default function EbayConnectionStatus() {
   const [loading, setLoading] = useState(true);
