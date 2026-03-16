@@ -631,7 +631,7 @@ Deno.serve(async (req) => {
             details: { error: linesResult.error, lines_written: linesResult.count },
           })
         } else {
-          console.log(`[fetch-ebay-settlements] Wrote ${linesResult.count} settlement_lines for ${settlementId}`)
+          logger.debug(`[fetch-ebay-settlements] Wrote ${linesResult.count} settlement_lines for ${settlementId}`)
         }
 
         if (isUpdate) {
