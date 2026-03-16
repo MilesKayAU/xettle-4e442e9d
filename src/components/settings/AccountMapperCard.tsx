@@ -1104,20 +1104,12 @@ function AccountCombobox({
   const displayAccounts = showAll ? allAccounts : accounts;
   const selectedAccount = allAccounts.find(a => a.account_code === value);
 
-  // Suggest next available code based on existing codes in the type range
+  // Suggest next available code via centralized policy (no ad-hoc generation)
   const suggestNextCode = (): string => {
-    const numericCodes = existingCodes
-      .map(c => parseInt(c, 10))
-      .filter(n => !isNaN(n))
-      .sort((a, b) => a - b);
-    
-    // Find codes in the relevant range
-    const rangeStart = suggestedType === 'REVENUE' || suggestedType === 'OTHERINCOME' ? 200 : 400;
-    const rangeEnd = rangeStart + 199;
-    const codesInRange = numericCodes.filter(c => c >= rangeStart && c <= rangeEnd);
-    
-    if (codesInRange.length === 0) return String(rangeStart);
-    return String(Math.max(...codesInRange) + 1);
+    return generateNextCode({
+      existingCodes,
+      accountType: suggestedType,
+    });
   };
 
   const suggestedName = suggestedNameContext
