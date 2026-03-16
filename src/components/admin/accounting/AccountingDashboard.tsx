@@ -132,7 +132,7 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
     const refundsTotal = round2(summary.refunds);
     const reimbursementsTotal = round2(summary.reimbursements);
     const journalOneNet = round2(salesTotal + feesTotal + refundsTotal + reimbursementsTotal);
-    console.info('[Split Month Rollover Debug]', {
+    logger.info('[Split Month Rollover Debug]', {
       settlementId: header.settlementId, salesTotal, feesTotal, refundsTotal, reimbursementsTotal, journalOneNet,
       parserRolloverAmount: splitMonth.rolloverAmount,
     });
