@@ -151,6 +151,7 @@ export default function MarketplaceSwitcher({
   userMarketplaces,
   onMarketplacesChanged,
   settlementCounts = {},
+  apiConnectedCodes = new Set(),
 }: MarketplaceSwitcherProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addingCode, setAddingCode] = useState<string | null>(null);
