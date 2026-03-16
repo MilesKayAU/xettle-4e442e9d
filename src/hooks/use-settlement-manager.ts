@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { deleteSettlement } from '@/utils/settlement-engine';
+import { deleteSettlement as canonicalDeleteSettlement } from '@/actions/settlements';
 import { toast } from 'sonner';
 
 export interface BaseSettlementRow {
