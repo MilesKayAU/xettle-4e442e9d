@@ -1007,26 +1007,45 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       {onSwitchToUpload && (
         <>
           <Separator />
-          <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-muted/30 rounded-xl" onClick={onSwitchToUpload}>
-            <CardContent className="py-8 px-8 flex flex-col items-center justify-center text-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <CloudUpload className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-base font-bold text-foreground uppercase tracking-wide">
-                  Upload more settlement files
+          {isApiConnected ? (
+            <Card className="border border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/10 rounded-xl">
+              <CardContent className="py-6 px-8 flex flex-col items-center justify-center text-center gap-2">
+                <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                  <Zap className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <p className="text-sm font-medium text-foreground">
+                  Settlements sync automatically
                 </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Xettle recognises the marketplace automatically. No configuration required.
+                <p className="text-xs text-muted-foreground">
+                  {marketplaceName} settlements are fetched via API during each sync cycle.
                 </p>
-              </div>
-              <Button size="sm" className="gap-2 mt-1">
-                <Upload className="h-4 w-4" />
-                Smart Upload
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </CardContent>
-          </Card>
+                <Button size="sm" variant="ghost" onClick={onSwitchToUpload} className="gap-1.5 text-muted-foreground mt-1">
+                  <Upload className="h-3.5 w-3.5" /> Upload manually if needed
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-dashed border-2 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer bg-muted/30 rounded-xl" onClick={onSwitchToUpload}>
+              <CardContent className="py-8 px-8 flex flex-col items-center justify-center text-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <CloudUpload className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-foreground uppercase tracking-wide">
+                    Upload more settlement files
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Xettle recognises the marketplace automatically. No configuration required.
+                  </p>
+                </div>
+                <Button size="sm" className="gap-2 mt-1">
+                  <Upload className="h-4 w-4" />
+                  Smart Upload
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
