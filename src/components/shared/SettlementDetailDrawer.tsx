@@ -169,6 +169,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const mpLabel = MARKETPLACE_LABELS[marketplace] || marketplace;
 
   return (
+    <>
     <Sheet open={open} onOpenChange={() => onClose()}>
       <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
