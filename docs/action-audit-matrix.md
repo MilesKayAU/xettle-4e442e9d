@@ -137,6 +137,26 @@
 
 ---
 
+## H) Xero Invoice Refresh / Rescan / Compare
+
+| Entry Point | File | Tables Written | Idempotency | Canonical Path |
+|---|---|---|---|---|
+| Per-row refresh (Outstanding) | `OutstandingTab.tsx` | `xero_invoice_cache`, `system_events` (via edge fn) | `upsert` (user_id, xero_invoice_id) | ✅ `refreshXeroInvoiceDetails()` in `xeroInvoice.ts` |
+| Per-row refresh (Settlement drawer) | `SettlementDetailDrawer.tsx` | same | same | ✅ `refreshXeroInvoiceDetails()` |
+| Rescan match | `OutstandingTab.tsx`, `SettlementDetailDrawer.tsx` | `xero_accounting_matches`, `system_events` (via edge fn) | `upsert` (user_id, xero_invoice_id) | ✅ `rescanMatchForInvoice()` in `xeroInvoice.ts` |
+| Compare payload | `OutstandingTab.tsx`, `SettlementDetailDrawer.tsx` | (read-only) | n/a | ✅ `getXeroVsXettlePayloadDiff()` in `xeroInvoice.ts` |
+| fetch-xero-invoice | `supabase/functions/fetch-xero-invoice/` | `xero_invoice_cache`, `system_events` | `upsert` + 30s cooldown | ✅ (server-side) |
+| rescan-xero-invoice-match | `supabase/functions/rescan-xero-invoice-match/` | `xero_accounting_matches`, `system_events` | `upsert` | ✅ (server-side) |
+
+### Client → Server Invoke Guard (Invoice)
+
+| Invoke Target | Allowed Callers | Canonical Path |
+|---|---|---|
+| `fetch-xero-invoice` | `src/actions/xeroInvoice.ts` only | ✅ `refreshXeroInvoiceDetails()` |
+| `rescan-xero-invoice-match` | `src/actions/xeroInvoice.ts` only | ✅ `rescanMatchForInvoice()` |
+
+---
+
 ## H) System Events (Audit Trail)
 
 | Entry Point | File | Event Types | Notes |
