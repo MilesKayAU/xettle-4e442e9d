@@ -104,8 +104,11 @@ export default function InsightsDashboard() {
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
-      const data = settlementsRes.data;
-      if (!data || data.length === 0) {
+      // Filter out any corrupted rows with impossibly large values (bad CSV parses)
+      const data = (settlementsRes.data || []).filter(r => 
+        r.is_hidden === false && Math.abs(r.sales_principal || 0) < 10_000_000
+      );
+      if (data.length === 0) {
         setStats([]);
         return;
       }
