@@ -378,7 +378,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     }
     if (transactionType && isExplicitNonAu && firstNonAuMarketplaceName === null) {
       firstNonAuMarketplaceName = marketplaceName;
-      console.info('[Marketplace Raw First Non-AU]', { row: i, marketplaceNameRaw: marketplaceName });
+      logger.info('[Marketplace Raw First Non-AU]', { row: i, marketplaceNameRaw: marketplaceName });
     }
 
     if (!transactionType) continue;
