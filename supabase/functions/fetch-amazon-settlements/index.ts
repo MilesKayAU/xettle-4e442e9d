@@ -483,7 +483,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
         if (syncFromParam && report.dataEndTime) {
           const reportEnd = report.dataEndTime.split('T')[0];
           if (reportEnd < syncFromParam) {
-            console.log(`[Sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${syncFromParam}`);
+            logger.debug(`[Sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${syncFromParam}`);
             userSkipped++;
             continue;
           }
