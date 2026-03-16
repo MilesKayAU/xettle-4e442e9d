@@ -132,7 +132,7 @@ serve(async (req) => {
         .eq('settlement_id', matchResult.settlement_id)
         .maybeSingle();
 
-      await supabase.from('xero_accounting_matches').upsert({
+      const xamResult = await safeUpsertXam(supabase, {
         user_id: user.id,
         settlement_id: matchResult.settlement_id,
         marketplace_code: settlement?.marketplace || 'unknown',
@@ -147,7 +147,17 @@ serve(async (req) => {
         confidence: matchResult.confidence,
         notes: matchResult.evidence,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,xero_invoice_id' });
+      }, 'user_id,xero_invoice_id');
+
+      if (!xamResult.success && xamResult.errorCode === 'INVOICE_ALREADY_LINKED') {
+        return new Response(JSON.stringify({
+          success: false,
+          errorCode: 'INVOICE_ALREADY_LINKED',
+          xeroInvoiceId,
+          existingSettlementId: xamResult.existingSettlementId,
+          message: xamResult.message,
+        }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
 
     // Log event
