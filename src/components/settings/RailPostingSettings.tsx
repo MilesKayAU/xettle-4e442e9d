@@ -88,8 +88,8 @@ export default function RailPostingSettings() {
             posting_mode: s.posting_mode as 'manual' | 'auto',
             require_bank_match: s.require_bank_match,
             auto_post_enabled_at: s.auto_post_enabled_at,
-            invoice_status: (s as any).invoice_status === 'AUTHORISED' ? 'AUTHORISED' : 'DRAFT',
-            auto_repost_after_rollback: (s as any).auto_repost_after_rollback ?? false,
+            invoice_status: s.invoice_status === 'AUTHORISED' ? 'AUTHORISED' : 'DRAFT',
+            auto_repost_after_rollback: s.auto_repost_after_rollback ?? false,
           });
         }
         setSettings(map);
