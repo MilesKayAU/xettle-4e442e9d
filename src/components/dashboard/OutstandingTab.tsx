@@ -549,7 +549,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
     // Dedup: if a request is already in-flight, cancel it (latest wins)
     if (inflightRef.current) {
-      console.log('[OutstandingTab] Cancelling in-flight fetch — new request takes priority');
+      logger.debug('[OutstandingTab] Cancelling in-flight fetch — new request takes priority');
       inflightRef.current.abort();
     }
 
