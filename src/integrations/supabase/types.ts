@@ -711,40 +711,58 @@ export type Database = {
         Row: {
           column_mapping: Json
           column_signature: Json
+          confidence: number | null
           created_at: string
+          created_by: string | null
           file_pattern: string | null
           id: string
           is_multi_marketplace: boolean | null
+          last_seen_at: string | null
           marketplace_code: string
+          notes: string | null
+          parser_type: string
           reconciliation_type: string | null
           split_column: string | null
           split_mappings: Json | null
+          status: string
           user_id: string
         }
         Insert: {
           column_mapping?: Json
           column_signature?: Json
+          confidence?: number | null
           created_at?: string
+          created_by?: string | null
           file_pattern?: string | null
           id?: string
           is_multi_marketplace?: boolean | null
+          last_seen_at?: string | null
           marketplace_code: string
+          notes?: string | null
+          parser_type?: string
           reconciliation_type?: string | null
           split_column?: string | null
           split_mappings?: Json | null
+          status?: string
           user_id: string
         }
         Update: {
           column_mapping?: Json
           column_signature?: Json
+          confidence?: number | null
           created_at?: string
+          created_by?: string | null
           file_pattern?: string | null
           id?: string
           is_multi_marketplace?: boolean | null
+          last_seen_at?: string | null
           marketplace_code?: string
+          notes?: string | null
+          parser_type?: string
           reconciliation_type?: string | null
           split_column?: string | null
           split_mappings?: Json | null
+          status?: string
           user_id?: string
         }
         Relationships: []
@@ -1690,6 +1708,7 @@ export type Database = {
           duplicate_of_settlement_id: string | null
           duplicate_reason: string | null
           fba_fees: number | null
+          fingerprint_id: string | null
           gst_on_expenses: number | null
           gst_on_income: number | null
           holdback_amount: number
@@ -1758,6 +1777,7 @@ export type Database = {
           duplicate_of_settlement_id?: string | null
           duplicate_reason?: string | null
           fba_fees?: number | null
+          fingerprint_id?: string | null
           gst_on_expenses?: number | null
           gst_on_income?: number | null
           holdback_amount?: number
@@ -1826,6 +1846,7 @@ export type Database = {
           duplicate_of_settlement_id?: string | null
           duplicate_reason?: string | null
           fba_fees?: number | null
+          fingerprint_id?: string | null
           gst_on_expenses?: number | null
           gst_on_income?: number | null
           holdback_amount?: number
@@ -2498,6 +2519,15 @@ export type Database = {
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
+      }
+      promote_and_save_settlement: {
+        Args: {
+          p_fingerprint_id: string
+          p_settlement: Json
+          p_should_promote?: boolean
+          p_system_event?: Json
+        }
+        Returns: Json
       }
       release_sync_lock: {
         Args: { p_integration: string; p_lock_key: string; p_user_id: string }

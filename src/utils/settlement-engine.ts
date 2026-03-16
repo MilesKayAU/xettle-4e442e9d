@@ -23,6 +23,8 @@ export interface StandardSettlement {
   net_payout: number;        // Amount deposited to bank
   source: 'csv_upload' | 'api' | 'manual';  // How this settlement was ingested
   reconciles: boolean;       // Whether calculated total ≈ net_payout
+  /** ID of the marketplace_file_fingerprints record that produced this settlement */
+  fingerprint_id?: string;
   // Optional marketplace-specific metadata
   metadata?: Record<string, any>;
 }
@@ -536,6 +538,114 @@ export interface SaveResult {
   error?: string;
   duplicate?: boolean;
   sanityFailed?: boolean;
+  /** Gates that blocked save (for draft fingerprints) */
+  blockedGates?: string[];
+}
+
+/**
+ * Atomic promote + save using the Postgres RPC.
+ * Promotes a draft fingerprint to active in the same transaction as settlement insert.
+ */
+async function saveWithAtomicPromote(settlement: StandardSettlement, fingerprintId: string): Promise<SaveResult> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    // Run dedup check before RPC (RPC doesn't handle dedup)
+    const dupCheck = await checkForDuplicate({
+      settlementId: settlement.settlement_id,
+      marketplace: settlement.marketplace,
+      userId: user.id,
+      periodStart: settlement.period_start,
+      periodEnd: settlement.period_end,
+      bankDeposit: settlement.net_payout,
+    });
+    if (dupCheck.isDuplicate) {
+      return { success: false, error: `This settlement has already been saved (matched by ${dupCheck.matchMethod}).`, duplicate: true };
+    }
+
+    const meta = settlement.metadata || {};
+    const settlementPayload = {
+      user_id: user.id,
+      settlement_id: settlement.settlement_id,
+      marketplace: settlement.marketplace,
+      period_start: settlement.period_start,
+      period_end: settlement.period_end,
+      sales_principal: settlement.sales_ex_gst,
+      sales_shipping: meta.shippingExGst || 0,
+      seller_fees: Math.abs(settlement.fees_ex_gst),
+      refunds: meta.refundsExGst || 0,
+      reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
+      other_fees: (meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0),
+      gst_on_income: settlement.gst_on_sales,
+      gst_on_expenses: settlement.gst_on_fees,
+      bank_deposit: settlement.net_payout,
+      source: settlement.source,
+      source_reference: meta.sourceReference || null,
+      status: 'saved',
+      reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
+    };
+
+    const systemEvent = {
+      user_id: user.id,
+      event_type: 'format_promoted_to_active',
+      severity: 'info',
+      marketplace_code: settlement.marketplace,
+      settlement_id: settlement.settlement_id,
+      details: {
+        fingerprint_id: fingerprintId,
+        marketplace: settlement.marketplace,
+        promotion_method: 'auto_on_first_save',
+      },
+    };
+
+    const { data, error } = await supabase.rpc('promote_and_save_settlement', {
+      p_fingerprint_id: fingerprintId,
+      p_settlement: settlementPayload,
+      p_should_promote: true,
+      p_system_event: systemEvent,
+    });
+
+    if (error) return { success: false, error: error.message };
+    const result = data as any;
+    if (!result?.success) return { success: false, error: result?.error || 'Atomic save failed' };
+
+    // Post-save background work (aliases, components, validation, etc.)
+    registerAliases(settlement.settlement_id, user.id, settlement.source, meta.sourceReference);
+    postInsertDuplicateCheck(settlement.settlement_id, settlement.marketplace, user.id);
+
+    // Components
+    import('@/utils/settlement-components').then(({ upsertSettlementComponents }) => {
+      upsertSettlementComponents({
+        userId: user.id,
+        settlementId: settlement.settlement_id,
+        marketplaceCode: settlement.marketplace,
+        periodStart: settlement.period_start,
+        periodEnd: settlement.period_end,
+        salesPrincipal: settlement.sales_ex_gst,
+        salesShipping: meta.shippingExGst || 0,
+        promotionalDiscounts: 0,
+        sellerFees: Math.abs(settlement.fees_ex_gst),
+        fbaFees: 0,
+        storageFees: 0,
+        refunds: meta.refundsExGst || 0,
+        reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
+        advertisingCosts: 0,
+        otherFees: (meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0),
+        gstOnIncome: settlement.gst_on_sales,
+        gstOnExpenses: settlement.gst_on_fees,
+        bankDeposit: settlement.net_payout,
+        source: settlement.source,
+      }).catch(console.error);
+    });
+
+    // Validation sweep
+    triggerValidationSweep();
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
+  }
 }
 
 /**
@@ -544,6 +654,83 @@ export interface SaveResult {
  */
 export async function saveSettlement(settlement: StandardSettlement): Promise<SaveResult> {
   try {
+    // ─── Date Validation Gate (critical — no fallback to today) ─────
+    if (!settlement.period_start || !settlement.period_end) {
+      // Log missing dates event
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          supabase.from('system_events').insert({
+            user_id: user.id,
+            event_type: 'format_missing_dates_requires_manual_entry',
+            severity: 'warning',
+            marketplace_code: settlement.marketplace,
+            settlement_id: settlement.settlement_id,
+            details: {
+              period_start: settlement.period_start || null,
+              period_end: settlement.period_end || null,
+              fingerprint_id: settlement.fingerprint_id || null,
+            },
+          } as any).then(() => {});
+        }
+      } catch {}
+      return {
+        success: false,
+        error: 'Settlement dates are missing. Please map a date column or enter dates manually before saving.',
+        blockedGates: ['period_start and period_end are required'],
+      };
+    }
+
+    // ─── Fingerprint Lifecycle Gate ─────────────────────────────────
+    if (settlement.fingerprint_id) {
+      const { validateDraftGates, getFingerprintById } = await import('./fingerprint-lifecycle');
+      const fp = await getFingerprintById(settlement.fingerprint_id);
+
+      if (fp && fp.status === 'rejected') {
+        return {
+          success: false,
+          error: 'This format has been rejected. Please re-map columns or contact support.',
+          blockedGates: ['Format rejected'],
+        };
+      }
+
+      if (fp && fp.status === 'draft') {
+        const gateResult = validateDraftGates(settlement, fp, settlement.metadata?.fileFormat);
+
+        if (!gateResult.canSave) {
+          // Log blocked save
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              supabase.from('system_events').insert({
+                user_id: user.id,
+                event_type: 'format_save_blocked',
+                severity: 'warning',
+                marketplace_code: settlement.marketplace,
+                settlement_id: settlement.settlement_id,
+                details: {
+                  fingerprint_id: settlement.fingerprint_id,
+                  missing_fields: gateResult.missingGates,
+                  actor_user_id: user.id,
+                },
+              } as any).then(() => {});
+            }
+          } catch {}
+
+          return {
+            success: false,
+            error: `Draft format validation failed:\n${gateResult.missingGates.join('\n')}`,
+            blockedGates: gateResult.missingGates,
+          };
+        }
+
+        // If auto-promote is allowed, use the atomic RPC
+        if (gateResult.canAutoPromote) {
+          return await saveWithAtomicPromote(settlement, fp.id);
+        }
+      }
+    }
+
     // ─── Sanity Validation Gate ─────────────────────────────────────
     const sanity = validateSettlementSanity(settlement);
     if (!sanity.passed) {
@@ -601,6 +788,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
         source_reference: meta.sourceReference || null,
         status: 'already_recorded',
         reconciliation_status: 'reconciled',
+        fingerprint_id: settlement.fingerprint_id || null,
       } as any);
 
       if (error) return { success: false, error: error.message };
@@ -661,6 +849,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       source_reference: meta.sourceReference || null,
       status: 'saved',
       reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
+      fingerprint_id: settlement.fingerprint_id || null,
     } as any);
 
     // Register aliases + post-insert safety check after successful insert

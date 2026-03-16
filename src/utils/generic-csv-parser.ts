@@ -8,7 +8,7 @@
  */
 
 import type { StandardSettlement } from './settlement-engine';
-import { TOL_BUNNINGS_PDF } from '@/constants/reconciliation-tolerance';
+import { TOL_GENERIC_PARSER } from '@/constants/reconciliation-tolerance';
 import type { ColumnMapping } from './file-fingerprint-engine';
 import { findHeaderRow } from './file-fingerprint-engine';
 import { parseDateOrEmpty, detectDateColumn } from './date-parser';
@@ -276,9 +276,9 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
 
     const netPayout = netIdx >= 0 ? round2(totalNet) : round2(grossSales + fees + refunds);
 
-    // Reconciliation
+    // Reconciliation — use purpose-based tolerance for generic parser
     const calculatedNet = round2(grossSales + fees + refunds);
-    const reconciles = netIdx >= 0 ? Math.abs(calculatedNet - netPayout) <= TOL_BUNNINGS_PDF : true;
+    const reconciles = netIdx >= 0 ? Math.abs(calculatedNet - netPayout) <= TOL_GENERIC_PARSER : true;
 
     if (!reconciles) {
       warnings.push(`Settlement ${groupId}: calculated net ($${calculatedNet}) differs from reported net ($${netPayout}) by $${round2(Math.abs(calculatedNet - netPayout))}`);
@@ -287,15 +287,15 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
     // ── Pre-save sanity check ──
     const sanityFailed = checkParserSanity(grossSales, fees, netPayout, groupId, warnings);
 
-    // Use today as fallback date
-    const now = new Date();
-    const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+    // CRITICAL: Do NOT fallback to today's date — leave empty if dates not found.
+    // Saving with missing dates is blocked by the fingerprint lifecycle gate.
+    const hasDates = !!(minDate && (maxDate || minDate));
 
     settlements.push({
       marketplace,
       settlement_id: groupId,
-      period_start: minDate || today,
-      period_end: maxDate || minDate || today,
+      period_start: minDate || '',
+      period_end: maxDate || minDate || '',
       sales_ex_gst: salesExGst,
       gst_on_sales: gstOnSales,
       fees_ex_gst: feesExGst,
@@ -313,7 +313,8 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
         rowCount: groupRows.length,
         currency: groupRows[0]?.currency || 'AUD',
         csvFormat: 'generic',
-        parserVersion: 'generic-v1.0.0',
+        parserVersion: 'generic-v1.1.0',
+        dates_missing: !hasDates,
         ...(sanityFailed ? { sanity_failed: true } : {}),
       },
     });

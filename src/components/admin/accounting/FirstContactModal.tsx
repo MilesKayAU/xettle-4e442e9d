@@ -13,6 +13,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -50,9 +51,11 @@ interface FirstContactModalProps {
   confidence: number;
   confidenceTier: ConfidenceTier;
   detectedMarketplace: string;
-  /** Callback when user confirms — returns the confirmed marketplace code */
-  onConfirm: (marketplaceCode: string, marketplaceName: string) => void;
+  /** Callback when user confirms — returns the confirmed marketplace code and fingerprint ID */
+  onConfirm: (marketplaceCode: string, marketplaceName: string, fingerprintId?: string) => void;
   onCancel: () => void;
+  /** Whether this detection came from AI (Level 3) */
+  isAiDetected?: boolean;
 }
 
 export default function FirstContactModal({
@@ -67,6 +70,7 @@ export default function FirstContactModal({
   detectedMarketplace,
   onConfirm,
   onCancel,
+  isAiDetected,
 }: FirstContactModalProps) {
   const [selectedMarketplace, setSelectedMarketplace] = useState<string>('');
   const [customName, setCustomName] = useState('');
@@ -139,9 +143,32 @@ export default function FirstContactModal({
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!canSave) return;
-    onConfirm(resolvedCode, resolvedName);
+
+    // Create a DRAFT fingerprint
+    let fingerprintId: string | undefined;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const parserType = isAiDetected ? 'ai' : 'generic';
+        const id = await createDraftFingerprint({
+          userId: user.id,
+          marketplaceCode: resolvedCode,
+          columnSignature: headers,
+          columnMapping: {} as any, // Will be set by detection pipeline
+          parserType: parserType as any,
+          confidence: confidence,
+          filePattern: filename.replace(/\d+/g, '*'),
+          notes: `Created via First Contact modal. User-identified as: ${resolvedName}`,
+        });
+        fingerprintId = id || undefined;
+      }
+    } catch (err) {
+      console.error('[FirstContact] Failed to create draft fingerprint:', err);
+    }
+
+    onConfirm(resolvedCode, resolvedName, fingerprintId);
     onOpenChange(false);
   };
 
