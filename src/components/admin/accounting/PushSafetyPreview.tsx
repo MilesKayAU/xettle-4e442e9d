@@ -137,10 +137,11 @@ export default function PushSafetyPreview({
       let coaMap = new Map<string, { name: string; type: string; active: boolean }>();
       let userCodes: Record<string, string> = {};
       let lockedMonths = new Set<string>();
+      let coaFreshness: Date | null = null;
 
       if (user) {
         const [coaRes, codesRes, locksRes] = await Promise.all([
-          supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, is_active').eq('user_id', user.id),
+          supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, is_active, updated_at').eq('user_id', user.id),
           supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'accounting_xero_account_codes').maybeSingle(),
           supabase.from('period_locks').select('period_month').eq('user_id', user.id).is('unlocked_at', null),
         ]);
@@ -151,13 +152,62 @@ export default function PushSafetyPreview({
               type: (acc.account_type || '').toUpperCase(),
               active: acc.is_active !== false,
             });
+            // Track freshness
+            if (acc.updated_at) {
+              const d = new Date(acc.updated_at);
+              if (!coaFreshness || d > coaFreshness) coaFreshness = d;
+            }
           }
         }
+
+        // ─── CoA freshness check: auto-refresh if stale (>24h) ───
+        const coaAgeMs = coaFreshness ? Date.now() - coaFreshness.getTime() : Infinity;
+        const COA_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+        if (coaAgeMs > COA_MAX_AGE_MS) {
+          console.log('[push-safety] CoA cache stale or empty, attempting refresh…');
+          try {
+            const { error: refreshError } = await supabase.functions.invoke('fetch-xero-bank-accounts', {
+              body: { action: 'refresh_coa' },
+            });
+            if (!refreshError) {
+              // Re-fetch fresh CoA
+              const { data: freshCoa } = await supabase
+                .from('xero_chart_of_accounts')
+                .select('account_code, account_name, account_type, is_active, updated_at')
+                .eq('user_id', user.id);
+              coaMap = new Map();
+              coaFreshness = null;
+              for (const acc of (freshCoa || [])) {
+                if (acc.account_code) {
+                  coaMap.set(acc.account_code, {
+                    name: acc.account_name,
+                    type: (acc.account_type || '').toUpperCase(),
+                    active: acc.is_active !== false,
+                  });
+                  if (acc.updated_at) {
+                    const d = new Date(acc.updated_at);
+                    if (!coaFreshness || d > coaFreshness) coaFreshness = d;
+                  }
+                }
+              }
+              console.log('[push-safety] CoA refreshed successfully');
+            } else {
+              console.warn('[push-safety] CoA refresh failed:', refreshError);
+            }
+          } catch (e) {
+            console.warn('[push-safety] CoA refresh call failed:', e);
+          }
+        }
+
         if (codesRes.data?.value) {
           try { userCodes = JSON.parse(codesRes.data.value); } catch { /* */ }
         }
         (locksRes.data || []).forEach(l => lockedMonths.add(l.period_month));
       }
+
+      // Compute final CoA freshness for validation
+      const finalCoaAgeMs = coaFreshness ? Date.now() - coaFreshness.getTime() : Infinity;
+      const isCoaStale = finalCoaAgeMs > 24 * 60 * 60 * 1000;
 
       const results = [];
       for (const { settlementId, marketplace } of settlements) {
