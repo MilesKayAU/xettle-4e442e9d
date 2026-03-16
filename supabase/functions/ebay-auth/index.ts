@@ -123,7 +123,7 @@ serve(async (req) => {
 
       const tokenData = await tokenResponse.json()
       if (!tokenResponse.ok || !tokenData.refresh_token) {
-        console.error('eBay token exchange failed:', tokenData)
+        logger.error('eBay token exchange failed:', tokenData)
         return new Response(JSON.stringify({ error: 'Token exchange failed', details: tokenData }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
