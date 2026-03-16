@@ -80,6 +80,23 @@ export default function CloneCoaDialog({
     });
 
     setCloneRows(rows);
+
+    // Log preview generation event (telemetry)
+    (async () => {
+      try {
+        const { data: { user } } = await (await import('@/integrations/supabase/client')).supabase.auth.getUser();
+        if (user) {
+          await logCloneEvent({
+            userId: user.id,
+            eventType: 'coa_clone_previewed',
+            templateMarketplace,
+            targetMarketplace,
+            accountsCreated: rows.filter(r => r.enabled).length,
+            taxProfile: undefined,
+          });
+        }
+      } catch { /* non-critical */ }
+    })();
   }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern]);
 
   // Reset on open

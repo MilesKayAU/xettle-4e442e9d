@@ -511,25 +511,42 @@ function SettlementPreviewCard({ preview, index, total }: {
       {/* Validation Checks */}
       <div className="px-4 py-3 space-y-1.5">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Validation Checks</p>
-        {checks.map((check, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs">
-            {check.status === 'green' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />}
-            {check.status === 'amber' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />}
-            {check.status === 'red' && <XCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />}
-            <div>
-              <span className={cn(
-                check.status === 'red' && 'text-red-700 dark:text-red-400 font-medium',
-                check.status === 'amber' && 'text-amber-700 dark:text-amber-400',
-                check.status === 'green' && 'text-foreground',
-              )}>
-                {check.label}
-              </span>
-              {check.detail && (
-                <p className="text-muted-foreground text-[10px] mt-0.5">{check.detail}</p>
+        {checks.map((check, i) => {
+          const extCheck = check as ValidationCheck & { _marketplace?: string; _missingCategories?: string[] };
+          const isMappingRequired = check.label.includes('MAPPING_REQUIRED');
+          return (
+            <div key={i} className="space-y-2">
+              <div className="flex items-start gap-2 text-xs">
+                {check.status === 'green' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />}
+                {check.status === 'amber' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />}
+                {check.status === 'red' && <XCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />}
+                <div>
+                  <span className={cn(
+                    check.status === 'red' && 'text-red-700 dark:text-red-400 font-medium',
+                    check.status === 'amber' && 'text-amber-700 dark:text-amber-400',
+                    check.status === 'green' && 'text-foreground',
+                  )}>
+                    {check.label}
+                  </span>
+                  {check.detail && (
+                    <p className="text-muted-foreground text-[10px] mt-0.5">{check.detail}</p>
+                  )}
+                </div>
+              </div>
+              {isMappingRequired && extCheck._marketplace && (
+                <CoaBlockerCta
+                  marketplace={extCheck._marketplace}
+                  missingCategories={extCheck._missingCategories}
+                  compact
+                  onResolved={() => {
+                    // Reload previews after clone resolves mappings
+                    loadPreviews();
+                  }}
+                />
               )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <Separator />
