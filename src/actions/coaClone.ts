@@ -77,6 +77,59 @@ export interface CloneResult {
   errors: { code: string; error: string }[];
 }
 
+// ─── Template Guard (Prevent Clone Loops) ───────────────────────────────────
+
+/**
+ * Validate that the template marketplace has FULL coverage.
+ * This prevents clone loops (A→B→C→D) where accounts drift.
+ * Template must have status === 'covered' (≥3 categories matched).
+ */
+export function validateTemplateEligibility(
+  templateMarketplace: string,
+  coaAccounts: ClonePreviewInput['coaAccounts'],
+): { eligible: boolean; reason?: string } {
+  const coverage = getMarketplaceCoverage(
+    [templateMarketplace],
+    coaAccounts as any,
+  );
+  const detail = coverage.details[0];
+
+  if (!detail || detail.status !== 'covered') {
+    return {
+      eligible: false,
+      reason: `${templateMarketplace} does not have full COA coverage (status: ${detail?.status || 'unknown'}). Only marketplaces with full coverage can be used as templates.`,
+    };
+  }
+
+  return { eligible: true };
+}
+
+// ─── System Event Logging ───────────────────────────────────────────────────
+
+/**
+ * Log a COA clone event to system_events for audit trail.
+ */
+export async function logCloneEvent(event: CloneSystemEvent): Promise<void> {
+  try {
+    await supabase.from('system_events').insert({
+      user_id: event.userId,
+      event_type: event.eventType,
+      severity: event.eventType === 'coa_clone_failed' ? 'warning' : 'info',
+      marketplace_code: event.targetMarketplace,
+      details: {
+        template: event.templateMarketplace,
+        target: event.targetMarketplace,
+        accounts_created: event.accountsCreated,
+        tax_profile: event.taxProfile,
+        errors: event.errors,
+      },
+    });
+  } catch {
+    // Non-critical — don't break clone flow
+    console.warn('[coaClone] Failed to log system event:', event.eventType);
+  }
+}
+
 // ─── Preview (Pure Logic) ───────────────────────────────────────────────────
 
 /**
