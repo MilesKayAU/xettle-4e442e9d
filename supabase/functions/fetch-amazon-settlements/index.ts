@@ -1482,7 +1482,7 @@ serve(async (req) => {
             }
           }
         } catch (chunkErr: any) {
-          console.error(`[backfill] Chunk ${chunk + 1} error: ${chunkErr.message}`);
+          logger.error(`[backfill] Chunk ${chunk + 1} error: ${chunkErr.message}`);
         }
 
         // Brief pause between chunks to avoid rate limits
