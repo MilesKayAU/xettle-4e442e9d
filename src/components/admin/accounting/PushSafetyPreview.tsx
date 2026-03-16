@@ -335,11 +335,14 @@ function SettlementPreviewCard({ preview, index, total }: {
     checks: ValidationCheck[];
     contactName: string;
     reference: string;
+    isRepost?: boolean;
+    repostOfInvoiceId?: string | null;
+    repostReason?: string | null;
   };
   index: number;
   total: number;
 }) {
-  const { settlement: s, lineItems, checks, contactName, reference } = preview;
+  const { settlement: s, lineItems, checks, contactName, reference, isRepost, repostOfInvoiceId, repostReason } = preview;
   const label = MARKETPLACE_LABELS[s.marketplace] || s.marketplace;
   const periodLabel = `${formatDate(s.period_start)} – ${formatDate(s.period_end)}`;
   const netGst = (s.gst_on_income || 0) + (s.gst_on_expenses || 0);
