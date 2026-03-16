@@ -78,6 +78,44 @@ export default function ChannelDetectedEmptyState({ marketplaceCode, marketplace
 
   if (loading) return null;
 
+  // API-connected marketplace with no settlements yet
+  if (isApiConnected && !subChannel) {
+    return (
+      <Card className="border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/20">
+        <CardContent className="py-6 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+              <Zap className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                {marketplaceName} is connected via API
+                <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                  Auto
+                </Badge>
+              </h4>
+              <p className="text-sm text-muted-foreground">
+                Settlements are fetched automatically during sync. No manual upload needed.
+              </p>
+            </div>
+          </div>
+          <div className="ml-11 flex items-center gap-2">
+            {onSyncNow && (
+              <Button size="sm" variant="outline" onClick={onSyncNow} className="gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" /> Sync Now
+              </Button>
+            )}
+            {onUpload && (
+              <Button size="sm" variant="ghost" onClick={onUpload} className="gap-1.5 text-muted-foreground">
+                <Upload className="h-3.5 w-3.5" /> Upload manually
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // If no sub-channel record found, fall back to generic empty state
   if (!subChannel) {
     return (
