@@ -184,7 +184,7 @@ export default function PushSafetyPreview({
         const coaAgeMs = coaFreshness ? Date.now() - coaFreshness.getTime() : Infinity;
         const COA_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
         if (coaAgeMs > COA_MAX_AGE_MS) {
-          console.log('[push-safety] CoA cache stale or empty, attempting refresh…');
+          logger.debug('[push-safety] CoA cache stale or empty, attempting refresh…');
           try {
             const { error: refreshError } = await supabase.functions.invoke('fetch-xero-bank-accounts', {
               body: { action: 'refresh_coa' },
