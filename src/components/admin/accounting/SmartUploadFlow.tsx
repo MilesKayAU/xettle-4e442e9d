@@ -1003,19 +1003,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         try {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            // Extract headers for fingerprint
             const extracted = await extractFileHeaders(df.file);
             if (extracted) {
-              // Save to marketplace_file_fingerprints with reconciliation_type
-              await supabase.from('marketplace_file_fingerprints').insert({
-                user_id: user.id,
-                marketplace_code: marketplace,
-                column_signature: extracted.headers as any,
-                column_mapping: df.detection?.columnMapping || {} as any,
-                is_multi_marketplace: false,
-                file_pattern: df.file.name.replace(/\d+/g, '*'),
-                reconciliation_type: 'csv_only',
-              } as any);
+              // Use lifecycle-safe createDraftFingerprint instead of direct insert
+              await createDraftFingerprint({
+                userId: user.id,
+                marketplaceCode: marketplace,
+                columnSignature: extracted.headers,
+                columnMapping: df.detection?.columnMapping || {},
+                parserType: 'generic',
+                confidence: df.detection?.confidence || undefined,
+                filePattern: df.file.name.replace(/\d+/g, '*'),
+              });
 
               // Create bug report for admin visibility
               const scrubbedSample = scrubSampleRows(extracted.headers, extracted.sampleRows.slice(0, 3));
@@ -1037,9 +1036,22 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               } as any);
             }
           }
-        } catch { /* silent — don't fail save for learning loop */ }
+        } catch (err) {
+          console.error('[learning-loop] fingerprint creation failed:', err);
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await supabase.from('system_events').insert({
+                user_id: user.id,
+                event_type: 'format_learning_loop_failed',
+                severity: 'warning',
+                marketplace_code: marketplace,
+                details: { error: String(err), filename: df.file.name, confidence: df.detection?.confidence || 0 },
+              } as any);
+            }
+          } catch { /* non-blocking */ }
+        }
 
-        // Show post-save validation banner
         setShowNewFormatBanner(true);
       }
 
