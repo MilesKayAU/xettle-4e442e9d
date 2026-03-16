@@ -69,32 +69,21 @@ export default function RailPostingSettings() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [taxProfile, setTaxProfile] = useState<TaxProfile>('AU_GST');
 
-  useAiPageContext(() => {
-    const railSummary = connectedRails.map(rail => {
-      const s = settings.get(rail);
-      return {
-        rail,
-        posting_mode: s?.posting_mode ?? 'manual',
-        invoice_status: s?.invoice_status ?? 'DRAFT',
-        tax_mode: s?.tax_mode ?? 'AU_GST_STANDARD',
-        require_bank_match: s?.require_bank_match ?? true,
-      };
-    });
-    return {
-      routeId: 'rail_posting_settings',
-      pageTitle: 'Rail Posting Settings',
-      primaryEntities: { rails: connectedRails },
-      pageStateSummary: {
-        connected_rail_count: connectedRails.length,
-        auto_rails: railSummary.filter(r => r.posting_mode === 'auto').length,
-        manual_rails: railSummary.filter(r => r.posting_mode === 'manual').length,
-        failed_settlement_count: failedSettlements.length,
-        tax_profile: taxProfile,
-        rail_settings: railSummary.slice(0, 10),
-      },
-      capabilities: ['toggle_auto_post', 'retry_failed'],
-    };
-  });
+  useAiPageContext(() => ({
+    routeId: 'rail_posting_settings',
+    pageTitle: 'Rail Posting Settings',
+    primaryEntities: {
+      marketplace_codes: connectedRails,
+    },
+    pageStateSummary: {
+      connected_rail_count: connectedRails.length,
+      auto_rails: connectedRails.filter(r => settings.get(r)?.posting_mode === 'auto').length,
+      manual_rails: connectedRails.filter(r => settings.get(r)?.posting_mode !== 'auto').length,
+      failed_settlement_count: failedSettlements.length,
+      tax_profile: taxProfile,
+    },
+    capabilities: ['toggle_auto_post', 'retry_failed'],
+  }));
 
   const loadData = useCallback(async () => {
     try {

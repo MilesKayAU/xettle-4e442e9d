@@ -133,13 +133,9 @@ export default function PushSafetyPreview({
     },
     pageStateSummary: {
       settlement_count: settlements.length,
-      marketplaces: [...new Set(settlements.map(s => s.marketplace))],
-      checks_summary: previews.map(p => ({
-        settlement_id: p.settlement.settlement_id,
-        green: p.checks.filter(c => c.status === 'green').length,
-        amber: p.checks.filter(c => c.status === 'amber').length,
-        red: p.checks.filter(c => c.status === 'red').length,
-      })).slice(0, 10),
+      green_checks: previews.reduce((n, p) => n + p.checks.filter(c => c.status === 'green').length, 0),
+      amber_checks: previews.reduce((n, p) => n + p.checks.filter(c => c.status === 'amber').length, 0),
+      red_checks: previews.reduce((n, p) => n + p.checks.filter(c => c.status === 'red').length, 0),
       has_mapping_error: !!mappingInvalidError,
     },
     capabilities: ['push_to_xero'],
