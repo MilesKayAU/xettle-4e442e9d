@@ -173,7 +173,7 @@ export default function PushSafetyPreview({
               // Re-fetch fresh CoA
               const { data: freshCoa } = await supabase
                 .from('xero_chart_of_accounts')
-                .select('account_code, account_name, account_type, is_active, updated_at')
+                .select('account_code, account_name, account_type, is_active, synced_at')
                 .eq('user_id', user.id);
               coaMap = new Map();
               coaFreshness = null;
