@@ -116,6 +116,9 @@ export default function PushSafetyPreview({
     checks: ValidationCheck[];
     contactName: string;
     reference: string;
+    isRepost?: boolean;
+    repostOfInvoiceId?: string | null;
+    repostReason?: string | null;
   }>>([]);
 
   useEffect(() => {
