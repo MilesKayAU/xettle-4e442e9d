@@ -12,6 +12,7 @@ interface TaskCounts {
   readyToPush: number;
   awaitingReconciliation: number;
   reconAlerts: number;
+  backfillGaps: number;
 }
 
 export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: DailyTaskStripProps) {
