@@ -142,6 +142,8 @@ export default function ActionCentre({
     period_start: string; period_end: string; bank_deposit: number | null;
   }>>([]);
   const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
+  // Settlement-level pipeline fallback: marketplace+month → stage summary
+  const [settlementPipeline, setSettlementPipeline] = useState<Map<string, PipelineStage>>(new Map());
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -151,7 +153,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes, pipelineSettlementsRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -184,6 +186,14 @@ export default function ActionCentre({
           .eq('posting_state', 'failed')
           .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
+        // Pipeline fallback: fetch recent settlements with their Xero/bank status
+        supabase.from('settlements')
+          .select('marketplace, period_start, status, xero_invoice_id, xero_status, bank_verified, bank_deposit, posting_state')
+          .eq('is_hidden', false)
+          .eq('is_pre_boundary', false)
+          .is('duplicate_of_settlement_id', null)
+          .order('period_start', { ascending: false })
+          .limit(500),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -250,6 +260,30 @@ export default function ActionCentre({
       }
       if (autoPostFailedRes.data) {
         setAutoPostFailed(autoPostFailedRes.data as any);
+      }
+      // Build settlement-level pipeline fallback for cells without marketplace_validation rows
+      if (pipelineSettlementsRes.data) {
+        const pipeMap = new Map<string, PipelineStage>();
+        for (const s of pipelineSettlementsRes.data as any[]) {
+          const mp = MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || '';
+          if (!mp || GATEWAY_CODES.has(mp)) continue;
+          const month = s.period_start?.substring(0, 7);
+          if (!month) continue;
+          const key = `${mp}_${month}`;
+          const existing = pipeMap.get(key) || { settlement: false, xero: false, bank: false, reconciled: false };
+          // Settlement exists = stage 1 done
+          existing.settlement = true;
+          // Xero: has invoice or is pushed
+          const hasXero = !!s.xero_invoice_id || s.xero_status === 'AUTHORISED' || s.xero_status === 'PAID' || s.status === 'pushed_to_xero' || s.posting_state === 'posted';
+          if (hasXero) existing.xero = true;
+          // Bank: verified or settlement-confirmed rail
+          const bankDone = s.bank_verified || (hasXero && !isBankMatchRequired(mp));
+          if (bankDone) existing.bank = true;
+          // Reconciled: bank done + xero done
+          if (existing.xero && existing.bank) existing.reconciled = true;
+          pipeMap.set(key, existing);
+        }
+        setSettlementPipeline(pipeMap);
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
@@ -402,17 +436,21 @@ export default function ActionCentre({
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    // Combine marketplaces from validation rows AND connected marketplaces
+    // Combine marketplaces from validation rows, connected marketplaces, AND settlement pipeline
     const allMps = new Set<string>();
     for (const r of normalisedRows) allMps.add(r.marketplace_code);
     for (const c of connectedMarketplaces) {
       const code = MARKETPLACE_ALIASES[c] || c;
       if (!GATEWAY_CODES.has(code)) allMps.add(code);
     }
+    for (const key of settlementPipeline.keys()) {
+      const mp = key.split('_').slice(0, -1).join('_'); // remove month suffix
+      if (!GATEWAY_CODES.has(mp)) allMps.add(mp);
+    }
     const marketplaces = [...allMps].sort();
 
     return { months, marketplaces };
-  }, [normalisedRows, connectedMarketplaces]);
+  }, [normalisedRows, connectedMarketplaces, settlementPipeline]);
 
   const getRowsForCell = (marketplace: string, monthKey: string): ValidationRow[] => {
     return normalisedRows.filter(r => {
@@ -789,14 +827,19 @@ export default function ActionCentre({
                         );
                       }
                       const cellRows = getRowsForCell(mp, m);
-                      if (cellRows.length === 0) {
+                      // Use settlement pipeline fallback when no validation rows exist
+                      const fallbackKey = `${mp}_${m}`;
+                      const fallbackPipeline = settlementPipeline.get(fallbackKey);
+                      if (cellRows.length === 0 && !fallbackPipeline) {
                         return (
                           <td key={m} className="text-center py-2.5 px-3">
                             <span className="text-[10px] text-muted-foreground/40">—</span>
                           </td>
                         );
                       }
-                      const pipeline = getPipelineForCell(cellRows);
+                      const pipeline = cellRows.length > 0
+                        ? getPipelineForCell(cellRows)
+                        : fallbackPipeline!;
                       const stageEntries: { key: string; label: string; done: boolean }[] = [
                         { key: 'S', label: 'Settlement uploaded', done: pipeline.settlement },
                          { key: 'X', label: 'Sent to Xero', done: pipeline.xero },
@@ -833,7 +876,9 @@ export default function ActionCentre({
                                   </div>
                                 ))}
                                 <div className="text-muted-foreground pt-1 border-t border-border mt-1">
-                                  {cellRows.length} settlement{cellRows.length > 1 ? 's' : ''}
+                                  {cellRows.length > 0
+                                    ? `${cellRows.length} settlement${cellRows.length > 1 ? 's' : ''}`
+                                    : 'From settlement data'}
                                 </div>
                               </TooltipContent>
                             </Tooltip>
