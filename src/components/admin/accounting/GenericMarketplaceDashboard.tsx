@@ -407,6 +407,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             marketplaceCode={code}
             marketplaceName={marketplaceName}
             onUpload={onSwitchToUpload}
+            isApiConnected={isApiConnected}
+            onSyncNow={isApiConnected ? handleRefreshXero : undefined}
           />
         ) : (
           <div className="space-y-2">
