@@ -11,7 +11,8 @@ import { toast } from "@/hooks/use-toast";
 import { sanitizeEmail } from "@/utils/input-sanitization";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import Honeypot from "@/components/ui/honeypot";
-import { Lock, UserPlus, Mail } from 'lucide-react';
+import { Lock, UserPlus, Mail, Shield } from 'lucide-react';
+import { hashPin } from "@/hooks/use-settings-pin";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -24,7 +25,9 @@ export default function Auth() {
     email: '', 
     password: '', 
     confirmPassword: '',
-    fullName: ''
+    fullName: '',
+    settingsPin: '',
+    confirmSettingsPin: '',
   });
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
@@ -97,6 +100,15 @@ export default function Auth() {
       toast({ title: "Weak Password", description: "Password must be at least 6 characters long", variant: "destructive" });
       return;
     }
+    // Validate settings PIN
+    if (!signUpData.settingsPin || signUpData.settingsPin.length !== 4 || !/^\d{4}$/.test(signUpData.settingsPin)) {
+      toast({ title: "Settings PIN Required", description: "Please enter a 4-digit settings PIN", variant: "destructive" });
+      return;
+    }
+    if (signUpData.settingsPin !== signUpData.confirmSettingsPin) {
+      toast({ title: "PIN Mismatch", description: "Settings PINs do not match", variant: "destructive" });
+      return;
+    }
     const sanitizedEmail = sanitizeEmail(signUpData.email);
     if (!sanitizedEmail || sanitizedEmail !== signUpData.email.toLowerCase().trim()) {
       toast({ title: "Invalid Email", description: "Please enter a valid email address", variant: "destructive" });
@@ -104,7 +116,7 @@ export default function Auth() {
     }
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpResult, error } = await supabase.auth.signUp({
         email: sanitizedEmail,
         password: signUpData.password,
         options: {
@@ -116,10 +128,21 @@ export default function Auth() {
         toast({ title: "Sign Up Failed", description: error.message, variant: "destructive" });
         return;
       }
+
+      // Store the hashed settings PIN if user was created
+      if (signUpResult?.user?.id) {
+        const pinHash = await hashPin(signUpData.settingsPin);
+        await supabase.from('app_settings').upsert({
+          user_id: signUpResult.user.id,
+          key: 'settings_pin_hash',
+          value: pinHash,
+        } as any, { onConflict: 'user_id,key' });
+      }
+
       toast({ title: "Account Created!", description: "Please check your email to confirm your account." });
       setResendEmail(sanitizedEmail);
       setShowResendVerification(true);
-      setSignUpData({ email: '', password: '', confirmPassword: '', fullName: '' });
+      setSignUpData({ email: '', password: '', confirmPassword: '', fullName: '', settingsPin: '', confirmSettingsPin: '' });
     } catch {
       toast({ title: "Sign Up Failed", description: "An unexpected error occurred", variant: "destructive" });
     } finally {
@@ -339,7 +362,43 @@ export default function Auth() {
                         placeholder="Confirm your password" required disabled={isLoading}
                         autoComplete="new-password" maxLength={128} />
                     </div>
-                    <Button type="submit" className="w-full" disabled={isLoading || !signUpData.email || !signUpData.password || !signUpData.confirmPassword}>
+
+                    {/* Settings PIN */}
+                    <div className="border-t pt-4 mt-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Shield className="h-4 w-4 text-primary" />
+                        <Label className="text-sm font-medium">Settings PIN</Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Create a 4-digit PIN to protect sensitive settings like Xero account changes.
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="signup-pin" className="text-xs">PIN</Label>
+                          <Input id="signup-pin" type="password" inputMode="numeric"
+                            value={signUpData.settingsPin}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                              setSignUpData(prev => ({ ...prev, settingsPin: v }));
+                            }}
+                            placeholder="••••" required disabled={isLoading}
+                            autoComplete="off" maxLength={4} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="signup-pin-confirm" className="text-xs">Confirm PIN</Label>
+                          <Input id="signup-pin-confirm" type="password" inputMode="numeric"
+                            value={signUpData.confirmSettingsPin}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                              setSignUpData(prev => ({ ...prev, confirmSettingsPin: v }));
+                            }}
+                            placeholder="••••" required disabled={isLoading}
+                            autoComplete="off" maxLength={4} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button type="submit" className="w-full" disabled={isLoading || !signUpData.email || !signUpData.password || !signUpData.confirmPassword || signUpData.settingsPin.length !== 4}>
                       {isLoading ? <LoadingSpinner size="sm" text="Creating Account..." /> : "Create Account"}
                     </Button>
                   </form>

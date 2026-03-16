@@ -13,6 +13,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle, Search, ChevronsUpDown, Filter, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useSettingsPin } from '@/hooks/use-settings-pin';
+import SettingsPinDialog from '@/components/shared/SettingsPinDialog';
 import {
   refreshXeroCOA,
   getCachedXeroAccounts,
@@ -67,6 +69,7 @@ export default function AccountMapperCard() {
   const [notes, setNotes] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const settingsPin = useSettingsPin();
 
   // Xero COA state
   const [coaAccounts, setCoaAccounts] = useState<CachedXeroAccount[]>([]);
@@ -301,83 +304,88 @@ export default function AccountMapperCard() {
   }, [splitByMarketplace]);
 
   const handleSplitToggle = async (enabled: boolean) => {
-    setSplitByMarketplace(enabled);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'accounting_split_by_marketplace',
-        value: enabled ? 'true' : 'false',
-      } as any, { onConflict: 'user_id,key' });
+    const doToggle = async () => {
+      setSplitByMarketplace(enabled);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        await supabase.from('app_settings').upsert({
+          user_id: user.id,
+          key: 'accounting_split_by_marketplace',
+          value: enabled ? 'true' : 'false',
+        } as any, { onConflict: 'user_id,key' });
 
-      if (!enabled) {
-        const cleaned = { ...editableMapping };
-        for (const key of Object.keys(cleaned)) {
-          if (key.includes(':')) delete cleaned[key];
+        if (!enabled) {
+          const cleaned = { ...editableMapping };
+          for (const key of Object.keys(cleaned)) {
+            if (key.includes(':')) delete cleaned[key];
+          }
+          setEditableMapping(cleaned);
         }
-        setEditableMapping(cleaned);
+      } catch (e) {
+        console.error('Failed to save split toggle:', e);
       }
-    } catch (e) {
-      console.error('Failed to save split toggle:', e);
-    }
+    };
+    settingsPin.requirePin(doToggle);
   };
 
   const handleConfirm = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+    settingsPin.requirePin(async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
 
-      const finalCodes: Record<string, string> = {};
-      for (const cat of CATEGORIES) {
-        finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
-      }
+        const finalCodes: Record<string, string> = {};
+        for (const cat of CATEGORIES) {
+          finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
+        }
 
-      if (splitByMarketplace) {
-        for (const mp of getEffectiveMarketplaces()) {
-          for (const cat of SPLITTABLE_CATEGORIES) {
-            const key = `${cat}:${mp}`;
-            if (editableMapping[key]) {
-              finalCodes[key] = editableMapping[key];
+        if (splitByMarketplace) {
+          for (const mp of getEffectiveMarketplaces()) {
+            for (const cat of SPLITTABLE_CATEGORIES) {
+              const key = `${cat}:${mp}`;
+              if (editableMapping[key]) {
+                finalCodes[key] = editableMapping[key];
+              }
             }
           }
         }
-      }
 
-      const { error } = await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'accounting_xero_account_codes',
-        value: JSON.stringify(finalCodes),
-      } as any, { onConflict: 'user_id,key' });
-      if (error) throw error;
+        const { error } = await supabase.from('app_settings').upsert({
+          user_id: user.id,
+          key: 'accounting_xero_account_codes',
+          value: JSON.stringify(finalCodes),
+        } as any, { onConflict: 'user_id,key' });
+        if (error) throw error;
 
-      await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'ai_mapper_status',
-        value: 'confirmed',
-      } as any, { onConflict: 'user_id,key' });
+        await supabase.from('app_settings').upsert({
+          user_id: user.id,
+          key: 'ai_mapper_status',
+          value: 'confirmed',
+        } as any, { onConflict: 'user_id,key' });
 
-      const updatedMapping: Record<string, MappingEntry> = {};
-      for (const cat of CATEGORIES) {
-        const code = finalCodes[cat];
-        const coaEntry = coaAccounts.find(a => a.account_code === code);
-        updatedMapping[cat] = {
-          code,
-          name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
-        };
-      }
-      for (const key of Object.keys(finalCodes)) {
-        if (key.includes(':')) {
-          const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
-          updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
+        const updatedMapping: Record<string, MappingEntry> = {};
+        for (const cat of CATEGORIES) {
+          const code = finalCodes[cat];
+          const coaEntry = coaAccounts.find(a => a.account_code === code);
+          updatedMapping[cat] = {
+            code,
+            name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
+          };
         }
+        for (const key of Object.keys(finalCodes)) {
+          if (key.includes(':')) {
+            const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
+            updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
+          }
+        }
+        setMapping(updatedMapping);
+        setState('confirmed');
+        toast.success('Account mapping saved — all Xero pushes will use these codes');
+      } catch (err: any) {
+        toast.error(`Failed to save mapping: ${err.message}`);
       }
-      setMapping(updatedMapping);
-      setState('confirmed');
-      toast.success('Account mapping saved — all Xero pushes will use these codes');
-    } catch (err: any) {
-      toast.error(`Failed to save mapping: ${err.message}`);
-    }
+    });
   };
 
   const handleApplySuggestionsToMissing = () => {
@@ -570,6 +578,15 @@ export default function AccountMapperCard() {
     );
   }
 
+  const renderPinDialog = () => (
+    <SettingsPinDialog
+      open={settingsPin.showDialog}
+      onVerify={settingsPin.verifyPin}
+      onSuccess={settingsPin.unlock}
+      onCancel={settingsPin.cancelDialog}
+    />
+  );
+
   // ─── Shared COA refresh strip ──────────────────────────────────────
   const renderCoaRefreshStrip = () => (
     <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
@@ -595,6 +612,8 @@ export default function AccountMapperCard() {
   // ─── UNMAPPED STATE ──────────────────────────────────────────────
   if (state === 'unmapped') {
     return (
+      <>
+      {renderPinDialog()}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -613,6 +632,7 @@ export default function AccountMapperCard() {
           </Button>
         </CardContent>
       </Card>
+      </>
     );
   }
 
@@ -644,6 +664,8 @@ export default function AccountMapperCard() {
       : [...CATEGORIES];
 
     return (
+      <>
+      {renderPinDialog()}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -762,6 +784,7 @@ export default function AccountMapperCard() {
           </div>
         </CardContent>
       </Card>
+      </>
     );
   }
 
@@ -769,6 +792,8 @@ export default function AccountMapperCard() {
   const marketplaceOverrideKeys = Object.keys(mapping).filter(k => k.includes(':'));
 
   return (
+    <>
+    {renderPinDialog()}
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
@@ -886,6 +911,7 @@ export default function AccountMapperCard() {
         </div>
       </CardContent>
     </Card>
+    </>
   );
 }
 
