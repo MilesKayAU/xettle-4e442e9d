@@ -1071,6 +1071,7 @@ export default function AccountMapperCard() {
         </div>
       </CardContent>
     </Card>
+    {renderCloneDialog()}
     </>
   );
 }
