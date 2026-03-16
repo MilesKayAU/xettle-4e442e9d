@@ -21,7 +21,7 @@ interface SubChannelInfo {
   source_name: string;
 }
 
-export default function ChannelDetectedEmptyState({ marketplaceCode, marketplaceName, onUpload }: ChannelDetectedEmptyStateProps) {
+export default function ChannelDetectedEmptyState({ marketplaceCode, marketplaceName, onUpload, isApiConnected, onSyncNow }: ChannelDetectedEmptyStateProps) {
   const [subChannel, setSubChannel] = useState<SubChannelInfo | null>(null);
   const [alertData, setAlertData] = useState<{ order_count: number; total_revenue: number } | null>(null);
   const [loading, setLoading] = useState(true);
