@@ -473,15 +473,23 @@ export default function AccountMapperCard() {
       const key = `${baseCat}:${mp}`;
       const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
       const overrideCode = editableMapping[key] || '';
+      const aiSuggestion = mapping[key]; // AI-suggested per-rail mapping
       return (
         <tr key={key} className="border-b last:border-b-0 bg-muted/20">
           <td className="p-2 pl-6">
             <div className="text-xs text-muted-foreground">↳ {mp} {baseCat}</div>
           </td>
           <td className="p-2">
-            <span className="text-xs text-muted-foreground">
-              Fallback: <span className="font-mono">{baseCode}</span>
-            </span>
+            {aiSuggestion?.code ? (
+              <span className="text-xs">
+                <span className="font-mono">{aiSuggestion.code}</span>
+                <span className="text-muted-foreground ml-1">— {aiSuggestion.name}</span>
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Fallback: <span className="font-mono">{baseCode}</span>
+              </span>
+            )}
           </td>
           <td className="p-2">
             {renderStatusBadge(overrideCode || baseCode, baseCat)}
