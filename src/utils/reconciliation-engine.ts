@@ -5,6 +5,7 @@
  */
 
 import type { ParsedSettlement } from './settlement-parser';
+import { TOL_PARSER_TOTAL, TOL_COLUMN_TOTALS, TOL_GST_CONSISTENCY } from '@/constants/reconciliation-tolerance';
 
 export interface ReconCheck {
   id: string;
