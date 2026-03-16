@@ -185,10 +185,7 @@ export default function CoaBlockerCta({
         </AlertDescription>
       </Alert>
 
-      {/* Settings PIN dialog — rendered by the hook user */}
-      {showDialog && (
-        <div /> // PIN dialog is rendered by SettingsPinDialog in the parent layout
-      )}
+      {/* PIN dialog is rendered by SettingsPinDialog in AuthenticatedLayout — no local rendering needed */}
 
       {/* Clone COA Dialog */}
       {showCloneDialog && (
