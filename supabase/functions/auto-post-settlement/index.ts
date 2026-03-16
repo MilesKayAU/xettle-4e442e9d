@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
 
           // REVIEW_EACH_SETTLEMENT blocks autopost
           if (r.tax_mode === 'REVIEW_EACH_SETTLEMENT') {
-            console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: REVIEW_EACH_SETTLEMENT tax mode`);
+            logger.debug(`[auto-post] Skipping ${r.rail} for user ${userId}: REVIEW_EACH_SETTLEMENT tax mode`);
             return false;
           }
 
