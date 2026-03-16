@@ -144,8 +144,11 @@ export default function AccountMapperCard() {
               size="sm"
               className="h-6 text-xs gap-1"
               onClick={() => {
-                setCloneTarget(mp);
-                setCloneDialogOpen(true);
+                // PIN gate for COA clone
+                settingsPin.requirePin(() => {
+                  setCloneTarget(mp);
+                  setCloneDialogOpen(true);
+                });
               }}
             >
               <Copy className="h-3 w-3" />
