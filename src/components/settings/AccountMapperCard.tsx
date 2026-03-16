@@ -264,12 +264,27 @@ export default function AccountMapperCard() {
         editable[cat] = (entry as MappingEntry).code;
       }
       setEditableMapping(editable);
+
+      // Auto-enable split mode if AI found per-rail suggestions
+      const hasOverrides = Object.keys(data.mapping || {}).some((k: string) => k.includes(':'));
+      if (hasOverrides && !splitByMarketplace) {
+        setSplitByMarketplace(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('app_settings').upsert({
+            user_id: user.id,
+            key: 'accounting_split_by_marketplace',
+            value: 'true',
+          } as any, { onConflict: 'user_id,key' });
+        }
+      }
+
       setState('review');
     } catch (err: any) {
       toast.error(`AI mapper failed: ${err.message}`);
       setState('unmapped');
     }
-  }, []);
+  }, [splitByMarketplace]);
 
   const handleSplitToggle = async (enabled: boolean) => {
     setSplitByMarketplace(enabled);
