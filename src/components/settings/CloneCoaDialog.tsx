@@ -76,10 +76,11 @@ export default function CloneCoaDialog({
       targetMarketplace,
       coaAccounts,
       existingCodes: allCodes,
+      matchPattern,
     });
 
     setCloneRows(rows);
-  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible]);
+  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern]);
 
   // Reset on open
   useEffect(() => {
