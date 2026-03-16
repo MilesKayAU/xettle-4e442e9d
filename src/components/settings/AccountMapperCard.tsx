@@ -343,7 +343,40 @@ export default function AccountMapperCard() {
     settingsPin.requirePin(doToggle);
   };
 
-  const handleConfirm = async () => {
+  const handleSaveDraft = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const draftCodes: Record<string, string> = {};
+      for (const cat of CATEGORIES) {
+        draftCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
+      }
+      if (splitByMarketplace) {
+        for (const mp of getEffectiveMarketplaces()) {
+          for (const cat of SPLITTABLE_CATEGORIES) {
+            const key = `${cat}:${mp}`;
+            if (editableMapping[key]) {
+              draftCodes[key] = editableMapping[key];
+            }
+          }
+        }
+      }
+
+      const { error } = await supabase.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'accounting_xero_account_codes_draft',
+        value: JSON.stringify(draftCodes),
+      } as any, { onConflict: 'user_id,key' });
+      if (error) throw error;
+
+      toast.success('Draft saved locally — come back anytime to finish');
+    } catch (err: any) {
+      toast.error(`Failed to save draft: ${err.message}`);
+    }
+  };
+
+
     settingsPin.requirePin(async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
