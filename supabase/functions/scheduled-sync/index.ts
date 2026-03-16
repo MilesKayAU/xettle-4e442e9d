@@ -390,8 +390,9 @@ Deno.serve(async (req) => {
   // ─── Aggregate totals ──────────────────────────────────────────
   const totalAmazonSynced = results.amazon?.imported || results.amazon?.total_synced || 0;
   const totalShopifySynced = results.shopify?.imported || results.shopify?.total_synced || 0;
+  const totalEbaySynced = results.ebay?.total_synced || 0;
   const totalXeroPushed = results.xero_push?.pushed || 0;
-  const totalSynced = totalAmazonSynced + totalShopifySynced;
+  const totalSynced = totalAmazonSynced + totalShopifySynced + totalEbaySynced;
 
   // ─── Determine overall status ─────────────────────────────────
   const totalSteps = 9;
