@@ -224,9 +224,11 @@ export function buildPostingLineItems(
 
     if (Math.abs(amount) < TOL_LINE_SUM) continue;
 
+    const resolvedCode = resolver(cat.name, marketplace);
+
     lines.push({
       Description: cat.name,
-      AccountCode: resolver(cat.name, marketplace),
+      AccountCode: resolvedCode ?? 'UNMAPPED',
       TaxType: cat.taxType,
       UnitAmount: amount,
       Quantity: 1,
