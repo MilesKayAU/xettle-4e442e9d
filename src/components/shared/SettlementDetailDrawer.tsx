@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import InvoiceRefreshButton from '@/components/shared/InvoiceRefreshButton';
 import XeroInvoiceCompareDrawer from '@/components/shared/XeroInvoiceCompareDrawer';
+import CoaBlockerCta from '@/components/shared/CoaBlockerCta';
+import { checkXeroReadinessForMarketplace } from '@/actions/xeroReadiness';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
