@@ -788,6 +788,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
         source_reference: meta.sourceReference || null,
         status: 'already_recorded',
         reconciliation_status: 'reconciled',
+        fingerprint_id: settlement.fingerprint_id || null,
       } as any);
 
       if (error) return { success: false, error: error.message };
