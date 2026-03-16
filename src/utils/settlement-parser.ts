@@ -518,7 +518,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const columnSum = round2(reconIncomeTotal + reconExpenseTotal);
   reconciliationChecks.push({
     name: 'Column totals',
-    passed: Math.abs(columnSum - grossTotal) < 0.01,
+    passed: Math.abs(columnSum - grossTotal) < TOL_LINE_SUM,
     detail: `Income ${formatAUD(reconIncomeTotal)} + Expenses ${formatAUD(reconExpenseTotal)} = ${formatAUD(columnSum)} vs Gross ${formatAUD(grossTotal)}`,
   });
 
