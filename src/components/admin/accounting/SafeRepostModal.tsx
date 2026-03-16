@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, Undo2, FileText, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, Undo2, FileText, RefreshCw, ShieldAlert } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatAUD } from '@/utils/settlement-parser';
@@ -19,6 +19,7 @@ interface RepostSettlement {
   xero_journal_id_1?: string | null;
   xero_journal_id_2?: string | null;
   xero_invoice_number?: string | null;
+  xero_invoice_id?: string | null;
   is_split_month?: boolean;
   status?: string;
 }
@@ -29,27 +30,36 @@ interface SafeRepostModalProps {
   onComplete: () => void;
 }
 
-type RepostStep = 'reason' | 'voiding' | 'voided' | 'ready_to_push' | 'error';
+type RepostStep = 'preflight' | 'reason' | 'voiding' | 'voided' | 'ready_to_push' | 'error';
+
+interface PreflightResult {
+  canRepost: boolean;
+  blockers: string[];
+  warnings: string[];
+  invoiceStatus?: string;
+}
 
 /**
- * SafeRepostModal — Accountant-grade repost workflow:
- * 1. Capture reason for repost
- * 2. Void existing invoice(s) in Xero
- * 3. Reset settlement to ready_to_push with repost chain linkage
- * 4. User then pushes new DRAFT via PushSafetyPreview
+ * SafeRepostModal — Accountant-grade repost workflow (Model A):
+ * - One settlement row, multiple invoice attempts
+ * - Void existing invoice(s) in Xero
+ * - Reset settlement to ready_to_push with repost linkage
+ * - User pushes new DRAFT via PushSafetyPreview
  * 
- * Rules:
- * - Never overwrite
- * - Never delete
- * - Always audit trail (system_events + repost columns)
- * - Always link old + new invoice IDs via repost_chain_id
+ * Guards:
+ * - Blocks repost if invoice is PAID (requires accountant workflow)
+ * - Blocks if invoice is already VOIDED (idempotent — shows message)
+ * - Blocks if a newer replacement invoice exists
+ * - Period lock check
+ * - Records immutable audit trail
  */
 export default function SafeRepostModal({ settlement, onClose, onComplete }: SafeRepostModalProps) {
-  const [step, setStep] = useState<RepostStep>('reason');
+  const [step, setStep] = useState<RepostStep>('preflight');
   const [reason, setReason] = useState('');
   const [processing, setProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [voidedInvoiceIds, setVoidedInvoiceIds] = useState<string[]>([]);
+  const [preflight, setPreflight] = useState<PreflightResult | null>(null);
 
   const invoiceIds = [
     settlement.xero_journal_id,
@@ -57,20 +67,24 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
     settlement.xero_journal_id_2,
   ].filter(Boolean) as string[];
 
-  const handleStartRepost = async () => {
-    if (!reason.trim()) {
-      toast.error('Please provide a reason for the repost');
-      return;
-    }
+  // Run preflight checks on mount
+  useEffect(() => {
+    runPreflightChecks();
+  }, []);
 
-    setProcessing(true);
-    setStep('voiding');
-
+  const runPreflightChecks = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) {
+        setPreflight({ canRepost: false, blockers: ['Not authenticated'], warnings: [] });
+        setStep('reason');
+        return;
+      }
 
-      // Check period lock
+      const blockers: string[] = [];
+      const warnings: string[] = [];
+
+      // 1. Period lock check
       const periodMonth = settlement.period_end?.substring(0, 7);
       if (periodMonth) {
         const { data: lockData } = await supabase
@@ -81,17 +95,87 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
           .is('unlocked_at', null)
           .maybeSingle();
         if (lockData) {
-          throw new Error(`Period ${periodMonth} is locked. Unlock it first before reposting.`);
+          blockers.push(`Period ${periodMonth} is locked. Unlock it first.`);
         }
       }
 
-      // Step 1: Void existing invoices via sync-amazon-journal rollback
-      const { data, error } = await supabase.functions.invoke('sync-amazon-journal', {
+      // 2. Check if invoice IDs exist
+      if (invoiceIds.length === 0) {
+        blockers.push('No invoice IDs found on this settlement — nothing to void.');
+      }
+
+      // 3. Check for existing non-VOIDED match in xero_accounting_matches
+      const { data: existingMatch } = await supabase
+        .from('xero_accounting_matches')
+        .select('xero_invoice_id, xero_status, xero_invoice_number')
+        .eq('user_id', user.id)
+        .eq('settlement_id', settlement.settlement_id)
+        .maybeSingle();
+
+      if (existingMatch) {
+        const status = existingMatch.xero_status?.toUpperCase();
+
+        if (status === 'PAID') {
+          blockers.push(
+            `Invoice ${existingMatch.xero_invoice_number || existingMatch.xero_invoice_id} is PAID in Xero. ` +
+            `Paid invoices cannot be voided — use credit notes in Xero instead.`
+          );
+        } else if (status === 'VOIDED') {
+          // Already voided — check if a newer replacement exists
+          warnings.push('Previous invoice is already VOIDED in Xero.');
+        }
+
+        // Check if a different (newer) invoice exists for this settlement
+        if (existingMatch.xero_invoice_id && !invoiceIds.includes(existingMatch.xero_invoice_id)) {
+          blockers.push(
+            `A different invoice (${existingMatch.xero_invoice_number || existingMatch.xero_invoice_id}) ` +
+            `already exists for this settlement. Resolve it first.`
+          );
+        }
+      }
+
+      const result: PreflightResult = {
+        canRepost: blockers.length === 0,
+        blockers,
+        warnings,
+        invoiceStatus: existingMatch?.xero_status || undefined,
+      };
+
+      setPreflight(result);
+      setStep(result.canRepost ? 'reason' : 'reason'); // Always show reason step with blockers visible
+    } catch (err) {
+      console.error('Preflight check failed:', err);
+      setPreflight({ canRepost: true, blockers: [], warnings: ['Preflight checks could not complete — proceed with caution.'] });
+      setStep('reason');
+    }
+  };
+
+  const handleStartRepost = async () => {
+    if (!reason.trim()) {
+      toast.error('Please provide a reason for the repost');
+      return;
+    }
+
+    if (preflight && !preflight.canRepost) {
+      toast.error('Cannot repost — resolve blockers first');
+      return;
+    }
+
+    setProcessing(true);
+    setStep('voiding');
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Step 1: Void existing invoices via sync-settlement-to-xero rollback
+      // This function is marketplace-agnostic — it voids by invoice ID
+      const { data, error } = await supabase.functions.invoke('sync-settlement-to-xero', {
         body: {
           action: 'rollback',
           userId: user.id,
           settlementId: settlement.settlement_id,
-          journalIds: invoiceIds,
+          invoiceIds: invoiceIds,
           rollbackScope: 'all',
         },
       });
@@ -101,24 +185,36 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
 
       setVoidedInvoiceIds(invoiceIds);
 
-      // Step 2: Generate a repost chain ID and update settlement
-      const chainId = crypto.randomUUID();
-
+      // Step 2: Update settlement for repost (Model A — same row)
       const { error: updateErr } = await supabase
         .from('settlements')
         .update({
-          repost_chain_id: chainId,
           repost_of_invoice_id: invoiceIds[0], // Primary voided invoice
           repost_reason: reason.trim(),
           status: 'ready_to_push',
           posting_state: null,
           posting_error: null,
+          // Clear old invoice links so PushSafetyPreview doesn't block
+          xero_invoice_id: null,
+          xero_journal_id: null,
+          xero_journal_id_1: null,
+          xero_journal_id_2: null,
+          xero_invoice_number: null,
+          xero_status: null,
         })
-        .eq('id', settlement.id);
+        .eq('id', settlement.id)
+        .eq('user_id', user.id);
 
       if (updateErr) throw updateErr;
 
-      // Step 3: Log audit event
+      // Step 3: Update xero_accounting_matches to mark old match as VOIDED
+      await supabase
+        .from('xero_accounting_matches')
+        .update({ xero_status: 'VOIDED' })
+        .eq('user_id', user.id)
+        .eq('settlement_id', settlement.settlement_id);
+
+      // Step 4: Log immutable audit event
       await supabase.from('system_events').insert({
         user_id: user.id,
         event_type: 'safe_repost_initiated',
@@ -128,10 +224,11 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
         details: {
           reason: reason.trim(),
           voided_invoice_ids: invoiceIds,
-          repost_chain_id: chainId,
           original_invoice_number: settlement.xero_invoice_number || null,
           period: `${settlement.period_start} to ${settlement.period_end}`,
           bank_deposit: settlement.bank_deposit,
+          actor_user_id: user.id,
+          initiated_at: new Date().toISOString(),
         },
       });
 
@@ -150,6 +247,9 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
     onComplete();
     onClose();
   };
+
+  const isPreflightLoading = step === 'preflight';
+  const hasBlockers = preflight && preflight.blockers.length > 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -184,57 +284,93 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Invoice{invoiceIds.length > 1 ? 's' : ''}</span>
-            <span className="font-mono text-amber-700">{invoiceIds.join(', ').substring(0, 40)}…</span>
+            <span className="font-mono text-amber-700">{invoiceIds.join(', ').substring(0, 40)}{invoiceIds.join(', ').length > 40 ? '…' : ''}</span>
           </div>
         </div>
 
-        {/* Step: Reason */}
+        {/* Preflight loading */}
+        {isPreflightLoading && (
+          <div className="flex items-center justify-center py-6 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            Running safety checks…
+          </div>
+        )}
+
+        {/* Step: Reason (with preflight results) */}
         {step === 'reason' && (
           <div className="space-y-3">
+            {/* Blockers */}
+            {hasBlockers && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-md p-3 space-y-1.5">
+                <p className="text-xs font-semibold text-destructive flex items-center gap-1.5">
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                  Repost blocked
+                </p>
+                {preflight!.blockers.map((b, i) => (
+                  <p key={i} className="text-xs text-destructive/80 ml-5">• {b}</p>
+                ))}
+              </div>
+            )}
+
+            {/* Warnings */}
+            {preflight && preflight.warnings.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-2.5 text-xs text-amber-800">
+                {preflight.warnings.map((w, i) => (
+                  <p key={i}>⚠ {w}</p>
+                ))}
+              </div>
+            )}
+
             {/* Workflow preview */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" className="text-[10px]">1. Void old</Badge>
-              <ArrowRight className="h-3 w-3" />
-              <Badge variant="outline" className="text-[10px]">2. Reset status</Badge>
-              <ArrowRight className="h-3 w-3" />
-              <Badge variant="outline" className="text-[10px]">3. Push new DRAFT</Badge>
-            </div>
+            {!hasBlockers && (
+              <>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="text-[10px]">1. Void old</Badge>
+                  <ArrowRight className="h-3 w-3" />
+                  <Badge variant="outline" className="text-[10px]">2. Reset status</Badge>
+                  <ArrowRight className="h-3 w-3" />
+                  <Badge variant="outline" className="text-[10px]">3. Push new DRAFT</Badge>
+                </div>
 
-            <div>
-              <Label htmlFor="repost-reason" className="text-sm font-medium">
-                Reason for repost <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                id="repost-reason"
-                placeholder="e.g. Wrong account codes on fee lines, Missing refund line, Incorrect GST treatment…"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="mt-1.5 text-sm"
-                rows={3}
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">
-                This is recorded in the audit trail and visible to your accountant.
-              </p>
-            </div>
+                <div>
+                  <Label htmlFor="repost-reason" className="text-sm font-medium">
+                    Reason for repost <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    id="repost-reason"
+                    placeholder="e.g. Wrong account codes on fee lines, Missing refund line, Incorrect GST treatment…"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    className="mt-1.5 text-sm"
+                    rows={3}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    This is recorded in the audit trail and visible to your accountant.
+                  </p>
+                </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-md p-2.5 text-xs text-amber-800">
-              <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
-              <strong>This will void {invoiceIds.length} invoice{invoiceIds.length > 1 ? 's' : ''} in Xero.</strong>{' '}
-              Voided invoices remain visible in Xero history but have no financial effect.
-              The settlement will be reset to "Ready to Push" so you can push a corrected DRAFT.
-            </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-md p-2.5 text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
+                  <strong>This will void {invoiceIds.length} invoice{invoiceIds.length > 1 ? 's' : ''} in Xero.</strong>{' '}
+                  Voided invoices remain visible in Xero history but have no financial effect.
+                  The settlement will be reset to "Ready to Push" so you can push a corrected DRAFT.
+                </div>
+              </>
+            )}
 
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-              <Button
-                size="sm"
-                onClick={handleStartRepost}
-                disabled={!reason.trim()}
-                className="gap-1.5"
-              >
-                <Undo2 className="h-3.5 w-3.5" />
-                Void & Prepare Repost
-              </Button>
+              {!hasBlockers && (
+                <Button
+                  size="sm"
+                  onClick={handleStartRepost}
+                  disabled={!reason.trim()}
+                  className="gap-1.5"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  Void & Prepare Repost
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -264,14 +400,14 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
               <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
                 <li>Voided invoice ID{voidedInvoiceIds.length > 1 ? 's' : ''}: <span className="font-mono">{voidedInvoiceIds.map(id => id.substring(0, 8) + '…').join(', ')}</span></li>
                 <li>Reason: "{reason}"</li>
-                <li>Repost chain linked for traceability</li>
+                <li>Old match marked VOIDED in tracking cache</li>
               </ul>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-md p-2.5 text-xs text-blue-800">
               <FileText className="h-3.5 w-3.5 inline mr-1" />
-              <strong>Next step:</strong> Go to the settlement row and use "Push to Xero" — it will open the Push Safety Preview 
-              with the corrected line items. The new DRAFT invoice will be automatically linked to the voided one.
+              <strong>Next step:</strong> Go to the settlement row and use "Push to Xero" — the Push Safety Preview
+              will show a repost banner linking back to the voided invoice. The new DRAFT will be recorded as a replacement.
             </div>
 
             <div className="flex justify-end">

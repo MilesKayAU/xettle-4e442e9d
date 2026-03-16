@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  CheckCircle2, AlertTriangle, XCircle, Loader2, Send, ArrowLeft, FileText,
+  CheckCircle2, AlertTriangle, XCircle, Loader2, Send, ArrowLeft, FileText, RefreshCw,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -116,6 +116,9 @@ export default function PushSafetyPreview({
     checks: ValidationCheck[];
     contactName: string;
     reference: string;
+    isRepost?: boolean;
+    repostOfInvoiceId?: string | null;
+    repostReason?: string | null;
   }>>([]);
 
   useEffect(() => {
@@ -164,6 +167,11 @@ export default function PushSafetyPreview({
           .maybeSingle();
 
         if (!s) continue;
+
+        // Detect repost context
+        const isRepost = !!s.repost_of_invoice_id;
+        const repostOfInvoiceId = s.repost_of_invoice_id || null;
+        const repostReason = s.repost_reason || null;
 
         const settlement: SettlementPreview = {
           settlement_id: s.settlement_id,
@@ -232,7 +240,7 @@ export default function PushSafetyPreview({
         const contactName = MARKETPLACE_CONTACTS[settlement.marketplace] || `${settlement.marketplace} Marketplace`;
         const reference = `Xettle-${settlement.settlement_id}`;
 
-        results.push({ settlement, lineItems, checks, contactName, reference });
+        results.push({ settlement, lineItems, checks, contactName, reference, isRepost, repostOfInvoiceId, repostReason });
       }
       setPreviews(results);
     } catch (err) {
@@ -327,11 +335,14 @@ function SettlementPreviewCard({ preview, index, total }: {
     checks: ValidationCheck[];
     contactName: string;
     reference: string;
+    isRepost?: boolean;
+    repostOfInvoiceId?: string | null;
+    repostReason?: string | null;
   };
   index: number;
   total: number;
 }) {
-  const { settlement: s, lineItems, checks, contactName, reference } = preview;
+  const { settlement: s, lineItems, checks, contactName, reference, isRepost, repostOfInvoiceId, repostReason } = preview;
   const label = MARKETPLACE_LABELS[s.marketplace] || s.marketplace;
   const periodLabel = `${formatDate(s.period_start)} – ${formatDate(s.period_end)}`;
   const netGst = (s.gst_on_income || 0) + (s.gst_on_expenses || 0);
@@ -350,6 +361,20 @@ function SettlementPreviewCard({ preview, index, total }: {
           <Badge variant="outline" className="text-xs">DRAFT</Badge>
         </div>
       </div>
+
+      {/* Repost Banner */}
+      {isRepost && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-xs text-amber-800 flex items-start gap-2">
+          <RefreshCw className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">This is a repost</p>
+            <p className="text-amber-700">
+              Previous invoice: <span className="font-mono">{repostOfInvoiceId?.substring(0, 12)}…</span> (voided)
+              {repostReason && <span className="ml-1">— Reason: "{repostReason}"</span>}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Line Items */}
       <div className="px-4 py-3 space-y-1">
