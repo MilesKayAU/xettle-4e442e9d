@@ -548,6 +548,83 @@ export interface SaveResult {
  */
 export async function saveSettlement(settlement: StandardSettlement): Promise<SaveResult> {
   try {
+    // ─── Date Validation Gate (critical — no fallback to today) ─────
+    if (!settlement.period_start || !settlement.period_end) {
+      // Log missing dates event
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          supabase.from('system_events').insert({
+            user_id: user.id,
+            event_type: 'format_missing_dates_requires_manual_entry',
+            severity: 'warning',
+            marketplace_code: settlement.marketplace,
+            settlement_id: settlement.settlement_id,
+            details: {
+              period_start: settlement.period_start || null,
+              period_end: settlement.period_end || null,
+              fingerprint_id: settlement.fingerprint_id || null,
+            },
+          } as any).catch(() => {});
+        }
+      } catch {}
+      return {
+        success: false,
+        error: 'Settlement dates are missing. Please map a date column or enter dates manually before saving.',
+        blockedGates: ['period_start and period_end are required'],
+      };
+    }
+
+    // ─── Fingerprint Lifecycle Gate ─────────────────────────────────
+    if (settlement.fingerprint_id) {
+      const { validateDraftGates, getFingerprintById } = await import('./fingerprint-lifecycle');
+      const fp = await getFingerprintById(settlement.fingerprint_id);
+
+      if (fp && fp.status === 'rejected') {
+        return {
+          success: false,
+          error: 'This format has been rejected. Please re-map columns or contact support.',
+          blockedGates: ['Format rejected'],
+        };
+      }
+
+      if (fp && fp.status === 'draft') {
+        const gateResult = validateDraftGates(settlement, fp, settlement.metadata?.fileFormat);
+
+        if (!gateResult.canSave) {
+          // Log blocked save
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              supabase.from('system_events').insert({
+                user_id: user.id,
+                event_type: 'format_save_blocked',
+                severity: 'warning',
+                marketplace_code: settlement.marketplace,
+                settlement_id: settlement.settlement_id,
+                details: {
+                  fingerprint_id: settlement.fingerprint_id,
+                  missing_fields: gateResult.missingGates,
+                  actor_user_id: user.id,
+                },
+              } as any).catch(() => {});
+            }
+          } catch {}
+
+          return {
+            success: false,
+            error: `Draft format validation failed:\n${gateResult.missingGates.join('\n')}`,
+            blockedGates: gateResult.missingGates,
+          };
+        }
+
+        // If auto-promote is allowed, use the atomic RPC
+        if (gateResult.canAutoPromote) {
+          return await saveWithAtomicPromote(settlement, fp.id);
+        }
+      }
+    }
+
     // ─── Sanity Validation Gate ─────────────────────────────────────
     const sanity = validateSettlementSanity(settlement);
     if (!sanity.passed) {
