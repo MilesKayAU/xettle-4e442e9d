@@ -100,6 +100,15 @@ export default function Auth() {
       toast({ title: "Weak Password", description: "Password must be at least 6 characters long", variant: "destructive" });
       return;
     }
+    // Validate settings PIN
+    if (!signUpData.settingsPin || signUpData.settingsPin.length !== 4 || !/^\d{4}$/.test(signUpData.settingsPin)) {
+      toast({ title: "Settings PIN Required", description: "Please enter a 4-digit settings PIN", variant: "destructive" });
+      return;
+    }
+    if (signUpData.settingsPin !== signUpData.confirmSettingsPin) {
+      toast({ title: "PIN Mismatch", description: "Settings PINs do not match", variant: "destructive" });
+      return;
+    }
     const sanitizedEmail = sanitizeEmail(signUpData.email);
     if (!sanitizedEmail || sanitizedEmail !== signUpData.email.toLowerCase().trim()) {
       toast({ title: "Invalid Email", description: "Please enter a valid email address", variant: "destructive" });
@@ -107,7 +116,7 @@ export default function Auth() {
     }
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpResult, error } = await supabase.auth.signUp({
         email: sanitizedEmail,
         password: signUpData.password,
         options: {
@@ -119,10 +128,21 @@ export default function Auth() {
         toast({ title: "Sign Up Failed", description: error.message, variant: "destructive" });
         return;
       }
+
+      // Store the hashed settings PIN if user was created
+      if (signUpResult?.user?.id) {
+        const pinHash = await hashPin(signUpData.settingsPin);
+        await supabase.from('app_settings').upsert({
+          user_id: signUpResult.user.id,
+          key: 'settings_pin_hash',
+          value: pinHash,
+        } as any, { onConflict: 'user_id,key' });
+      }
+
       toast({ title: "Account Created!", description: "Please check your email to confirm your account." });
       setResendEmail(sanitizedEmail);
       setShowResendVerification(true);
-      setSignUpData({ email: '', password: '', confirmPassword: '', fullName: '' });
+      setSignUpData({ email: '', password: '', confirmPassword: '', fullName: '', settingsPin: '', confirmSettingsPin: '' });
     } catch {
       toast({ title: "Sign Up Failed", description: "An unexpected error occurred", variant: "destructive" });
     } finally {
