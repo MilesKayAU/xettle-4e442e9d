@@ -570,7 +570,7 @@ Return JSON with this structure:
     // Validate marketplace overrides too
     for (const [key, code] of Object.entries(marketplaceOverrides)) {
       if (!existingCodes.has(code)) {
-        console.warn(`[ai-account-mapper] Removing invalid override ${key}: ${code}`)
+        logger.warn(`[ai-account-mapper] Removing invalid override ${key}: ${code}`)
         delete marketplaceOverrides[key]
       }
     }
