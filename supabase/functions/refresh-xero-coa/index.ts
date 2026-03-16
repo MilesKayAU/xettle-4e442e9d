@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
 
     if (!accountsResp.ok) {
       const errText = await accountsResp.text()
-      console.error('Xero accounts error:', accountsResp.status, errText)
+      logger.error('Xero accounts error:', accountsResp.status, errText)
       return new Response(JSON.stringify({ error: `Xero API error: ${accountsResp.status}` }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
