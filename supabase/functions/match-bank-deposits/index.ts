@@ -100,9 +100,11 @@ interface MatchResult {
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req)
-  const preflightResponse = handleCorsPreflightResponse(req)
-  if (preflightResponse) return preflightResponse
+  const origin = req.headers.get("Origin") ?? ""
+  const corsHeaders = getCorsHeaders(origin)
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders })
+  }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!

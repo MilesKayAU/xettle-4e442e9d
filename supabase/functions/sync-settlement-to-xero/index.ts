@@ -502,9 +502,11 @@ async function getXeroToken(supabase: any, userId: string): Promise<XeroToken> {
 }
 
 serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  const preflightResponse = handleCorsPreflightResponse(req);
-  if (preflightResponse) return preflightResponse;
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     // ─── JWT VERIFICATION ──────────────────────────────────────────────
