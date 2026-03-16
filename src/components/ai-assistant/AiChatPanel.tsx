@@ -79,8 +79,8 @@ export default function AiChatPanel({ open, onClose }: { open: boolean; onClose:
         </SheetHeader>
 
         {/* Messages area */}
-        <ScrollArea className="flex-1 px-4 py-3" ref={scrollRef as any}>
-          <div className="space-y-4">
+        <ScrollArea className="flex-1 overflow-hidden" ref={scrollRef as any}>
+          <div className="px-4 py-3 space-y-4">
             {messages.length === 0 && !isLoading && (
               <div className="space-y-3 pt-4">
                 <p className="text-sm text-muted-foreground text-center">
