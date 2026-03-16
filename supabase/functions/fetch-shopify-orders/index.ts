@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
           console.error("[fetch-shopify-orders] upsert error:", upsertErr.message);
         }
       }
-      console.log(`[fetch-shopify-orders] Persisted ${rows.length} orders to shopify_orders`);
+      logger.debug(`[fetch-shopify-orders] Persisted ${rows.length} orders to shopify_orders`);
     }
 
     return new Response(

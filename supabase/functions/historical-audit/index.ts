@@ -295,7 +295,7 @@ Deno.serve(async (req) => {
       },
     } as any);
 
-    console.log(`[historical-audit] User ${userId}: ${results.length} marketplaces audited, ${totalMissing} missing, ${overallReconPct}% reconciled`);
+    logger.debug(`[historical-audit] User ${userId}: ${results.length} marketplaces audited, ${totalMissing} missing, ${overallReconPct}% reconciled`);
 
     return new Response(JSON.stringify({
       success: true,

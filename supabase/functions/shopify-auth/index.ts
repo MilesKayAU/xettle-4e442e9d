@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
         // Non-fatal — token is already saved
       }
 
-      console.log('Shopify token stored successfully for shop:', shop)
+      logger.debug('Shopify token stored successfully for shop:', shop)
 
       return new Response(
         JSON.stringify({ success: true, shop, scope }),
