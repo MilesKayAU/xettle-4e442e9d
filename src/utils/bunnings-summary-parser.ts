@@ -10,6 +10,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import type { StandardSettlement } from './settlement-engine';
 import { parseDateOrEmpty } from './date-parser';
+import { TOL_BUNNINGS_PDF } from '@/constants/reconciliation-tolerance';
 
 // Configure worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -250,7 +251,7 @@ export async function parseBunningsSummaryPdf(
       manualNet +
       otherCharges.inclGst
     ) * 100) / 100;
-    const reconciles = Math.abs(calculatedTotal - netPayout) <= 0.10;
+    const reconciles = Math.abs(calculatedTotal - netPayout) <= TOL_BUNNINGS_PDF;
 
     // ─── Build metadata with full breakdown for analytics ──────────
     const metadata: Record<string, any> = {

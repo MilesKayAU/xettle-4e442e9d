@@ -46,6 +46,7 @@
  */
 
 export const CANONICAL_VERSION = 'v2-10cat';
+import { TOL_LINE_SUM } from '@/constants/reconciliation-tolerance';
 
 // ─── Category Definitions ───────────────────────────────────────────────
 
@@ -212,7 +213,7 @@ export function buildPostingLineItems(
     // Use stored sign as-is — NO sign manipulation (Option A)
     const amount = round2(value);
 
-    if (Math.abs(amount) < 0.01) continue;
+    if (Math.abs(amount) < TOL_LINE_SUM) continue;
 
     lines.push({
       Description: cat.name,

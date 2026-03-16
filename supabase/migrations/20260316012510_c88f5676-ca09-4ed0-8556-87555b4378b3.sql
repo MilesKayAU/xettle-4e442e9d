@@ -1,0 +1,1 @@
+ALTER TABLE public.settlements ADD COLUMN IF NOT EXISTS holdback_amount numeric NOT NULL DEFAULT 0;

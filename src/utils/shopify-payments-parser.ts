@@ -23,6 +23,7 @@
 
 import type { StandardSettlement } from './settlement-engine';
 import { parseDateOrEmpty } from './date-parser';
+import { TOL_PAYOUT_MATCH } from '@/constants/reconciliation-tolerance';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -342,7 +343,7 @@ function parsePayoutLevelCSV(headers: string[], lines: string[]): ShopifyParseRe
 
     // Reconciliation: charges + refunds + adjustments + fees = total
     const calculatedNet = round2(grossSales + refunds + fees + otherAdjustments);
-    const reconciles = Math.abs(calculatedNet - bankDeposit) <= 0.05;
+    const reconciles = Math.abs(calculatedNet - bankDeposit) <= TOL_PAYOUT_MATCH;
 
     // For payout-level, period_start = period_end = payout date
     settlements.push({
@@ -502,7 +503,7 @@ function parseTransactionLevelCSV(headers: string[], lines: string[]): ShopifyPa
     const gstOnFees = round2(Math.abs(feesInclGst / GST_DIVISOR));
 
     const calculatedNet = round2(grossSales + refunds + fees + adjustments);
-    const reconciles = Math.abs(calculatedNet - bankDeposit) <= 0.05;
+    const reconciles = Math.abs(calculatedNet - bankDeposit) <= TOL_PAYOUT_MATCH;
 
     settlements.push({
       marketplace: 'shopify_payments',

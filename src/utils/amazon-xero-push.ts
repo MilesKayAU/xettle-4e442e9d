@@ -4,6 +4,7 @@
  */
 
 import { round2, formatAUD, XERO_ACCOUNT_MAP, type ParsedSettlement } from '@/utils/settlement-parser';
+import { TOL_PAYOUT_MATCH } from '@/constants/reconciliation-tolerance';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -179,7 +180,7 @@ export function buildAmazonInvoiceLineItems(
     }
     xeroTotal = round2(xeroTotal);
     const diff = round2(bankDeposit - xeroTotal);
-    if (diff !== 0 && Math.abs(diff) <= 0.05) {
+    if (diff !== 0 && Math.abs(diff) <= TOL_PAYOUT_MATCH) {
       console.info('[Rounding Adjustment]', { bankDeposit, xeroTotal, diff });
       lineItems.push({
         Description: `Rounding adjustment ${periodLabel}`,
@@ -188,10 +189,10 @@ export function buildAmazonInvoiceLineItems(
         UnitAmount: diff,
         Quantity: 1,
       });
-    } else if (diff !== 0 && Math.abs(diff) > 0.05) {
+    } else if (diff !== 0 && Math.abs(diff) > TOL_PAYOUT_MATCH) {
       console.error('[Rounding BLOCKED]', { bankDeposit, xeroTotal, diff });
       throw new Error(
-        `Rounding discrepancy of ${formatAUD(Math.abs(diff))} exceeds ±$0.05 tolerance. ` +
+        `Rounding discrepancy of ${formatAUD(Math.abs(diff))} exceeds ±$${TOL_PAYOUT_MATCH} tolerance. ` +
         `Bank deposit: ${formatAUD(bankDeposit)}, Calculated total: ${formatAUD(xeroTotal)}. ` +
         `This settlement cannot be pushed to Xero until the discrepancy is resolved.`
       );

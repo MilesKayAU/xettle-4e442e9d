@@ -8,6 +8,7 @@
  */
 
 import type { StandardSettlement } from './settlement-engine';
+import { TOL_BUNNINGS_PDF } from '@/constants/reconciliation-tolerance';
 import type { ColumnMapping } from './file-fingerprint-engine';
 import { findHeaderRow } from './file-fingerprint-engine';
 import { parseDateOrEmpty, detectDateColumn } from './date-parser';
@@ -277,7 +278,7 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
 
     // Reconciliation
     const calculatedNet = round2(grossSales + fees + refunds);
-    const reconciles = netIdx >= 0 ? Math.abs(calculatedNet - netPayout) <= 0.10 : true;
+    const reconciles = netIdx >= 0 ? Math.abs(calculatedNet - netPayout) <= TOL_BUNNINGS_PDF : true;
 
     if (!reconciles) {
       warnings.push(`Settlement ${groupId}: calculated net ($${calculatedNet}) differs from reported net ($${netPayout}) by $${round2(Math.abs(calculatedNet - netPayout))}`);

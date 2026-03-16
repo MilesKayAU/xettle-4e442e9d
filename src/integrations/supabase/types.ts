@@ -1653,6 +1653,7 @@ export type Database = {
           fba_fees: number | null
           gst_on_expenses: number | null
           gst_on_income: number | null
+          holdback_amount: number
           id: string
           is_hidden: boolean
           is_pre_boundary: boolean
@@ -1720,6 +1721,7 @@ export type Database = {
           fba_fees?: number | null
           gst_on_expenses?: number | null
           gst_on_income?: number | null
+          holdback_amount?: number
           id?: string
           is_hidden?: boolean
           is_pre_boundary?: boolean
@@ -1787,6 +1789,7 @@ export type Database = {
           fba_fees?: number | null
           gst_on_expenses?: number | null
           gst_on_income?: number | null
+          holdback_amount?: number
           id?: string
           is_hidden?: boolean
           is_pre_boundary?: boolean

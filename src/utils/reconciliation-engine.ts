@@ -5,6 +5,7 @@
  */
 
 import type { ParsedSettlement } from './settlement-parser';
+import { TOL_PARSER_TOTAL, TOL_COLUMN_TOTALS, TOL_GST_CONSISTENCY } from '@/constants/reconciliation-tolerance';
 
 export interface ReconCheck {
   id: string;
@@ -57,11 +58,11 @@ export function runReconciliation(
     id: 'balance',
     label: 'Balance Check',
     description: 'Verify settlement math balances against bank deposit',
-    status: balanceDiff <= 0.01 ? 'pass' : balanceDiff <= 0.50 ? 'warn' : 'fail',
-    detail: balanceDiff <= 0.01
+    status: balanceDiff <= TOL_PARSER_TOTAL ? 'pass' : balanceDiff <= TOL_GST_CONSISTENCY ? 'warn' : 'fail',
+    detail: balanceDiff <= TOL_PARSER_TOTAL
       ? `Balanced — expected ${fmt(expectedPayout)}, deposit ${fmt(summary.bankDeposit)}`
       : `Imbalance of ${fmt(balanceDiff)} — expected ${fmt(expectedPayout)}, deposit ${fmt(summary.bankDeposit)}`,
-    severity: balanceDiff > 0.50 ? 'critical' : balanceDiff > 0.01 ? 'warning' : 'info',
+    severity: balanceDiff > TOL_GST_CONSISTENCY ? 'critical' : balanceDiff > TOL_PARSER_TOTAL ? 'warning' : 'info',
   });
 
   // ─── 2. Column Totals Check ──────────────────────────────────────
@@ -73,11 +74,11 @@ export function runReconciliation(
     id: 'column_totals',
     label: 'Column Totals',
     description: 'Sum of all line items matches summary totals',
-    status: colDiff <= 0.02 ? 'pass' : colDiff <= 1.00 ? 'warn' : 'fail',
-    detail: colDiff <= 0.02
+    status: colDiff <= TOL_COLUMN_TOTALS ? 'pass' : colDiff <= 1.00 ? 'warn' : 'fail',
+    detail: colDiff <= TOL_COLUMN_TOTALS
       ? `Line sum ${fmt(lineSum)} matches summary ${fmt(summaryGross)}`
       : `Line sum ${fmt(lineSum)} vs summary ${fmt(summaryGross)} — diff ${fmt(colDiff)}`,
-    severity: colDiff > 1.00 ? 'critical' : colDiff > 0.02 ? 'warning' : 'info',
+    severity: colDiff > 1.00 ? 'critical' : colDiff > TOL_COLUMN_TOTALS ? 'warning' : 'info',
   });
 
   // ─── 3. GST Consistency ──────────────────────────────────────────
@@ -90,11 +91,11 @@ export function runReconciliation(
     id: 'gst_consistency',
     label: 'GST Consistency',
     description: 'GST on income aligns with sales ÷ 11',
-    status: gstDiff <= 0.50 ? 'pass' : gstDiff <= 2.00 ? 'warn' : 'fail',
-    detail: gstDiff <= 0.50
+    status: gstDiff <= TOL_GST_CONSISTENCY ? 'pass' : gstDiff <= 2.00 ? 'warn' : 'fail',
+    detail: gstDiff <= TOL_GST_CONSISTENCY
       ? `GST on income ${fmt(summary.gstOnIncome)} ≈ expected ${fmt(expectedGstIncome)}`
       : `GST mismatch — parsed ${fmt(summary.gstOnIncome)} vs expected ${fmt(expectedGstIncome)} (diff ${fmt(gstDiff)})`,
-    severity: gstDiff > 2.00 ? 'critical' : gstDiff > 0.50 ? 'warning' : 'info',
+    severity: gstDiff > 2.00 ? 'critical' : gstDiff > TOL_GST_CONSISTENCY ? 'warning' : 'info',
   });
 
   // ─── 4. Sanity Checks ───────────────────────────────────────────
