@@ -55,11 +55,22 @@ export default function EbayConnectionStatus() {
       }
 
       if (data?.authUrl) {
-        console.log('[eBay OAuth] Redirecting to eBay login...');
+        console.log('[eBay OAuth] Opening eBay login in new window...');
         if (data.state) {
           sessionStorage.setItem('ebay_oauth_state', data.state);
         }
-        window.location.href = data.authUrl;
+        const popup = window.open(data.authUrl, 'ebay_oauth', 'width=600,height=700,scrollbars=yes');
+        if (!popup) {
+          toast.error('Popup blocked — please allow popups for this site and try again.');
+          return;
+        }
+        // Poll for popup close, then refresh status
+        const pollInterval = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(pollInterval);
+            checkStatus();
+          }
+        }, 500);
       } else {
         throw new Error('No authorization URL returned');
       }
