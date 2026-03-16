@@ -160,6 +160,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         apiConnected = !!(tokens && tokens.length > 0);
       } else if (code === 'shopify_payments' || code === 'shopify_orders') {
         apiConnected = !!(data && data.length > 0); // reuse shopify_tokens check
+      } else if (code === 'ebay_au') {
+        const { data: ebayTokens } = await supabase.from('ebay_tokens').select('id').eq('user_id', user.id).limit(1);
+        apiConnected = !!(ebayTokens && ebayTokens.length > 0);
       }
       setIsApiConnected(apiConnected);
 
