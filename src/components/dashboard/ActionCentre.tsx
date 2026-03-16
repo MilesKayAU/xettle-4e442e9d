@@ -827,14 +827,19 @@ export default function ActionCentre({
                         );
                       }
                       const cellRows = getRowsForCell(mp, m);
-                      if (cellRows.length === 0) {
+                      // Use settlement pipeline fallback when no validation rows exist
+                      const fallbackKey = `${mp}_${m}`;
+                      const fallbackPipeline = settlementPipeline.get(fallbackKey);
+                      if (cellRows.length === 0 && !fallbackPipeline) {
                         return (
                           <td key={m} className="text-center py-2.5 px-3">
                             <span className="text-[10px] text-muted-foreground/40">—</span>
                           </td>
                         );
                       }
-                      const pipeline = getPipelineForCell(cellRows);
+                      const pipeline = cellRows.length > 0
+                        ? getPipelineForCell(cellRows)
+                        : fallbackPipeline!;
                       const stageEntries: { key: string; label: string; done: boolean }[] = [
                         { key: 'S', label: 'Settlement uploaded', done: pipeline.settlement },
                          { key: 'X', label: 'Sent to Xero', done: pipeline.xero },
