@@ -1854,6 +1854,31 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                               <span className="font-semibold text-foreground">Net Payout</span>
                               <span className="font-bold text-primary">{formatAUD(s.net_payout)}</span>
                             </div>
+                            {/* Sanity warnings */}
+                            {s.net_payout === 0 && s.sales_ex_gst > 500 && (
+                              <div className="flex items-center gap-1.5 mt-1 text-amber-600 dark:text-amber-400">
+                                <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                                <span className="text-[10px] font-medium">Net is $0 — check column mapping</span>
+                              </div>
+                            )}
+                            {Math.abs(s.fees_ex_gst) > Math.abs(s.sales_ex_gst) * 3 && Math.abs(s.fees_ex_gst) > 500 && (
+                              <div className="flex items-center gap-1.5 mt-1 text-amber-600 dark:text-amber-400">
+                                <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                                <span className="text-[10px] font-medium">Fees seem disproportionate to sales</span>
+                              </div>
+                            )}
+                            {Math.abs(s.sales_ex_gst) > 10_000_000 && (
+                              <div className="flex items-center gap-1.5 mt-1 text-destructive">
+                                <XCircle className="h-3 w-3 flex-shrink-0" />
+                                <span className="text-[10px] font-medium">Sales value implausibly large — likely wrong mapping</span>
+                              </div>
+                            )}
+                            {s.metadata?.sanity_failed && (
+                              <div className="flex items-center gap-1.5 mt-1 text-destructive">
+                                <XCircle className="h-3 w-3 flex-shrink-0" />
+                                <span className="text-[10px] font-medium">⛔ This settlement will be blocked on save — data integrity check failed</span>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
