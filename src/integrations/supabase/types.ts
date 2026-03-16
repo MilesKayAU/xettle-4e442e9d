@@ -1625,6 +1625,9 @@ export type Database = {
           reconciliation_status: string | null
           refunds: number | null
           reimbursements: number | null
+          repost_chain_id: string | null
+          repost_of_invoice_id: string | null
+          repost_reason: string | null
           sales_principal: number | null
           sales_shipping: number | null
           seller_fees: number | null
@@ -1689,6 +1692,9 @@ export type Database = {
           reconciliation_status?: string | null
           refunds?: number | null
           reimbursements?: number | null
+          repost_chain_id?: string | null
+          repost_of_invoice_id?: string | null
+          repost_reason?: string | null
           sales_principal?: number | null
           sales_shipping?: number | null
           seller_fees?: number | null
@@ -1753,6 +1759,9 @@ export type Database = {
           reconciliation_status?: string | null
           refunds?: number | null
           reimbursements?: number | null
+          repost_chain_id?: string | null
+          repost_of_invoice_id?: string | null
+          repost_reason?: string | null
           sales_principal?: number | null
           sales_shipping?: number | null
           seller_fees?: number | null
