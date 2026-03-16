@@ -124,7 +124,22 @@ export default function AccountMapperCard() {
 
   // ─── Clone COA banner renderer ───────────────────────────────────
   const renderCloneBanner = () => {
-    if (!splitByMarketplace || uncoveredMarketplaces.length === 0 || coveredMarketplaces.length === 0 || !isAdmin) {
+    if (!splitByMarketplace || !isAdmin) return null;
+
+    // No-template-available: uncovered marketplaces exist but no covered template
+    if (uncoveredMarketplaces.length > 0 && coveredMarketplaces.length === 0) {
+      return (
+        <Alert className="border-amber-300 bg-amber-50">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+          <AlertDescription className="text-xs text-amber-900">
+            <strong>{uncoveredMarketplaces.join(', ')}</strong> {uncoveredMarketplaces.length === 1 ? 'has' : 'have'} no accounts in your COA, and no marketplace template is available yet.
+            Create accounts manually or confirm a base marketplace structure first.
+          </AlertDescription>
+        </Alert>
+      );
+    }
+
+    if (uncoveredMarketplaces.length === 0) {
       return null;
     }
 
