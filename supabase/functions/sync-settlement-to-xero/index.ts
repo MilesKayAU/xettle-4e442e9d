@@ -58,6 +58,8 @@ interface InvoiceRequest {
   country?: string;
   contactName?: string;
   netAmount?: number;
+  // Invoice status: 'DRAFT' (default, safe) or 'AUTHORISED' (stricter gates apply)
+  invoiceStatus?: 'DRAFT' | 'AUTHORISED';
   // Settlement data for CSV attachment
   settlementData?: Record<string, any>;
   // Rollback fields
