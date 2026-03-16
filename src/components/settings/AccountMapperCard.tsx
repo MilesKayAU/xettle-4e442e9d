@@ -507,18 +507,9 @@ export default function AccountMapperCard() {
           }
         }
 
-        const { error } = await supabase.from('app_settings').upsert({
-          user_id: user.id,
-          key: 'accounting_xero_account_codes',
-          value: JSON.stringify(finalCodes),
-        } as any, { onConflict: 'user_id,key' });
-        if (error) throw error;
-
-        await supabase.from('app_settings').upsert({
-          user_id: user.id,
-          key: 'ai_mapper_status',
-          value: 'confirmed',
-        } as any, { onConflict: 'user_id,key' });
+        const { confirmMappings } = await import('@/actions/accountMappings');
+        const result = await confirmMappings(finalCodes);
+        if (!result.success) throw new Error(result.error);
 
         const updatedMapping: Record<string, MappingEntry> = {};
         for (const cat of CATEGORIES) {
@@ -537,8 +528,6 @@ export default function AccountMapperCard() {
         }
         setMapping(updatedMapping);
         setState('confirmed');
-        // Clean up draft after successful confirm
-        await supabase.from('app_settings').delete().eq('user_id', user.id).eq('key', 'accounting_xero_account_codes_draft');
         toast.success('Account mapping confirmed — all Xero pushes will use these codes');
       } catch (err: any) {
         toast.error(`Failed to save mapping: ${err.message}`);

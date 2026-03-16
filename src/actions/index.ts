@@ -138,3 +138,14 @@ export {
   type CloneResult,
   type CloneSystemEvent,
 } from './coaClone';
+
+// ─── Account Mappings (canonical source of truth) ───────────────────────────
+export {
+  getMappings,
+  getMappingsRaw,
+  getEffectiveMapping,
+  saveDraftMappings,
+  confirmMappings,
+  mergeIntoConfirmedMappings,
+  type AccountMappings,
+} from './accountMappings';
