@@ -775,7 +775,7 @@ serve(async (req) => {
         updated++;
         const refHash = ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null;
 
-        await supabase.from('xero_accounting_matches').upsert({
+        await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: settlementId,
           marketplace_code: detectedMarketplace,
@@ -790,7 +790,7 @@ serve(async (req) => {
           matched_contact: contactName,
           matched_reference: ref,
           reference_hash: refHash,
-        }, { onConflict: 'user_id,settlement_id' });
+        });
       }
     }
     console.log(`[step-4] Reference matching: ${updated} NEW settlements linked`);
