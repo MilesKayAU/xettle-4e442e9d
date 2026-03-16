@@ -531,7 +531,7 @@ Return JSON with this structure:
           if (args[cat]) mapping[cat] = args[cat]
         }
       } catch (e) {
-        console.error('Failed to parse AI tool call response:', e)
+        logger.error('Failed to parse AI tool call response:', e)
       }
     }
 
