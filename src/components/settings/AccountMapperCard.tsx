@@ -632,6 +632,53 @@ export default function AccountMapperCard() {
           </div>
         )}
 
+        {/* Per-marketplace use_global_mappings toggles */}
+        {getEffectiveMarketplaces().length > 1 && (
+          <div className="mt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Per-marketplace mapping mode</p>
+            <div className="space-y-2">
+              {getEffectiveMarketplaces().map(mp => (
+                <div key={mp} className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium">{mp}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {globalMappingFlags[mp] !== false
+                        ? 'Uses global account mappings as fallback'
+                        : 'Requires explicit mappings — no fallback to global'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`global-${mp}`} className="text-[10px] text-muted-foreground">
+                      Use global
+                    </Label>
+                    <Switch
+                      id={`global-${mp}`}
+                      checked={globalMappingFlags[mp] !== false}
+                      onCheckedChange={async (checked) => {
+                        const newFlags = { ...globalMappingFlags, [mp]: checked };
+                        setGlobalMappingFlags(newFlags);
+                        // Persist to marketplace_connections.settings
+                        try {
+                          const { data: { user } } = await supabase.auth.getUser();
+                          if (!user) return;
+                          await supabase
+                            .from('marketplace_connections')
+                            .update({ settings: { use_global_mappings: checked } } as any)
+                            .eq('user_id', user.id)
+                            .eq('marketplace_name', mp);
+                          toast.success(`${mp}: ${checked ? 'global mappings enabled' : 'explicit mappings required'}`);
+                        } catch (e) {
+                          console.error('Failed to save use_global_mappings:', e);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <TrackingCategoryPrompt />
         <Button variant="outline" size="sm" onClick={runMapper} className="gap-2">
           <RefreshCw className="h-3 w-3" />
