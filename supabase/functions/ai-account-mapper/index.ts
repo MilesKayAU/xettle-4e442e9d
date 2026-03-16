@@ -272,7 +272,7 @@ Deno.serve(async (req) => {
     const CATEGORY_KEYWORDS: Record<string, string[]> = {
       'Sales': ['sales', 'revenue', 'income'],
       'Shipping': ['shipping', 'freight', 'postage', 'delivery'],
-      'Seller Fees': ['seller fee', 'referral fee', 'commission', 'selling fee'],
+      'Seller Fees': ['seller fee', 'seller fees', 'referral fee', 'commission', 'selling fee', 'fees'],
       'FBA Fees': ['fba', 'fulfilment', 'fulfillment', 'pick and pack'],
       'Storage Fees': ['storage', 'warehouse', 'inventory fee'],
       'Refunds': ['refund', 'return'],
