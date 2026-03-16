@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useTrialStatus } from '@/hooks/use-trial-status';
 import TrialBanner from '@/components/shared/TrialBanner';
+import ScopeBanner from '@/components/shared/ScopeBanner';
 
 export default function AuthenticatedLayout() {
   const [userId, setUserId] = useState<string | undefined>();
@@ -21,6 +22,7 @@ export default function AuthenticatedLayout() {
 
   return (
     <>
+      <ScopeBanner />
       <TrialBanner status={trialInfo.status} daysRemaining={trialInfo.daysRemaining} />
       <Outlet />
     </>
