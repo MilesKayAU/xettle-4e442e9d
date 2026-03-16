@@ -461,11 +461,9 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
     if (!confirm(`Delete auto-imported settlement ${settlement.settlement_id}?`)) return;
     setDeleting(settlement.id);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      await supabase.from('settlement_lines').delete().eq('user_id', user.id).eq('settlement_id', settlement.settlement_id);
-      await supabase.from('settlement_unmapped').delete().eq('user_id', user.id).eq('settlement_id', settlement.settlement_id);
-      await supabase.from('settlements').delete().eq('id', settlement.id);
+      const { deleteSettlement } = await import('@/actions/settlements');
+      const result = await deleteSettlement(settlement.id);
+      if (!result.success) throw new Error(result.error);
       toast.success(`Settlement ${settlement.settlement_id} deleted`);
       await loadApiSettlements();
     } catch (err: any) {
