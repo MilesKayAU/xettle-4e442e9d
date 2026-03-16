@@ -562,7 +562,7 @@ Deno.serve(async (req) => {
             is_reconciled: det.is_reconciled ?? null,
             bank_account_name: det.bank_account_name ?? null,
           },
-        }, { onConflict: 'user_id,marketplace_code,country_code' })
+        }, { onConflict: 'user_id,marketplace_code' })
       if (!upsertErr) marketplaces_created++
       else console.error(`Failed to upsert marketplace_connection for ${det.marketplace}:`, upsertErr)
     }
