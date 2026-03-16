@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     cutoffDate.setDate(cutoffDate.getDate() - days);
     const cutoffStr = cutoffDate.toISOString().split('T')[0];
 
-    console.log(`[historical-audit] User ${userId}: Auditing last ${days} days from ${cutoffStr}`);
+    logger.debug(`[historical-audit] User ${userId}: Auditing last ${days} days from ${cutoffStr}`);
 
     const results: AuditResult[] = [];
 
