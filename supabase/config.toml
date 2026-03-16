@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.rescan-xero-invoice-match]
 verify_jwt = false
+
+[functions.preview-xettle-invoice-payload]
+verify_jwt = false

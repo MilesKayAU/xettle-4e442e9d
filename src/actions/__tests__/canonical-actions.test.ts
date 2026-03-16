@@ -170,9 +170,20 @@ describe('Canonical action guardrails', () => {
     expect(violations, `Direct rescan-xero-invoice-match invocations found:\n${formatViolations(violations)}`).toEqual([]);
   });
 
+  it('no direct invoke of preview-xettle-invoice-payload outside canonical actions', () => {
+    const violations = scanForPattern(/functions\.invoke\(['"]preview-xettle-invoice-payload['"]/);
+    expect(violations, `Direct preview-xettle-invoice-payload invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
   it('no direct writes to xero_invoice_cache outside canonical actions', () => {
     const violations = scanForPattern(/from\(['"]xero_invoice_cache['"]\)\.\s*(?:insert|upsert|update|delete)/);
     expect(violations, `Direct xero_invoice_cache writes found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no local preview builder exists outside canonical actions', () => {
+    // Prevent drift: no component should have its own buildXettlePreviewPayload
+    const violations = scanForPattern(/buildXettlePreviewPayload/);
+    expect(violations, `Local preview builder found outside canonical actions:\n${formatViolations(violations)}`).toEqual([]);
   });
 
   it('no UI files implement their own tier computation (must use supportPolicy)', () => {
