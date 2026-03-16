@@ -34,7 +34,9 @@ export {
   pushSettlementToXero,
   rollbackFromXero,
   triggerAutoPost,
+  checkPushCategoryCoverage,
   type PushResult,
+  type PushEligibility,
   type RollbackResult,
 } from './xeroPush';
 
