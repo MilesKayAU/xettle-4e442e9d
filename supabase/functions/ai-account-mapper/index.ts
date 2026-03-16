@@ -321,7 +321,7 @@ Deno.serve(async (req) => {
       for (const [cat, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
         const exclusions = CATEGORY_EXCLUSIONS[cat] || []
         // Find ALL accounts matching marketplace + category (not just the first)
-        const candidates = revenueAccounts.filter((a: any) => {
+        const candidates = allActiveAccounts.filter((a: any) => {
           const nameLower = (a.name || '').toLowerCase()
           const hasMarketplace = mpKeywords.some((kw: string) => nameLower.includes(kw))
           const hasCategory = catKeywords.some((kw: string) => nameLower.includes(kw))

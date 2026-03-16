@@ -50,6 +50,7 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   'Seller Fees': 'Referral & selling fees charged by marketplace',
   'FBA Fees': 'Fulfilment, pick & pack, delivery fees',
   'Storage Fees': 'Warehouse & inventory storage fees',
+  'Advertising Costs': 'Sponsored products, PPC ads & campaign spend',
   'Other Fees': 'Miscellaneous marketplace charges',
 };
 
