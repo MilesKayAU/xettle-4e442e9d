@@ -352,7 +352,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err: any) {
-    console.error('[auto-post-settlement] Error:', err);
+    logger.error('[auto-post-settlement] Error:', err);
     return new Response(JSON.stringify({ success: false, error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
