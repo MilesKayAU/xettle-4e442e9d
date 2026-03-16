@@ -1,0 +1,1 @@
+UPDATE public.settlements SET is_hidden = true WHERE marketplace = 'kogan' AND period_start = period_end AND gst_on_income > sales_principal AND sales_principal > 0;

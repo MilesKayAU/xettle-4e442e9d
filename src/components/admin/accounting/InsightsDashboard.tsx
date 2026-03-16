@@ -104,9 +104,12 @@ export default function InsightsDashboard() {
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
-      // Filter out any corrupted rows with impossibly large values (bad CSV parses)
+      // Filter out any corrupted rows with impossibly large values or bad GST
       const data = (settlementsRes.data || []).filter(r => 
-        r.is_hidden === false && Math.abs(r.sales_principal || 0) < 10_000_000
+        r.is_hidden === false && 
+        Math.abs(r.sales_principal || 0) < 10_000_000 &&
+        // GST cannot exceed sales principal (10% in AU, max ~15% globally)
+        (r.gst_on_income || 0) <= (r.sales_principal || 0) * 0.5
       );
       if (data.length === 0) {
         setStats([]);
