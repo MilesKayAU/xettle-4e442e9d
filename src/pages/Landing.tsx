@@ -345,6 +345,185 @@ export default function Landing() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
+          POST TO XERO SAFELY — SAFETY SECTION
+          ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-4 bg-card border-y border-border">
+        <div className="container-custom max-w-5xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Accountant-grade posting
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground">
+                Post to Xero safely.
+                <br />
+                <span className="text-muted-foreground text-2xl md:text-3xl font-semibold">Every time. No exceptions.</span>
+              </h2>
+              <p className="text-lg text-muted-foreground">
+                Posting marketplace settlements to Xero shouldn't break your books. Xettle verifies totals, checks for duplicates, prevents locked-period edits, and keeps a full audit trail — so every settlement posts cleanly.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { icon: Fingerprint, title: 'Duplicate prevention', desc: 'Fingerprint-based deduplication catches re-uploads, split-month overlaps, and tool migrations before they reach Xero.' },
+                { icon: Repeat, title: 'Safe void & repost', desc: 'Void the original, repost with a replacement invoice. Full chain of custody. No orphaned entries.' },
+                { icon: Eye, title: 'Audit trail', desc: 'Every posting is logged with the raw settlement payload, Xero response, and timestamp. Your accountant can verify any invoice.' },
+                { icon: AlertTriangle, title: 'Exception inbox', desc: 'Missing contacts, attachment failures, posting blocks — all caught and surfaced. Nothing silently fails.' },
+                { icon: Lock, title: 'Period lock safety', desc: 'Locked months stay locked. Xettle blocks postings into finalised periods automatically.' },
+                { icon: Activity, title: 'Bank verification', desc: 'Optionally require the bank deposit to match before posting. Configurable per marketplace rail.' },
+              ].map(({ icon: Icon, title, desc }) => (
+                <div key={title} className="p-4 rounded-xl border border-border bg-background">
+                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+                    <Icon className="h-4 w-4 text-primary" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground mb-1">{title}</h3>
+                  <p className="text-xs text-muted-foreground">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
+          RECONCILIATION ENGINE
+          ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-4">
+        <div className="container-custom max-w-5xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold mb-4">
+              <ListChecks className="h-3.5 w-3.5" />
+              Reconciliation engine
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              Reconcile every payout before posting.
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Most tools push invoices and hope for the best. Xettle reconciles the settlement against your bank feed first — so you know the numbers are right before anything reaches Xero.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="p-6 rounded-2xl border border-border bg-card text-center">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <Receipt className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground mb-2">Settlement verification</h3>
+              <p className="text-sm text-muted-foreground">
+                Every line item is validated — sales, fees, refunds, GST. Totals must balance before the settlement is marked verified.
+              </p>
+            </div>
+            <div className="p-6 rounded-2xl border border-border bg-card text-center">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <DollarSign className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground mb-2">Bank deposit matching</h3>
+              <p className="text-sm text-muted-foreground">
+                Match the settlement payout to a real bank transaction in Xero. Tolerance-based matching handles rounding differences.
+              </p>
+            </div>
+            <div className="p-6 rounded-2xl border border-border bg-card text-center">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <BadgeCheck className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground mb-2">Coverage tracking</h3>
+              <p className="text-sm text-muted-foreground">
+                See which periods have settlements, which are missing, and which have gaps — across every marketplace, on one screen.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
+          MULTI-MARKETPLACE COMPLEXITY
+          ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-4 bg-card border-y border-border">
+        <div className="container-custom max-w-5xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold mb-6">
+                <Layers className="h-3.5 w-3.5" />
+                Not just one marketplace
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
+                Built for the mess of<br />real multi-marketplace selling.
+              </h2>
+              <p className="text-lg text-muted-foreground mb-8">
+                Most accounting tools assume one marketplace, one format, one schedule. Australian sellers don't work like that.
+              </p>
+              <div className="space-y-4">
+                {[
+                  { mp: 'Amazon AU', detail: 'Fortnightly TSV settlements via API' },
+                  { mp: 'Shopify', detail: 'Daily payouts, multiple sub-channels' },
+                  { mp: 'eBay AU', detail: 'Managed payments, fortnightly cycles' },
+                  { mp: 'Bunnings', detail: 'Monthly CSV remittance' },
+                  { mp: 'Kogan', detail: 'Monthly CSV with variable commission' },
+                  { mp: 'Catch / MyDeal / BigW', detail: 'Woolworths MarketPlus — auto-split' },
+                ].map(({ mp, detail }) => (
+                  <div key={mp} className="flex items-start gap-3">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-1" />
+                    <div>
+                      <span className="text-sm font-semibold text-foreground">{mp}</span>
+                      <span className="text-sm text-muted-foreground"> — {detail}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-8 rounded-2xl border border-border bg-background">
+              <h3 className="text-lg font-semibold text-foreground mb-6">What other tools miss:</h3>
+              <div className="space-y-5">
+                {[
+                  { problem: 'Mixed settlement files', solution: 'Auto-split into separate marketplace settlements' },
+                  { problem: 'Different payout schedules', solution: 'Coverage map shows gaps across all channels' },
+                  { problem: 'Commission rate changes', solution: 'Fee observation engine detects and alerts' },
+                  { problem: 'Bank deposits that don\'t match', solution: 'Tolerance-based matching with manual override' },
+                  { problem: 'CSV formats keep changing', solution: 'Fingerprint learning adapts to new layouts' },
+                ].map(({ problem, solution }) => (
+                  <div key={problem}>
+                    <p className="text-sm font-medium text-destructive mb-0.5">❌ {problem}</p>
+                    <p className="text-sm text-muted-foreground">→ {solution}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
+          NOT JUST UPLOADS — FULL SETTLEMENT ENGINE
+          ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-4">
+        <div className="container-custom max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
+            Not just uploads.<br />A full settlement engine.
+          </h2>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-12">
+            Xettle doesn't just create invoices. It tracks every settlement, verifies payouts, matches deposits, handles exceptions, and keeps your accounting clean across every marketplace — with a complete audit trail.
+          </p>
+          <div className="grid md:grid-cols-4 gap-4 text-left">
+            {[
+              { label: 'Settlement tracking', desc: 'Every payout period, every marketplace, one view' },
+              { label: 'Payout verification', desc: 'Totals validated before anything posts' },
+              { label: 'Bank matching', desc: 'Deposits reconciled against settlements' },
+              { label: 'Exception handling', desc: 'Problems surfaced, never hidden' },
+              { label: 'Duplicate guard', desc: 'Fingerprint dedup prevents double-posting' },
+              { label: 'Safe repost', desc: 'Void and replace with full audit chain' },
+              { label: 'Period locks', desc: 'Finalised months stay protected' },
+              { label: 'Posting modes', desc: 'Per-rail control over how each channel posts' },
+            ].map(({ label, desc }) => (
+              <div key={label} className="p-4 rounded-xl border border-border bg-card">
+                <p className="text-sm font-semibold text-foreground mb-1">{label}</p>
+                <p className="text-xs text-muted-foreground">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
           SOCIAL PROOF / STATS
           ════════════════════════════════════════════════════════════════════ */}
       <section className="py-20 px-4 bg-card border-y border-border">
@@ -362,9 +541,9 @@ export default function Landing() {
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
-              <p className="text-4xl font-bold text-primary mb-3">3 min</p>
+              <p className="text-4xl font-bold text-primary mb-3">0</p>
               <p className="text-sm text-muted-foreground">
-                Settlement verification that used to take 3 hours now takes 3 minutes
+                Duplicate invoices posted — fingerprint dedup catches every one
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
