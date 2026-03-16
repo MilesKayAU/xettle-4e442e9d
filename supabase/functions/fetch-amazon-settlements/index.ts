@@ -412,7 +412,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
 
     try {
       const accessToken = await refreshAccessToken(amazonToken);
-      console.log(`[Sync] Got access token for user ${userId}`);
+      logger.debug(`[Sync] Got access token for user ${userId}`);
 
       const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
