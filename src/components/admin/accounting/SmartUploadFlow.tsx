@@ -2156,10 +2156,26 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
             {/* Reviewing: show Save + Collapse */}
             {isReviewing && (
               <div className="flex flex-col gap-1.5">
-                <Button size="default" className="gap-2 font-semibold" onClick={() => onProcess(idx)}>
-                  <CheckCircle2 className="h-4 w-4" />
-                  Confirm & Save
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        size="default"
+                        className="gap-2 font-semibold"
+                        disabled={readiness ? !readiness.canSave : false}
+                        onClick={() => onProcess(idx)}
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Confirm & Save
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {readiness && !readiness.canSave && (
+                    <TooltipContent side="left" className="max-w-xs text-xs">
+                      {readiness.errorMessage}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
                 <Button size="sm" variant="ghost" className="text-xs" onClick={() => onSetStatus(idx, 'detected')}>
                   Collapse
                 </Button>
