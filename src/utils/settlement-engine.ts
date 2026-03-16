@@ -565,7 +565,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
               period_end: settlement.period_end || null,
               fingerprint_id: settlement.fingerprint_id || null,
             },
-          } as any).catch(() => {});
+          } as any).then(() => {});
         }
       } catch {}
       return {
