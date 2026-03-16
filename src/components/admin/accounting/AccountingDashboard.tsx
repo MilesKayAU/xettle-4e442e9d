@@ -46,6 +46,7 @@ import SafeRepostModal from '@/components/admin/accounting/SafeRepostModal';
 import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
 import ExceptionsInbox from '@/components/admin/accounting/ExceptionsInbox';
 import PeriodLockManager from '@/components/admin/accounting/PeriodLockManager';
+import FormatInspector from '@/components/admin/accounting/FormatInspector';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
