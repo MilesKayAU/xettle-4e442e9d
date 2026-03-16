@@ -498,7 +498,7 @@ Deno.serve(async (req) => {
 
         const { error: upsertError } = await userAdminClient
           .from('settlements')
-          .upsert(settlement, { onConflict: 'user_id,settlement_id' })
+          .upsert(settlement, { onConflict: 'user_id,marketplace,settlement_id' })
 
         if (upsertError) {
           console.error(`[fetch-ebay-settlements] Upsert failed for payout ${payout.payoutId}:`, upsertError)
