@@ -1648,6 +1648,42 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
   const marketplace = df.overrideMarketplace || detection?.marketplace;
   const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
   const colorDot = MARKETPLACE_COLORS[marketplace || ''] || 'bg-muted-foreground';
+  const [readinessOpen, setReadinessOpen] = useState(false);
+
+  // Compute bookkeeper readiness for review mode
+  const readiness = useMemo(() => {
+    if (status !== 'reviewing' || !settlements || settlements.length === 0) return null;
+    // Aggregate check across all settlements in this file
+    const aggregated: StandardSettlement = {
+      ...settlements[0],
+      sales_ex_gst: settlements.reduce((s, x) => s + x.sales_ex_gst, 0),
+      fees_ex_gst: settlements.reduce((s, x) => s + x.fees_ex_gst, 0),
+      net_payout: settlements.reduce((s, x) => s + x.net_payout, 0),
+      gst_on_sales: settlements.reduce((s, x) => s + x.gst_on_sales, 0),
+      gst_on_fees: settlements.reduce((s, x) => s + x.gst_on_fees, 0),
+      reconciles: settlements.every(s => s.reconciles),
+      period_start: settlements.reduce((a, s) => s.period_start < a ? s.period_start : a, settlements[0].period_start),
+      period_end: settlements.reduce((a, s) => s.period_end > a ? s.period_end : a, settlements[0].period_end),
+    };
+    // Determine hasLineItems based on marketplace type
+    const mp = marketplace || '';
+    const hasLineItems = ['woolworths_marketplus', 'shopify_orders', 'shopify_payments'].includes(mp)
+      || (detection?.recordCount != null && detection.recordCount > 1)
+      || mp === 'bunnings'; // Bunnings writes summary lines
+    return validateBookkeeperMinimumData({
+      settlement: aggregated,
+      hasLineItems,
+      lineItemsExplicitlyNone: aggregated.metadata?.line_items === 'none',
+      reconciles: aggregated.reconciles,
+    });
+  }, [status, settlements, marketplace, detection]);
+
+  // Auto-expand readiness panel when there are failures/warnings
+  useEffect(() => {
+    if (readiness && (!readiness.canSave || readiness.checks.some(c => c.status === 'warn'))) {
+      setReadinessOpen(true);
+    }
+  }, [readiness]);
 
   // Aggregate settlement preview
   const previewData = settlements && settlements.length > 0
