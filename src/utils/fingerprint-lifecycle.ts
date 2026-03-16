@@ -108,7 +108,7 @@ export function validateDraftGates(
       warnings.push('PDF formats require manual promotion.');
     }
 
-    if (fingerprint.parser_type !== 'generic') {
+    if (fingerprint.parser_type !== 'generic' && fingerprint.parser_type !== 'ai') {
       canAutoPromote = false;
       warnings.push(`Parser type "${fingerprint.parser_type}" requires manual promotion.`);
     }
