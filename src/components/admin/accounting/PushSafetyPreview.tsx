@@ -132,11 +132,13 @@ export default function PushSafetyPreview({
       const { data: { user } } = await supabase.auth.getUser();
       let coaMap = new Map<string, { name: string; type: string; active: boolean }>();
       let userCodes: Record<string, string> = {};
+      let lockedMonths = new Set<string>();
 
       if (user) {
-        const [coaRes, codesRes] = await Promise.all([
+        const [coaRes, codesRes, locksRes] = await Promise.all([
           supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, is_active').eq('user_id', user.id),
           supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'accounting_xero_account_codes').maybeSingle(),
+          supabase.from('period_locks').select('period_month').eq('user_id', user.id).is('unlocked_at', null),
         ]);
         for (const acc of (coaRes.data || [])) {
           if (acc.account_code) {
@@ -150,6 +152,7 @@ export default function PushSafetyPreview({
         if (codesRes.data?.value) {
           try { userCodes = JSON.parse(codesRes.data.value); } catch { /* */ }
         }
+        (locksRes.data || []).forEach(l => lockedMonths.add(l.period_month));
       }
 
       const results = [];
@@ -213,14 +216,18 @@ export default function PushSafetyPreview({
           }
         }
 
+        // ─── Period lock check ───
+        const periodMonth = s.period_end?.substring(0, 7);
+        const periodLocked = periodMonth ? lockedMonths.has(periodMonth) : false;
+
         // Build line items for display using canonical builder
         const resolver = createAccountCodeResolver(userCodes);
         const mpLabel = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
         const xeroLines = buildPostingLineItems(settlement as SettlementForPosting, resolver, mpLabel);
         const lineItems = toLineItemPreviews(xeroLines);
 
-        // Build validation checks (now with CoA awareness + already-in-Xero)
-        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck);
+        // Build validation checks (now with CoA awareness + already-in-Xero + period lock)
+        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck, periodLocked, periodMonth);
 
         const contactName = MARKETPLACE_CONTACTS[settlement.marketplace] || `${settlement.marketplace} Marketplace`;
         const reference = `Xettle-${settlement.settlement_id}`;
