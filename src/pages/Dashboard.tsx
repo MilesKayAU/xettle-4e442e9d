@@ -27,7 +27,7 @@ import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
 import AskAiButton from '@/components/ai-assistant/AskAiButton';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
 import DailyTaskStrip from '@/components/dashboard/DailyTaskStrip';
@@ -87,6 +87,25 @@ function SetupInProgressBanner({ show: showProp }: { show?: boolean }) {
       >
         Continue setup →
       </a>
+    </div>
+  );
+}
+
+function SettingsAccordion({ title, description, defaultOpen = false, children }: { title: string; description: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-muted/30 transition-colors"
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+        </div>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="px-5 pb-5 pt-1">{children}</div>}
     </div>
   );
 }
@@ -939,36 +958,52 @@ export default function Dashboard() {
         {/* ─── Settings ──────────────────────────────────────────────── */}
         {activeView === 'settings' && (
           <ErrorBoundary>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
                 <h2 className="text-2xl font-bold text-foreground">Settings</h2>
-                <p className="text-muted-foreground mt-1">
-                  Manage API connections, account mappings, and reconciliation preferences.
+                <p className="text-sm text-muted-foreground mt-1">
+                  Manage connections, account mappings, posting rules, and reconciliation preferences.
                 </p>
               </div>
-              <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                <ApiConnectionsPanel
-                  isPaid={true}
-                  syncCutoffDate={undefined}
-                  onSettlementsAutoFetched={async () => {
-                    // Refresh settlements if needed
+
+              <SettingsAccordion title="API Connections" description="Connect marketplaces and accounting integrations" defaultOpen>
+                <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+                  <ApiConnectionsPanel
+                    isPaid={true}
+                    syncCutoffDate={undefined}
+                    onSettlementsAutoFetched={async () => {}}
+                    onRequestSettings={() => {}}
+                    onFetchStateChange={() => {}}
+                  />
+                </Suspense>
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts">
+                <DestinationAccountMapper />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Account Mapper" description="AI-assisted account code suggestions and overrides">
+                <AccountMapperCard />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Destination Posting Mode" description="Configure how each marketplace rail posts to Xero">
+                <RailPostingSettings />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Accounting Boundary" description="Set the start date and backfill horizon for settlement processing">
+                <AccountingBoundarySettings
+                  xeroConnected={xeroConnected}
+                  onConnectXero={() => {
+                    setWizardInitialStep(2);
+                    setShowWizard(true);
                   }}
-                  onRequestSettings={() => {}}
-                  onFetchStateChange={() => {}}
+                  onGoToUpload={() => switchView('smart_upload')}
                 />
-              </Suspense>
-              <DestinationAccountMapper />
-              <AccountMapperCard />
-              <RailPostingSettings />
-              <AccountingBoundarySettings
-                xeroConnected={xeroConnected}
-                onConnectXero={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onGoToUpload={() => switchView('smart_upload')}
-              />
-              <PaymentVerificationSettings />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules">
+                <PaymentVerificationSettings />
+              </SettingsAccordion>
             </div>
           </ErrorBoundary>
         )}
