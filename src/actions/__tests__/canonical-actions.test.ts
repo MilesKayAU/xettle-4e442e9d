@@ -46,17 +46,15 @@ function findTsFiles(dir: string, excludeDirs: string[] = []): string[] {
  * Everything else must go through src/actions/*.
  */
 const ALLOWED_FILES = [
-  // Canonical action modules (they ARE the source of truth)
   'actions/settlements.ts',
   'actions/marketplaces.ts',
   'actions/xeroPush.ts',
   'actions/repost.ts',
   'actions/xeroReadiness.ts',
   'actions/scopeConsent.ts',
+  'actions/xeroInvoice.ts',
   'actions/index.ts',
-  // Integration files (auto-generated, read-only)
   'integrations/',
-  // Policy module (read-only constants, no DB writes)
   'policy/',
 ];
 
