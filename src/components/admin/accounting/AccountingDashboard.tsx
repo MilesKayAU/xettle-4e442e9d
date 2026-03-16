@@ -894,9 +894,6 @@ export default function AccountingDashboard() {
               <TabsTrigger value="auto-imported" className="gap-1.5">
                 <CloudDownload className="h-3.5 w-3.5" /> Auto-Imported
               </TabsTrigger>
-              <TabsTrigger value="settings" className="gap-1.5">
-                <Settings className="h-3.5 w-3.5" /> Settings
-              </TabsTrigger>
               <TabsTrigger value="exceptions" className="gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5" /> Exceptions
               </TabsTrigger>
