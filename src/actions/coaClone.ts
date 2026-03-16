@@ -14,9 +14,11 @@
  * - Clone does NOT change support tier or push gating
  */
 
+import { supabase } from '@/integrations/supabase/client';
 import { createXeroAccounts, type CreateXeroAccountInput } from './xeroAccounts';
 import {
   findTemplateAccounts,
+  getMarketplaceCoverage,
   generateNewAccountName,
   type TemplateAccount,
 } from './coaCoverage';
