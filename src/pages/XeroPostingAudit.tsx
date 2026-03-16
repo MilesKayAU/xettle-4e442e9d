@@ -18,9 +18,16 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, CheckCircle2, AlertTriangle, ExternalLink, Search, Shield } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ArrowLeft, CheckCircle2, AlertTriangle, ExternalLink, Search, Shield, Download, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
+import { exportAuditCsv, type AuditExportFilters } from '@/actions/auditExport';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 type AuditCategory = 'all' | 'xettle_posted' | 'external_detected' | 'unlinked';
