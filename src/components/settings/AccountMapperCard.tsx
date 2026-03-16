@@ -330,60 +330,62 @@ export default function AccountMapperCard() {
   };
 
   const handleConfirm = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+    settingsPin.requirePin(async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
 
-      const finalCodes: Record<string, string> = {};
-      for (const cat of CATEGORIES) {
-        finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
-      }
+        const finalCodes: Record<string, string> = {};
+        for (const cat of CATEGORIES) {
+          finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
+        }
 
-      if (splitByMarketplace) {
-        for (const mp of getEffectiveMarketplaces()) {
-          for (const cat of SPLITTABLE_CATEGORIES) {
-            const key = `${cat}:${mp}`;
-            if (editableMapping[key]) {
-              finalCodes[key] = editableMapping[key];
+        if (splitByMarketplace) {
+          for (const mp of getEffectiveMarketplaces()) {
+            for (const cat of SPLITTABLE_CATEGORIES) {
+              const key = `${cat}:${mp}`;
+              if (editableMapping[key]) {
+                finalCodes[key] = editableMapping[key];
+              }
             }
           }
         }
-      }
 
-      const { error } = await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'accounting_xero_account_codes',
-        value: JSON.stringify(finalCodes),
-      } as any, { onConflict: 'user_id,key' });
-      if (error) throw error;
+        const { error } = await supabase.from('app_settings').upsert({
+          user_id: user.id,
+          key: 'accounting_xero_account_codes',
+          value: JSON.stringify(finalCodes),
+        } as any, { onConflict: 'user_id,key' });
+        if (error) throw error;
 
-      await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'ai_mapper_status',
-        value: 'confirmed',
-      } as any, { onConflict: 'user_id,key' });
+        await supabase.from('app_settings').upsert({
+          user_id: user.id,
+          key: 'ai_mapper_status',
+          value: 'confirmed',
+        } as any, { onConflict: 'user_id,key' });
 
-      const updatedMapping: Record<string, MappingEntry> = {};
-      for (const cat of CATEGORIES) {
-        const code = finalCodes[cat];
-        const coaEntry = coaAccounts.find(a => a.account_code === code);
-        updatedMapping[cat] = {
-          code,
-          name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
-        };
-      }
-      for (const key of Object.keys(finalCodes)) {
-        if (key.includes(':')) {
-          const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
-          updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
+        const updatedMapping: Record<string, MappingEntry> = {};
+        for (const cat of CATEGORIES) {
+          const code = finalCodes[cat];
+          const coaEntry = coaAccounts.find(a => a.account_code === code);
+          updatedMapping[cat] = {
+            code,
+            name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
+          };
         }
+        for (const key of Object.keys(finalCodes)) {
+          if (key.includes(':')) {
+            const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
+            updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
+          }
+        }
+        setMapping(updatedMapping);
+        setState('confirmed');
+        toast.success('Account mapping saved — all Xero pushes will use these codes');
+      } catch (err: any) {
+        toast.error(`Failed to save mapping: ${err.message}`);
       }
-      setMapping(updatedMapping);
-      setState('confirmed');
-      toast.success('Account mapping saved — all Xero pushes will use these codes');
-    } catch (err: any) {
-      toast.error(`Failed to save mapping: ${err.message}`);
-    }
+    });
   };
 
   const handleApplySuggestionsToMissing = () => {
