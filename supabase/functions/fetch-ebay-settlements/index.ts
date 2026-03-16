@@ -712,7 +712,7 @@ Deno.serve(async (req) => {
         .eq('user_id', userId)
         .eq('key', 'ebay_rate_limit_until')
 
-      console.log(`[fetch-ebay-settlements] User ${userId}: imported=${imported}, updated=${updated}, skipped=${skipped}, total_payouts=${succeededPayouts.length}`)
+      logger.debug(`[fetch-ebay-settlements] User ${userId}: imported=${imported}, updated=${updated}, skipped=${skipped}, total_payouts=${succeededPayouts.length}`)
       results.push({
         user_id: userId,
         imported,
