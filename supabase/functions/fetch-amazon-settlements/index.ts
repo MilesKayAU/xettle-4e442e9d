@@ -1200,7 +1200,7 @@ serve(async (req) => {
       const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
       if (!isServiceRole) {
-        console.warn(`[fetch-amazon] Blocked global sync attempt from non-service-role caller`);
+        logger.warn(`[fetch-amazon] Blocked global sync attempt from non-service-role caller`);
         return new Response(JSON.stringify({
           error: 'forbidden',
           message: 'Global sync is only available to internal scheduled jobs. Use smart-sync instead.',
