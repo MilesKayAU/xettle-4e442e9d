@@ -81,9 +81,11 @@ export default function MarketplaceProfitComparison() {
         return;
       }
 
-      // Aggregate by marketplace
+      // Aggregate by marketplace, filtering out corrupted rows
       const mpMap = new Map<string, { revenue: number; profit: number; margins: number[]; count: number }>();
       for (const row of profits) {
+        // Skip corrupted rows with impossibly large values
+        if (Math.abs(Number(row.gross_revenue) || 0) > 10_000_000) continue;
         const mp = row.marketplace_code;
         if (!mpMap.has(mp)) mpMap.set(mp, { revenue: 0, profit: 0, margins: [], count: 0 });
         const entry = mpMap.get(mp)!;
