@@ -116,7 +116,9 @@ function sanitizeRows(
     const clean: Record<string, string | number | boolean | null> = {};
     for (const [k, v] of entries) {
       const val = redactValue(k, v);
-      if (val === null || typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+      if (val === null) {
+        clean[k] = null;
+      } else if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
         clean[k] = val;
       } else {
         clean[k] = String(val);
