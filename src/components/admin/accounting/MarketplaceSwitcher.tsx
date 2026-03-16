@@ -133,12 +133,16 @@ export interface UserMarketplace {
   country_code: string;
 }
 
+/** Codes that have API auto-sync capability */
+const API_MARKETPLACE_CODES = new Set(['amazon_au', 'shopify_payments', 'shopify_orders']);
+
 interface MarketplaceSwitcherProps {
   selectedMarketplace: string;
   onMarketplaceChange: (code: string) => void;
   userMarketplaces: UserMarketplace[];
   onMarketplacesChanged: () => void;
   settlementCounts?: Record<string, number>;
+  apiConnectedCodes?: Set<string>;
 }
 
 export default function MarketplaceSwitcher({
