@@ -635,7 +635,7 @@ Deno.serve(async (req) => {
           console.log(`[fetch-ebay-settlements] Wrote ${linesResult.count} settlement_lines for ${settlementId}`)
         }
 
-
+        if (isUpdate) {
           const prev = existing[0]
           const changed = prev.bank_deposit !== settlement.bank_deposit || prev.sales_principal !== settlement.sales_principal
           if (changed) {
