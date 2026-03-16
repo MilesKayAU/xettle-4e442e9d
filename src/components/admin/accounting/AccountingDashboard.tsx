@@ -898,6 +898,9 @@ export default function AccountingDashboard() {
               <TabsTrigger value="exceptions" className="gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5" /> Exceptions
               </TabsTrigger>
+              <TabsTrigger value="period-close" className="gap-1.5">
+                <Lock className="h-3.5 w-3.5" /> Period Close
+              </TabsTrigger>
               <TabsTrigger value="gst-audit" className="gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5" /> GST Audit
               </TabsTrigger>
