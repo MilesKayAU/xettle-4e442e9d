@@ -1724,6 +1724,34 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                     </p>
                   )}
 
+                  {/* Data completeness warning */}
+                  {detection.dataCompleteness && detection.dataCompleteness !== 'full' && (
+                    <div className="bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 rounded-lg p-3 space-y-1.5">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div className="space-y-1 flex-1">
+                          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            {detection.dataCompleteness === 'partial' ? 'Partial data' : 'Orders only'} — {detection.completenessWarning}
+                          </p>
+                          <p className="text-[11px] text-amber-600/80 dark:text-amber-400/70">
+                            This file will be imported but may not provide full accounting detail.
+                            You can upload the complete report later to supplement this data.
+                          </p>
+                          {detection.upgradeAdvice && (
+                            <div className="mt-2 bg-amber-100/60 dark:bg-amber-900/20 rounded-md px-2.5 py-1.5">
+                              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                                📥 <span className="font-medium">For complete data:</span>{' '}
+                                {detection.upgradeAdvice.split('**').map((part, i) =>
+                                  i % 2 === 1 ? <strong key={i}>{part}</strong> : <span key={i}>{part}</span>
+                                )}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Summary preview (collapsed view) */}
                   {!isReviewing && previewData && (
                     <div className="bg-muted/40 rounded-lg p-3 space-y-1.5">

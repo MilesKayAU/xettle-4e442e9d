@@ -9,6 +9,7 @@
 
 import type { StandardSettlement } from './settlement-engine';
 import type { ColumnMapping } from './file-fingerprint-engine';
+import { findHeaderRow } from './file-fingerprint-engine';
 import { parseDateOrEmpty, detectDateColumn } from './date-parser';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -98,7 +99,10 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
   const commaCount = (firstLine.match(/,/g) || []).length;
   const delimiter = tabCount > commaCount ? '\t' : ',';
 
-  const headers = parseCSVRow(lines[0], delimiter);
+  // Smart header detection — skip metadata preambles
+  const { headerIndex } = findHeaderRow(lines, delimiter);
+
+  const headers = parseCSVRow(lines[headerIndex], delimiter);
   const headerMap: Record<string, number> = {};
   headers.forEach((h, i) => { headerMap[h.toLowerCase().trim()] = i; });
 
@@ -144,7 +148,8 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
   }
 
   const rows: RowData[] = [];
-  for (let i = 1; i < lines.length; i++) {
+  const dataStart = headerIndex + 1;
+  for (let i = dataStart; i < lines.length; i++) {
     const fields = parseCSVRow(lines[i], delimiter);
     if (fields.length < 2) continue;
 
