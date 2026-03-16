@@ -85,7 +85,7 @@ export default function Landing() {
             <span className="text-primary">between marketplaces and Xero.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Xettle verifies every settlement, reconciles payouts against bank deposits, and posts accountant-safe invoices to Xero — across Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
+            Xettle turns marketplace settlements into Xero invoices — with reconciliation checks and mapping safeguards so you can verify totals before posting. Across Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
             Not a file uploader. A settlement engine with duplicate prevention, audit trail, and bank verification built in.
@@ -265,7 +265,7 @@ export default function Landing() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { step: '05', icon: FileSpreadsheet, title: 'Generate correct invoice', desc: 'Sales, shipping, commission, FBA, storage, refunds, reimbursements — each on the right Xero account code.' },
+              { step: '05', icon: FileSpreadsheet, title: 'Generate Xero invoice', desc: 'Sales, shipping, commission, FBA, storage, refunds, reimbursements — each mapped to your Xero account codes. We suggest mappings and flag missing accounts — your bookkeeper stays in control.' },
               { step: '06', icon: ShieldCheck, title: 'Post safely as DRAFT', desc: 'Duplicate guard active. Audit CSV attached. Raw payload stored. Your accountant reviews before authorising.' },
               { step: '07', icon: Lock, title: 'Full audit history', desc: 'Every posting logged. Void and repost with replacement chain. Period locks respected. Nothing lost.' },
             ].map((item) => {
@@ -326,7 +326,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { icon: FileText, title: 'Settlement-first accounting', desc: 'Every invoice is generated from the settlement — the only source of truth for marketplace payouts. Not from orders, not from bank feeds.' },
-              { icon: Shield, title: 'Prevents duplicate posting', desc: 'Fingerprint-based deduplication catches re-uploads, split-month overlaps, and tool migrations before they reach Xero.' },
+              { icon: Shield, title: 'Deduplication safeguards', desc: 'Fingerprint-based deduplication and idempotent syncing guard against duplicate invoices from re-uploads, split-month overlaps, and tool migrations.' },
               { icon: Repeat, title: 'Safe void and repost', desc: 'Need to correct an invoice? Void the original, repost with a full chain of custody. No orphaned entries.' },
               { icon: ShieldCheck, title: 'Accountant-safe posting', desc: 'Every invoice posts as DRAFT with audit CSV attached. Your accountant reviews before authorising. No surprises.' },
               { icon: Layers, title: 'Handles mixed files', desc: 'Woolworths MarketPlus covering BigW, MyDeal and Everyday Market? Automatically split into separate settlements.' },
@@ -358,7 +358,7 @@ export default function Landing() {
               <h2 className="text-3xl md:text-4xl font-bold text-foreground">
                 Post to Xero safely.
                 <br />
-                <span className="text-muted-foreground text-2xl md:text-3xl font-semibold">Every time. No exceptions.</span>
+                <span className="text-muted-foreground text-2xl md:text-3xl font-semibold">With safeguards at every step.</span>
               </h2>
               <p className="text-lg text-muted-foreground">
                 Posting marketplace settlements to Xero shouldn't break your books. Xettle verifies totals, checks for duplicates, prevents locked-period edits, and keeps a full audit trail — so every settlement posts cleanly.
@@ -366,7 +366,7 @@ export default function Landing() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               {[
-                { icon: Fingerprint, title: 'Duplicate prevention', desc: 'Fingerprint-based deduplication catches re-uploads, split-month overlaps, and tool migrations before they reach Xero.' },
+                { icon: Fingerprint, title: 'Deduplication safeguards', desc: 'Fingerprint-based deduplication and idempotent syncing guard against duplicate invoices from re-uploads, overlaps, and tool migrations.' },
                 { icon: Repeat, title: 'Safe void & repost', desc: 'Void the original, repost with a replacement invoice. Full chain of custody. No orphaned entries.' },
                 { icon: Eye, title: 'Audit trail', desc: 'Every posting is logged with the raw settlement payload, Xero response, and timestamp. Your accountant can verify any invoice.' },
                 { icon: AlertTriangle, title: 'Exception inbox', desc: 'Missing contacts, attachment failures, posting blocks — all caught and surfaced. Nothing silently fails.' },
@@ -397,7 +397,7 @@ export default function Landing() {
               Reconciliation engine
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Reconcile every payout before posting.
+              Reconcile each settlement before creating a Xero invoice.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Most tools push invoices and hope for the best. Xettle reconciles the settlement against your bank feed first — so you know the numbers are right before anything reaches Xero.
@@ -410,7 +410,7 @@ export default function Landing() {
               </div>
               <h3 className="text-base font-semibold text-foreground mb-2">Settlement verification</h3>
               <p className="text-sm text-muted-foreground">
-                Every line item is validated — sales, fees, refunds, GST. Totals must balance before the settlement is marked verified.
+                Settlement totals are validated — sales, fees, refunds, GST. Order-level drilldown where available. Totals must balance before the settlement is marked verified.
               </p>
             </div>
             <div className="p-6 rounded-2xl border border-border bg-card text-center">
@@ -428,7 +428,7 @@ export default function Landing() {
               </div>
               <h3 className="text-base font-semibold text-foreground mb-2">Coverage tracking</h3>
               <p className="text-sm text-muted-foreground">
-                See which periods have settlements, which are missing, and which have gaps — across every marketplace, on one screen.
+                See which periods have settlements, which are missing, and which have gaps — across every marketplace, on one screen. Some marketplace exports may not include transaction-level drilldown. Xettle warns you when drilldown is unavailable.
               </p>
             </div>
           </div>
@@ -501,7 +501,7 @@ export default function Landing() {
             Not just uploads.<br />A full settlement engine.
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-12">
-            Xettle doesn't just create invoices. It tracks every settlement, verifies payouts, matches deposits, handles exceptions, and keeps your accounting clean across every marketplace — with a complete audit trail.
+            Xettle doesn't just create Xero invoices. It tracks each settlement, verifies payouts, matches deposits, handles exceptions, and keeps your accounting clean across every marketplace — with a complete audit trail. Every invoice is traceable back to the original settlement ID.
           </p>
           <div className="grid md:grid-cols-4 gap-4 text-left">
             {[
@@ -541,9 +541,9 @@ export default function Landing() {
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
-              <p className="text-4xl font-bold text-primary mb-3">0</p>
+              <p className="text-4xl font-bold text-primary mb-3">✓</p>
               <p className="text-sm text-muted-foreground">
-                Duplicate invoices posted — fingerprint dedup catches every one
+                Fingerprint-based dedup and idempotent syncing guard against duplicate invoices
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
@@ -568,7 +568,7 @@ export default function Landing() {
             {[
               { step: '01', title: 'Connect your marketplaces', desc: 'Amazon and Shopify connect via API. Bunnings, eBay, Kogan, Catch and others — upload the settlement file.' },
               { step: '02', title: 'We verify everything', desc: 'Xettle parses every format, validates totals, matches bank deposits, and flags exceptions before anything reaches Xero.' },
-              { step: '03', title: 'Xero stays clean', desc: 'Every verified settlement becomes a correctly coded DRAFT invoice with full audit trail. No duplicates. No broken books.' },
+              { step: '03', title: 'Xero stays clean', desc: 'Every verified settlement becomes a correctly coded DRAFT Xero invoice with full audit trail. Deduplication safeguards and clean books.' },
             ].map((item) => (
               <div key={item.step} className="text-center">
                 <div className="text-5xl font-bold text-primary/20 mb-4">{item.step}</div>
