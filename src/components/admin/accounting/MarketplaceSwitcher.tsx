@@ -235,31 +235,21 @@ export default function MarketplaceSwitcher({
     if (!deletingCode) return;
     setDeleting(true);
     try {
+      const { removeMarketplace } = await import('@/actions/marketplaces');
+      const result = await removeMarketplace(deletingCode);
+      if (!result.success) throw new Error(result.error);
+
+      // Also clean up marketplace-specific tables not covered by removeMarketplace
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Delete related data in parallel
-      await Promise.all([
-        supabase.from('settlement_lines').delete().eq('user_id', user.id).in(
-          'settlement_id',
-          (await supabase.from('settlements').select('settlement_id').eq('marketplace', deletingCode).eq('user_id', user.id)).data?.map(s => s.settlement_id) || []
-        ),
-        supabase.from('settlement_unmapped').delete().eq('user_id', user.id).in(
-          'settlement_id',
-          (await supabase.from('settlements').select('settlement_id').eq('marketplace', deletingCode).eq('user_id', user.id)).data?.map(s => s.settlement_id) || []
-        ),
-        supabase.from('marketplace_fee_alerts').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
-        supabase.from('marketplace_fee_observations').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
-        supabase.from('marketplace_file_fingerprints').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
-        supabase.from('marketplace_ad_spend').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
-        supabase.from('marketplace_shipping_costs').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
-      ]);
-
-      // Delete settlements
-      await supabase.from('settlements').delete().eq('marketplace', deletingCode).eq('user_id', user.id);
-
-      // Delete the marketplace connection
-      await supabase.from('marketplace_connections').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id);
+      if (user) {
+        await Promise.all([
+          supabase.from('marketplace_fee_alerts').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+          supabase.from('marketplace_fee_observations').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+          supabase.from('marketplace_file_fingerprints').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+          supabase.from('marketplace_ad_spend').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+          supabase.from('marketplace_shipping_costs').delete().eq('marketplace_code', deletingCode).eq('user_id', user.id),
+        ]);
+      }
 
       toast.success(`${deletingName} removed`);
       setDeleteDialogOpen(false);

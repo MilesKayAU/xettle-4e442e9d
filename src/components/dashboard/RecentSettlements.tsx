@@ -473,13 +473,15 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
   // ── Actions ──
   const handleHide = async (row: SettlementRow) => {
-    await supabase.from('settlements').update({ is_hidden: true } as any).eq('id', row.id);
+    const { updateSettlementVisibility } = await import('@/actions/settlements');
+    await updateSettlementVisibility(row.id, true);
     toast.success(`Hidden: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
     fetchAll();
   };
 
   const handleUnhide = async (row: SettlementRow) => {
-    await supabase.from('settlements').update({ is_hidden: false } as any).eq('id', row.id);
+    const { updateSettlementVisibility } = await import('@/actions/settlements');
+    await updateSettlementVisibility(row.id, false);
     toast.success(`Restored: ${getMarketplaceLabel(row.marketplace)} ${formatDateRange(row.period_start, row.period_end)}`);
     fetchAll();
   };
