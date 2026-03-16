@@ -403,7 +403,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
       // Release lock since we're skipping
       await supabaseAdmin.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: 'settlement_sync' });
       details.push(`User ${userId}: Skipped — Amazon rate limit cooldown active`);
-      console.log(`[Sync] Amazon rate limited for ${userId} — cooldown active`);
+      logger.debug(`[Sync] Amazon rate limited for ${userId} — cooldown active`);
       continue;
     }
 
