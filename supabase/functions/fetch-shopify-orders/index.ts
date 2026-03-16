@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = tokenRow.access_token;
-    console.log("[fetch-shopify-orders] Got access token, length:", accessToken?.length);
+    logger.debug("[fetch-shopify-orders] Got access token, length:", accessToken?.length);
 
     // 2. Build Shopify API URL
     const buildUrl = (cursor?: string) => {
