@@ -502,7 +502,7 @@ function parseTransactionLevelCSV(headers: string[], lines: string[]): ShopifyPa
     const gstOnFees = round2(Math.abs(feesInclGst / GST_DIVISOR));
 
     const calculatedNet = round2(grossSales + refunds + fees + adjustments);
-    const reconciles = Math.abs(calculatedNet - bankDeposit) <= 0.05;
+    const reconciles = Math.abs(calculatedNet - bankDeposit) <= TOL_PAYOUT_MATCH;
 
     settlements.push({
       marketplace: 'shopify_payments',

@@ -349,7 +349,7 @@ export const orderToXeroRows = (order: AlibabaOrderForExport): XeroBillRow[] => 
     
     // CRITICAL: Service Fee is FIXED (user-entered exact amount)
     // Only Product and Freight can be adjusted to match the total
-    if (orderAud > 0 && totalLineItemAud > 0 && Math.abs(orderAud - totalLineItemAud) > 0.01) {
+    if (orderAud > 0 && totalLineItemAud > 0 && Math.abs(orderAud - totalLineItemAud) > TOL_LINE_SUM) {
       const discrepancy = orderAud - totalLineItemAud;
       console.warn(`AUD discrepancy for order ${order.order_id}: Line items = $${totalLineItemAud.toFixed(2)}, Order total = $${orderAud.toFixed(2)} (gap: $${discrepancy.toFixed(2)})`);
       

@@ -91,11 +91,11 @@ export function runReconciliation(
     id: 'gst_consistency',
     label: 'GST Consistency',
     description: 'GST on income aligns with sales ÷ 11',
-    status: gstDiff <= 0.50 ? 'pass' : gstDiff <= 2.00 ? 'warn' : 'fail',
-    detail: gstDiff <= 0.50
+    status: gstDiff <= TOL_GST_CONSISTENCY ? 'pass' : gstDiff <= 2.00 ? 'warn' : 'fail',
+    detail: gstDiff <= TOL_GST_CONSISTENCY
       ? `GST on income ${fmt(summary.gstOnIncome)} ≈ expected ${fmt(expectedGstIncome)}`
       : `GST mismatch — parsed ${fmt(summary.gstOnIncome)} vs expected ${fmt(expectedGstIncome)} (diff ${fmt(gstDiff)})`,
-    severity: gstDiff > 2.00 ? 'critical' : gstDiff > 0.50 ? 'warning' : 'info',
+    severity: gstDiff > 2.00 ? 'critical' : gstDiff > TOL_GST_CONSISTENCY ? 'warning' : 'info',
   });
 
   // ─── 4. Sanity Checks ───────────────────────────────────────────

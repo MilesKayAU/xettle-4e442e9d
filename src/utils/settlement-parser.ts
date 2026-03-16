@@ -536,7 +536,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const sanityDiff = round2(header.totalAmount - sanityTotal);
   reconciliationChecks.push({
     name: 'Sanity check',
-    passed: Math.abs(sanityDiff) < 0.02,
+    passed: Math.abs(sanityDiff) < TOL_COLUMN_TOTALS,
     detail: `Net ${formatAUD(netExGst)} + GST Inc ${formatAUD(gstOnIncome)} + GST Exp ${formatAUD(gstOnExpenses)} = ${formatAUD(sanityTotal)} vs Bank ${formatAUD(header.totalAmount)}`,
   });
 

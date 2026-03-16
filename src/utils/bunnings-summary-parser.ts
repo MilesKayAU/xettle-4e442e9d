@@ -251,7 +251,7 @@ export async function parseBunningsSummaryPdf(
       manualNet +
       otherCharges.inclGst
     ) * 100) / 100;
-    const reconciles = Math.abs(calculatedTotal - netPayout) <= 0.10;
+    const reconciles = Math.abs(calculatedTotal - netPayout) <= TOL_BUNNINGS_PDF;
 
     // ─── Build metadata with full breakdown for analytics ──────────
     const metadata: Record<string, any> = {
