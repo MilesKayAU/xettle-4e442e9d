@@ -621,7 +621,7 @@ Deno.serve(async (req) => {
           userAdminClient, userId, settlementId, transactions, payoutDateStr,
         )
         if (linesResult.error) {
-          console.warn(`[fetch-ebay-settlements] settlement_lines partial/failed for ${settlementId}: ${linesResult.error}`)
+          logger.warn(`[fetch-ebay-settlements] settlement_lines partial/failed for ${settlementId}: ${linesResult.error}`)
           await userAdminClient.from('system_events').insert({
             user_id: userId,
             event_type: 'settlement_lines_write_failed',
