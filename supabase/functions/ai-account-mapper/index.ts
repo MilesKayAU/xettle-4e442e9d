@@ -286,7 +286,7 @@ Deno.serve(async (req) => {
     const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
       'Sales': ['shipping', 'freight', 'postage', 'delivery', 'fee', 'refund', 'reimbursement'],
       'Shipping': ['sales', 'fee', 'refund'],
-      'Seller Fees': ['fba', 'storage', 'advertising', 'shipping'],
+      'Seller Fees': ['fba', 'storage', 'advertising', 'shipping', 'transaction service'],
       'FBA Fees': ['seller', 'storage', 'advertising'],
       'Storage Fees': ['seller', 'fba', 'advertising'],
       'Refunds': ['fee', 'reimbursement'],
