@@ -69,22 +69,30 @@ export default function MarketplaceProfitComparison() {
         return;
       }
 
-      // Load profit data
-      const { data: profits, error } = await supabase
-        .from('settlement_profit')
-        .select('marketplace_code, gross_revenue, gross_profit, margin_percent')
-        .eq('user_id', user.id);
+      // Load profit data + all marketplaces from settlements
+      const [profitRes, settlementsRes] = await Promise.all([
+        supabase
+          .from('settlement_profit')
+          .select('marketplace_code, gross_revenue, gross_profit, margin_percent')
+          .eq('user_id', user.id),
+        supabase
+          .from('settlements')
+          .select('marketplace, sales_principal, sales_shipping, bank_deposit')
+          .eq('user_id', user.id)
+          .eq('is_hidden', false)
+          .is('duplicate_of_settlement_id', null)
+          .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")'),
+      ]);
 
-      if (error) throw error;
-      if (!profits || profits.length === 0) {
-        setLoading(false);
-        return;
-      }
+      if (profitRes.error) throw profitRes.error;
+      if (settlementsRes.error) throw settlementsRes.error;
 
-      // Aggregate by marketplace, filtering out corrupted rows
+      const profits = profitRes.data || [];
+      const settlements = settlementsRes.data || [];
+
+      // Aggregate profit data by marketplace, filtering out corrupted rows
       const mpMap = new Map<string, { revenue: number; profit: number; margins: number[]; count: number }>();
       for (const row of profits) {
-        // Skip corrupted rows with impossibly large values
         if (Math.abs(Number(row.gross_revenue) || 0) > 10_000_000) continue;
         const mp = row.marketplace_code;
         if (!mpMap.has(mp)) mpMap.set(mp, { revenue: 0, profit: 0, margins: [], count: 0 });
@@ -95,7 +103,21 @@ export default function MarketplaceProfitComparison() {
         entry.count++;
       }
 
+      // Also aggregate settlement-level data for marketplaces without profit rows
+      const settlementMap = new Map<string, { revenue: number; payout: number; count: number }>();
+      for (const row of settlements) {
+        const mp = row.marketplace;
+        if (!mp) continue;
+        if (!settlementMap.has(mp)) settlementMap.set(mp, { revenue: 0, payout: 0, count: 0 });
+        const entry = settlementMap.get(mp)!;
+        entry.revenue += (Number(row.sales_principal) || 0) + (Number(row.sales_shipping) || 0);
+        entry.payout += Number(row.bank_deposit) || 0;
+        entry.count++;
+      }
+
       const results: AggregatedMarketplace[] = [];
+
+      // Add marketplaces with profit data
       for (const [mp, agg] of mpMap) {
         const avg_margin = agg.margins.length > 0
           ? agg.margins.reduce((a, b) => a + b, 0) / agg.margins.length
@@ -107,6 +129,22 @@ export default function MarketplaceProfitComparison() {
           total_revenue: Math.round(agg.revenue),
           total_profit: Math.round(agg.profit),
           periods: agg.count,
+          has_cost_data: true,
+        });
+      }
+
+      // Add marketplaces that only have settlement data (no profit rows)
+      for (const [mp, agg] of settlementMap) {
+        if (mpMap.has(mp)) continue; // already included
+        const margin = agg.revenue > 0 ? (agg.payout / agg.revenue) * 100 : 0;
+        results.push({
+          marketplace_code: mp,
+          marketplace_name: MARKETPLACE_LABELS[mp] || mp,
+          avg_margin: Math.round(margin * 10) / 10,
+          total_revenue: Math.round(agg.revenue),
+          total_profit: Math.round(agg.payout),
+          periods: agg.count,
+          has_cost_data: false,
         });
       }
 
