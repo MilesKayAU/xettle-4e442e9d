@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
       tokenError = result.error;
       if (tokenRow?.shop_domain) {
         shopDomain = tokenRow.shop_domain;
-        console.log("[fetch-shopify-orders] Resolved shopDomain from DB:", shopDomain);
+        logger.debug("[fetch-shopify-orders] Resolved shopDomain from DB:", shopDomain);
       }
     }
 
