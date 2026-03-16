@@ -528,7 +528,7 @@ Deno.serve(async (req) => {
 
     for (const tokenRow of userTokens) {
       const userId = tokenRow.user_id
-      console.log(`[fetch-ebay-settlements] Processing user ${userId}, sync_from=${syncFrom}`)
+      logger.debug(`[fetch-ebay-settlements] Processing user ${userId}, sync_from=${syncFrom}`)
 
       const userAdminClient = adminClient
 
