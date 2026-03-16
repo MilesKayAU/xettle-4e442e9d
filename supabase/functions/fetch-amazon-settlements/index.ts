@@ -373,7 +373,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
     return { users: 0, imported: 0, skipped: 0, errors: 0, details };
   }
 
-  console.log(`[Sync] Processing ${amazonTokens.length} user(s) with Amazon tokens`);
+  logger.debug(`[Sync] Processing ${amazonTokens.length} user(s) with Amazon tokens`);
 
   for (const amazonToken of amazonTokens) {
     const userId = amazonToken.user_id;
