@@ -588,15 +588,17 @@ function buildValidationChecks(
     checks.push({ label: 'No existing invoice found in Xero ✓', status: 'green' });
   }
 
-  // 0b. UNMAPPED account codes — hard block
+  // 0b. UNMAPPED account codes — hard block (MAPPING_REQUIRED)
   const unmappedLines = lineItems.filter(li => li.accountCode === 'UNMAPPED');
   if (unmappedLines.length > 0) {
     const categories = unmappedLines.map(li => li.description).join(', ');
     checks.push({
-      label: 'Unmapped account codes — push blocked',
+      label: 'MAPPING_REQUIRED — unmapped account codes',
       status: 'red',
-      detail: `Missing account mapping for: ${categories}. Configure in Account Mapper before pushing.`,
-    });
+      detail: `Missing account mapping for: ${categories}. Use "Resolve" options below to clone COA or configure Account Mapper.`,
+      _marketplace: s.marketplace,
+      _missingCategories: unmappedLines.map(li => li.description),
+    } as ValidationCheck & { _marketplace?: string; _missingCategories?: string[] });
   }
 
   // 0c. Per-marketplace mapping completeness gate
