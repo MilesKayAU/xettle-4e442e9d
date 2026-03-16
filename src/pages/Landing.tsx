@@ -543,7 +543,7 @@ export default function Landing() {
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
               <p className="text-4xl font-bold text-primary mb-3">✓</p>
               <p className="text-sm text-muted-foreground">
-                Fingerprint-based dedup and idempotent syncing guard against duplicate invoices
+                Fingerprint-based deduplication and idempotent syncing help guard against duplicate invoices
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
@@ -568,7 +568,7 @@ export default function Landing() {
             {[
               { step: '01', title: 'Connect your marketplaces', desc: 'Amazon and Shopify connect via API. Bunnings, eBay, Kogan, Catch and others — upload the settlement file.' },
               { step: '02', title: 'We verify everything', desc: 'Xettle parses every format, validates totals, matches bank deposits, and flags exceptions before anything reaches Xero.' },
-              { step: '03', title: 'Xero stays clean', desc: 'Every verified settlement becomes a correctly coded DRAFT Xero invoice with full audit trail. Deduplication safeguards and clean books.' },
+              { step: '03', title: 'Xero stays clean', desc: 'Every verified settlement becomes a correctly coded DRAFT Xero invoice with full audit trail. Deduplication safeguards and a full audit trail — clean books.' },
             ].map((item) => (
               <div key={item.step} className="text-center">
                 <div className="text-5xl font-bold text-primary/20 mb-4">{item.step}</div>
