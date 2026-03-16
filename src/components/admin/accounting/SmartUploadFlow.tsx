@@ -46,6 +46,7 @@ import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, validateSettlementSanity, type StandardSettlement } from '@/utils/settlement-engine';
+import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import {
   detectMultiMarketplace,
