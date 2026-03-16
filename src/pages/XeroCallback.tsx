@@ -108,29 +108,20 @@ const XeroCallback = () => {
               console.log(`[XeroCallback] CoA intelligence: ${highChannels.length} HIGH channels, ${signals.payment_providers.length} providers`);
 
               // Insert suggested channels — never downgrade active to suggested
+              const { upsertMarketplaceConnection } = await import('@/utils/marketplace-connections');
               for (const ch of highChannels) {
-                // Check if already active
-                const { data: existing } = await supabase
-                  .from('marketplace_connections')
-                  .select('connection_status')
-                  .eq('user_id', session.user.id)
-                  .eq('marketplace_code', ch.marketplace_code)
-                  .maybeSingle();
-
-                if (existing?.connection_status === 'active') continue;
-
-                await supabase.from('marketplace_connections').upsert({
-                  user_id: session.user.id,
-                  marketplace_code: ch.marketplace_code,
-                  marketplace_name: ch.marketplace_name,
-                  connection_type: 'coa_detected',
-                  connection_status: 'suggested',
-                  suggested_at: new Date().toISOString(),
+                await upsertMarketplaceConnection({
+                  userId: session.user.id,
+                  marketplaceCode: ch.marketplace_code,
+                  marketplaceName: ch.marketplace_name,
+                  connectionType: 'coa_detected',
+                  connectionStatus: 'suggested',
+                  neverDowngrade: true,
                   settings: {
                     detected_from: 'coa',
                     detected_account: ch.detected_account,
                   },
-                }, { onConflict: 'user_id,marketplace_code' });
+                });
               }
 
               // Cache detection results

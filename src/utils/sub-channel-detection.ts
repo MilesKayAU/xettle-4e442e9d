@@ -136,16 +136,17 @@ export async function saveSubChannel(params: {
 
     if (error) throw error;
 
-    // If separate_file, create a marketplace_connection
+    // If separate_file, create a marketplace_connection via canonical helper
     if (params.settlement_type === 'separate_file') {
-      await supabase.from('marketplace_connections').upsert({
-        user_id: user.id,
-        marketplace_code: params.marketplace_code,
-        marketplace_name: params.marketplace_label,
-        country_code: 'AU',
-        connection_type: 'sub_channel',
-        connection_status: 'active',
-      } as any, { onConflict: 'user_id,marketplace_code,country_code' } as any);
+      const { upsertMarketplaceConnection } = await import('./marketplace-connections');
+      await upsertMarketplaceConnection({
+        userId: user.id,
+        marketplaceCode: params.marketplace_code,
+        marketplaceName: params.marketplace_label,
+        connectionType: 'sub_channel',
+        connectionStatus: 'active',
+        countryCode: 'AU',
+      });
     }
 
     return { success: true };

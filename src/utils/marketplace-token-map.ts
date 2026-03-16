@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { upsertMarketplaceConnection } from './marketplace-connections';
 
 /**
  * Payment processors / gateways — NOT marketplaces.
@@ -22,7 +23,7 @@ export function isPaymentProcessor(code: string): boolean {
 }
 
 export interface TokenMarketplaceEntry {
-  table: 'amazon_tokens' | 'shopify_tokens';
+  table: 'amazon_tokens' | 'shopify_tokens' | 'ebay_tokens';
   code: string;
   type: string;
   name: string;
@@ -33,7 +34,7 @@ export interface TokenMarketplaceEntry {
 export const TOKEN_TABLE_MAP: TokenMarketplaceEntry[] = [
   { table: 'amazon_tokens', code: 'amazon_au', type: 'sp_api', name: 'Amazon AU', checkColumn: 'selling_partner_id' },
   { table: 'shopify_tokens', code: 'shopify_payments', type: 'shopify_api', name: 'Shopify Payments', checkColumn: 'shop_domain' },
-  // Future: { table: 'ebay_tokens', code: 'ebay_au', type: 'ebay_api', name: 'eBay AU', checkColumn: 'ebay_user_id' },
+  { table: 'ebay_tokens', code: 'ebay_au', type: 'ebay_api', name: 'eBay AU', checkColumn: 'ebay_username' },
 ];
 
 /**
@@ -65,13 +66,13 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
   // 1. Provision from token tables
   const connected = await getConnectedTokenMarketplaces();
   for (const entry of connected) {
-    await supabase.from('marketplace_connections').upsert({
-      user_id: userId,
-      marketplace_code: entry.code,
-      connection_type: entry.type,
-      marketplace_name: entry.name,
-      connection_status: 'active',
-    }, { onConflict: 'user_id,marketplace_code' });
+    await upsertMarketplaceConnection({
+      userId,
+      marketplaceCode: entry.code,
+      connectionType: entry.type,
+      marketplaceName: entry.name,
+      connectionStatus: 'active',
+    });
   }
 
   // 2. Provision from Shopify sub-channels
@@ -85,13 +86,13 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
   if (channels) {
     for (const ch of channels) {
       if (!ch.marketplace_code) continue;
-      await supabase.from('marketplace_connections').upsert({
-        user_id: userId,
-        marketplace_code: ch.marketplace_code,
-        marketplace_name: ch.marketplace_label,
-        connection_type: 'shopify_sub_channel',
-        connection_status: 'active',
-      }, { onConflict: 'user_id,marketplace_code' });
+      await upsertMarketplaceConnection({
+        userId,
+        marketplaceCode: ch.marketplace_code,
+        marketplaceName: ch.marketplace_label,
+        connectionType: 'shopify_sub_channel',
+        connectionStatus: 'active',
+      });
     }
   }
 

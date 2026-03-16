@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { upsertMarketplaceConnection } from '@/utils/marketplace-connections';
 
 export default function EbayConnectionStatus() {
   const [loading, setLoading] = useState(true);
@@ -23,31 +24,23 @@ export default function EbayConnectionStatus() {
         setConnected(data.connected);
         setConnection(data.connection || null);
 
-        // Auto-provision marketplace_connections row if connected but missing
+        // Ensure marketplace_connections row exists via universal helper
         if (data.connected) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            const { data: existing } = await supabase
-              .from('marketplace_connections')
-              .select('id')
-              .eq('user_id', user.id)
-              .eq('marketplace_code', 'ebay_au')
-              .limit(1);
-            if (!existing || existing.length === 0) {
-              await supabase.from('marketplace_connections').insert({
-                user_id: user.id,
-                marketplace_code: 'ebay_au',
-                marketplace_name: 'eBay Australia',
-                connection_type: 'api',
-                connection_status: 'active',
-                country_code: 'AU',
-              });
-            }
+            await upsertMarketplaceConnection({
+              userId: user.id,
+              marketplaceCode: 'ebay_au',
+              marketplaceName: 'eBay Australia',
+              connectionType: 'ebay_api',
+              connectionStatus: 'active',
+              countryCode: 'AU',
+            });
           }
         }
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.warn('[EbayConnectionStatus] status check failed:', err);
     } finally {
       setLoading(false);
     }

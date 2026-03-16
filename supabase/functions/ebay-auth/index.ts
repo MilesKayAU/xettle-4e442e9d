@@ -165,10 +165,10 @@ serve(async (req) => {
         user_id: userId,
         marketplace_code: 'ebay_au',
         marketplace_name: 'eBay Australia',
-        connection_type: 'api',
+        connection_type: 'ebay_api',
         connection_status: 'active',
         country_code: 'AU',
-      }, { onConflict: 'user_id,marketplace_code,country_code' })
+      }, { onConflict: 'user_id,marketplace_code' })
 
       // Log sync event
       await adminClient.from('sync_history').insert({
