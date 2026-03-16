@@ -56,6 +56,16 @@ export interface ClonePreviewInput {
   existingCodes: string[];
 }
 
+export interface CloneSystemEvent {
+  userId: string;
+  eventType: 'coa_clone_previewed' | 'coa_clone_executed' | 'coa_clone_failed' | 'coa_clone_cancelled';
+  templateMarketplace: string;
+  targetMarketplace: string;
+  accountsCreated?: number;
+  taxProfile?: string | null;
+  errors?: string[];
+}
+
 export interface CloneExecuteInput {
   rows: CloneAccountRow[];
 }
