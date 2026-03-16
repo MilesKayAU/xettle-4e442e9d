@@ -268,19 +268,33 @@ Deno.serve(async (req) => {
     const CATEGORY_KEYWORDS: Record<string, string[]> = {
       'Sales': ['sales', 'revenue', 'income'],
       'Shipping': ['shipping', 'freight', 'postage', 'delivery'],
+      'Seller Fees': ['seller fee', 'referral fee', 'commission', 'selling fee'],
+      'FBA Fees': ['fba', 'fulfilment', 'fulfillment', 'pick and pack'],
+      'Storage Fees': ['storage', 'warehouse', 'inventory fee'],
+      'Refunds': ['refund', 'return'],
+      'Reimbursements': ['reimbursement'],
+      'Advertising Costs': ['advertising', 'sponsored', 'ppc', 'ad spend'],
+      'Other Fees': ['other fee', 'adjustment', 'miscellaneous'],
+      'Promotional Discounts': ['promotion', 'discount', 'voucher', 'coupon'],
     }
 
     // Negative keywords: if account name contains these, exclude from the category
     const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
-      'Sales': ['shipping', 'freight', 'postage', 'delivery'],
-      'Shipping': ['sales'],
+      'Sales': ['shipping', 'freight', 'postage', 'delivery', 'fee', 'refund', 'reimbursement'],
+      'Shipping': ['sales', 'fee', 'refund'],
+      'Seller Fees': ['fba', 'storage', 'advertising', 'shipping'],
+      'FBA Fees': ['seller', 'storage', 'advertising'],
+      'Storage Fees': ['seller', 'fba', 'advertising'],
+      'Refunds': ['fee', 'reimbursement'],
+      'Reimbursements': ['refund', 'fee'],
     }
 
     // Pre-scan: find marketplace-specific accounts by keyword matching
     const deterministicOverrides: Record<string, string> = {}
-    const revenueAccounts = xeroAccounts.filter((a: any) => {
+    // Search ALL account types (revenue + expense) for marketplace-specific accounts
+    const allActiveAccounts = xeroAccounts.filter((a: any) => {
       const type = (a.type || '').toUpperCase()
-      return ['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS'].includes(type)
+      return ['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS', 'EXPENSE', 'OVERHEADS', 'CURRLIAB', 'LIABILITY'].includes(type)
     })
 
     for (const mp of activeMarketplaces) {
@@ -356,9 +370,9 @@ Deno.serve(async (req) => {
     
     const perRailPromptSection = marketplaceNames.length > 0
       ? `\n\nThe business sells on these marketplaces: ${marketplaceNames.join(', ')}.
-For the "Sales" and "Shipping" categories, ALSO look for marketplace-specific accounts.
-For example, if there's an account called "Shopify Sales" or "Amazon Revenue", map it to that marketplace's Sales.
-Return per-marketplace overrides in "marketplace_overrides" keyed as "Sales:<Marketplace Name>" or "Shipping:<Marketplace Name>".
+For ALL categories (Sales, Shipping, Seller Fees, FBA Fees, Storage Fees, Refunds, Reimbursements, Promotional Discounts, Advertising Costs, Other Fees), look for marketplace-specific accounts.
+For example, "Amazon Seller Fees AU" should map to "Seller Fees:Amazon AU", "Bunnings Refunds" to "Refunds:Bunnings".
+Return per-marketplace overrides in "marketplace_overrides" keyed as "<Category>:<Marketplace Name>".
 Only include overrides where you find a SPECIFIC account for that marketplace — don't repeat the global mapping.
 
 IMPORTANT: I've pre-identified these accounts that appear to be marketplace-specific. USE THEM:
