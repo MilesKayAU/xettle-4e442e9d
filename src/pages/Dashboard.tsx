@@ -153,20 +153,23 @@ export default function Dashboard() {
     const connected = searchParams.get('connected');
     const checkWizard = async () => {
       try {
-        const [settRes, amazonRes, shopifyRes, wizardRes] = await Promise.all([
+      const [settRes, amazonRes, shopifyRes, ebayRes, wizardRes] = await Promise.all([
           supabase.from('settlements').select('id').limit(1),
           supabase.from('amazon_tokens').select('id').limit(1),
           supabase.from('shopify_tokens').select('id').limit(1),
+          supabase.from('ebay_tokens').select('id').limit(1),
           supabase.from('app_settings').select('value').eq('key', 'onboarding_wizard_complete').maybeSingle(),
         ]);
 
         const hasSettlements = !!(settRes.data && settRes.data.length > 0);
         const hasAmz = !!(amazonRes.data && amazonRes.data.length > 0);
         const hasShp = !!(shopifyRes.data && shopifyRes.data.length > 0);
+        const hasEby = !!(ebayRes.data && ebayRes.data.length > 0);
         const wizardComplete = wizardRes.data?.value === 'true';
 
         setHasAmazon(hasAmz);
         setHasShopify(hasShp);
+        setHasEbay(hasEby);
 
         const dismissKey = user ? `xettle_wizard_dismiss_count_${user.id}` : 'xettle_wizard_dismiss_count';
         const dismissCount = parseInt(sessionStorage.getItem(dismissKey) || '0', 10);
