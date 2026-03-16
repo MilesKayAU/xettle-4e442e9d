@@ -527,7 +527,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const gstIncDiff = Math.abs(gstOnIncome - expectedGstOnIncome);
   reconciliationChecks.push({
     name: 'GST consistency',
-    passed: gstIncDiff < 0.02,
+    passed: gstIncDiff < TOL_COLUMN_TOTALS,
     detail: `GST on income ${formatAUD(gstOnIncome)} vs expected ${formatAUD(expectedGstOnIncome)} (diff ${formatAUD(gstIncDiff)})`,
   });
 
