@@ -436,17 +436,21 @@ export default function ActionCentre({
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    // Combine marketplaces from validation rows AND connected marketplaces
+    // Combine marketplaces from validation rows, connected marketplaces, AND settlement pipeline
     const allMps = new Set<string>();
     for (const r of normalisedRows) allMps.add(r.marketplace_code);
     for (const c of connectedMarketplaces) {
       const code = MARKETPLACE_ALIASES[c] || c;
       if (!GATEWAY_CODES.has(code)) allMps.add(code);
     }
+    for (const key of settlementPipeline.keys()) {
+      const mp = key.split('_').slice(0, -1).join('_'); // remove month suffix
+      if (!GATEWAY_CODES.has(mp)) allMps.add(mp);
+    }
     const marketplaces = [...allMps].sort();
 
     return { months, marketplaces };
-  }, [normalisedRows, connectedMarketplaces]);
+  }, [normalisedRows, connectedMarketplaces, settlementPipeline]);
 
   const getRowsForCell = (marketplace: string, monthKey: string): ValidationRow[] => {
     return normalisedRows.filter(r => {
