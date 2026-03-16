@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
           settlement_id: stale.settlement_id,
           details: { recovered_at: new Date().toISOString(), new_retry_count: newRetry, result_state: failState },
         });
-        console.warn(`[auto-post-settlement] Recovered stale lock for ${stale.settlement_id}, retry ${newRetry}`);
+        logger.warn(`[auto-post-settlement] Recovered stale lock for ${stale.settlement_id}, retry ${newRetry}`);
       }
     }
 
