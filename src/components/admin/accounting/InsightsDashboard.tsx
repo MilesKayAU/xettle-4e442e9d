@@ -90,6 +90,10 @@ export default function InsightsDashboard() {
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start')
+          .eq('is_hidden', false)
+          .eq('is_pre_boundary', false)
+          .is('duplicate_of_settlement_id', null)
+          .not('status', 'eq', 'push_failed_permanent')
           .order('period_end', { ascending: false }),
         supabase
           .from('marketplace_ad_spend')
