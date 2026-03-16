@@ -549,6 +549,7 @@ function buildValidationChecks(
   alreadyInXeroCheck?: ValidationCheck | null,
   periodLocked?: boolean,
   periodMonth?: string | null,
+  isCoaStale?: boolean,
 ): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
 
@@ -566,6 +567,54 @@ function buildValidationChecks(
     checks.push(alreadyInXeroCheck);
   } else {
     checks.push({ label: 'No existing invoice found in Xero ✓', status: 'green' });
+  }
+
+  // 0b. UNMAPPED account codes — hard block
+  const unmappedLines = lineItems.filter(li => li.accountCode === 'UNMAPPED');
+  if (unmappedLines.length > 0) {
+    const categories = unmappedLines.map(li => li.description).join(', ');
+    checks.push({
+      label: 'Unmapped account codes — push blocked',
+      status: 'red',
+      detail: `Missing account mapping for: ${categories}. Configure in Account Mapper before pushing.`,
+    });
+  }
+
+  // 0c. Per-marketplace mapping completeness gate
+  const missingRequired = REQUIRED_MAPPING_CATEGORIES.filter(reqCat => {
+    const matchingLine = lineItems.find(li => {
+      const desc = li.description;
+      if (reqCat === 'Sales') return desc === 'Sales (Principal)';
+      if (reqCat === 'Shipping') return desc === 'Shipping Revenue';
+      if (reqCat === 'Seller Fees') return desc === 'Seller Fees';
+      if (reqCat === 'Refunds') return desc === 'Refunds';
+      if (reqCat === 'Other Fees') return desc === 'Other Fees';
+      return false;
+    });
+    // If no line item for this category (zero amount), it's fine
+    if (!matchingLine) return false;
+    // If the line item is UNMAPPED, it's missing
+    return matchingLine.accountCode === 'UNMAPPED';
+  });
+
+  if (missingRequired.length > 0) {
+    const mpLabel = s.marketplace || 'Unknown';
+    checks.push({
+      label: 'Required account mappings incomplete',
+      status: 'red',
+      detail: `${mpLabel}: missing mapping for ${missingRequired.join(', ')}. All required categories must be mapped.`,
+    });
+  } else if (unmappedLines.length === 0) {
+    checks.push({ label: 'All required categories mapped ✓', status: 'green' });
+  }
+
+  // 0d. CoA freshness check
+  if (isCoaStale) {
+    checks.push({
+      label: 'Chart of Accounts could not be verified',
+      status: 'red',
+      detail: 'CoA cache is stale or empty and auto-refresh failed. Reconnect Xero or refresh your Chart of Accounts.',
+    });
   }
 
   // 1. Line items sum to settlement net
@@ -590,6 +639,7 @@ function buildValidationChecks(
     const REVENUE_DESCS = ['Sales', 'Refunds', 'Reimbursements'];
 
     for (const li of lineItems) {
+      if (li.accountCode === 'UNMAPPED') continue; // Already handled above
       const entry = coaMap.get(li.accountCode);
       if (!entry) {
         invalidCodes.push(li.accountCode);
@@ -622,12 +672,12 @@ function buildValidationChecks(
         status: 'red',
         detail: wrongTypeCodes.join('; '),
       });
-    } else {
+    } else if (unmappedLines.length === 0) {
       checks.push({ label: 'All account codes verified in Xero ✓', status: 'green' });
     }
-  } else {
+  } else if (!isCoaStale) {
     // No CoA cached — fallback to old check
-    const allCodesKnown = lineItems.every(li => ACCOUNT_NAMES[li.accountCode]);
+    const allCodesKnown = lineItems.every(li => li.accountCode !== 'UNMAPPED' && ACCOUNT_NAMES[li.accountCode]);
     checks.push({
       label: 'Account codes confirmed',
       status: allCodesKnown ? 'green' : 'amber',
@@ -643,12 +693,12 @@ function buildValidationChecks(
     detail: hasGstData ? undefined : 'No GST data — verify this settlement has correct tax treatment',
   });
 
-  // 4. Contact maps to known Xero contact
+  // 4. Contact maps to known Xero contact — RED BLOCK if missing
   const knownContact = !!MARKETPLACE_CONTACTS[s.marketplace];
   checks.push({
-    label: 'Contact maps to known Xero contact',
-    status: knownContact ? 'green' : 'amber',
-    detail: knownContact ? undefined : `Using fallback contact: "${s.marketplace} Marketplace"`,
+    label: knownContact ? 'Contact maps to known Xero contact' : 'No Xero contact mapping for this marketplace',
+    status: knownContact ? 'green' : 'red',
+    detail: knownContact ? undefined : `No contact mapping found for "${s.marketplace}". Add to marketplace contacts before pushing.`,
   });
 
   // 5. Bank deposit confirmed
