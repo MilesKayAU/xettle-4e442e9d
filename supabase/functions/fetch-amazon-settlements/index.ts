@@ -1408,7 +1408,7 @@ serve(async (req) => {
                 foundIds.push(header.settlementId);
                 existingSet.add(header.settlementId);
                 backfilled++;
-                console.log(`[backfill] ✓ Found and ingested settlement ${header.settlementId}`);
+                logger.debug(`[backfill] ✓ Found and ingested settlement ${header.settlementId}`);
 
                 // ─── Compute and persist settlement_components ───
                 const payoutTotal = round2(summary.bankDeposit);
