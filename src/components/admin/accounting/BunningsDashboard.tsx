@@ -1274,6 +1274,14 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Golden Rule: All pushes go through PushSafetyPreview */}
+      <PushSafetyPreview
+        open={previewOpen}
+        onClose={() => { setPreviewOpen(false); setPreviewSettlements([]); }}
+        onConfirm={handlePreviewConfirm}
+        settlements={previewSettlements}
+      />
     </div>
   );
 }
