@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
           .limit(100)
 
         if (cacheErr) {
-          console.error(`[verify-payment-matches] Cache query error for ${gateway.code}:`, cacheErr.message)
+          logger.error(`[verify-payment-matches] Cache query error for ${gateway.code}:`, cacheErr.message)
           continue
         }
 
