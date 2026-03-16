@@ -23,6 +23,8 @@ import {
   getMarketplaceCoverage,
   type CachedXeroAccount,
 } from '@/actions';
+import { generateNextCode, getAccountTypeForCategory } from '@/policy/accountCodePolicy';
+import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { Save, Upload, Copy } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
 
@@ -122,7 +124,22 @@ export default function AccountMapperCard() {
 
   // ─── Clone COA banner renderer ───────────────────────────────────
   const renderCloneBanner = () => {
-    if (!splitByMarketplace || uncoveredMarketplaces.length === 0 || coveredMarketplaces.length === 0 || !isAdmin) {
+    if (!splitByMarketplace || !isAdmin) return null;
+
+    // No-template-available: uncovered marketplaces exist but no covered template
+    if (uncoveredMarketplaces.length > 0 && coveredMarketplaces.length === 0) {
+      return (
+        <Alert className="border-amber-300 bg-amber-50">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+          <AlertDescription className="text-xs text-amber-900">
+            <strong>{uncoveredMarketplaces.join(', ')}</strong> {uncoveredMarketplaces.length === 1 ? 'has' : 'have'} no accounts in your COA, and no marketplace template is available yet.
+            Create accounts manually or confirm a base marketplace structure first.
+          </AlertDescription>
+        </Alert>
+      );
+    }
+
+    if (uncoveredMarketplaces.length === 0) {
       return null;
     }
 
@@ -235,7 +252,7 @@ export default function AccountMapperCard() {
         .from('marketplace_connections')
         .select('marketplace_name, settings')
         .eq('user_id', user.id)
-        .eq('connection_status', 'connected');
+        .in('connection_status', ACTIVE_CONNECTION_STATUSES);
 
       if (connections && connections.length > 0) {
         setActiveMarketplaces(connections.map(c => c.marketplace_name));
@@ -1102,20 +1119,12 @@ function AccountCombobox({
   const displayAccounts = showAll ? allAccounts : accounts;
   const selectedAccount = allAccounts.find(a => a.account_code === value);
 
-  // Suggest next available code based on existing codes in the type range
+  // Suggest next available code via centralized policy (no ad-hoc generation)
   const suggestNextCode = (): string => {
-    const numericCodes = existingCodes
-      .map(c => parseInt(c, 10))
-      .filter(n => !isNaN(n))
-      .sort((a, b) => a - b);
-    
-    // Find codes in the relevant range
-    const rangeStart = suggestedType === 'REVENUE' || suggestedType === 'OTHERINCOME' ? 200 : 400;
-    const rangeEnd = rangeStart + 199;
-    const codesInRange = numericCodes.filter(c => c >= rangeStart && c <= rangeEnd);
-    
-    if (codesInRange.length === 0) return String(rangeStart);
-    return String(Math.max(...codesInRange) + 1);
+    return generateNextCode({
+      existingCodes,
+      accountType: suggestedType,
+    });
   };
 
   const suggestedName = suggestedNameContext
