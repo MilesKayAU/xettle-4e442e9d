@@ -543,7 +543,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
     // Throttle: skip if called within THROTTLE_MS (unless it's the first load)
     if (lastFetchTimestampRef.current > 0 && timeSinceLast < THROTTLE_MS && !options?.runSync) {
-      console.log(`[OutstandingTab] Throttled: ${Math.round(timeSinceLast / 1000)}s since last fetch (min ${THROTTLE_MS / 1000}s)`);
+      logger.debug(`[OutstandingTab] Throttled: ${Math.round(timeSinceLast / 1000)}s since last fetch (min ${THROTTLE_MS / 1000}s)`);
       return;
     }
 
