@@ -10,10 +10,10 @@
 
 | Entry Point | File | Tables Written | Idempotency | Canonical Path |
 |---|---|---|---|---|
-| Shopify auto-provision | `src/components/admin/ShopifyConnectionStatus.tsx:162` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
-| Shopify orders auto-provision | `src/components/admin/accounting/ShopifyOrdersDashboard.tsx:701` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
-| Shopify onboarding | `src/components/admin/accounting/ShopifyOnboarding.tsx:197` | `marketplace_connections` | `dedup-check` (existingCodes Set) | ❌ → `provisionMarketplace()` |
-| SmartUploadFlow detect new marketplace | `src/components/admin/accounting/SmartUploadFlow.tsx:2656` | `marketplace_connections` | ⚠️ **none** | ❌ → `provisionMarketplace()` |
+| Shopify auto-provision | `src/components/admin/ShopifyConnectionStatus.tsx:157` | `marketplace_connections` | via `provisionMarketplace()` | ✅ `provisionMarketplace()` |
+| Shopify orders auto-provision | `src/components/admin/accounting/ShopifyOrdersDashboard.tsx:691` | `marketplace_connections` | via `provisionMarketplace()` | ✅ `provisionMarketplace()` |
+| Shopify onboarding | `src/components/admin/accounting/ShopifyOnboarding.tsx:184` | `marketplace_connections` | via `provisionMarketplace()` | ✅ `provisionMarketplace()` |
+| SmartUploadFlow detect new marketplace | `src/components/admin/accounting/SmartUploadFlow.tsx:2641` | `marketplace_connections` | via `provisionMarketplace()` | ✅ `provisionMarketplace()` |
 | CoA detected panel confirm | `src/components/dashboard/CoaDetectedPanel.tsx:33` | `marketplace_connections` | n/a (update only) | ✅ (update, not provision) |
 | CoA detected panel dismiss | `src/components/dashboard/CoaDetectedPanel.tsx:49` | `marketplace_connections` | n/a (delete) | ✅ (dismiss) |
 | MarketplaceSwitcher delete | `src/components/admin/accounting/MarketplaceSwitcher.tsx` | `marketplace_connections`, `settlements`, `settlement_lines`, fees, fingerprints, ad_spend, shipping_costs | cascade delete | ✅ `removeMarketplace()` |
@@ -22,10 +22,7 @@
 | Shopify OAuth callback | `supabase/functions/shopify-auth/index.ts` | `shopify_tokens`, `marketplace_connections` | `upsert` | ✅ (server-side) |
 | Ghost cleanup | `src/utils/marketplace-token-map.ts:115,138` | `marketplace_connections` | n/a (cleanup delete) | ✅ (allowed utility) |
 
-**Invariant risks:**
-- SmartUploadFlow has NO dedup check before insert — can create duplicate connections
-- 3 Shopify components do identical "check existingCodes then insert" independently
-- No normalisation of marketplace_code at insert time in non-canonical paths
+**Invariant risks:** None — all client-side provisioning now goes through `provisionMarketplace()` with dedup, normalisation, and race-condition handling.
 
 ---
 
