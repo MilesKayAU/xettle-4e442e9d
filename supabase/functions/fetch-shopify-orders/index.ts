@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
     let tokenError: any = null;
 
     if (shopDomain) {
-      console.log("[fetch-shopify-orders] Querying shopify_tokens for domain:", shopDomain);
+      logger.debug("[fetch-shopify-orders] Querying shopify_tokens for domain:", shopDomain);
       const result = await supabase
         .from("shopify_tokens")
         .select("access_token, shop_domain")
