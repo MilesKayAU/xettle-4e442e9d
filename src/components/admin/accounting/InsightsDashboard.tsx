@@ -89,8 +89,9 @@ export default function InsightsDashboard() {
       const [settlementsRes, adSpendRes, shippingRes] = await Promise.all([
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start')
+          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden')
           .eq('is_hidden', false)
+          .eq('is_pre_boundary', false)
           .is('duplicate_of_settlement_id', null)
           .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")')
           .order('period_end', { ascending: false }),
@@ -103,8 +104,11 @@ export default function InsightsDashboard() {
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
-      const data = settlementsRes.data;
-      if (!data || data.length === 0) {
+      // Filter out any corrupted rows with impossibly large values (bad CSV parses)
+      const data = (settlementsRes.data || []).filter(r => 
+        r.is_hidden === false && Math.abs(r.sales_principal || 0) < 10_000_000
+      );
+      if (data.length === 0) {
         setStats([]);
         return;
       }
