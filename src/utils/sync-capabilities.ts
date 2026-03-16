@@ -164,7 +164,7 @@ export function buildSyncSummary(
   }
 
   if (parts.length === 0) {
-    if (!caps.hasAmazon && !caps.hasShopify && !caps.hasXero && !caps.hasSettlements) {
+    if (!caps.hasAmazon && !caps.hasShopify && !caps.hasEbay && !caps.hasXero && !caps.hasSettlements) {
       return 'No data yet. Connect your accounts or upload a settlement file to get started.';
     }
     return 'Scan complete.';
