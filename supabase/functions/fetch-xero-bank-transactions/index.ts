@@ -10,6 +10,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { logger } from '../_shared/logger.ts'
 
 // ── Keys ──
 const COOLDOWN_KEY = 'xero_bank_api_cooldown_until';      // Bank feed cooldown only (set on BankTransactions 429)

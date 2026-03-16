@@ -14,6 +14,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logger } from '../_shared/logger.ts';
 
 // ─── Hardcoded fallback registries (used only if DB query fails) ────────────
 

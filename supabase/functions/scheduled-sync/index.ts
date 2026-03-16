@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logger } from '../_shared/logger.ts';
 
 const STEP_TIMEOUT_MS = 90_000; // 90 seconds per step (increased from 45s to match Xero cooldown)
 

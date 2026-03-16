@@ -1,6 +1,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
+import { logger } from '../_shared/logger.ts';
 
 const GST_INCOME_CATEGORIES = ['gst_income'];
 const GST_EXPENSE_CATEGORIES = ['gst_expense'];
