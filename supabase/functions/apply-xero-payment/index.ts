@@ -1,7 +1,46 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts';
 
-// ... keep existing code
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const xeroClientId = Deno.env.get('XERO_CLIENT_ID')!;
+const xeroClientSecret = Deno.env.get('XERO_CLIENT_SECRET')!;
+
+// Token refresh helper
+async function refreshXeroToken(supabase: any, tokenRow: any) {
+  const basicAuth = btoa(`${xeroClientId}:${xeroClientSecret}`);
+  const resp = await fetch('https://identity.xero.com/connect/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${basicAuth}` },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokenRow.refresh_token }),
+  });
+  if (!resp.ok) throw new Error(`Token refresh failed: ${resp.status}`);
+  const data = await resp.json();
+  await supabase.from('xero_tokens').update({
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('id', tokenRow.id);
+  return data.access_token;
+}
+
+// Get valid access token
+async function getValidToken(supabase: any, userId: string) {
+  const { data: tokens } = await supabase.from('xero_tokens').select('*').eq('user_id', userId).order('updated_at', { ascending: false }).limit(1);
+  if (!tokens?.length) throw new Error('No Xero connection found');
+  const token = tokens[0];
+  if (new Date(token.expires_at) < new Date()) {
+    const newAccessToken = await refreshXeroToken(supabase, token);
+    return { accessToken: newAccessToken, tenantId: token.tenant_id };
+  }
+  return { accessToken: token.access_token, tenantId: token.tenant_id };
+}
+
+Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+  const preflightResponse = handleCorsPreflightResponse(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
     const authHeader = req.headers.get('Authorization');
