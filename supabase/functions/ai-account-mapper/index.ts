@@ -253,6 +253,10 @@ Deno.serve(async (req) => {
     // This catches accounts like "Kogan Sales AU" (203), "Bunnings Sales" (209), etc. that AI may miss.
     const MARKETPLACE_KEYWORDS: Record<string, string[]> = {
       'Amazon AU': ['amazon'],
+      'Amazon USA': ['amazon'],
+      'Amazon JP': ['amazon'],
+      'Amazon SG': ['amazon'],
+      'Amazon UK': ['amazon'],
       'Shopify': ['shopify'],
       'Bunnings': ['bunnings'],
       'eBay AU': ['ebay', 'e-bay'],
