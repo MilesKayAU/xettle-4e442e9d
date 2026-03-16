@@ -846,6 +846,7 @@ serve(async (req) => {
       }
 
       for (const code of usedCodes) {
+        if (!code) continue; // Unmapped — already caught by MAPPING_REQUIRED check
         const coaEntry = coaMap.get(code);
         if (!coaEntry) {
           validationErrors.push(`Account code "${code}" does not exist in your Xero Chart of Accounts`);
@@ -859,7 +860,7 @@ serve(async (req) => {
       const allCategories = [...REVENUE_CATEGORIES, ...EXPENSE_CATEGORIES];
       for (const cat of allCategories) {
         const code = getCode(cat);
-        if (!code || code === '400') continue;
+        if (!code) continue; // Unmapped — already caught
         const coaEntry = coaMap.get(code);
         if (!coaEntry) continue;
 
