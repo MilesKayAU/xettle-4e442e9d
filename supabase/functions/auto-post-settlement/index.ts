@@ -167,7 +167,25 @@ Deno.serve(async (req) => {
     // ─── Single settlement mode ──────────────────────────────────
     if (targetSettlementId && targetUserId) {
       // Load rail setting for invoice_status in single mode
-      const result = await processSettlement(supabase, targetSettlementId, targetUserId, 'DRAFT');
+      let singleInvoiceStatus = 'DRAFT';
+      const { data: targetSettlement } = await supabase
+        .from('settlements')
+        .select('marketplace')
+        .eq('id', targetSettlementId)
+        .eq('user_id', targetUserId)
+        .single();
+      if (targetSettlement?.marketplace) {
+        const { data: railSetting } = await supabase
+          .from('rail_posting_settings')
+          .select('invoice_status')
+          .eq('user_id', targetUserId)
+          .eq('rail', targetSettlement.marketplace)
+          .single();
+        if (railSetting?.invoice_status) {
+          singleInvoiceStatus = railSetting.invoice_status;
+        }
+      }
+      const result = await processSettlement(supabase, targetSettlementId, targetUserId, singleInvoiceStatus);
       results.push(result);
     } else {
       // ─── Batch mode: scan all users with auto-post rails ───────
@@ -622,7 +640,7 @@ async function processSettlement(
       xero_invoice_id: pushResult.invoiceId || null,
       xero_invoice_number: pushResult.invoiceNumber || null,
       xero_journal_id: pushResult.invoiceId || null,
-      xero_status: 'DRAFT',
+      xero_status: invoiceStatus || 'DRAFT',
       xero_type: pushResult.xeroType || 'invoice',
     }).eq('id', settlementDbId);
 
