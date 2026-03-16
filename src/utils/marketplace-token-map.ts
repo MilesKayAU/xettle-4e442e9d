@@ -22,7 +22,7 @@ export function isPaymentProcessor(code: string): boolean {
 }
 
 export interface TokenMarketplaceEntry {
-  table: 'amazon_tokens' | 'shopify_tokens';
+  table: 'amazon_tokens' | 'shopify_tokens' | 'ebay_tokens';
   code: string;
   type: string;
   name: string;
@@ -33,7 +33,7 @@ export interface TokenMarketplaceEntry {
 export const TOKEN_TABLE_MAP: TokenMarketplaceEntry[] = [
   { table: 'amazon_tokens', code: 'amazon_au', type: 'sp_api', name: 'Amazon AU', checkColumn: 'selling_partner_id' },
   { table: 'shopify_tokens', code: 'shopify_payments', type: 'shopify_api', name: 'Shopify Payments', checkColumn: 'shop_domain' },
-  // Future: { table: 'ebay_tokens', code: 'ebay_au', type: 'ebay_api', name: 'eBay AU', checkColumn: 'ebay_user_id' },
+  { table: 'ebay_tokens', code: 'ebay_au', type: 'ebay_api', name: 'eBay AU', checkColumn: 'ebay_username' },
 ];
 
 /**
