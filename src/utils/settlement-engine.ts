@@ -607,7 +607,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
                   missing_fields: gateResult.missingGates,
                   actor_user_id: user.id,
                 },
-              } as any).catch(() => {});
+              } as any).then(() => {});
             }
           } catch {}
 
