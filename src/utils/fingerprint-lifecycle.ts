@@ -1,6 +1,9 @@
 /**
  * Fingerprint Lifecycle — Trusted Format validation and auto-promotion logic.
  *
+ * DO NOT insert directly into marketplace_file_fingerprints.
+ * Always use createDraftFingerprint() to enforce lifecycle rules.
+ *
  * Fingerprints go through: draft → active (or rejected).
  * Draft fingerprints must pass validation gates before settlements can be saved.
  * Auto-promotion to active happens for low-risk CSV/TSV/XLSX formats.
@@ -105,7 +108,7 @@ export function validateDraftGates(
       warnings.push('PDF formats require manual promotion.');
     }
 
-    if (fingerprint.parser_type !== 'generic') {
+    if (fingerprint.parser_type !== 'generic' && fingerprint.parser_type !== 'ai') {
       canAutoPromote = false;
       warnings.push(`Parser type "${fingerprint.parser_type}" requires manual promotion.`);
     }
@@ -246,4 +249,55 @@ export async function createDraftFingerprint(params: {
     console.error('[createDraftFingerprint] exception:', err);
     return null;
   }
+}
+
+// ─── Centralized Logging Helpers ────────────────────────────────────────────
+
+/**
+ * Log when a draft fingerprint is promoted to active.
+ */
+export async function logPromotionEvent(params: {
+  userId: string;
+  fingerprintId: string;
+  marketplace: string;
+  parserType: string;
+  confidence: number | null;
+}): Promise<void> {
+  try {
+    await supabase.from('system_events').insert({
+      user_id: params.userId,
+      event_type: 'format_promoted_to_active',
+      severity: 'info',
+      marketplace_code: params.marketplace,
+      details: {
+        fingerprint_id: params.fingerprintId,
+        parser_type: params.parserType,
+        confidence: params.confidence,
+      },
+    } as any);
+  } catch { /* non-blocking */ }
+}
+
+/**
+ * Log when a settlement save is blocked by lifecycle gates.
+ */
+export async function logSaveBlocked(params: {
+  userId: string;
+  fingerprintId: string;
+  marketplace: string;
+  missingGates: string[];
+}): Promise<void> {
+  try {
+    await supabase.from('system_events').insert({
+      user_id: params.userId,
+      event_type: 'format_save_blocked',
+      severity: 'warning',
+      marketplace_code: params.marketplace,
+      details: {
+        fingerprint_id: params.fingerprintId,
+        missing_gates: params.missingGates,
+        actor_user_id: params.userId,
+      },
+    } as any);
+  } catch { /* non-blocking */ }
 }

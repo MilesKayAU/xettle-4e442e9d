@@ -46,6 +46,7 @@ import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, validateSettlementSanity, type StandardSettlement } from '@/utils/settlement-engine';
+import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import {
   detectMultiMarketplace,
@@ -76,6 +77,10 @@ interface DetectedFile {
   sampleRows?: string[][];
   /** Whether this file was low-confidence (for post-save banner) */
   wasLowConfidence?: boolean;
+  /** Fingerprint lifecycle status (draft/active/rejected) */
+  fingerprintStatus?: string;
+  /** Parser type from fingerprint */
+  fingerprintParserType?: string;
 }
 
 interface SmartUploadFlowProps {
@@ -998,19 +1003,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         try {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            // Extract headers for fingerprint
             const extracted = await extractFileHeaders(df.file);
             if (extracted) {
-              // Save to marketplace_file_fingerprints with reconciliation_type
-              await supabase.from('marketplace_file_fingerprints').insert({
-                user_id: user.id,
-                marketplace_code: marketplace,
-                column_signature: extracted.headers as any,
-                column_mapping: df.detection?.columnMapping || {} as any,
-                is_multi_marketplace: false,
-                file_pattern: df.file.name.replace(/\d+/g, '*'),
-                reconciliation_type: 'csv_only',
-              } as any);
+              // Use lifecycle-safe createDraftFingerprint instead of direct insert
+              await createDraftFingerprint({
+                userId: user.id,
+                marketplaceCode: marketplace,
+                columnSignature: extracted.headers,
+                columnMapping: (df.detection?.columnMapping || {}) as Record<string, string>,
+                parserType: 'generic',
+                confidence: df.detection?.confidence || undefined,
+                filePattern: df.file.name.replace(/\d+/g, '*'),
+              });
 
               // Create bug report for admin visibility
               const scrubbedSample = scrubSampleRows(extracted.headers, extracted.sampleRows.slice(0, 3));
@@ -1032,9 +1036,22 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               } as any);
             }
           }
-        } catch { /* silent — don't fail save for learning loop */ }
+        } catch (err) {
+          console.error('[learning-loop] fingerprint creation failed:', err);
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await supabase.from('system_events').insert({
+                user_id: user.id,
+                event_type: 'format_learning_loop_failed',
+                severity: 'warning',
+                marketplace_code: marketplace,
+                details: { error: String(err), filename: df.file.name, confidence: df.detection?.confidence || 0 },
+              } as any);
+            }
+          } catch { /* non-blocking */ }
+        }
 
-        // Show post-save validation banner
         setShowNewFormatBanner(true);
       }
 
@@ -1706,6 +1723,18 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                         <span className="text-xs font-semibold text-foreground">{detection.confidence}%</span>
                       </div>
                     </div>
+                    {df.fingerprintStatus && (
+                      <Badge
+                        variant="outline"
+                        className={df.fingerprintStatus === 'active' ? 'text-green-600 border-green-300' :
+                                   df.fingerprintStatus === 'rejected' ? 'text-destructive border-destructive/30' :
+                                   'text-amber-600 border-amber-300'}
+                        title={df.fingerprintStatus === 'draft' ? 'New format — verified before saving' :
+                               df.fingerprintStatus === 'active' ? 'Trusted format' : 'Rejected format'}
+                      >
+                        {df.fingerprintStatus.toUpperCase()}{df.fingerprintParserType ? ` · ${df.fingerprintParserType}` : ''}
+                      </Badge>
+                    )}
                     {detection.recordCount && (
                       <div className="flex items-center gap-1">
                         <FileSpreadsheet className="h-3 w-3 text-muted-foreground" />
