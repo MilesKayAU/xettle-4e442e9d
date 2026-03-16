@@ -321,6 +321,20 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               )}
             </div>
 
+            {/* Refresh + Compare actions */}
+            {(settlement.xero_invoice_id || settlement.xero_journal_id) && (
+              <div className="flex items-center gap-2">
+                <InvoiceRefreshButton
+                  xeroInvoiceId={settlement.xero_invoice_id || settlement.xero_journal_id}
+                  size="sm"
+                />
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCompareOpen(true)}>
+                  <GitCompare className="h-3.5 w-3.5" />
+                  Compare to Xettle
+                </Button>
+              </div>
+            )}
+
             <Separator />
 
             {/* Source label */}
