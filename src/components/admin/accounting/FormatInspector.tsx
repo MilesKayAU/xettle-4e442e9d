@@ -110,11 +110,16 @@ export default function FormatInspector() {
   const loadFingerprints = useCallback(async () => {
     setLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
+
       const { data } = await supabase
         .from('marketplace_file_fingerprints')
         .select('id, marketplace_code, status, parser_type, confidence, created_at, created_by, last_seen_at, notes, column_signature, column_mapping')
+        .eq('user_id', user.id)
         .order('status', { ascending: true })
-        .order('last_seen_at', { ascending: false, nullsFirst: false });
+        .order('last_seen_at', { ascending: false, nullsFirst: false })
+        .limit(200);
       setFingerprints((data as any as FingerprintRow[]) || []);
     } catch {
       toast.error('Failed to load formats');
