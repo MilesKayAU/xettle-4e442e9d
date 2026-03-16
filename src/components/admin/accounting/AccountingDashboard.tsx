@@ -1146,6 +1146,11 @@ export default function AccountingDashboard() {
               <GstAuditTab />
             </TabsContent>
 
+            {/* FORMATS TAB */}
+            <TabsContent value="formats">
+              <FormatInspector />
+            </TabsContent>
+
             {/* Upgrade nudge dialog */}
             <UpgradeNudgeDialog
               open={showUpgradeNudge}
