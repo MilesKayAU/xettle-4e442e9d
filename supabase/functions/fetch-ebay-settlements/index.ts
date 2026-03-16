@@ -611,7 +611,7 @@ Deno.serve(async (req) => {
           .upsert(settlement, { onConflict: 'user_id,marketplace,settlement_id' })
 
         if (upsertError) {
-          console.error(`[fetch-ebay-settlements] Upsert failed for payout ${payout.payoutId}:`, upsertError)
+          logger.error(`[fetch-ebay-settlements] Upsert failed for payout ${payout.payoutId}:`, upsertError)
           continue
         }
 
