@@ -5,6 +5,7 @@
 
 import { round2, formatAUD, XERO_ACCOUNT_MAP, type ParsedSettlement } from '@/utils/settlement-parser';
 import { TOL_PAYOUT_MATCH } from '@/constants/reconciliation-tolerance';
+import { logger } from '@/utils/logger';
 
 // ─── Types ──────────────────────────────────────────────────────────
 

@@ -6,6 +6,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { upsertMarketplaceConnection } from './marketplace-connections';
+import { logger } from '@/utils/logger';
 
 /**
  * Payment processors / gateways — NOT marketplaces.

@@ -24,6 +24,7 @@
  */
 
 import { useState, useCallback, useEffect, Fragment, useMemo, useRef } from 'react';
+import { logger } from '@/utils/logger';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { Switch } from '@/components/ui/switch';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';

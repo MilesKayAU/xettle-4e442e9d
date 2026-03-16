@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { logger } from '@/utils/logger';
 import { supabase } from '@/integrations/supabase/client';
 import {
   syncSettlementToXero,

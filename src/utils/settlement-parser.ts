@@ -2,6 +2,7 @@
 export const PARSER_VERSION = 'v1.7.1';
 import { parseDateOrEmpty } from './date-parser';
 import { TOL_PARSER_TOTAL, TOL_LINE_SUM, TOL_COLUMN_TOTALS, TOL_GST_CONSISTENCY } from '@/constants/reconciliation-tolerance';
+import { logger } from '@/utils/logger';
 /**
  * Amazon Settlement Report (TSV) Parser
  * Parses the primary settlement data source and categorizes transactions
