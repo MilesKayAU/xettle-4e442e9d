@@ -94,6 +94,10 @@ export default function CloneCoaDialog({
       return;
     }
 
+    // Get user for event logging
+    const { data: { user } } = await (await import('@/integrations/supabase/client')).supabase.auth.getUser();
+    const userId = user?.id || 'unknown';
+
     setCreating(true);
     try {
       const result = await executeCoaClone({ rows: cloneRows });
@@ -107,11 +111,40 @@ export default function CloneCoaDialog({
       if (result.success) {
         const count = Object.keys(result.createdMappings).length;
         toast.success(`Created ${count} account${count !== 1 ? 's' : ''} in Xero for ${targetMarketplace}`);
+
+        // Log success event
+        await logCloneEvent({
+          userId,
+          eventType: 'coa_clone_executed',
+          templateMarketplace,
+          targetMarketplace,
+          accountsCreated: count,
+          taxProfile,
+        });
+
         onOpenChange(false);
         onComplete(result.createdMappings);
+      } else {
+        // Log failure event
+        await logCloneEvent({
+          userId,
+          eventType: 'coa_clone_failed',
+          templateMarketplace,
+          targetMarketplace,
+          taxProfile,
+          errors: result.errors.map(e => e.error),
+        });
       }
     } catch (err: any) {
       toast.error(`Error: ${err.message}`);
+      await logCloneEvent({
+        userId,
+        eventType: 'coa_clone_failed',
+        templateMarketplace,
+        targetMarketplace,
+        taxProfile,
+        errors: [err.message],
+      });
     } finally {
       setCreating(false);
     }
