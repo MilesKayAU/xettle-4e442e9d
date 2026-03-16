@@ -1156,6 +1156,11 @@ export default function AccountingDashboard() {
             </TabsContent>
 
 
+            {/* EXCEPTIONS TAB */}
+            <TabsContent value="exceptions">
+              <ExceptionsInbox />
+            </TabsContent>
+
             {/* GST AUDIT TAB */}
             <TabsContent value="gst-audit">
               <GstAuditTab />
