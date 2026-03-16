@@ -237,7 +237,7 @@ export default function PushSafetyPreview({
         const contactName = MARKETPLACE_CONTACTS[settlement.marketplace] || `${settlement.marketplace} Marketplace`;
         const reference = `Xettle-${settlement.settlement_id}`;
 
-        results.push({ settlement, lineItems, checks, contactName, reference });
+        results.push({ settlement, lineItems, checks, contactName, reference, isRepost, repostOfInvoiceId, repostReason });
       }
       setPreviews(results);
     } catch (err) {
