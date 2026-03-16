@@ -23,6 +23,8 @@ export interface StandardSettlement {
   net_payout: number;        // Amount deposited to bank
   source: 'csv_upload' | 'api' | 'manual';  // How this settlement was ingested
   reconciles: boolean;       // Whether calculated total ≈ net_payout
+  /** ID of the marketplace_file_fingerprints record that produced this settlement */
+  fingerprint_id?: string;
   // Optional marketplace-specific metadata
   metadata?: Record<string, any>;
 }
