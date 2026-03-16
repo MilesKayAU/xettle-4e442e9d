@@ -972,7 +972,7 @@ serve(async (req) => {
           await supabase.from('settlements').update(fuzzyUpdatePayload)
             .eq('settlement_id', settlement.settlement_id).eq('user_id', userId);
 
-          await supabase.from('xero_accounting_matches').upsert({
+          await safeUpsertXam(supabase, {
             user_id: userId,
             settlement_id: settlement.settlement_id,
             marketplace_code: marketplace,
@@ -988,7 +988,7 @@ serve(async (req) => {
             matched_reference: bestMatch.Reference || null,
             reference_hash: (bestMatch.Reference || '').replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
             notes: `Auto-detected: amount diff $${Math.abs((bestMatch.Total || 0) - Math.abs(settlement.bank_deposit || 0)).toFixed(2)}, contact: ${bestMatch.Contact?.Name || 'unknown'}`,
-          }, { onConflict: 'user_id,settlement_id' });
+          });
 
           matchedInvoiceIds.add(bestMatch.InvoiceID);
           fuzzyMatched++;
