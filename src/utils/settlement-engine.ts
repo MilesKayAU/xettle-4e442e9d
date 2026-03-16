@@ -849,6 +849,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       source_reference: meta.sourceReference || null,
       status: 'saved',
       reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
+      fingerprint_id: settlement.fingerprint_id || null,
     } as any);
 
     // Register aliases + post-insert safety check after successful insert
