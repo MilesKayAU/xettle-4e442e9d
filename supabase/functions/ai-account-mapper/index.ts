@@ -580,7 +580,7 @@ Return JSON with this structure:
     for (const [key, code] of Object.entries(deterministicOverrides)) {
       if (existingCodes.has(code) && !marketplaceOverrides[key]) {
         marketplaceOverrides[key] = code
-        console.log(`[ai-account-mapper] Applied deterministic override: ${key} → ${code}`)
+        logger.debug(`[ai-account-mapper] Applied deterministic override: ${key} → ${code}`)
       }
     }
 
