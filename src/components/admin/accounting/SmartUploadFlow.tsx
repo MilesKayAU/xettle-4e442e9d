@@ -1785,6 +1785,19 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                         <span className="font-semibold text-foreground">Net Payout</span>
                         <span className="font-bold text-primary">{formatAUD(previewData.totalNet)}</span>
                       </div>
+                      {/* Collapsed preview sanity warnings */}
+                      {previewData.totalNet === 0 && previewData.totalSales > 500 && (
+                        <div className="flex items-center gap-1.5 mt-1.5 text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                          <span className="text-[10px] font-medium">⚠ Net is $0 with {formatAUD(previewData.totalSales)} in sales — check column mapping</span>
+                        </div>
+                      )}
+                      {settlements?.some(s => s.metadata?.sanity_failed) && (
+                        <div className="flex items-center gap-1.5 mt-1.5 text-destructive">
+                          <XCircle className="h-3 w-3 flex-shrink-0" />
+                          <span className="text-[10px] font-medium">⛔ Data integrity issue detected — review before saving</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
