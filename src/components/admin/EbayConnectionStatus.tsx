@@ -22,6 +22,29 @@ export default function EbayConnectionStatus() {
       if (!error && data) {
         setConnected(data.connected);
         setConnection(data.connection || null);
+
+        // Auto-provision marketplace_connections row if connected but missing
+        if (data.connected) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: existing } = await supabase
+              .from('marketplace_connections')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('marketplace_code', 'ebay_au')
+              .limit(1);
+            if (!existing || existing.length === 0) {
+              await supabase.from('marketplace_connections').insert({
+                user_id: user.id,
+                marketplace_code: 'ebay_au',
+                marketplace_name: 'eBay Australia',
+                connection_type: 'api',
+                connection_status: 'active',
+                country_code: 'AU',
+              });
+            }
+          }
+        }
       }
     } catch {
       // silently fail
