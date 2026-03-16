@@ -115,11 +115,11 @@ function sanitizeRows(
     const entries = Object.entries(row).slice(0, MAX_FIELDS_PER_ROW);
     const clean: Record<string, string | number | boolean | null> = {};
     for (const [k, v] of entries) {
-      const sanitized = redactValue(k, v);
-      if (sanitized === null || typeof sanitized === 'string' || typeof sanitized === 'number' || typeof sanitized === 'boolean') {
-        clean[k] = sanitized;
+      const val = redactValue(k, v);
+      if (val === null || typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+        clean[k] = val;
       } else {
-        clean[k] = String(sanitized);
+        clean[k] = String(val);
       }
     }
     return clean;
