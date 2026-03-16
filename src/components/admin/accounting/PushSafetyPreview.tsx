@@ -165,6 +165,11 @@ export default function PushSafetyPreview({
 
         if (!s) continue;
 
+        // Detect repost context
+        const isRepost = !!s.repost_of_invoice_id;
+        const repostOfInvoiceId = s.repost_of_invoice_id || null;
+        const repostReason = s.repost_reason || null;
+
         const settlement: SettlementPreview = {
           settlement_id: s.settlement_id,
           marketplace: s.marketplace || marketplace,
