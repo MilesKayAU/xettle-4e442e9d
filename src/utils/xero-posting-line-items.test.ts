@@ -406,7 +406,7 @@ describe('xero-posting-line-items', () => {
 
     it('line items sum matches bank_deposit (the foundation of attachment integrity)', () => {
       const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
-      const sum = lines.reduce((acc, l) => acc + l.unitAmount * (l.quantity || 1), 0);
+      const sum = lines.reduce((acc, l) => acc + l.UnitAmount * (l.Quantity || 1), 0);
       expect(Math.abs(sum - GOLDEN_SETTLEMENT.bank_deposit)).toBeLessThan(0.02);
     });
   });
