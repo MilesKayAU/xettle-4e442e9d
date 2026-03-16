@@ -9,6 +9,7 @@
 
 import type { StandardSettlement } from './settlement-engine';
 import type { ColumnMapping } from './file-fingerprint-engine';
+import { findHeaderRow } from './file-fingerprint-engine';
 import { parseDateOrEmpty, detectDateColumn } from './date-parser';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
