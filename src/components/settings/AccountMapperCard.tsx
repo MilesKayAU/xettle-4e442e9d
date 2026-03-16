@@ -104,6 +104,15 @@ export default function AccountMapperCard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Check admin role
+      const { data: roleRow } = await supabase
+        .from('user_roles' as any)
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      setIsAdmin(!!roleRow);
+
       // Load cached COA + last sync in parallel
       const [accounts, lastSynced] = await Promise.all([
         getCachedXeroAccounts(),
