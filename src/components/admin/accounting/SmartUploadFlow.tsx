@@ -2640,29 +2640,18 @@ function ShopifySyncBanner({ onSync, syncing }: { onSync: () => void; syncing: b
 
 async function ensureMarketplaceConnection(marketplaceCode: string) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: existing } = await supabase
-      .from('marketplace_connections')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('marketplace_code', marketplaceCode)
-      .maybeSingle();
-
-    if (existing) return;
-
+    const { provisionMarketplace } = await import('@/actions/marketplaces');
     const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplaceCode);
-    await supabase.from('marketplace_connections').insert({
-      user_id: user.id,
-      marketplace_code: marketplaceCode,
-      marketplace_name: catDef?.name || marketplaceCode,
-      country_code: catDef?.country || 'AU',
-      connection_type: 'auto_detected',
-      connection_status: 'active',
-    } as any);
+    const result = await provisionMarketplace({
+      marketplaceCode,
+      marketplaceName: catDef?.name || marketplaceCode,
+      countryCode: catDef?.country || 'AU',
+      connectionType: 'auto_detected',
+    });
 
-    toast.info(`New marketplace detected: ${catDef?.name || marketplaceCode} — auto-added to your dashboard.`);
+    if (result.action === 'created') {
+      toast.info(`New marketplace detected: ${catDef?.name || marketplaceCode} — auto-added to your dashboard.`);
+    }
   } catch (err) {
     console.error('Failed to auto-create marketplace connection:', err);
   }

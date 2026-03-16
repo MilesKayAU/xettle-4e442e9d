@@ -154,20 +154,18 @@ const ShopifyConnectionStatus = () => {
         .select('marketplace_code');
       const existingCodes = new Set((existing || []).map((e: any) => e.marketplace_code));
 
+      const { provisionMarketplace } = await import('@/actions/marketplaces');
       let created = 0;
       for (const code of selectedCodes) {
         const mpCode = `shopify_orders_${code}`;
         if (existingCodes.has(mpCode)) continue;
         const mp = discoveryResult?.marketplaces.find(m => m.code === code);
-        await supabase.from('marketplace_connections').insert({
-          user_id: user.id,
-          marketplace_code: mpCode,
-          marketplace_name: mp?.name || code,
-          country_code: 'AU',
-          connection_type: 'auto_detected',
-          connection_status: 'active',
-        } as any);
-        created++;
+        const result = await provisionMarketplace({
+          marketplaceCode: mpCode,
+          marketplaceName: mp?.name || code,
+          connectionType: 'auto_detected',
+        });
+        if (result.action === 'created') created++;
       }
 
       toast.success(`${created > 0 ? created : selectedCodes.length} marketplace tab${created !== 1 ? 's' : ''} created`);

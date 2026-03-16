@@ -181,27 +181,15 @@ export default function ShopifyOnboarding({ onComplete, onMarketplacesChanged }:
   // Auto-insert marketplace_connections for detected groups
   async function autoCreateConnections(groups: MarketplaceGroup[]) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: existing } = await supabase
-        .from('marketplace_connections')
-        .select('marketplace_code');
-
-      const existingCodes = new Set((existing || []).map((e: any) => e.marketplace_code));
+      const { provisionMarketplace } = await import('@/actions/marketplaces');
 
       for (const g of groups) {
         const code = `shopify_orders_${g.marketplaceKey}`;
-        if (existingCodes.has(code)) continue;
-
-        await supabase.from('marketplace_connections').insert({
-          user_id: user.id,
-          marketplace_code: code,
-          marketplace_name: g.registryEntry.display_name || g.marketplaceKey,
-          country_code: 'AU',
-          connection_type: 'auto_detected',
-          connection_status: 'active',
-        } as any);
+        await provisionMarketplace({
+          marketplaceCode: code,
+          marketplaceName: g.registryEntry.display_name || g.marketplaceKey,
+          connectionType: 'auto_detected',
+        });
       }
 
       onMarketplacesChanged?.();

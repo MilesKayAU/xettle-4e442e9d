@@ -688,25 +688,14 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
 
       // Auto-create marketplace_connections for discovered groups
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: existing } = await supabase
-            .from('marketplace_connections')
-            .select('marketplace_code');
-          const existingCodes = new Set((existing || []).map((e: any) => e.marketplace_code));
-
-          for (const g of readyGroups) {
-            const code = `shopify_orders_${g.marketplaceKey}`;
-            if (existingCodes.has(code)) continue;
-            await supabase.from('marketplace_connections').insert({
-              user_id: user.id,
-              marketplace_code: code,
-              marketplace_name: g.registryEntry?.display_name || g.marketplaceKey,
-              country_code: 'AU',
-              connection_type: 'auto_detected',
-              connection_status: 'active',
-            } as any);
-          }
+        const { provisionMarketplace } = await import('@/actions/marketplaces');
+        for (const g of readyGroups) {
+          const code = `shopify_orders_${g.marketplaceKey}`;
+          await provisionMarketplace({
+            marketplaceCode: code,
+            marketplaceName: g.registryEntry?.display_name || g.marketplaceKey,
+            connectionType: 'auto_detected',
+          });
         }
       } catch { /* non-fatal */ }
 
