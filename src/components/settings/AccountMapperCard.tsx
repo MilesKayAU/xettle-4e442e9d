@@ -819,16 +819,23 @@ export default function AccountMapperCard() {
             </div>
           )}
 
-          <div className="flex gap-2">
-            <Button onClick={handleConfirm} className="gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Confirm & Save
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={handleSaveDraft} className="gap-2">
+              <Save className="h-4 w-4" />
+              Save Draft
             </Button>
-            <Button variant="outline" onClick={runMapper} className="gap-2">
+            <Button onClick={handleConfirm} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Confirm & Push to Xero
+            </Button>
+            <Button variant="ghost" size="sm" onClick={runMapper} className="gap-2">
               <RefreshCw className="h-4 w-4" />
               Re-run
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            <strong>Save Draft</strong> keeps your changes locally. <strong>Confirm & Push</strong> locks the mapping for all future Xero pushes.
+          </p>
         </CardContent>
       </Card>
       </>
