@@ -1422,8 +1422,33 @@ serve(async (req) => {
         ...pushEventDetails,
         csv_hash: attachmentResult?.csvHash || null,
         attachment_filename: attachmentFilename,
+        ...(isRepostPush ? {
+          is_repost: true,
+          voided_invoice_id: repostOfInvoiceId,
+          replacement_invoice_id: invoiceId,
+          replacement_invoice_number: invoiceNumber,
+        } : {}),
       },
     });
+
+    // ─── REPOST COMPLETION: link old → new invoice for traceability ──
+    if (isRepostPush && repostOfInvoiceId && invoiceId) {
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'safe_repost_completed',
+        severity: 'info',
+        settlement_id: settlementIdForDb,
+        marketplace_code: body.settlementData?.marketplace || null,
+        details: {
+          voided_invoice_id: repostOfInvoiceId,
+          new_invoice_id: invoiceId,
+          new_invoice_number: invoiceNumber,
+          reference,
+          completed_at: new Date().toISOString(),
+        },
+      });
+      console.log(`[repost-complete] Linked voided ${repostOfInvoiceId} → new ${invoiceId}`);
+    }
 
     return new Response(JSON.stringify({
       success: true,
