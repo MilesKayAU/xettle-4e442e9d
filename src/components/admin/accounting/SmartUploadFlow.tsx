@@ -84,6 +84,8 @@ interface SmartUploadFlowProps {
   onViewSettlements?: () => void;
   missingSettlements?: MissingSettlement[];
   onReturnToDashboard?: () => void;
+  prefillMarketplace?: string;
+  prefillDateRange?: { start: string; end: string };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
