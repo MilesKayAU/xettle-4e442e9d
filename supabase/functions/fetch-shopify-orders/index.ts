@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
     // ─── Boundary note: accounting_boundary_date only applies to entry creation,
     //     never to order fetching. All orders are fetched regardless of boundary. ─
     const effectiveDateFrom = dateFrom;
-    console.log("[fetch-shopify-orders] effectiveDateFrom:", effectiveDateFrom, "channelDetectionOnly:", channelDetectionOnly);
+    logger.debug("[fetch-shopify-orders] effectiveDateFrom:", effectiveDateFrom, "channelDetectionOnly:", channelDetectionOnly);
 
     // 1. Get access token from shopify_tokens
     // If shopDomain not provided, look up the user's token by user_id alone
