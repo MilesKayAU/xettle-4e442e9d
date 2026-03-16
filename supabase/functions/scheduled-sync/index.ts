@@ -4,9 +4,9 @@ import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts"
 const STEP_TIMEOUT_MS = 90_000; // 90 seconds per step (increased from 45s to match Xero cooldown)
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsHeaders = getCorsHeaders(req);
+  const preflightResponse = handleCorsPreflightResponse(req);
+  if (preflightResponse) return preflightResponse;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

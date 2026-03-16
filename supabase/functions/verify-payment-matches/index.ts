@@ -47,9 +47,9 @@ interface PaymentCandidate {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  const corsHeaders = getCorsHeaders(req)
+  const preflightResponse = handleCorsPreflightResponse(req)
+  if (preflightResponse) return preflightResponse
 
   // PAYMENT VERIFICATION LAYER ONLY
   // This function never creates accounting entries.

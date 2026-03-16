@@ -77,9 +77,9 @@ async function getCachedBankAccounts(supabase: any, userId: string): Promise<Xer
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsHeaders = getCorsHeaders(req)
+  const preflightResponse = handleCorsPreflightResponse(req)
+  if (preflightResponse) return preflightResponse
 
   let authenticatedUserId: string | null = null;
   let adminClient: any = null;

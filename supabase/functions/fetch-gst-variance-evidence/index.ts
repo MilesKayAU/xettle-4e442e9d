@@ -13,9 +13,9 @@ function round2(n: number): number {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsHeaders = getCorsHeaders(req);
+  const preflightResponse = handleCorsPreflightResponse(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
     const authHeader = req.headers.get('Authorization');
