@@ -359,7 +359,7 @@ export default function PushSafetyPreview({
           ) : (
             <div className="space-y-6 pb-4">
               {previews.map((preview, idx) => (
-                <SettlementPreviewCard key={preview.settlement.settlement_id} preview={preview} index={idx} total={previews.length} />
+                <SettlementPreviewCard key={preview.settlement.settlement_id} preview={preview} index={idx} total={previews.length} onReloadPreviews={loadPreviews} />
               ))}
             </div>
           )}
