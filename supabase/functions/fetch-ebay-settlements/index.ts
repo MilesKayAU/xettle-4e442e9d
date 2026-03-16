@@ -56,7 +56,7 @@ async function getEbayAccessToken(
 
   const refreshData = await refreshResponse.json()
   if (!refreshResponse.ok || !refreshData.access_token) {
-    console.error('[fetch-ebay-settlements] Token refresh failed:', refreshData)
+    logger.error('[fetch-ebay-settlements] Token refresh failed:', refreshData)
     return { access_token: '', error: 'Token refresh failed' }
   }
 
@@ -115,7 +115,7 @@ async function fetchPayouts(
 
     if (!res.ok) {
       const text = await res.text()
-      console.error(`[fetch-ebay-settlements] getPayouts failed (${res.status}):`, text)
+      logger.error(`[fetch-ebay-settlements] getPayouts failed (${res.status}):`, text)
       if (res.status === 429) return { payouts: allPayouts, error: 'rate_limited' }
       return { payouts: allPayouts, error: `API error ${res.status}` }
     }
@@ -150,7 +150,7 @@ async function fetchTransactionsForPayout(
 
     if (!res.ok) {
       const text = await res.text()
-      console.error(`[fetch-ebay-settlements] getTransactions failed for payout ${payoutId} (${res.status}):`, text)
+      logger.error(`[fetch-ebay-settlements] getTransactions failed for payout ${payoutId} (${res.status}):`, text)
       break
     }
 
@@ -308,14 +308,14 @@ async function persistSettlementLines(
         .from('settlement_lines')
         .insert(chunk)
       if (insertErr) {
-        console.error(`[fetch-ebay-settlements] settlement_lines insert chunk failed:`, insertErr)
+        logger.error(`[fetch-ebay-settlements] settlement_lines insert chunk failed:`, insertErr)
         return { count: i, error: insertErr.message }
       }
     }
 
     return { count: lineRows.length }
   } catch (err: any) {
-    console.error(`[fetch-ebay-settlements] settlement_lines write failed:`, err)
+    logger.error(`[fetch-ebay-settlements] settlement_lines write failed:`, err)
     return { count: 0, error: err.message || 'unknown' }
   }
 }
@@ -528,7 +528,7 @@ Deno.serve(async (req) => {
 
     for (const tokenRow of userTokens) {
       const userId = tokenRow.user_id
-      console.log(`[fetch-ebay-settlements] Processing user ${userId}, sync_from=${syncFrom}`)
+      logger.debug(`[fetch-ebay-settlements] Processing user ${userId}, sync_from=${syncFrom}`)
 
       const userAdminClient = adminClient
 
@@ -541,7 +541,7 @@ Deno.serve(async (req) => {
       )
 
       if (tokenError || !access_token) {
-        console.error(`[fetch-ebay-settlements] Token error for ${userId}:`, tokenError)
+        logger.error(`[fetch-ebay-settlements] Token error for ${userId}:`, tokenError)
         results.push({ user_id: userId, error: tokenError || 'No access token', imported: 0 })
         continue
       }
@@ -578,7 +578,7 @@ Deno.serve(async (req) => {
         continue
       }
 
-      console.log(`[fetch-ebay-settlements] Found ${payouts.length} payouts for user ${userId}`)
+      logger.debug(`[fetch-ebay-settlements] Found ${payouts.length} payouts for user ${userId}`)
 
       // 3. Filter to SUCCEEDED payouts only
       const succeededPayouts = payouts.filter(p => p.payoutStatus === 'SUCCEEDED')
@@ -611,7 +611,7 @@ Deno.serve(async (req) => {
           .upsert(settlement, { onConflict: 'user_id,marketplace,settlement_id' })
 
         if (upsertError) {
-          console.error(`[fetch-ebay-settlements] Upsert failed for payout ${payout.payoutId}:`, upsertError)
+          logger.error(`[fetch-ebay-settlements] Upsert failed for payout ${payout.payoutId}:`, upsertError)
           continue
         }
 
@@ -621,7 +621,7 @@ Deno.serve(async (req) => {
           userAdminClient, userId, settlementId, transactions, payoutDateStr,
         )
         if (linesResult.error) {
-          console.warn(`[fetch-ebay-settlements] settlement_lines partial/failed for ${settlementId}: ${linesResult.error}`)
+          logger.warn(`[fetch-ebay-settlements] settlement_lines partial/failed for ${settlementId}: ${linesResult.error}`)
           await userAdminClient.from('system_events').insert({
             user_id: userId,
             event_type: 'settlement_lines_write_failed',
@@ -631,7 +631,7 @@ Deno.serve(async (req) => {
             details: { error: linesResult.error, lines_written: linesResult.count },
           })
         } else {
-          console.log(`[fetch-ebay-settlements] Wrote ${linesResult.count} settlement_lines for ${settlementId}`)
+          logger.debug(`[fetch-ebay-settlements] Wrote ${linesResult.count} settlement_lines for ${settlementId}`)
         }
 
         if (isUpdate) {
@@ -712,7 +712,7 @@ Deno.serve(async (req) => {
         .eq('user_id', userId)
         .eq('key', 'ebay_rate_limit_until')
 
-      console.log(`[fetch-ebay-settlements] User ${userId}: imported=${imported}, updated=${updated}, skipped=${skipped}, total_payouts=${succeededPayouts.length}`)
+      logger.debug(`[fetch-ebay-settlements] User ${userId}: imported=${imported}, updated=${updated}, skipped=${skipped}, total_payouts=${succeededPayouts.length}`)
       results.push({
         user_id: userId,
         imported,
@@ -760,7 +760,7 @@ Deno.serve(async (req) => {
       }
     } catch { /* best effort */ }
 
-    console.error('[fetch-ebay-settlements] error:', err)
+    logger.error('[fetch-ebay-settlements] error:', err)
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

@@ -302,12 +302,12 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) {
       const delay = 5000; // Fixed 5s backoff
-      console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
+      logger.debug(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
       await new Promise(r => setTimeout(r, delay));
     }
     docResponse = await fetch(docUrl, { headers: { 'x-amz-access-token': accessToken } });
     if (docResponse.status !== 429) break;
-    console.warn('SP-API 429 rate limited');
+    logger.warn('SP-API 429 rate limited');
   }
 
   if (docResponse?.status === 429) {
@@ -315,7 +315,7 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
     if (supabase && userId) {
       const retryAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       await upsertSetting(supabase, userId, 'amazon_rate_limit_until', retryAt);
-      console.warn(`[downloadReport] 429 fail-fast: cooldown set until ${retryAt} for user ${userId}`);
+      logger.warn(`[downloadReport] 429 fail-fast: cooldown set until ${retryAt} for user ${userId}`);
     }
     throw new Error('RATE_LIMITED: Amazon API rate limited — cooldown set');
   }
@@ -373,7 +373,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
     return { users: 0, imported: 0, skipped: 0, errors: 0, details };
   }
 
-  console.log(`[Sync] Processing ${amazonTokens.length} user(s) with Amazon tokens`);
+  logger.debug(`[Sync] Processing ${amazonTokens.length} user(s) with Amazon tokens`);
 
   for (const amazonToken of amazonTokens) {
     const userId = amazonToken.user_id;
@@ -388,7 +388,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
 
     if (!lockResult?.acquired) {
       details.push(`User ${userId}: Skipped — sync lock held until ${lockResult?.expires_at}`);
-      console.log(`[Sync] Amazon sync skipped for ${userId} — lock held`);
+      logger.debug(`[Sync] Amazon sync skipped for ${userId} — lock held`);
       continue;
     }
 
@@ -403,7 +403,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
       // Release lock since we're skipping
       await supabaseAdmin.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: 'settlement_sync' });
       details.push(`User ${userId}: Skipped — Amazon rate limit cooldown active`);
-      console.log(`[Sync] Amazon rate limited for ${userId} — cooldown active`);
+      logger.debug(`[Sync] Amazon rate limited for ${userId} — cooldown active`);
       continue;
     }
 
@@ -412,7 +412,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
 
     try {
       const accessToken = await refreshAccessToken(amazonToken);
-      console.log(`[Sync] Got access token for user ${userId}`);
+      logger.debug(`[Sync] Got access token for user ${userId}`);
 
       const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
@@ -432,7 +432,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
       // Clamp: never go further back than 90 days (Amazon API limit)
       const maxLookback = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
       if (startDate < maxLookback) startDate.setTime(maxLookback.getTime());
-      console.log(`[Sync] Report listing window: ${startDate.toISOString()} (sync_from: ${syncFromParam || 'none'})`);
+      logger.debug(`[Sync] Report listing window: ${startDate.toISOString()} (sync_from: ${syncFromParam || 'none'})`);
       const params = new URLSearchParams({
         reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
         processingStatuses: 'DONE',
@@ -483,7 +483,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
         if (syncFromParam && report.dataEndTime) {
           const reportEnd = report.dataEndTime.split('T')[0];
           if (reportEnd < syncFromParam) {
-            console.log(`[Sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${syncFromParam}`);
+            logger.debug(`[Sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${syncFromParam}`);
             userSkipped++;
             continue;
           }
@@ -602,9 +602,9 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
                 sync_origin: 'xettle',
                 posted_at: new Date().toISOString(),
               } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
-              console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
+              logger.debug(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
             } else {
-              console.log(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking (requires user review)`);
+              logger.debug(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking (requires user review)`);
             }
           }
 
@@ -811,7 +811,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
   const listStartDate = smartSyncFrom
     ? new Date(Math.max(new Date(smartSyncFrom).getTime(), Date.now() - 90 * 24 * 60 * 60 * 1000))
     : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-  console.log(`[smart-sync] Report listing window: ${listStartDate.toISOString()} (sync_from: ${smartSyncFrom || 'none'})`);
+  logger.debug(`[smart-sync] Report listing window: ${listStartDate.toISOString()} (sync_from: ${smartSyncFrom || 'none'})`);
   const params = new URLSearchParams({
     reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
     processingStatuses: 'DONE',
@@ -874,7 +874,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
     if (smartSyncFrom && report.dataEndTime) {
       const reportEnd = report.dataEndTime.split('T')[0];
       if (reportEnd < smartSyncFrom) {
-        console.log(`[smart-sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${smartSyncFrom}`);
+        logger.debug(`[smart-sync] Skipping report ${report.reportDocumentId} — ends ${reportEnd} before sync_from ${smartSyncFrom}`);
         continue;
       }
     }
@@ -1011,9 +1011,9 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
             sync_origin: 'xettle',
             posted_at: new Date().toISOString(),
           } as any).eq('settlement_id', header.settlementId).eq('user_id', userId);
-          console.log(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
+          logger.debug(`[fetch-amazon] Auto-linked settlement ${header.settlementId} to Xettle invoice ${preMatch.xero_invoice_number}`);
         } else {
-          console.log(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking`);
+          logger.debug(`[fetch-amazon] External invoice ${preMatch.xero_invoice_number} found for ${header.settlementId} — NOT auto-linking`);
         }
       }
 
@@ -1146,7 +1146,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
       // Fail-fast on rate limit: stop processing remaining reports
       if (dlErr.message?.includes('RATE_LIMITED')) {
         earlyRateLimitCount++;
-        console.warn(`[smart-sync] Rate limited — aborting remaining ${sorted.length - i - 1} reports`);
+        logger.warn(`[smart-sync] Rate limited — aborting remaining ${sorted.length - i - 1} reports`);
         break;
       }
     }
@@ -1200,7 +1200,7 @@ serve(async (req) => {
       const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
       if (!isServiceRole) {
-        console.warn(`[fetch-amazon] Blocked global sync attempt from non-service-role caller`);
+        logger.warn(`[fetch-amazon] Blocked global sync attempt from non-service-role caller`);
         return new Response(JSON.stringify({
           error: 'forbidden',
           message: 'Global sync is only available to internal scheduled jobs. Use smart-sync instead.',
@@ -1218,7 +1218,7 @@ serve(async (req) => {
       } catch { /* no body */ }
 
       const result = await handleSync(supabaseAdmin, syncFromParam);
-      console.log(`[Sync Complete]`, result);
+      logger.debug(`[Sync Complete]`, result);
 
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1253,7 +1253,7 @@ serve(async (req) => {
         if (!syncFrom && body?.lookback_days && typeof body.lookback_days === 'number') {
           const lookbackDate = new Date(Date.now() - body.lookback_days * 24 * 60 * 60 * 1000);
           syncFrom = lookbackDate.toISOString().split('T')[0];
-          console.log(`[smart-sync] lookback_days=${body.lookback_days} → sync_from=${syncFrom}`);
+          logger.debug(`[smart-sync] lookback_days=${body.lookback_days} → sync_from=${syncFrom}`);
         }
       } catch { /* no body */ }
       return await handleSmartSync(supabase, userId, syncFrom);
@@ -1289,7 +1289,7 @@ serve(async (req) => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      console.log(`[backfill] Looking for ${stillMissing.length} missing settlement IDs: ${stillMissing.join(', ')}`);
+      logger.debug(`[backfill] Looking for ${stillMissing.length} missing settlement IDs: ${stillMissing.join(', ')}`);
 
       // Use the smart-sync infrastructure but with wider window chunks
       // Each chunk goes back 90 days further. Max 3 chunks = 270 days total.
@@ -1305,7 +1305,7 @@ serve(async (req) => {
         const remainingMissing = stillMissing.filter(id => !foundIds.includes(id));
         if (remainingMissing.length === 0) break;
 
-        console.log(`[backfill] Chunk ${chunk + 1}/${MAX_CHUNKS}: ${chunkStart.toISOString()} to ${chunkEnd.toISOString()}`);
+        logger.debug(`[backfill] Chunk ${chunk + 1}/${MAX_CHUNKS}: ${chunkStart.toISOString()} to ${chunkEnd.toISOString()}`);
 
         try {
           // Get fresh token
@@ -1313,7 +1313,7 @@ serve(async (req) => {
             headers: { 'x-action': 'refresh' },
           });
           if (!authData?.access_token) {
-            console.error('[backfill] Failed to get access token');
+            logger.error('[backfill] Failed to get access token');
             break;
           }
 
@@ -1333,14 +1333,14 @@ serve(async (req) => {
           });
 
           if (!reportsResponse.ok) {
-            console.error(`[backfill] SP-API error: ${reportsResponse.status}`);
+            logger.error(`[backfill] SP-API error: ${reportsResponse.status}`);
             if (reportsResponse.status === 429) break; // Stop on rate limit
             continue;
           }
 
           const reportsData = await reportsResponse.json();
           const reports = reportsData.reports || [];
-          console.log(`[backfill] Chunk ${chunk + 1}: ${reports.length} reports found`);
+          logger.debug(`[backfill] Chunk ${chunk + 1}: ${reports.length} reports found`);
 
           // Get settings for parsing
           const { data: settingsData } = await supabase
@@ -1408,7 +1408,7 @@ serve(async (req) => {
                 foundIds.push(header.settlementId);
                 existingSet.add(header.settlementId);
                 backfilled++;
-                console.log(`[backfill] ✓ Found and ingested settlement ${header.settlementId}`);
+                logger.debug(`[backfill] ✓ Found and ingested settlement ${header.settlementId}`);
 
                 // ─── Compute and persist settlement_components ───
                 const payoutTotal = round2(summary.bankDeposit);
@@ -1475,14 +1475,14 @@ serve(async (req) => {
               }
             } catch (dlErr: any) {
               if (dlErr.message?.includes('RATE_LIMITED')) {
-                console.warn('[backfill] Rate limited — stopping');
+                logger.warn('[backfill] Rate limited — stopping');
                 break;
               }
-              console.error(`[backfill] Download error: ${dlErr.message}`);
+              logger.error(`[backfill] Download error: ${dlErr.message}`);
             }
           }
         } catch (chunkErr: any) {
-          console.error(`[backfill] Chunk ${chunk + 1} error: ${chunkErr.message}`);
+          logger.error(`[backfill] Chunk ${chunk + 1} error: ${chunkErr.message}`);
         }
 
         // Brief pause between chunks to avoid rate limits
@@ -1578,7 +1578,7 @@ serve(async (req) => {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   } catch (err) {
-    console.error('fetch-amazon-settlements error:', err)
+    logger.error('fetch-amazon-settlements error:', err)
     const message = err instanceof Error ? err.message : 'Unknown error'
     return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }

@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
 
     if (!accountsResp.ok) {
       const errText = await accountsResp.text()
-      console.error('Xero accounts error:', accountsResp.status, errText)
+      logger.error('Xero accounts error:', accountsResp.status, errText)
       return new Response(JSON.stringify({ error: `Xero API error: ${accountsResp.status}` }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
 
       // GUARD: Never soft-delete if Xero returns empty (API timeout, token issue, etc.)
       if (xeroAccountRows.length === 0) {
-        console.warn('[ai-account-mapper] No accounts returned from Xero — skipping soft delete');
+        logger.warn('[ai-account-mapper] No accounts returned from Xero — skipping soft delete');
         return;
       }
 
@@ -152,9 +152,9 @@ Deno.serve(async (req) => {
         .eq('is_active', true)
         .not('xero_account_id', 'in', `(${currentIds.join(',')})`);
 
-      console.log(`[ai-account-mapper] Cached ${xeroAccountRows.length} CoA accounts for user ${userId}`);
+      logger.debug(`[ai-account-mapper] Cached ${xeroAccountRows.length} CoA accounts for user ${userId}`);
     } catch (coaErr: any) {
-      console.warn('[ai-account-mapper] CoA cache failed (non-fatal):', coaErr.message);
+      logger.warn('[ai-account-mapper] CoA cache failed (non-fatal):', coaErr.message);
     }
 
     // If action is scan_only, just return the accounts
@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
         const totalUses = learned.reduce((sum: number, l: any) => sum + l.usage_count, 0)
         if (totalUses >= 5) {
           const accountLookup = new Map(xeroAccounts.map((a: any) => [a.code || a.Code, a.name || a.Name]))
-          console.log(`[ai-account-mapper] Using learned mapping for contact "${body.contact_name}" → normalised "${normKey}" (${learned.length} codes, top confidence: ${learned[0].confidence_pct}%, total uses: ${totalUses})`)
+          logger.debug(`[ai-account-mapper] Using learned mapping for contact "${body.contact_name}" → normalised "${normKey}" (${learned.length} codes, top confidence: ${learned[0].confidence_pct}%, total uses: ${totalUses})`)
 
           return new Response(JSON.stringify({
             success: true,
@@ -344,12 +344,12 @@ Deno.serve(async (req) => {
           
           const key = `${cat}:${mp.name}`
           deterministicOverrides[key] = best.code
-          console.log(`[ai-account-mapper] Deterministic match: ${key} → ${best.code} (${best.name})`)
+          logger.debug(`[ai-account-mapper] Deterministic match: ${key} → ${best.code} (${best.name})`)
         }
       }
     }
 
-    console.log(`[ai-account-mapper] Deterministic pre-scan found ${Object.keys(deterministicOverrides).length} marketplace overrides`)
+    logger.debug(`[ai-account-mapper] Deterministic pre-scan found ${Object.keys(deterministicOverrides).length} marketplace overrides`)
 
     // ─── STEP 2: AI Matching via Lovable AI ──────────────────────────
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
@@ -503,7 +503,7 @@ Return JSON with this structure:
         })
       }
       const errText = await aiResponse.text()
-      console.error('AI gateway error:', aiResponse.status, errText)
+      logger.error('AI gateway error:', aiResponse.status, errText)
       return new Response(JSON.stringify({ error: 'AI matching failed' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -531,7 +531,7 @@ Return JSON with this structure:
           if (args[cat]) mapping[cat] = args[cat]
         }
       } catch (e) {
-        console.error('Failed to parse AI tool call response:', e)
+        logger.error('Failed to parse AI tool call response:', e)
       }
     }
 
@@ -551,7 +551,7 @@ Return JSON with this structure:
           }
         }
       } catch (e) {
-        console.error('Failed to parse AI content response:', e)
+        logger.error('Failed to parse AI content response:', e)
       }
     }
 
@@ -561,7 +561,7 @@ Return JSON with this structure:
     // Remove any AI-suggested codes that don't exist in the user's COA
     for (const [cat, code] of Object.entries(mapping)) {
       if (!existingCodes.has(code)) {
-        console.warn(`[ai-account-mapper] Removing invalid code for ${cat}: ${code}`)
+        logger.warn(`[ai-account-mapper] Removing invalid code for ${cat}: ${code}`)
         delete mapping[cat]
         confidence = 'low'
       }
@@ -570,7 +570,7 @@ Return JSON with this structure:
     // Validate marketplace overrides too
     for (const [key, code] of Object.entries(marketplaceOverrides)) {
       if (!existingCodes.has(code)) {
-        console.warn(`[ai-account-mapper] Removing invalid override ${key}: ${code}`)
+        logger.warn(`[ai-account-mapper] Removing invalid override ${key}: ${code}`)
         delete marketplaceOverrides[key]
       }
     }
@@ -580,7 +580,7 @@ Return JSON with this structure:
     for (const [key, code] of Object.entries(deterministicOverrides)) {
       if (existingCodes.has(code) && !marketplaceOverrides[key]) {
         marketplaceOverrides[key] = code
-        console.log(`[ai-account-mapper] Applied deterministic override: ${key} → ${code}`)
+        logger.debug(`[ai-account-mapper] Applied deterministic override: ${key} → ${code}`)
       }
     }
 
@@ -588,7 +588,7 @@ Return JSON with this structure:
     const unmappedCategories = ['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
       .filter(cat => !mapping[cat])
     if (unmappedCategories.length > 0) {
-      console.warn('[ai-account-mapper] Categories without valid mapping:', unmappedCategories)
+      logger.warn('[ai-account-mapper] Categories without valid mapping:', unmappedCategories)
       await supabase.from('system_events').insert({
         user_id: userId,
         event_type: 'ai_mapper_unmapped_categories',
@@ -635,7 +635,7 @@ Return JSON with this structure:
       }, { onConflict: 'user_id,key' })
     }
 
-    console.log('[ai-account-mapper] Mapping complete:', { userId, confidence, categoriesMapped: Object.keys(mapping).length })
+    logger.debug('[ai-account-mapper] Mapping complete:', { userId, confidence, categoriesMapped: Object.keys(mapping).length })
 
     return new Response(JSON.stringify({
       success: true,
@@ -647,7 +647,7 @@ Return JSON with this structure:
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error: any) {
-    console.error('[ai-account-mapper] Error:', error.message)
+    logger.error('[ai-account-mapper] Error:', error.message)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

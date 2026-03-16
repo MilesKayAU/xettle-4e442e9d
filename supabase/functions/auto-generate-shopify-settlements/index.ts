@@ -276,7 +276,7 @@ Deno.serve(async (req) => {
     .order("processed_at", { ascending: true });
 
   if (ordersErr) {
-    console.error("[auto-gen-settlements] orders query error:", ordersErr);
+    logger.error("[auto-gen-settlements] orders query error:", ordersErr);
     return new Response(JSON.stringify({ error: ordersErr.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -419,7 +419,7 @@ Deno.serve(async (req) => {
         .from("settlements")
         .insert(settlementRecord);
       if (!error) settlementsCreated++;
-      else console.error(`[auto-gen-settlements] insert error for ${settlementId}:`, error);
+      else logger.error(`[auto-gen-settlements] insert error for ${settlementId}:`, error);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -503,7 +503,7 @@ Deno.serve(async (req) => {
           .from("settlement_lines")
           .insert(chunk);
         if (lineErr) {
-          console.error(`[auto-gen-settlements] lines insert error for ${settlementId}:`, lineErr);
+          logger.error(`[auto-gen-settlements] lines insert error for ${settlementId}:`, lineErr);
         } else {
           linesCreated += chunk.length;
         }
@@ -536,7 +536,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  console.log(`[auto-gen-settlements] user=${userPrefix} orders=${orders.length} groups=${groups.size} settlements=${settlementsCreated} lines=${linesCreated} connections=${connectionsProvisioned}`);
+  logger.debug(`[auto-gen-settlements] user=${userPrefix} orders=${orders.length} groups=${groups.size} settlements=${settlementsCreated} lines=${linesCreated} connections=${connectionsProvisioned}`);
 
   return new Response(
     JSON.stringify({

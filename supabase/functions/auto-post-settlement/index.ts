@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
           settlement_id: stale.settlement_id,
           details: { recovered_at: new Date().toISOString(), new_retry_count: newRetry, result_state: failState },
         });
-        console.warn(`[auto-post-settlement] Recovered stale lock for ${stale.settlement_id}, retry ${newRetry}`);
+        logger.warn(`[auto-post-settlement] Recovered stale lock for ${stale.settlement_id}, retry ${newRetry}`);
       }
     }
 
@@ -258,14 +258,14 @@ Deno.serve(async (req) => {
 
           // UNSUPPORTED: always block autopost
           if (tier === 'UNSUPPORTED') {
-            console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: UNSUPPORTED tier`);
+            logger.debug(`[auto-post] Skipping ${r.rail} for user ${userId}: UNSUPPORTED tier`);
             return false;
           }
 
           // EXPERIMENTAL: only if acknowledged + force DRAFT
           if (tier === 'EXPERIMENTAL') {
             if (!r.support_acknowledged_at) {
-              console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: EXPERIMENTAL not acknowledged`);
+              logger.debug(`[auto-post] Skipping ${r.rail} for user ${userId}: EXPERIMENTAL not acknowledged`);
               return false;
             }
             // Force DRAFT for experimental rails — log for audit trail
@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
 
           // REVIEW_EACH_SETTLEMENT blocks autopost
           if (r.tax_mode === 'REVIEW_EACH_SETTLEMENT') {
-            console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: REVIEW_EACH_SETTLEMENT tax mode`);
+            logger.debug(`[auto-post] Skipping ${r.rail} for user ${userId}: REVIEW_EACH_SETTLEMENT tax mode`);
             return false;
           }
 
@@ -352,7 +352,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err: any) {
-    console.error('[auto-post-settlement] Error:', err);
+    logger.error('[auto-post-settlement] Error:', err);
     return new Response(JSON.stringify({ success: false, error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -520,7 +520,7 @@ async function processSettlement(
 
   if (missingMappings.length > 0) {
     const errMsg = `Missing account mappings for: ${missingMappings.join(', ')}`;
-    console.error(`[auto-post-settlement] ${sid}: ${errMsg}`);
+    logger.error(`[auto-post-settlement] ${sid}: ${errMsg}`);
 
     await supabase.from('settlements').update({
       posting_state: 'failed',
@@ -688,7 +688,7 @@ async function processSettlement(
 
     if (!pushResponse.ok || !pushResult.success) {
       const errMsg = pushResult.error || `HTTP ${pushResponse.status}`;
-      console.error(`[auto-post-settlement] Failed ${sid}: ${errMsg}`);
+      logger.error(`[auto-post-settlement] Failed ${sid}: ${errMsg}`);
 
       await supabase.from('settlements').update({
         posting_state: 'failed',
@@ -768,11 +768,11 @@ async function processSettlement(
       details: snapshotDetails,
     });
 
-    console.log(`[auto-post-settlement] Successfully posted ${sid} to Xero as ${pushResult.invoiceNumber}`);
+    logger.debug(`[auto-post-settlement] Successfully posted ${sid} to Xero as ${pushResult.invoiceNumber}`);
     return { settlement_id: sid, result: 'posted' };
 
   } catch (err: any) {
-    console.error(`[auto-post-settlement] Error posting ${sid}:`, err);
+    logger.error(`[auto-post-settlement] Error posting ${sid}:`, err);
 
     await supabase.from('settlements').update({
       posting_state: 'failed',
