@@ -212,6 +212,41 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── STEP 1c: Load active marketplaces for per-rail suggestions ─
+    const { data: connections } = await supabase
+      .from('marketplace_connections')
+      .select('marketplace_name, marketplace_code')
+      .eq('user_id', userId)
+      .eq('connection_status', 'connected')
+
+    let activeMarketplaces: { name: string; code: string }[] = []
+    if (connections && connections.length > 0) {
+      activeMarketplaces = connections.map((c: any) => ({
+        name: c.marketplace_name,
+        code: c.marketplace_code,
+      }))
+    } else {
+      // Fall back to settlements
+      const { data: settlements } = await supabase
+        .from('settlements')
+        .select('marketplace')
+        .eq('user_id', userId)
+        .not('status', 'in', '("duplicate_suppressed","already_recorded")')
+      if (settlements) {
+        const unique = [...new Set(settlements.map((s: any) => s.marketplace).filter(Boolean))]
+        const labelMap: Record<string, string> = {
+          amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
+          shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
+          kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
+          etsy: 'Etsy', theiconic: 'The Iconic', bigw: 'bigw',
+        }
+        activeMarketplaces = unique.map(code => ({
+          name: labelMap[code || ''] || code || '',
+          code: code || '',
+        })).filter(m => m.name)
+      }
+    }
+
     // ─── STEP 2: AI Matching via Lovable AI ──────────────────────────
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
     if (!LOVABLE_API_KEY) {
@@ -220,41 +255,84 @@ Deno.serve(async (req) => {
       })
     }
 
-    const systemPrompt = `You are an Australian ecommerce accounting assistant. 
+    const marketplaceNames = activeMarketplaces.map(m => m.name)
+    const perRailPromptSection = marketplaceNames.length > 0
+      ? `\n\nThe business sells on these marketplaces: ${marketplaceNames.join(', ')}.
+For the "Sales" and "Shipping" categories, ALSO look for marketplace-specific accounts.
+For example, if there's an account called "Shopify Sales" or "Amazon Revenue", map it to that marketplace's Sales.
+Return per-marketplace overrides in "marketplace_overrides" keyed as "Sales:<Marketplace Name>" or "Shipping:<Marketplace Name>".
+Only include overrides where you find a SPECIFIC account for that marketplace — don't repeat the global mapping.`
+      : ''
+
+    const systemPrompt = `You are an Australian ecommerce accounting assistant.
 You will be given a list of Xero account codes from an Australian business and must match each of 9 ecommerce settlement categories to the most appropriate account.
 Always prefer existing accounts over creating new ones.
 Australian GST applies — revenue accounts use OUTPUT tax, expense/fee accounts use INPUT tax, reimbursements use BASEXCLUDED (compensation payments, not taxable supplies).
 Advertising Costs (Sponsored Products, PPC ads) MUST be separated from Other Fees for BAS accuracy.
+
+IMPORTANT MATCHING RULES:
+- Look at account NAMES carefully for keywords like "sales", "revenue", "fees", "commission", "fulfilment", "shipping", "freight", "refund", "advertising", "storage", "reimbursement"
+- Match by semantic meaning, not just exact text
+- If multiple accounts could match, prefer the one that is most specific (e.g. "Marketplace Fees" over "Other Expenses")
+- If no specific match exists, look for general-purpose accounts of the right type (Revenue for income, Expense for costs)
+- NEVER guess codes that don't exist in the provided list
+- Revenue categories (Sales, Shipping, Promotional Discounts, Refunds, Reimbursements) should map to REVENUE, SALES, or OTHERINCOME type accounts
+- Expense categories (Seller Fees, FBA Fees, Storage Fees, Advertising Costs, Other Fees) should map to EXPENSE, OVERHEADS, or DIRECTCOSTS type accounts
 Return only valid JSON, no explanation.`
 
-    const userPrompt = `Here are the Xero accounts for this business:
-${JSON.stringify(xeroAccounts, null, 2)}
+    const userPrompt = `Here are ALL ${xeroAccounts.length} Xero accounts for this business (code, name, type):
+${xeroAccounts.map((a: any) => `${a.code || '???'} | ${a.name} | ${a.type}`).join('\n')}
 
-Match each category to the best account code:
+Match each category to the BEST account code from the list above:
 - Sales: gross product sales and shipping revenue
-- Promotional Discounts: vouchers and promotions reducing sale price  
+- Shipping: shipping revenue charged to customers (look for "shipping", "freight", "postage" accounts)
+- Promotional Discounts: vouchers and promotions reducing sale price
 - Refunds: product and shipping refunds to customers
 - Reimbursements: Amazon/marketplace reimbursements (not taxable)
 - Seller Fees: referral fees and selling fees charged by marketplace
 - FBA Fees: fulfilment, pick and pack, delivery fees
 - Storage Fees: warehouse and inventory storage fees
-- Advertising Costs: Sponsored Products, PPC advertising fees (INPUT tax, GST on purchases)
+- Advertising Costs: Sponsored Products, PPC advertising fees
 - Other Fees: miscellaneous marketplace charges and adjustments
+${perRailPromptSection}
 
-Return JSON only with this exact structure:
+Return JSON with this structure:
 {
-  "Sales": "XXXX",
-  "Promotional Discounts": "XXXX",
-  "Refunds": "XXXX",
-  "Reimbursements": "XXXX",
-  "Seller Fees": "XXXX",
-  "FBA Fees": "XXXX",
-  "Storage Fees": "XXXX",
-  "Advertising Costs": "XXXX",
-  "Other Fees": "XXXX",
+  "Sales": "code",
+  "Shipping": "code",
+  "Promotional Discounts": "code",
+  "Refunds": "code",
+  "Reimbursements": "code",
+  "Seller Fees": "code",
+  "FBA Fees": "code",
+  "Storage Fees": "code",
+  "Advertising Costs": "code",
+  "Other Fees": "code",
+  "marketplace_overrides": { "Sales:Amazon AU": "code", "Sales:Shopify": "code" },
   "confidence": "high" | "medium" | "low",
-  "notes": "brief plain English explanation of key decisions"
+  "notes": "brief explanation of key decisions and any categories where you couldn't find a good match"
 }`
+
+    // Build tool schema with marketplace overrides
+    const toolProperties: Record<string, any> = {
+      Sales: { type: 'string' },
+      Shipping: { type: 'string' },
+      'Promotional Discounts': { type: 'string' },
+      Refunds: { type: 'string' },
+      Reimbursements: { type: 'string' },
+      'Seller Fees': { type: 'string' },
+      'FBA Fees': { type: 'string' },
+      'Storage Fees': { type: 'string' },
+      'Advertising Costs': { type: 'string' },
+      'Other Fees': { type: 'string' },
+      marketplace_overrides: {
+        type: 'object',
+        description: 'Per-marketplace account overrides keyed as "Category:Marketplace Name"',
+        additionalProperties: { type: 'string' },
+      },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      notes: { type: 'string' },
+    }
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -276,20 +354,8 @@ Return JSON only with this exact structure:
               description: 'Map ecommerce settlement categories to Xero account codes',
               parameters: {
                 type: 'object',
-                properties: {
-                  Sales: { type: 'string' },
-                  'Promotional Discounts': { type: 'string' },
-                  Refunds: { type: 'string' },
-                  Reimbursements: { type: 'string' },
-                  'Seller Fees': { type: 'string' },
-                  'FBA Fees': { type: 'string' },
-                  'Storage Fees': { type: 'string' },
-                  'Advertising Costs': { type: 'string' },
-                  'Other Fees': { type: 'string' },
-                  confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-                  notes: { type: 'string' },
-                },
-                required: ['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees', 'confidence', 'notes'],
+                properties: toolProperties,
+                required: ['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees', 'confidence', 'notes'],
                 additionalProperties: false,
               },
             },
@@ -321,6 +387,7 @@ Return JSON only with this exact structure:
 
     // Extract mapping from tool call response
     let mapping: Record<string, string> = {}
+    let marketplaceOverrides: Record<string, string> = {}
     let confidence = 'medium'
     let notes = ''
 
@@ -332,8 +399,8 @@ Return JSON only with this exact structure:
           : toolCall.function.arguments
         confidence = args.confidence || 'medium'
         notes = args.notes || ''
-        // Extract just the 9 category mappings
-        const categories = ['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
+        marketplaceOverrides = args.marketplace_overrides || {}
+        const categories = ['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
         for (const cat of categories) {
           if (args[cat]) mapping[cat] = args[cat]
         }
@@ -351,7 +418,8 @@ Return JSON only with this exact structure:
           const parsed = JSON.parse(jsonMatch[0])
           confidence = parsed.confidence || 'medium'
           notes = parsed.notes || ''
-          const categories = ['Sales', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
+          marketplaceOverrides = parsed.marketplace_overrides || {}
+          const categories = ['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
           for (const cat of categories) {
             if (parsed[cat]) mapping[cat] = parsed[cat]
           }
@@ -361,48 +429,42 @@ Return JSON only with this exact structure:
       }
     }
 
-    // Validate — ensure all 9 categories have a code
-    const DEFAULT_CODES: Record<string, string> = {
-      'Sales': '200', 'Promotional Discounts': '200', 'Refunds': '205',
-      'Reimbursements': '271', 'Seller Fees': '407', 'FBA Fees': '408',
-      'Storage Fees': '409', 'Advertising Costs': '410', 'Other Fees': '405',
-    }
-    for (const [cat, def] of Object.entries(DEFAULT_CODES)) {
-      if (!mapping[cat]) {
-        mapping[cat] = def
-        confidence = 'low' // Downgrade confidence if we had to fill gaps
+    // Validate — DON'T fall back to hardcoded defaults; leave unmapped for user
+    const existingCodes = new Set(xeroAccounts.map((a: any) => a.code || a.Code));
+
+    // Remove any AI-suggested codes that don't exist in the user's COA
+    for (const [cat, code] of Object.entries(mapping)) {
+      if (!existingCodes.has(code)) {
+        console.warn(`[ai-account-mapper] Removing invalid code for ${cat}: ${code}`)
+        delete mapping[cat]
+        confidence = 'low'
       }
     }
 
-    // Validate that every mapped code actually exists in the user's Xero CoA
-    const existingCodes = new Set(xeroAccounts.map((a: any) => a.code || a.Code));
-    const invalidMappings = Object.entries(mapping)
-      .filter(([, code]) => !existingCodes.has(code));
+    // Validate marketplace overrides too
+    for (const [key, code] of Object.entries(marketplaceOverrides)) {
+      if (!existingCodes.has(code)) {
+        console.warn(`[ai-account-mapper] Removing invalid override ${key}: ${code}`)
+        delete marketplaceOverrides[key]
+      }
+    }
 
-    let mapperStatus = 'suggested';
-    if (invalidMappings.length > 0) {
-      console.warn('[ai-account-mapper] Invalid codes detected:', invalidMappings);
-
-      // Log warning to system_events
+    let mapperStatus = 'suggested'
+    const unmappedCategories = ['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
+      .filter(cat => !mapping[cat])
+    if (unmappedCategories.length > 0) {
+      console.warn('[ai-account-mapper] Categories without valid mapping:', unmappedCategories)
       await supabase.from('system_events').insert({
         user_id: userId,
-        event_type: 'ai_mapper_invalid_codes',
+        event_type: 'ai_mapper_unmapped_categories',
         severity: 'warning',
         details: {
-          invalid_categories: invalidMappings.map(([cat, code]) => ({ category: cat, suggested_code: code })),
-          total_invalid: invalidMappings.length,
+          unmapped_categories: unmappedCategories,
+          total_unmapped: unmappedCategories.length,
+          total_accounts_scanned: xeroAccounts.length,
         },
-      });
-
-      // Fall back to defaults for invalid categories only
-      for (const [cat] of invalidMappings) {
-        if (DEFAULT_CODES[cat]) {
-          mapping[cat] = DEFAULT_CODES[cat];
-        }
-      }
-
-      confidence = 'low';
-      mapperStatus = 'needs_review';
+      })
+      mapperStatus = 'needs_review'
     }
 
     // Build enriched response with account names
