@@ -3,10 +3,12 @@
  * Shows exact line items, GST treatment, validation checks, and Xero invoice details.
  *
  * ══════════════════════════════════════════════════════════════
- * GOLDEN RULE: Nothing is pushed to Xero without the user explicitly
- * reviewing and confirming the data shown in this modal. This is the
- * ONLY path to Xero. Auto-detection is always a SUGGESTION.
- * User is the final validator for all Xero operations.
+ * GOLDEN RULE: Nothing is pushed to Xero manually without the user
+ * explicitly reviewing and confirming the data shown in this modal.
+ * Manual posting path to Xero. Automation uses the same server-side
+ * push engine and safety gates (see auto-post-settlement edge function).
+ * Auto-detection is always a SUGGESTION.
+ * User is the final validator for all manual Xero operations.
  * ══════════════════════════════════════════════════════════════
  */
 
