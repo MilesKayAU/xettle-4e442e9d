@@ -59,7 +59,7 @@ export default function EbayConnectionStatus() {
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      console.log('[eBay OAuth] Requesting authorize URL...');
+      logger.debug('[eBay OAuth] Requesting authorize URL...');
       const { data, error } = await supabase.functions.invoke('ebay-auth', {
         headers: { 'x-action': 'authorize' },
       });
