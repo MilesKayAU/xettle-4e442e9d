@@ -90,6 +90,10 @@ export default function InsightsDashboard() {
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start')
+          .eq('is_hidden', false)
+          .eq('is_pre_boundary', false)
+          .is('duplicate_of_settlement_id', null)
+          .not('status', 'eq', 'push_failed_permanent')
           .order('period_end', { ascending: false }),
         supabase
           .from('marketplace_ad_spend')
@@ -130,7 +134,8 @@ export default function InsightsDashboard() {
 
       const grouped: Record<string, typeof data> = {};
       for (const row of data) {
-        const rawMp = row.marketplace || 'amazon_au';
+        const rawMp = row.marketplace;
+        if (!rawMp) continue; // Skip settlements with no marketplace tag
         const mp = normalizeMarketplace(rawMp);
         if (!grouped[mp]) grouped[mp] = [];
         grouped[mp].push(row);
