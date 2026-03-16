@@ -100,7 +100,6 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
   const delimiter = tabCount > commaCount ? '\t' : ',';
 
   // Smart header detection — skip metadata preambles
-  const { findHeaderRow } = require('./file-fingerprint-engine');
   const { headerIndex } = findHeaderRow(lines, delimiter);
 
   const headers = parseCSVRow(lines[headerIndex], delimiter);
