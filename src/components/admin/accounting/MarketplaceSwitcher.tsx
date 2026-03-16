@@ -284,7 +284,13 @@ export default function MarketplaceSwitcher({
                     {settlementCounts[um.marketplace_code]}
                   </Badge>
                 )}
-                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                {apiConnectedCodes.has(um.marketplace_code) ? (
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                    <Zap className="h-2.5 w-2.5" /> Auto
+                  </Badge>
+                ) : (
+                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                )}
               </button>
               {/* Delete X button - visible on hover */}
               <button
