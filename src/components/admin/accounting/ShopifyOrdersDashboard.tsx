@@ -553,18 +553,10 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
 
   // ─── Push single from history ──────────────────────────────────────
 
-  const handlePushToXero = async (settlementId: string, marketplace: string) => {
-    setPushing(true);
-    const result = await syncSettlementToXero(settlementId, marketplace, {
-      contactName: marketplace.replace('shopify_orders_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-    });
-    if (result.success) {
-      toast.success('Clearing invoice created in Xero!');
-      loadHistory();
-    } else {
-      toast.error(result.error || 'Failed to push to Xero');
-    }
-    setPushing(false);
+  // Golden Rule: Open PushSafetyPreview for single push from history
+  const handlePushToXero = (settlementId: string, marketplace: string) => {
+    setPreviewSettlements([{ settlementId, marketplace }]);
+    setPreviewOpen(true);
   };
 
   // ─── Delete ─────────────────────────────────────────────────────────
