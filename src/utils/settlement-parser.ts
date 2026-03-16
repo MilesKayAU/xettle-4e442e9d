@@ -330,7 +330,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
       intlOrderIds.add(orderKey);
     }
   }
-  console.info('[Pass 1] International order-ids detected:', intlOrderIds.size, 'heuristics: marketplace-name + LVGT', [...intlOrderIds].slice(0, 10));
+  logger.info('[Pass 1] International order-ids detected:', intlOrderIds.size, 'heuristics: marketplace-name + LVGT', [...intlOrderIds].slice(0, 10));
 
   // === PASS 2: Main classification loop ===
   let debugRowCount = 0;
