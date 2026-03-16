@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
         headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
       });
 
-      console.log(`[fetch-shopify-orders] Shopify response: status=${res.status}`);
+      logger.debug(`[fetch-shopify-orders] Shopify response: status=${res.status}`);
 
       if (res.status === 401) {
         console.error("[fetch-shopify-orders] Shopify 401 — token invalid");
