@@ -352,11 +352,22 @@ export default function AccountMapperCard() {
   };
 
   const handleApplySuggestionsToMissing = () => {
-    // For each category that has no mapping, apply the AI suggestion
     const updated = { ...editableMapping };
+    // Apply global category suggestions
     for (const cat of CATEGORIES) {
       if (!updated[cat] && mapping[cat]?.code) {
         updated[cat] = mapping[cat].code;
+      }
+    }
+    // Apply per-marketplace override suggestions from AI
+    if (splitByMarketplace) {
+      for (const mp of getEffectiveMarketplaces()) {
+        for (const cat of SPLITTABLE_CATEGORIES) {
+          const key = `${cat}:${mp}`;
+          if (!updated[key] && mapping[key]?.code) {
+            updated[key] = mapping[key].code;
+          }
+        }
       }
     }
     setEditableMapping(updated);
