@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
@@ -67,6 +68,24 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [externalCandidate, setExternalCandidate] = useState<any>(null);
   const [dismissingCandidate, setDismissingCandidate] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+
+  useAiPageContext(() => ({
+    routeId: 'settlement_detail',
+    pageTitle: `Settlement Detail — ${settlementId ?? 'none'}`,
+    primaryEntities: {
+      settlement_ids: settlementId ? [settlementId] : [],
+      xero_invoice_ids: settlement?.xero_invoice_id ? [settlement.xero_invoice_id] : [],
+    },
+    pageStateSummary: {
+      posting_state: settlement?.posting_state ?? 'unknown',
+      xero_status: settlement?.xero_status ?? null,
+      marketplace: settlement?.marketplace ?? null,
+      has_snapshot: hasSnapshot,
+      event_count: events.length,
+      has_external_candidate: !!externalCandidate,
+    },
+    capabilities: ['compare_invoice', 'view_audit_trail'],
+  }));
 
   useEffect(() => {
     if (!open || !settlementId) return;

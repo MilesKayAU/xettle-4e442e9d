@@ -15,6 +15,7 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,6 +68,22 @@ export default function RailPostingSettings() {
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [taxProfile, setTaxProfile] = useState<TaxProfile>('AU_GST');
+
+  useAiPageContext(() => ({
+    routeId: 'rail_posting_settings',
+    pageTitle: 'Rail Posting Settings',
+    primaryEntities: {
+      marketplace_codes: connectedRails,
+    },
+    pageStateSummary: {
+      connected_rail_count: connectedRails.length,
+      auto_rails: connectedRails.filter(r => settings.get(r)?.posting_mode === 'auto').length,
+      manual_rails: connectedRails.filter(r => settings.get(r)?.posting_mode !== 'auto').length,
+      failed_settlement_count: failedSettlements.length,
+      tax_profile: taxProfile,
+    },
+    capabilities: ['toggle_auto_post', 'retry_failed'],
+  }));
 
   const loadData = useCallback(async () => {
     try {

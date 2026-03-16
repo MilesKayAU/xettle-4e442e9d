@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useAiPageContext } from '@/ai/context/useAiPageContext';
 // Rule #11 enforcement is server-side: sync-settlement-to-xero requires
 // settlementId + settlementData. No order/payment path exists.
 // See: src/constants/accounting-rules.ts for canonical documentation.
@@ -123,6 +124,22 @@ export default function PushSafetyPreview({
     repostOfInvoiceId?: string | null;
     repostReason?: string | null;
   }>>([]);
+
+  useAiPageContext(() => ({
+    routeId: 'push_safety_preview',
+    pageTitle: 'Push Safety Preview',
+    primaryEntities: {
+      settlement_ids: settlements.map(s => s.settlementId),
+    },
+    pageStateSummary: {
+      settlement_count: settlements.length,
+      green_checks: previews.reduce((n, p) => n + p.checks.filter(c => c.status === 'green').length, 0),
+      amber_checks: previews.reduce((n, p) => n + p.checks.filter(c => c.status === 'amber').length, 0),
+      red_checks: previews.reduce((n, p) => n + p.checks.filter(c => c.status === 'red').length, 0),
+      has_mapping_error: !!mappingInvalidError,
+    },
+    capabilities: ['push_to_xero'],
+  }));
 
   useEffect(() => {
     if (open && settlements.length > 0) {

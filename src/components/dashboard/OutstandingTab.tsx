@@ -24,6 +24,7 @@
  */
 
 import { useState, useCallback, useEffect, Fragment, useMemo, useRef } from 'react';
+import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { Switch } from '@/components/ui/switch';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -307,6 +308,25 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
     confidence: number;
     matchMethod: string;
   }>>({});
+
+  // ─── AI Page Context ───
+  useAiPageContext(() => ({
+    routeId: 'outstanding',
+    pageTitle: 'Outstanding Invoices',
+    primaryEntities: {
+      xero_invoice_ids: (data?.rows || []).slice(0, 20).map(r => r.xero_invoice_id),
+      settlement_ids: (data?.rows || []).filter(r => r.settlement_id).slice(0, 20).map(r => r.settlement_id!),
+    },
+    pageStateSummary: {
+      invoice_count: data?.invoice_count ?? 0,
+      total_outstanding: data?.total_outstanding ?? 0,
+      matched_with_settlement: data?.matched_with_settlement ?? 0,
+      bank_deposit_found: data?.bank_deposit_found ?? 0,
+      ready_to_reconcile: data?.ready_to_reconcile ?? 0,
+      non_marketplace_count: nonMarketplaceCount,
+    },
+    capabilities: ['compare_invoice', 'bank_match', 'payment_verification'],
+  }));
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
