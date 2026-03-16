@@ -876,7 +876,9 @@ export default function ActionCentre({
                                   </div>
                                 ))}
                                 <div className="text-muted-foreground pt-1 border-t border-border mt-1">
-                                  {cellRows.length} settlement{cellRows.length > 1 ? 's' : ''}
+                                  {cellRows.length > 0
+                                    ? `${cellRows.length} settlement${cellRows.length > 1 ? 's' : ''}`
+                                    : 'From settlement data'}
                                 </div>
                               </TooltipContent>
                             </Tooltip>
