@@ -536,7 +536,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  console.log(`[auto-gen-settlements] user=${userPrefix} orders=${orders.length} groups=${groups.size} settlements=${settlementsCreated} lines=${linesCreated} connections=${connectionsProvisioned}`);
+  logger.debug(`[auto-gen-settlements] user=${userPrefix} orders=${orders.length} groups=${groups.size} settlements=${settlementsCreated} lines=${linesCreated} connections=${connectionsProvisioned}`);
 
   return new Response(
     JSON.stringify({
