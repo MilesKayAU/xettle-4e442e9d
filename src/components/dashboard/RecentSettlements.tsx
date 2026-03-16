@@ -379,7 +379,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
               supabase.from('settlements')
                 .update({ status: 'already_recorded', sync_origin: 'external' } as any)
                 .in('id', paidDbIds)
-                .then(() => { console.log(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`); fetchAll(); });
+                .then(() => { logger.debug(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`); fetchAll(); });
             }
             setExternalMatchIds(new Set(
               matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
