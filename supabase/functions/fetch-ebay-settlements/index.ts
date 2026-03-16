@@ -315,7 +315,7 @@ async function persistSettlementLines(
 
     return { count: lineRows.length }
   } catch (err: any) {
-    console.error(`[fetch-ebay-settlements] settlement_lines write failed:`, err)
+    logger.error(`[fetch-ebay-settlements] settlement_lines write failed:`, err)
     return { count: 0, error: err.message || 'unknown' }
   }
 }
