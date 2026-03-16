@@ -1478,7 +1478,7 @@ serve(async (req) => {
                 logger.warn('[backfill] Rate limited — stopping');
                 break;
               }
-              console.error(`[backfill] Download error: ${dlErr.message}`);
+              logger.error(`[backfill] Download error: ${dlErr.message}`);
             }
           }
         } catch (chunkErr: any) {
