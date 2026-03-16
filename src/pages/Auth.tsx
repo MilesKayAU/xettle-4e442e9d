@@ -11,7 +11,8 @@ import { toast } from "@/hooks/use-toast";
 import { sanitizeEmail } from "@/utils/input-sanitization";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import Honeypot from "@/components/ui/honeypot";
-import { Lock, UserPlus, Mail } from 'lucide-react';
+import { Lock, UserPlus, Mail, Shield } from 'lucide-react';
+import { hashPin } from "@/hooks/use-settings-pin";
 
 export default function Auth() {
   const navigate = useNavigate();
