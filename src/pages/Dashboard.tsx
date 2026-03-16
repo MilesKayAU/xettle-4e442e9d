@@ -1003,11 +1003,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* AI Assistant floating button */}
-      <AskAiButton
-        context={aiContext}
-        suggestedPrompts={aiSuggestedPrompts}
-      />
     </div>
   );
 }
