@@ -25,19 +25,22 @@ interface Props {
 
 async function fetchStatuses(): Promise<ConnectionStatus[]> {
   // Fetch tokens AND scan completion flags in parallel for a unified view
-  const [xeroRes, amazonRes, shopifyRes, flagsRes] = await Promise.all([
+  const [xeroRes, amazonRes, shopifyRes, ebayRes, flagsRes] = await Promise.all([
     supabase.from('xero_tokens').select('tenant_name, updated_at').limit(1),
     supabase.from('amazon_tokens').select('selling_partner_id, updated_at').limit(1),
     supabase.from('shopify_tokens').select('shop_domain, updated_at').limit(1),
+    supabase.from('ebay_tokens').select('ebay_username, updated_at').limit(1),
     supabase.from('app_settings').select('key, value, updated_at').in('key', [
       'setup_phase1_xero', 'setup_phase1_shopify', 'setup_phase1_amazon',
       'xero_scan_completed', 'amazon_scan_completed', 'shopify_scan_completed',
+      'ebay_scan_completed',
     ]),
   ]);
 
   const xero = xeroRes.data?.[0];
   const amazon = amazonRes.data?.[0];
   const shopify = shopifyRes.data?.[0];
+  const ebay = ebayRes.data?.[0];
 
   const flags = new Map(flagsRes.data?.map(f => [f.key, f]) || []);
 
@@ -50,11 +53,13 @@ async function fetchStatuses(): Promise<ConnectionStatus[]> {
   const xeroConnected = !!xero;
   const amazonConnected = !!amazon;
   const shopifyConnected = !!shopify;
+  const ebayConnected = !!ebay;
 
   // "Synced" = deep scan completed (not just connected). Only use *_scan_completed flags for sync time.
   const xeroSynced = flags.get('xero_scan_completed')?.value === 'true';
   const amazonSynced = flags.get('amazon_scan_completed')?.value === 'true';
   const shopifySynced = flags.get('shopify_scan_completed')?.value === 'true';
+  const ebaySynced = flags.get('ebay_scan_completed')?.value === 'true';
 
   // Sync time only from deep-scan completion or token refresh — NOT from setup_phase1 connect flags
   const syncTime = (tokenDate: string | undefined, scanFlagKey: string): string | undefined => {
@@ -86,6 +91,13 @@ async function fetchStatuses(): Promise<ConnectionStatus[]> {
       synced: shopifySynced,
       detail: shopify?.shop_domain || undefined,
       lastSync: timeAgo(syncTime(shopify?.updated_at, 'shopify_scan_completed')),
+    },
+    {
+      label: 'eBay',
+      connected: ebayConnected,
+      synced: ebaySynced,
+      detail: ebay?.ebay_username || undefined,
+      lastSync: timeAgo(syncTime(ebay?.updated_at, 'ebay_scan_completed')),
     },
   ];
 }

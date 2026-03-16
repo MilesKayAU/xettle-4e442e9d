@@ -23,15 +23,17 @@ interface ConnectionStatusBarProps {
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionInfo[]> {
-  const [shopifyRes, amazonRes, xeroRes] = await Promise.all([
+  const [shopifyRes, amazonRes, xeroRes, ebayRes] = await Promise.all([
     supabase.from('shopify_tokens').select('shop_domain, installed_at').limit(1),
     supabase.from('amazon_tokens').select('selling_partner_id, created_at').limit(1),
     supabase.from('xero_tokens').select('tenant_name, created_at').limit(1),
+    supabase.from('ebay_tokens').select('ebay_username, created_at').limit(1),
   ]);
 
   const shopify = shopifyRes.data?.[0];
   const amazon = amazonRes.data?.[0];
   const xero = xeroRes.data?.[0];
+  const ebay = ebayRes.data?.[0];
 
   const formatDate = (d: string | null | undefined) => {
     if (!d) return undefined;
@@ -54,6 +56,14 @@ async function fetchConnectionStatus(): Promise<ConnectionInfo[]> {
       connected: !!amazon,
       detail: amazon?.selling_partner_id || undefined,
       connectedAt: formatDate(amazon?.created_at),
+    },
+    {
+      key: 'ebay',
+      label: 'eBay',
+      icon: '🏷️',
+      connected: !!ebay,
+      detail: ebay?.ebay_username || undefined,
+      connectedAt: formatDate(ebay?.created_at),
     },
     {
       key: 'xero',
