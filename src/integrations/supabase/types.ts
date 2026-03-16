@@ -1151,6 +1151,54 @@ export type Database = {
         }
         Relationships: []
       }
+      period_locks: {
+        Row: {
+          created_at: string
+          id: string
+          lock_hash: string | null
+          locked_at: string
+          locked_by: string
+          notes: string | null
+          period_month: string
+          pre_lock_snapshot: Json | null
+          unlock_reason: string | null
+          unlocked_at: string | null
+          unlocked_by: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lock_hash?: string | null
+          locked_at?: string
+          locked_by: string
+          notes?: string | null
+          period_month: string
+          pre_lock_snapshot?: Json | null
+          unlock_reason?: string | null
+          unlocked_at?: string | null
+          unlocked_by?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lock_hash?: string | null
+          locked_at?: string
+          locked_by?: string
+          notes?: string | null
+          period_month?: string
+          pre_lock_snapshot?: Json | null
+          unlock_reason?: string | null
+          unlocked_at?: string | null
+          unlocked_by?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       product_costs: {
         Row: {
           cost: number
