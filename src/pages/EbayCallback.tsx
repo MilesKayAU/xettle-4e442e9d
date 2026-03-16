@@ -18,6 +18,8 @@ export default function EbayCallback() {
       const errorParam = searchParams.get('error');
       const errorDesc = searchParams.get('error_description');
 
+      console.log('[eBay Callback] Params:', { code: code ? `${code.substring(0, 10)}...` : null, error: errorParam });
+
       if (errorParam) {
         setStatus('error');
         setErrorMessage(errorDesc || errorParam || 'Authorization was denied');
@@ -31,6 +33,7 @@ export default function EbayCallback() {
       }
 
       try {
+        console.log('[eBay Callback] Exchanging code for tokens...');
         const { data, error } = await supabase.functions.invoke('ebay-auth', {
           headers: { 'x-action': 'connect' },
           body: { code },
@@ -39,6 +42,7 @@ export default function EbayCallback() {
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
 
+        console.log('[eBay Callback] Token exchange successful, user:', data.ebay_username);
         setEbayUsername(data.ebay_username);
         setStatus('success');
 
@@ -46,7 +50,7 @@ export default function EbayCallback() {
           navigate('/dashboard?connected=ebay', { replace: true });
         }, 3000);
       } catch (err: any) {
-        console.error('eBay callback error:', err);
+        console.error('[eBay Callback] Error:', err);
         setStatus('error');
         setErrorMessage(err.message || 'Failed to connect eBay account');
       }
