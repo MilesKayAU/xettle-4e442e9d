@@ -85,7 +85,7 @@ export default function Landing() {
             <span className="text-primary">between marketplaces and Xero.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Xettle verifies every settlement, reconciles payouts against bank deposits, and posts accountant-safe invoices to Xero — across Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
+            Xettle turns marketplace settlements into Xero invoices — with reconciliation checks and mapping safeguards so you can verify totals before posting. Across Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
             Not a file uploader. A settlement engine with duplicate prevention, audit trail, and bank verification built in.
