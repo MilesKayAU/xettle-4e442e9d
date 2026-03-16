@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
         const totalUses = learned.reduce((sum: number, l: any) => sum + l.usage_count, 0)
         if (totalUses >= 5) {
           const accountLookup = new Map(xeroAccounts.map((a: any) => [a.code || a.Code, a.name || a.Name]))
-          console.log(`[ai-account-mapper] Using learned mapping for contact "${body.contact_name}" → normalised "${normKey}" (${learned.length} codes, top confidence: ${learned[0].confidence_pct}%, total uses: ${totalUses})`)
+          logger.debug(`[ai-account-mapper] Using learned mapping for contact "${body.contact_name}" → normalised "${normKey}" (${learned.length} codes, top confidence: ${learned[0].confidence_pct}%, total uses: ${totalUses})`)
 
           return new Response(JSON.stringify({
             success: true,
