@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { logger } from '../_shared/logger.ts'
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? ""
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
     }
 
   } catch (error) {
-    console.error('Admin manage users error:', error)
+    logger.error('Admin manage users error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

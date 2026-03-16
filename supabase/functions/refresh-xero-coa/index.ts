@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { logger } from '../_shared/logger.ts'
 
 const XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
 
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
 
     if (!accountsResp.ok) {
       const errText = await accountsResp.text()
-      console.error('Xero accounts error:', accountsResp.status, errText)
+      logger.error('Xero accounts error:', accountsResp.status, errText)
       return new Response(JSON.stringify({ error: `Xero API error: ${accountsResp.status}` }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -127,7 +128,7 @@ Deno.serve(async (req) => {
         { onConflict: 'user_id,xero_account_id' }
       )
       if (upsertErr) {
-        console.error('COA upsert error:', upsertErr)
+        logger.error('COA upsert error:', upsertErr)
       } else {
         accountsUpserted = coaRows.length
       }
@@ -168,13 +169,13 @@ Deno.serve(async (req) => {
           { onConflict: 'user_id,tax_type' }
         )
         if (taxErr) {
-          console.error('Tax rates upsert error:', taxErr)
+          logger.error('Tax rates upsert error:', taxErr)
         } else {
           taxRatesUpserted = taxRows.length
         }
       }
     } else {
-      console.warn('Tax rates fetch failed (non-fatal):', taxRatesResp.status)
+      logger.warn('Tax rates fetch failed (non-fatal):', taxRatesResp.status)
     }
 
     // ─── Log system event ────────────────────────────────────────────
@@ -211,7 +212,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err: any) {
-    console.error('refresh-xero-coa error:', err)
+    logger.error('refresh-xero-coa error:', err)
     return new Response(JSON.stringify({ error: err.message || 'Internal error' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

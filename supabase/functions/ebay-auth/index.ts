@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { logger } from '../_shared/logger.ts'
 
 const EBAY_AUTH_URL = 'https://auth.ebay.com/oauth2/authorize'
 const EBAY_TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
@@ -58,7 +59,7 @@ serve(async (req) => {
       const authUrl = `${EBAY_AUTH_URL}?${params.toString()}`
 
       // Debug: log the authorize URL components so we can verify credentials match
-      console.log('[ebay-auth] authorize URL built:', {
+      logger.debug('[ebay-auth] authorize URL built:', {
         authUrl,
         client_id_prefix: EBAY_CLIENT_ID.substring(0, 12) + '...',
         runame: EBAY_RUNAME,
@@ -122,7 +123,7 @@ serve(async (req) => {
 
       const tokenData = await tokenResponse.json()
       if (!tokenResponse.ok || !tokenData.refresh_token) {
-        console.error('eBay token exchange failed:', tokenData)
+        logger.error('eBay token exchange failed:', tokenData)
         return new Response(JSON.stringify({ error: 'Token exchange failed', details: tokenData }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -217,7 +218,7 @@ serve(async (req) => {
 
       const refreshData = await refreshResponse.json()
       if (!refreshResponse.ok || !refreshData.access_token) {
-        console.error('eBay token refresh failed:', refreshData)
+        logger.error('eBay token refresh failed:', refreshData)
         return new Response(JSON.stringify({ error: 'Token refresh failed' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -257,7 +258,7 @@ serve(async (req) => {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   } catch (err) {
-    console.error('ebay-auth error:', err)
+    logger.error('ebay-auth error:', err)
     const message = err instanceof Error ? err.message : 'Unknown error'
     return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }

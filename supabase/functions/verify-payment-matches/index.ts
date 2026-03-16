@@ -22,6 +22,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { logger } from '../_shared/logger.ts'
 
 const GATEWAY_DETECTION: Record<string, string[]> = {
   paypal: ['paypal', 'pypl'],
@@ -133,7 +134,7 @@ Deno.serve(async (req) => {
 
     if (!bankCacheCount || bankCacheCount === 0) {
       // ── EARLY EXIT: Cache empty — do NOT attempt verification ──
-      console.log(`[verify-payment-matches] Bank cache empty for ${userId} — exiting early. Run fetch-xero-bank-transactions first.`)
+      logger.info(`[verify-payment-matches] Bank cache empty for ${userId} — exiting early. Run fetch-xero-bank-transactions first.`)
       return new Response(JSON.stringify({
         candidates: {},
         gateways_checked: enabledGateways.map(g => g.code),
@@ -177,7 +178,7 @@ Deno.serve(async (req) => {
           .limit(100)
 
         if (cacheErr) {
-          console.error(`[verify-payment-matches] Cache query error for ${gateway.code}:`, cacheErr.message)
+          logger.error(`[verify-payment-matches] Cache query error for ${gateway.code}:`, cacheErr.message)
           continue
         }
 
@@ -185,7 +186,7 @@ Deno.serve(async (req) => {
         diagnostics.accounts_checked++
         diagnostics.transactions_checked += transactions.length
 
-        console.log(`[verify-payment-matches] ${gateway.code}: ${transactions.length} cached RECEIVE txns from account ${gateway.accountId}`)
+        logger.info(`[verify-payment-matches] ${gateway.code}: ${transactions.length} cached RECEIVE txns from account ${gateway.accountId}`)
 
         if (transactions.length === 0) continue
 
@@ -268,7 +269,7 @@ Deno.serve(async (req) => {
           allCandidates[gateway.code].sort((a, b) => b.score - a.score)
         }
       } catch (err) {
-        console.error(`[verify-payment-matches] Error processing ${gateway.code}:`, err)
+        logger.error(`[verify-payment-matches] Error processing ${gateway.code}:`, err)
       }
     }
 
@@ -285,7 +286,7 @@ Deno.serve(async (req) => {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    console.error('[verify-payment-matches] Error:', err)
+    logger.error('[verify-payment-matches] Error:', err)
     return new Response(JSON.stringify({ error: 'Internal server error', detail: String(err) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
