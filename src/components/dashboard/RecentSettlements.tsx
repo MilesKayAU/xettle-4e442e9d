@@ -352,7 +352,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         await supabase.from('settlements')
           .update({ status: 'ready_to_push' } as any)
           .in('id', stuckIds);
-        console.log(`[RecentSettlements] Promoted ${stuckIds.length} stuck ingested → ready_to_push`);
+        logger.debug(`[RecentSettlements] Promoted ${stuckIds.length} stuck ingested → ready_to_push`);
         // Re-fetch with updated statuses
         const { data: refreshed } = await supabase
           .from('settlements')
