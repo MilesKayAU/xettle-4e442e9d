@@ -398,45 +398,35 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
     loadHistory();
   };
 
-  // ─── Push All to Xero ──────────────────────────────────────────────
-
-  const handlePushAllToXero = async () => {
+  // Golden Rule: Open PushSafetyPreview for batch push
+  const handlePushAllToXero = () => {
     const toPush = settlements.filter(s => savedIds.has(s.settlement_id));
     if (toPush.length === 0) {
       toast.warning('Save clearing invoices first before pushing to Xero.');
       return;
     }
+    setPreviewSettlements(toPush.map(s => ({
+      settlementId: s.settlement_id,
+      marketplace: s.marketplace,
+    })));
+    setPreviewOpen(true);
+  };
+
+  const handlePreviewConfirm = async () => {
+    setPreviewOpen(false);
     setPushing(true);
     let pushed = 0;
-    let totalRevenue = 0;
-    let totalGst = 0;
 
-    for (const s of toPush) {
-      const lineItems = buildShopifyOrdersInvoiceLines(s);
-      const meta = s.metadata || {};
-
-      // Verify $0.00 balance before pushing
-      const lineTotal = lineItems.reduce((sum, l) => sum + round2(l.UnitAmount * l.Quantity) + (l.TaxAmount || 0), 0);
-      if (Math.abs(lineTotal) > 0.02) {
-        toast.error(`Invoice balancing error for ${meta.displayName} — please contact support`);
-        continue;
-      }
-
-      const result = await syncSettlementToXero(s.settlement_id, s.marketplace, {
-        lineItems,
-        contactName: meta.contactName || meta.displayName || 'Marketplace',
-      });
-      if (result.success) {
-        pushed++;
-        totalRevenue += (meta.salesInclGst || 0) + (meta.shippingInclGst || 0);
-        totalGst += (meta.gstOnSales || 0) + (meta.gstOnShipping || 0);
-      }
+    for (const s of previewSettlements) {
+      const result = await syncSettlementToXero(s.settlementId, s.marketplace);
+      if (result.success) pushed++;
     }
 
     setPushing(false);
-    setPushStats({ invoiceCount: pushed, totalRevenue, totalGst });
-    toast.success(`Pushed ${pushed} of ${toPush.length} clearing invoices to Xero`);
+    setPushStats({ invoiceCount: pushed, totalRevenue: 0, totalGst: 0 });
+    toast.success(`Pushed ${pushed} of ${previewSettlements.length} clearing invoices to Xero`);
     setShowBookkeeperInfo(true);
+    setPreviewSettlements([]);
     loadHistory();
   };
 
