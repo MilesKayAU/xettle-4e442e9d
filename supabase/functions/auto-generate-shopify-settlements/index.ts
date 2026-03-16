@@ -13,7 +13,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // ─── Hardcoded fallback registries (used only if DB query fails) ────────────
 

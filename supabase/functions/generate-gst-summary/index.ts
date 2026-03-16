@@ -1,6 +1,6 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 // ══════════════════════════════════════════════════════════════
 // INTERNAL FINANCIAL CATEGORIES (canonical)

@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SHOPIFY_API_VERSION = "2026-01";
 const RATE_LIMIT_DELAY_MS = 500;

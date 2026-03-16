@@ -1,15 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const EBAY_AUTH_URL = 'https://auth.ebay.com/oauth2/authorize'
 const EBAY_TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
 const EBAY_SCOPES = 'https://api.ebay.com/oauth/api_scope/sell.finances https://api.ebay.com/oauth/api_scope/sell.fulfillment'
 
 serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  const preflightResponse = handleCorsPreflightResponse(req);
-  if (preflightResponse) return preflightResponse;
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     const authHeader = req.headers.get('Authorization')

@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // Source names that are core Shopify — never alert on these
 const IGNORED_SOURCES = new Set([

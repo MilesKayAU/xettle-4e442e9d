@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const EBAY_API_BASE = 'https://apiz.ebay.com'
 const EBAY_TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token'

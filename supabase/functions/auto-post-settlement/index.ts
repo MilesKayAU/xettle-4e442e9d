@@ -26,7 +26,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -73,9 +73,11 @@ function round2(n: number): number {
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  const preflightResponse = handleCorsPreflightResponse(req);
-  if (preflightResponse) return preflightResponse;
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     // ─── Auth: verify caller is authenticated or service-role ─────

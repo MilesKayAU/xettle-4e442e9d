@@ -16,7 +16,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const MARKETPLACE_NAMES: Record<string, string[]> = {
   amazon_au: ['amazon', 'amzn', 'amazon payments', 'amzn mktplace pmts', 'amazon au'],
