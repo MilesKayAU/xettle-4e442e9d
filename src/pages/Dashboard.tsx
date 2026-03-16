@@ -36,6 +36,7 @@ import AccountMapperCard from '@/components/settings/AccountMapperCard';
 import PaymentVerificationSettings from '@/components/settings/PaymentVerificationSettings';
 import RailPostingSettings from '@/components/settings/RailPostingSettings';
 import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
+import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
