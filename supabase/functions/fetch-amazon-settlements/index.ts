@@ -1313,7 +1313,7 @@ serve(async (req) => {
             headers: { 'x-action': 'refresh' },
           });
           if (!authData?.access_token) {
-            console.error('[backfill] Failed to get access token');
+            logger.error('[backfill] Failed to get access token');
             break;
           }
 
