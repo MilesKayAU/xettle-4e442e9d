@@ -36,6 +36,7 @@ import AccountMapperCard from '@/components/settings/AccountMapperCard';
 import PaymentVerificationSettings from '@/components/settings/PaymentVerificationSettings';
 import RailPostingSettings from '@/components/settings/RailPostingSettings';
 import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
+import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
@@ -942,9 +943,20 @@ export default function Dashboard() {
               <div>
                 <h2 className="text-2xl font-bold text-foreground">Settings</h2>
                 <p className="text-muted-foreground mt-1">
-                  Configure bank account mappings, Xero account codes, and reconciliation preferences.
+                  Manage API connections, account mappings, and reconciliation preferences.
                 </p>
               </div>
+              <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+                <ApiConnectionsPanel
+                  isPaid={true}
+                  syncCutoffDate={undefined}
+                  onSettlementsAutoFetched={async () => {
+                    // Refresh settlements if needed
+                  }}
+                  onRequestSettings={() => {}}
+                  onFetchStateChange={() => {}}
+                />
+              </Suspense>
               <DestinationAccountMapper />
               <AccountMapperCard />
               <RailPostingSettings />
