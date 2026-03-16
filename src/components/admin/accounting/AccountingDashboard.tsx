@@ -41,6 +41,7 @@ import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPre
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 
 import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
+import ExceptionsInbox from '@/components/admin/accounting/ExceptionsInbox';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
@@ -892,6 +893,9 @@ export default function AccountingDashboard() {
               <TabsTrigger value="settings" className="gap-1.5">
                 <Settings className="h-3.5 w-3.5" /> Settings
               </TabsTrigger>
+              <TabsTrigger value="exceptions" className="gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" /> Exceptions
+              </TabsTrigger>
               <TabsTrigger value="gst-audit" className="gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5" /> GST Audit
               </TabsTrigger>
@@ -1151,6 +1155,11 @@ export default function AccountingDashboard() {
               </div>
             </TabsContent>
 
+
+            {/* EXCEPTIONS TAB */}
+            <TabsContent value="exceptions">
+              <ExceptionsInbox />
+            </TabsContent>
 
             {/* GST AUDIT TAB */}
             <TabsContent value="gst-audit">
