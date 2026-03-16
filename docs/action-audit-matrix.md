@@ -147,11 +147,13 @@ System events are always written by the code that performs the action (edge fn o
 | Auto-post trigger | `triggerAutoPost()` | auto-post-settlement | ✅ invoke guard test |
 | Readiness check | `checkXeroReadinessForMarketplace()` | sync-settlement-to-xero | ✅ REQUIRED_CATEGORIES sync test |
 
-### Remaining Migration Targets (allowlisted, non-blocking)
+### Remaining Migration Targets
 
-| File | Pattern | Plan |
+| File | Pattern | Status |
 |---|---|---|
-| `settlement-engine.ts` | direct `functions.invoke('sync-settlement-to-xero')` | Migrate to `xeroPush.ts` when PushSafetyPreview is refactored |
-| `settlement-engine.ts` | direct delete cascade | Migrate to `deleteSettlement()` |
-| 3 Shopify components | direct `marketplace_connections.insert` | Migrate to `provisionMarketplace()` |
-| SmartUploadFlow | direct `marketplace_connections.insert` (no dedup) | Migrate to `provisionMarketplace()` |
+| `settlement-engine.ts` | `syncSettlementToXero()` orchestrator | ✅ Delegates to `pushSettlementToXero()` for invoke |
+| `settlement-engine.ts` | `rollbackSettlementFromXero()` | ✅ Thin wrapper → `rollbackFromXero()` |
+| `settlement-engine.ts` | `deleteSettlement()` | ✅ Thin wrapper → `@/actions/settlements.deleteSettlement()` |
+| `marketplace-token-map.ts` | Ghost cleanup (delete only) | ✅ Cleanup utility, no provisioning |
+
+**No allowlisted legacy bypasses remain.** All client-side paths route through canonical actions.
