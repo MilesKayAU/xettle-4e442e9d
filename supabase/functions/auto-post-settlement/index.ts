@@ -768,7 +768,7 @@ async function processSettlement(
       details: snapshotDetails,
     });
 
-    console.log(`[auto-post-settlement] Successfully posted ${sid} to Xero as ${pushResult.invoiceNumber}`);
+    logger.debug(`[auto-post-settlement] Successfully posted ${sid} to Xero as ${pushResult.invoiceNumber}`);
     return { settlement_id: sid, result: 'posted' };
 
   } catch (err: any) {
