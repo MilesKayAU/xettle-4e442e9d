@@ -612,6 +612,8 @@ export default function AccountMapperCard() {
   // ─── UNMAPPED STATE ──────────────────────────────────────────────
   if (state === 'unmapped') {
     return (
+      <>
+      {renderPinDialog()}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -630,6 +632,7 @@ export default function AccountMapperCard() {
           </Button>
         </CardContent>
       </Card>
+      </>
     );
   }
 
