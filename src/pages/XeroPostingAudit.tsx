@@ -83,6 +83,9 @@ export default function XeroPostingAudit() {
   const [filter, setFilter] = useState<AuditCategory>('all');
   const [preBoundaryFilter, setPreBoundaryFilter] = useState<string>('all');
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportFilters, setExportFilters] = useState<AuditExportFilters>({});
+  const [exporting, setExporting] = useState(false);
 
   const auditCounts = useMemo(() => ({
     total: rows.length,
