@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
 import { Loader2, Copy, AlertTriangle, CheckCircle2, ArrowRight, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import {
