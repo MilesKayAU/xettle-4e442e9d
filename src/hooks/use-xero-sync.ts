@@ -69,12 +69,8 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
       if (result.success) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user && bankAmount !== undefined) {
-          await supabase.from('settlements').update({
-            bank_verified: true,
-            bank_verified_amount: bankAmount,
-            bank_verified_at: new Date().toISOString(),
-            bank_verified_by: user.id,
-          } as any).eq('id', settlement.id);
+          const { markBankVerified } = await import('@/actions/settlements');
+          await markBankVerified(settlement.id, bankAmount);
         }
         toast.success('Invoice created in Xero!');
         loadSettlements();
