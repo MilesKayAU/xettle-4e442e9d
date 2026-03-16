@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon, BarChart3, ShieldAlert } from "lucide-react";
+import { DollarSign, Upload, FileSpreadsheet, Globe, CheckCircle2, XCircle, AlertTriangle, FileText, History, Settings, Clock, ArrowRight, Info, Save, Loader2, FolderUp, SkipForward, Square, Eye, Download, ChevronDown, MoreHorizontal, Undo2, ExternalLink, Trash2, CheckSquare, CloudDownload, CalendarIcon, BarChart3, ShieldAlert, RefreshCw } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseSettlementTSV, formatDisplayDate, formatAUD, XERO_ACCOUNT_MAP, round2, PARSER_VERSION, type ParsedSettlement, type DebugBreakdownRow, type ParserOptions, type SplitMonthData } from '@/utils/settlement-parser';
@@ -39,6 +39,7 @@ import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplica
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
+import SafeRepostModal from '@/components/admin/accounting/SafeRepostModal';
 
 import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
 import ExceptionsInbox from '@/components/admin/accounting/ExceptionsInbox';
@@ -1768,6 +1769,7 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
   } = useBulkSelect({ settlements: settlements as any, onComplete: onDeleted });
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [rollbackConfirm, setRollbackConfirm] = useState<{ settlement: SettlementRecord; scope: 'all' | 'journal_1' | 'journal_2' } | null>(null);
+  const [repostTarget, setRepostTarget] = useState<SettlementRecord | null>(null);
 
   // Shared Xero sync hook for mark-as-synced (rollback stays Amazon-specific due to split-month scope)
   const {
@@ -2267,6 +2269,14 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                                     <Undo2 className="h-3.5 w-3.5 mr-2" /> Rollback Journal 2
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuSeparator />
+                                {/* Safe Repost — void + rebuild + push new DRAFT */}
+                                <DropdownMenuItem
+                                  onClick={() => setRepostTarget(s)}
+                                  className="text-primary focus:text-primary"
+                                >
+                                  <RefreshCw className="h-3.5 w-3.5 mr-2" /> Safe Repost…
+                                </DropdownMenuItem>
                               </>
                             )}
 
@@ -2397,6 +2407,15 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
             </div>
           </div>
         </div>
+      )}
+
+      {/* Safe Repost Modal */}
+      {repostTarget && (
+        <SafeRepostModal
+          settlement={repostTarget}
+          onClose={() => setRepostTarget(null)}
+          onComplete={onDeleted}
+        />
       )}
     </Card>
   );
