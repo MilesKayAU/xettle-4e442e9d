@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, Plus, Loader2, X } from 'lucide-react';
+import { CheckCircle2, Plus, Loader2, X, Zap } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
