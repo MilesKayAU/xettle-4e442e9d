@@ -87,7 +87,9 @@ export default function EbayCallback() {
                   User: {ebayUsername}
                 </p>
               )}
-              <p className="text-xs text-muted-foreground">Redirecting to dashboard...</p>
+              <p className="text-xs text-muted-foreground">
+                {window.opener ? 'This window will close automatically...' : 'Redirecting to dashboard...'}
+              </p>
             </>
           )}
 
