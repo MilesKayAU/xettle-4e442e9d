@@ -134,7 +134,8 @@ export default function InsightsDashboard() {
 
       const grouped: Record<string, typeof data> = {};
       for (const row of data) {
-        const rawMp = row.marketplace || 'amazon_au';
+        const rawMp = row.marketplace;
+        if (!rawMp) continue; // Skip settlements with no marketplace tag
         const mp = normalizeMarketplace(rawMp);
         if (!grouped[mp]) grouped[mp] = [];
         grouped[mp].push(row);
