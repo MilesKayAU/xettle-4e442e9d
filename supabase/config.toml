@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.auto-post-settlement]
 verify_jwt = false
+
+[functions.fetch-xero-invoice]
+verify_jwt = false
+
+[functions.rescan-xero-invoice-match]
+verify_jwt = false
