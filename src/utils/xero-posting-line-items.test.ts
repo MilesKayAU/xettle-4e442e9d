@@ -257,10 +257,10 @@ describe('xero-posting-line-items', () => {
       expect(lines.find(l => l.Description === 'Storage Fees')).toBeUndefined();
     });
 
-    it('should use default account codes when no resolver provided', () => {
+    it('should return UNMAPPED when no resolver or user codes provided', () => {
       const lines = buildPostingLineItems(GOLDEN_SETTLEMENT);
       const salesLine = lines.find(l => l.Description === 'Sales (Principal)');
-      expect(salesLine!.AccountCode).toBe('200');
+      expect(salesLine!.AccountCode).toBe('UNMAPPED');
     });
 
     it('should use custom account codes from resolver', () => {
