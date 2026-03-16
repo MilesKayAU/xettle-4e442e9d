@@ -53,6 +53,7 @@ const ALLOWED_FILES = [
   'actions/xeroReadiness.ts',
   'actions/scopeConsent.ts',
   'actions/xeroInvoice.ts',
+  'actions/xeroAccounts.ts',
   'actions/index.ts',
   'integrations/',
   'policy/',
@@ -207,6 +208,21 @@ describe('Canonical action guardrails', () => {
       !v.file.includes('toolRegistry') && !v.file.includes('test')
     );
     expect(componentViolations, `Direct AI tool calls found outside registry:\n${formatViolations(componentViolations)}`).toEqual([]);
+  });
+
+  it('no direct invoke of refresh-xero-coa outside canonical actions', () => {
+    const violations = scanForPattern(/functions\.invoke\(['"]refresh-xero-coa['"]/);
+    expect(violations, `Direct refresh-xero-coa invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no direct writes to xero_chart_of_accounts outside canonical actions', () => {
+    const violations = scanForPattern(/from\(['"]xero_chart_of_accounts['"]\)\.\s*(?:insert|upsert|update|delete)/);
+    expect(violations, `Direct xero_chart_of_accounts writes found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no direct writes to xero_tax_rates outside canonical actions', () => {
+    const violations = scanForPattern(/from\(['"]xero_tax_rates['"]\)\.\s*(?:insert|upsert|update|delete)/);
+    expect(violations, `Direct xero_tax_rates writes found:\n${formatViolations(violations)}`).toEqual([]);
   });
 });
 

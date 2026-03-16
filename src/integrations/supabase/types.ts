@@ -2405,6 +2405,42 @@ export type Database = {
         }
         Relationships: []
       }
+      xero_tax_rates: {
+        Row: {
+          can_apply_to_expenses: boolean | null
+          can_apply_to_revenue: boolean | null
+          effective_rate: number | null
+          id: string
+          name: string
+          status: string | null
+          synced_at: string | null
+          tax_type: string
+          user_id: string
+        }
+        Insert: {
+          can_apply_to_expenses?: boolean | null
+          can_apply_to_revenue?: boolean | null
+          effective_rate?: number | null
+          id?: string
+          name: string
+          status?: string | null
+          synced_at?: string | null
+          tax_type: string
+          user_id: string
+        }
+        Update: {
+          can_apply_to_expenses?: boolean | null
+          can_apply_to_revenue?: boolean | null
+          effective_rate?: number | null
+          id?: string
+          name?: string
+          status?: string | null
+          synced_at?: string | null
+          tax_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       xero_tokens: {
         Row: {
           access_token: string

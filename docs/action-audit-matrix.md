@@ -231,3 +231,27 @@
 - Context size hard-capped at 2KB JSON
 - Tools execute server-side with user_id scoping (service role + filter)
 - Tool-calling loop limited to 3 rounds max
+
+---
+
+## J) Xero Chart of Accounts / Account Mapper
+
+| Entry Point | File | Tables Written | Idempotency | Canonical Path |
+|---|---|---|---|---|
+| Refresh COA button | `AccountMapperCard.tsx` → `refreshXeroCOA()` | `xero_chart_of_accounts`, `xero_tax_rates`, `system_events` | `upsert` (user_id + xero_account_id / tax_type) | ✅ `refreshXeroCOA()` |
+| AI Account Mapper scan | `ai-account-mapper` edge fn | `xero_chart_of_accounts`, `app_settings`, `system_events` | `upsert` | ✅ (server-side) |
+| Confirm mapping | `AccountMapperCard.tsx` → `handleConfirm()` | `app_settings` (accounting_xero_account_codes) | `upsert` (user_id + key) | ✅ (canonical key) |
+| refresh-xero-coa | `supabase/functions/refresh-xero-coa/` | `xero_chart_of_accounts`, `xero_tax_rates`, `system_events` | `upsert` | ✅ (server-side) |
+
+### Canonical Action: `src/actions/xeroAccounts.ts`
+
+- `refreshXeroCOA()` — invokes `refresh-xero-coa` edge function
+- `getCachedXeroAccounts()` — reads cached COA from `xero_chart_of_accounts`
+- `getCachedXeroTaxRates()` — reads cached tax rates from `xero_tax_rates`
+- `getCoaLastSyncedAt()` — returns latest synced_at timestamp
+
+### Guardrails
+
+- No component may invoke `refresh-xero-coa` directly (must use canonical action)
+- No component may write directly to `xero_chart_of_accounts` or `xero_tax_rates`
+- Account codes validated against cached COA before save
