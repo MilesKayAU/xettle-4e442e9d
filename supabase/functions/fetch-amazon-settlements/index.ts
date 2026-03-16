@@ -432,7 +432,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
       // Clamp: never go further back than 90 days (Amazon API limit)
       const maxLookback = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
       if (startDate < maxLookback) startDate.setTime(maxLookback.getTime());
-      console.log(`[Sync] Report listing window: ${startDate.toISOString()} (sync_from: ${syncFromParam || 'none'})`);
+      logger.debug(`[Sync] Report listing window: ${startDate.toISOString()} (sync_from: ${syncFromParam || 'none'})`);
       const params = new URLSearchParams({
         reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
         processingStatuses: 'DONE',
