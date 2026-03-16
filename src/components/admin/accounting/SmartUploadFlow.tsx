@@ -2148,11 +2148,74 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
 
               {/* Saved */}
               {status === 'saved' && df.savedCount !== undefined && (
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                    {df.savedCount} settlement{df.savedCount !== 1 ? 's' : ''} saved — review in Settlements tab
-                  </p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                      {df.savedCount} settlement{df.savedCount !== 1 ? 's' : ''} saved — review in Settlements tab
+                    </p>
+                  </div>
+
+                  {/* Xero readiness card (shows only for first settlement of a new marketplace) */}
+                  {df.xeroReadiness && df.xeroReadiness.xeroConnected && (
+                    <div className="bg-muted/40 rounded-lg p-3 space-y-2 border border-border/50">
+                      <div className="flex items-center gap-2">
+                        <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-xs font-semibold text-foreground">Xero Push Readiness</span>
+                      </div>
+                      <div className="space-y-1">
+                        {df.xeroReadiness.checks.map(check => (
+                          <div key={check.key} className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              {check.status === 'pass' && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                              {check.status === 'fail' && <XCircle className="h-3 w-3 text-destructive" />}
+                              {check.status === 'warn' && <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                              <span className="text-xs text-foreground">{check.label}</span>
+                            </div>
+                            {check.message && (
+                              <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{check.message}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {df.xeroReadiness.checks.some(c => c.status === 'fail' || c.status === 'warn') && (
+                        <div className="flex gap-2 mt-1">
+                          {df.xeroReadiness.checks.some(c => c.cta === 'open_mapper') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 gap-1"
+                              onClick={() => {
+                                const params = new URLSearchParams(window.location.search);
+                                params.set('tab', 'settings');
+                                window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                                window.dispatchEvent(new CustomEvent('xettle-open-settings-tab'));
+                              }}
+                            >
+                              <MapPin className="h-3 w-3" />
+                              Open Account Mapper
+                            </Button>
+                          )}
+                          {df.xeroReadiness.checks.some(c => c.cta === 'refresh_coa') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 gap-1"
+                              onClick={() => {
+                                const params = new URLSearchParams(window.location.search);
+                                params.set('tab', 'settings');
+                                window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                                window.dispatchEvent(new CustomEvent('xettle-open-settings-tab'));
+                              }}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              Refresh CoA
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
