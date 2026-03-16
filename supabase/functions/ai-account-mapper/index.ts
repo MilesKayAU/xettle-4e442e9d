@@ -503,7 +503,7 @@ Return JSON with this structure:
         })
       }
       const errText = await aiResponse.text()
-      console.error('AI gateway error:', aiResponse.status, errText)
+      logger.error('AI gateway error:', aiResponse.status, errText)
       return new Response(JSON.stringify({ error: 'AI matching failed' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
