@@ -125,6 +125,26 @@ export default function PushSafetyPreview({
     repostReason?: string | null;
   }>>([]);
 
+  useAiPageContext(() => ({
+    routeId: 'push_safety_preview',
+    pageTitle: 'Push Safety Preview',
+    primaryEntities: {
+      settlement_ids: settlements.map(s => s.settlementId),
+    },
+    pageStateSummary: {
+      settlement_count: settlements.length,
+      marketplaces: [...new Set(settlements.map(s => s.marketplace))],
+      checks_summary: previews.map(p => ({
+        settlement_id: p.settlement.settlement_id,
+        green: p.checks.filter(c => c.status === 'green').length,
+        amber: p.checks.filter(c => c.status === 'amber').length,
+        red: p.checks.filter(c => c.status === 'red').length,
+      })).slice(0, 10),
+      has_mapping_error: !!mappingInvalidError,
+    },
+    capabilities: ['push_to_xero'],
+  }));
+
   useEffect(() => {
     if (open && settlements.length > 0) {
       loadPreviews();

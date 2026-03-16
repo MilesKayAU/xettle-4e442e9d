@@ -77,6 +77,27 @@ export default function XeroPostingAudit() {
   const [preBoundaryFilter, setPreBoundaryFilter] = useState<string>('all');
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
 
+  const auditCounts = useMemo(() => ({
+    total: rows.length,
+    xettle_posted: rows.filter(r => r.category === 'xettle_posted').length,
+    external_detected: rows.filter(r => r.category === 'external_detected').length,
+    unlinked: rows.filter(r => r.category === 'unlinked').length,
+    pre_boundary: rows.filter(r => r.is_pre_boundary).length,
+  }), [rows]);
+
+  useAiPageContext(() => ({
+    routeId: 'xero_posting_audit',
+    pageTitle: 'Xero Posting Audit',
+    primaryEntities: {
+      settlement_ids: rows.slice(0, 20).map(r => r.settlement_id),
+    },
+    pageStateSummary: {
+      ...auditCounts,
+      current_filter: filter,
+    },
+    capabilities: ['view_settlement_detail', 'filter_audit'],
+  }));
+
   useEffect(() => {
     (async () => {
       setLoading(true);
