@@ -6,7 +6,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
+
 
 export type SyncStatusValue = 'success' | 'error' | 'running' | 'never';
 
@@ -28,12 +28,28 @@ export interface SyncStatusResult {
   loading: boolean;
 }
 
+// API-synced integrations only — no CSV-only channels
+const API_INTEGRATIONS = [
+  { rail: 'xero', name: 'Xero', tokenTable: 'xero_tokens' as const, historyTypes: ['xero_sync', 'xero_push', 'xero_refresh', 'xero_status', 'xero_coa'], eventTypes: ['xero_sync_complete', 'xero_sync_error', 'xero_push_complete', 'xero_coa_refreshed'] },
+  { rail: 'amazon_au', name: 'Amazon AU', tokenTable: 'amazon_tokens' as const, historyTypes: ['amazon'], eventTypes: ['amazon_fetch_complete', 'settlement_imported'] },
+  { rail: 'shopify', name: 'Shopify', tokenTable: 'shopify_tokens' as const, historyTypes: ['shopify'], eventTypes: ['shopify_fetch_complete', 'settlement_imported'] },
+  { rail: 'ebay_au', name: 'eBay AU', tokenTable: 'ebay_tokens' as const, historyTypes: ['ebay'], eventTypes: ['ebay_fetch_complete', 'settlement_imported'] },
+] as const;
+
 async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
-  // 1. Get active marketplace connections
-  const { data: connections } = await supabase
-    .from('marketplace_connections')
-    .select('marketplace_code, marketplace_name, connection_status')
-    .in('connection_status', [...ACTIVE_CONNECTION_STATUSES]);
+  // 1. Check which API integrations are actually connected (have tokens)
+  const [xeroRes, amazonRes, shopifyRes, ebayRes] = await Promise.all([
+    supabase.from('xero_tokens').select('id').limit(1),
+    supabase.from('amazon_tokens').select('id').limit(1),
+    supabase.from('shopify_tokens').select('id').limit(1),
+    supabase.from('ebay_tokens').select('id').limit(1),
+  ]);
+
+  const connectedSet = new Set<string>();
+  if (xeroRes.data?.length) connectedSet.add('xero');
+  if (amazonRes.data?.length) connectedSet.add('amazon_au');
+  if (shopifyRes.data?.length) connectedSet.add('shopify');
+  if (ebayRes.data?.length) connectedSet.add('ebay_au');
 
   // 2. Get recent sync_history entries (last 50, covers all event types)
   const { data: syncHistory } = await supabase
@@ -43,35 +59,29 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
     .limit(50);
 
   // 3. Get recent system_events for additional sync signals
+  const allEventTypes = API_INTEGRATIONS.flatMap(i => i.eventTypes);
   const { data: systemEvents } = await supabase
     .from('system_events')
     .select('event_type, severity, created_at, marketplace_code, details')
-    .in('event_type', [
-      'xero_sync_complete', 'xero_sync_error', 'xero_push_complete',
-      'settlement_imported', 'settlement_parsed', 'sync_complete', 'sync_error',
-      'amazon_fetch_complete', 'shopify_fetch_complete', 'ebay_fetch_complete',
-    ])
+    .in('event_type', allEventTypes)
     .order('created_at', { ascending: false })
     .limit(50);
 
   // Helper: derive status from history
   function deriveStatus(
-    historyTypes: string[],
-    eventTypes: string[],
+    historyTypes: readonly string[],
+    eventTypes: readonly string[],
     marketplaceCode?: string,
   ): { status: SyncStatusValue; lastRun: Date | null; message?: string } {
-    // Check sync_history first
     const historyMatch = syncHistory?.find(h =>
       historyTypes.some(t => h.event_type.includes(t))
     );
 
-    // Check system_events (optionally filtered by marketplace)
     const eventMatch = systemEvents?.find(e =>
       eventTypes.includes(e.event_type) &&
       (!marketplaceCode || e.marketplace_code === marketplaceCode)
     );
 
-    // Pick most recent
     const candidates: { date: Date; isError: boolean; message?: string }[] = [];
 
     if (historyMatch) {
@@ -106,30 +116,28 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
     };
   }
 
-  // Xero status
-  const xero = deriveStatus(
-    ['xero_sync', 'xero_push', 'xero_refresh', 'xero_status'],
-    ['xero_sync_complete', 'xero_sync_error', 'xero_push_complete'],
-  );
+  // Xero status (always the first integration)
+  const xeroIntegration = API_INTEGRATIONS[0];
+  const xero = connectedSet.has('xero')
+    ? deriveStatus(xeroIntegration.historyTypes, xeroIntegration.eventTypes)
+    : { status: 'never' as SyncStatusValue, lastRun: null };
 
-  // Marketplace statuses
-  const marketplaces: SyncEntry[] = (connections || []).map(conn => {
-    const code = conn.marketplace_code.toLowerCase();
-    const result = deriveStatus(
-      [code, conn.marketplace_code],
-      [
-        'settlement_imported', 'settlement_parsed', 'sync_complete', 'sync_error',
-        'amazon_fetch_complete', 'shopify_fetch_complete', 'ebay_fetch_complete',
-      ],
-      conn.marketplace_code,
-    );
-
-    return {
-      rail: conn.marketplace_code,
-      name: conn.marketplace_name || conn.marketplace_code,
-      ...result,
-    };
-  });
+  // Marketplace statuses — only show connected API integrations (skip Xero, handled above)
+  const marketplaces: SyncEntry[] = API_INTEGRATIONS
+    .slice(1) // skip xero
+    .filter(integration => connectedSet.has(integration.rail))
+    .map(integration => {
+      const result = deriveStatus(
+        integration.historyTypes,
+        integration.eventTypes,
+        integration.rail,
+      );
+      return {
+        rail: integration.rail,
+        name: integration.name,
+        ...result,
+      };
+    });
 
   return { xero, marketplaces };
 }
