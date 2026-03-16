@@ -85,6 +85,10 @@ interface DetectedFile {
   fingerprintParserType?: string;
   /** Fingerprint ID for linking to inspector */
   fingerprintId?: string;
+  /** Bookkeeper readiness result (computed during review) */
+  readiness?: BookkeeperReadinessResult;
+  /** Xero readiness result (computed post-save for first marketplace settlement) */
+  xeroReadiness?: XeroReadinessResult;
 }
 
 interface SmartUploadFlowProps {
