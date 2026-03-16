@@ -16,7 +16,7 @@ interface TaskCounts {
 }
 
 export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: DailyTaskStripProps) {
-  const [counts, setCounts] = useState<TaskCounts>({ filesToReview: 0, readyToPush: 0, awaitingReconciliation: 0, reconAlerts: 0 });
+  const [counts, setCounts] = useState<TaskCounts>({ filesToReview: 0, readyToPush: 0, awaitingReconciliation: 0, reconAlerts: 0, backfillGaps: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
