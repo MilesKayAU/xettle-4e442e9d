@@ -120,6 +120,7 @@ export default function Dashboard() {
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
   const [hasAmazon, setHasAmazon] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
+  const [hasEbay, setHasEbay] = useState(false);
   const [justConnectedXero, setJustConnectedXero] = useState(false);
   const [showAiMapper, setShowAiMapper] = useState(false);
   const [showSetupBanner, setShowSetupBanner] = useState(false);
