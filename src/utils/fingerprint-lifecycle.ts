@@ -1,6 +1,9 @@
 /**
  * Fingerprint Lifecycle — Trusted Format validation and auto-promotion logic.
  *
+ * DO NOT insert directly into marketplace_file_fingerprints.
+ * Always use createDraftFingerprint() to enforce lifecycle rules.
+ *
  * Fingerprints go through: draft → active (or rejected).
  * Draft fingerprints must pass validation gates before settlements can be saved.
  * Auto-promotion to active happens for low-risk CSV/TSV/XLSX formats.

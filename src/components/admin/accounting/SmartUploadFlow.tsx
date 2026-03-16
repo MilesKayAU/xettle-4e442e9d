@@ -1711,6 +1711,18 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                         <span className="text-xs font-semibold text-foreground">{detection.confidence}%</span>
                       </div>
                     </div>
+                    {df.fingerprintStatus && (
+                      <Badge
+                        variant="outline"
+                        className={df.fingerprintStatus === 'active' ? 'text-green-600 border-green-300' :
+                                   df.fingerprintStatus === 'rejected' ? 'text-destructive border-destructive/30' :
+                                   'text-amber-600 border-amber-300'}
+                        title={df.fingerprintStatus === 'draft' ? 'New format — verified before saving' :
+                               df.fingerprintStatus === 'active' ? 'Trusted format' : 'Rejected format'}
+                      >
+                        {df.fingerprintStatus.toUpperCase()}{df.fingerprintParserType ? ` · ${df.fingerprintParserType}` : ''}
+                      </Badge>
+                    )}
                     {detection.recordCount && (
                       <div className="flex items-center gap-1">
                         <FileSpreadsheet className="h-3 w-3 text-muted-foreground" />

@@ -829,6 +829,11 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       return { success: false, error: `This settlement has already been saved (matched by ${dupCheck.matchMethod}).`, duplicate: true };
     }
 
+    // Lifecycle guard: require fingerprint_id when lifecycle is enabled
+    if (settlement.metadata?.lifecycleEnabled && !settlement.fingerprint_id) {
+      return { success: false, error: 'Settlement save requires fingerprint_id when lifecycle is enabled.' };
+    }
+
     const meta = settlement.metadata || {};
     const { error } = await supabase.from('settlements').insert({
       user_id: user.id,
