@@ -855,6 +855,7 @@ export default function Dashboard() {
                     apiConnectedCodes={new Set([
                       ...(hasAmazon ? ['amazon_au'] : []),
                       ...(hasShopify ? ['shopify_payments', 'shopify_orders'] : []),
+                      ...(hasEbay ? ['ebay_au'] : []),
                     ])}
                   />
                 )}

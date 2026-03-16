@@ -134,7 +134,7 @@ export interface UserMarketplace {
 }
 
 /** Codes that have API auto-sync capability */
-const API_MARKETPLACE_CODES = new Set(['amazon_au', 'shopify_payments', 'shopify_orders']);
+const API_MARKETPLACE_CODES = new Set(['amazon_au', 'shopify_payments', 'shopify_orders', 'ebay_au']);
 
 interface MarketplaceSwitcherProps {
   selectedMarketplace: string;

@@ -267,6 +267,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {isApiConnected && (
+            <SyncNowButton marketplaceCode={code} />
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -277,7 +280,6 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
             {refreshingXero ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             Refresh from Xero
           </Button>
-          
         </div>
       </div>
 
