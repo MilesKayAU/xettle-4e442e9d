@@ -250,3 +250,54 @@ export async function createDraftFingerprint(params: {
     return null;
   }
 }
+
+// ─── Centralized Logging Helpers ────────────────────────────────────────────
+
+/**
+ * Log when a draft fingerprint is promoted to active.
+ */
+export async function logPromotionEvent(params: {
+  userId: string;
+  fingerprintId: string;
+  marketplace: string;
+  parserType: string;
+  confidence: number | null;
+}): Promise<void> {
+  try {
+    await supabase.from('system_events').insert({
+      user_id: params.userId,
+      event_type: 'format_promoted_to_active',
+      severity: 'info',
+      marketplace_code: params.marketplace,
+      details: {
+        fingerprint_id: params.fingerprintId,
+        parser_type: params.parserType,
+        confidence: params.confidence,
+      },
+    } as any);
+  } catch { /* non-blocking */ }
+}
+
+/**
+ * Log when a settlement save is blocked by lifecycle gates.
+ */
+export async function logSaveBlocked(params: {
+  userId: string;
+  fingerprintId: string;
+  marketplace: string;
+  missingGates: string[];
+}): Promise<void> {
+  try {
+    await supabase.from('system_events').insert({
+      user_id: params.userId,
+      event_type: 'format_save_blocked',
+      severity: 'warning',
+      marketplace_code: params.marketplace,
+      details: {
+        fingerprint_id: params.fingerprintId,
+        missing_gates: params.missingGates,
+        actor_user_id: params.userId,
+      },
+    } as any);
+  } catch { /* non-blocking */ }
+}
