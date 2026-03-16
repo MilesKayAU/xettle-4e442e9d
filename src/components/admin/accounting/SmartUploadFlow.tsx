@@ -81,6 +81,8 @@ interface DetectedFile {
   fingerprintStatus?: string;
   /** Parser type from fingerprint */
   fingerprintParserType?: string;
+  /** Fingerprint ID for linking to inspector */
+  fingerprintId?: string;
 }
 
 interface SmartUploadFlowProps {
