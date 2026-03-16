@@ -22,6 +22,7 @@ import AccountMapperCard from '@/components/settings/AccountMapperCard';
 import ShopifyConnectionStatus from '@/components/admin/ShopifyConnectionStatus';
 import EbayConnectionStatus from '@/components/admin/EbayConnectionStatus';
 import ChannelManagement from '@/components/shopify/ChannelManagement';
+import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
 import SellerCentralGuide from '@/components/admin/accounting/SellerCentralGuide';
 import OnboardingChecklist from '@/components/admin/accounting/OnboardingChecklist';
 import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
