@@ -973,7 +973,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           }
 
         } else if (result.duplicate) dupCount++;
-        else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
+        else if (result.sanityFailed) {
+          // Sanity check failure — show as error with specific messaging
+          setFiles(prev => {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], status: 'error', error: `⛔ Data integrity check failed: ${result.error}` };
+            return updated;
+          });
+          return; // Stop processing this file
+        } else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
       }
 
       const label = MARKETPLACE_LABELS[marketplace] || marketplace;
