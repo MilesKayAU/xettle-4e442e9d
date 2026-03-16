@@ -410,7 +410,7 @@ export default function Landing() {
               </div>
               <h3 className="text-base font-semibold text-foreground mb-2">Settlement verification</h3>
               <p className="text-sm text-muted-foreground">
-                Every line item is validated — sales, fees, refunds, GST. Totals must balance before the settlement is marked verified.
+                Settlement totals are validated — sales, fees, refunds, GST. Order-level drilldown where available. Totals must balance before the settlement is marked verified.
               </p>
             </div>
             <div className="p-6 rounded-2xl border border-border bg-card text-center">
