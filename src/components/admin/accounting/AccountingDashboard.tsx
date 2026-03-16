@@ -1164,6 +1164,13 @@ export default function AccountingDashboard() {
               uploadCount={nudgeUploadCount}
             />
           </Tabs>
+          {/* PushSafetyPreview modal — Golden Rule enforcement */}
+          <PushSafetyPreview
+            open={pushPreviewOpen}
+            onClose={() => setPushPreviewOpen(false)}
+            onConfirm={handlePushPreviewConfirm}
+            settlements={pushPreviewSettlements}
+          />
         </>
       ))()}
         </div>
