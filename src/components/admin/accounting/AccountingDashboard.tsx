@@ -3412,7 +3412,7 @@ function SettlementReview({
             )}
             {pushed && (
               <p className="text-xs text-emerald-700 font-medium">
-                ✓ Posted to Xero as Invoice (AUTHORISED).
+                ✓ Posted to Xero as DRAFT Invoice. Review and approve in Xero.
               </p>
             )}
           </div>
