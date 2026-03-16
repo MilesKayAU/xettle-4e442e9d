@@ -268,19 +268,33 @@ Deno.serve(async (req) => {
     const CATEGORY_KEYWORDS: Record<string, string[]> = {
       'Sales': ['sales', 'revenue', 'income'],
       'Shipping': ['shipping', 'freight', 'postage', 'delivery'],
+      'Seller Fees': ['seller fee', 'referral fee', 'commission', 'selling fee'],
+      'FBA Fees': ['fba', 'fulfilment', 'fulfillment', 'pick and pack'],
+      'Storage Fees': ['storage', 'warehouse', 'inventory fee'],
+      'Refunds': ['refund', 'return'],
+      'Reimbursements': ['reimbursement'],
+      'Advertising Costs': ['advertising', 'sponsored', 'ppc', 'ad spend'],
+      'Other Fees': ['other fee', 'adjustment', 'miscellaneous'],
+      'Promotional Discounts': ['promotion', 'discount', 'voucher', 'coupon'],
     }
 
     // Negative keywords: if account name contains these, exclude from the category
     const CATEGORY_EXCLUSIONS: Record<string, string[]> = {
-      'Sales': ['shipping', 'freight', 'postage', 'delivery'],
-      'Shipping': ['sales'],
+      'Sales': ['shipping', 'freight', 'postage', 'delivery', 'fee', 'refund', 'reimbursement'],
+      'Shipping': ['sales', 'fee', 'refund'],
+      'Seller Fees': ['fba', 'storage', 'advertising', 'shipping'],
+      'FBA Fees': ['seller', 'storage', 'advertising'],
+      'Storage Fees': ['seller', 'fba', 'advertising'],
+      'Refunds': ['fee', 'reimbursement'],
+      'Reimbursements': ['refund', 'fee'],
     }
 
     // Pre-scan: find marketplace-specific accounts by keyword matching
     const deterministicOverrides: Record<string, string> = {}
-    const revenueAccounts = xeroAccounts.filter((a: any) => {
+    // Search ALL account types (revenue + expense) for marketplace-specific accounts
+    const allActiveAccounts = xeroAccounts.filter((a: any) => {
       const type = (a.type || '').toUpperCase()
-      return ['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS'].includes(type)
+      return ['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS', 'EXPENSE', 'OVERHEADS', 'CURRLIAB', 'LIABILITY'].includes(type)
     })
 
     for (const mp of activeMarketplaces) {
