@@ -520,7 +520,7 @@ async function processSettlement(
 
   if (missingMappings.length > 0) {
     const errMsg = `Missing account mappings for: ${missingMappings.join(', ')}`;
-    console.error(`[auto-post-settlement] ${sid}: ${errMsg}`);
+    logger.error(`[auto-post-settlement] ${sid}: ${errMsg}`);
 
     await supabase.from('settlements').update({
       posting_state: 'failed',
