@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
           { onConflict: 'user_id,tax_type' }
         )
         if (taxErr) {
-          console.error('Tax rates upsert error:', taxErr)
+          logger.error('Tax rates upsert error:', taxErr)
         } else {
           taxRatesUpserted = taxRows.length
         }
