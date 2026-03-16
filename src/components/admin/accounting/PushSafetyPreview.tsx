@@ -141,7 +141,7 @@ export default function PushSafetyPreview({
 
       if (user) {
         const [coaRes, codesRes, locksRes] = await Promise.all([
-          supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, is_active, updated_at').eq('user_id', user.id),
+          supabase.from('xero_chart_of_accounts').select('account_code, account_name, account_type, is_active, synced_at').eq('user_id', user.id),
           supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'accounting_xero_account_codes').maybeSingle(),
           supabase.from('period_locks').select('period_month').eq('user_id', user.id).is('unlocked_at', null),
         ]);
