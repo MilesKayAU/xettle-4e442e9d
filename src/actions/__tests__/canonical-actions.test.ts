@@ -160,6 +160,21 @@ describe('Canonical action guardrails', () => {
     expect(violations, `Direct auto-post-settlement invocations found:\n${formatViolations(violations)}`).toEqual([]);
   });
 
+  it('no direct invoke of fetch-xero-invoice outside canonical actions', () => {
+    const violations = scanForPattern(/functions\.invoke\(['"]fetch-xero-invoice['"]/);
+    expect(violations, `Direct fetch-xero-invoice invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no direct invoke of rescan-xero-invoice-match outside canonical actions', () => {
+    const violations = scanForPattern(/functions\.invoke\(['"]rescan-xero-invoice-match['"]/);
+    expect(violations, `Direct rescan-xero-invoice-match invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no direct writes to xero_invoice_cache outside canonical actions', () => {
+    const violations = scanForPattern(/from\(['"]xero_invoice_cache['"]\)\.\s*(?:insert|upsert|update|delete)/);
+    expect(violations, `Direct xero_invoice_cache writes found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
   it('no UI files implement their own tier computation (must use supportPolicy)', () => {
     // Guard against local tier/gating logic — reimplementing AU_VALIDATED_RAILS locally
     // Importing from @/policy/supportPolicy is allowed (that's the canonical source)
