@@ -2446,6 +2446,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         />
         </>
       )}
+      <XeroInvoiceCompareDrawer
+        open={compareDrawer.open}
+        onClose={() => setCompareDrawer({ open: false, settlementId: null, xeroInvoiceId: null })}
+        settlementId={compareDrawer.settlementId}
+        xeroInvoiceId={compareDrawer.xeroInvoiceId}
+      />
     </div>
   );
 }
