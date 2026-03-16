@@ -148,7 +148,8 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
   }
 
   const rows: RowData[] = [];
-  for (let i = 1; i < lines.length; i++) {
+  const dataStart = headerIndex + 1;
+  for (let i = dataStart; i < lines.length; i++) {
     const fields = parseCSVRow(lines[i], delimiter);
     if (fields.length < 2) continue;
 
