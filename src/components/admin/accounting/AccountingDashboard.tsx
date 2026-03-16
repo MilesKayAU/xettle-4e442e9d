@@ -1151,6 +1151,7 @@ export default function AccountingDashboard() {
                 <XeroConnectionStatus />
                 <AccountMapperCard />
                 <ShopifyConnectionStatus />
+                <EbayConnectionStatus />
                 <ChannelManagement />
                 <TrackingCategoriesToggle />
                 <AutomationSettingsPanel userTier={userTier} />
