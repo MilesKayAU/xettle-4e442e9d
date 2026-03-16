@@ -58,11 +58,11 @@ export function runReconciliation(
     id: 'balance',
     label: 'Balance Check',
     description: 'Verify settlement math balances against bank deposit',
-    status: balanceDiff <= 0.01 ? 'pass' : balanceDiff <= 0.50 ? 'warn' : 'fail',
-    detail: balanceDiff <= 0.01
+    status: balanceDiff <= TOL_PARSER_TOTAL ? 'pass' : balanceDiff <= TOL_GST_CONSISTENCY ? 'warn' : 'fail',
+    detail: balanceDiff <= TOL_PARSER_TOTAL
       ? `Balanced — expected ${fmt(expectedPayout)}, deposit ${fmt(summary.bankDeposit)}`
       : `Imbalance of ${fmt(balanceDiff)} — expected ${fmt(expectedPayout)}, deposit ${fmt(summary.bankDeposit)}`,
-    severity: balanceDiff > 0.50 ? 'critical' : balanceDiff > 0.01 ? 'warning' : 'info',
+    severity: balanceDiff > TOL_GST_CONSISTENCY ? 'critical' : balanceDiff > TOL_PARSER_TOTAL ? 'warning' : 'info',
   });
 
   // ─── 2. Column Totals Check ──────────────────────────────────────
