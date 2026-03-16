@@ -721,7 +721,7 @@ export default function AccountingDashboard() {
           if (oid) intlOrderIds.add(oid);
         }
       }
-      console.info('[History Reconstruction] International order-ids detected:', intlOrderIds.size);
+      logger.info('[History Reconstruction] International order-ids detected:', intlOrderIds.size);
 
       const reconstructedLines: ParsedSettlement['lines'] = (lineData || []).map((l: any) => {
         const mn = l.marketplace_name || 'Amazon.com.au';

@@ -71,7 +71,7 @@ export default function EbayConnectionStatus() {
       }
 
       if (data?.authUrl) {
-        console.log('[eBay OAuth] Opening eBay login in new window...');
+        logger.debug('[eBay OAuth] Opening eBay login in new window...');
         if (data.state) {
           sessionStorage.setItem('ebay_oauth_state', data.state);
         }

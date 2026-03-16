@@ -149,7 +149,7 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
       if (subChannelCount && subChannelCount > 0) continue;
 
       // No backing data anywhere — delete ghost
-      console.log(`[ghost-cleanup] Removing ghost connection: ${conn.marketplace_code}`);
+      logger.debug(`[ghost-cleanup] Removing ghost connection: ${conn.marketplace_code}`);
       await supabase
         .from('marketplace_connections')
         .delete()

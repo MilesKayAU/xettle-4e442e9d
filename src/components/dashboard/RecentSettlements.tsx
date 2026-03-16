@@ -411,7 +411,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
               .update({ status: 'already_recorded', sync_origin: 'external' } as any)
               .in('id', paidDbIds)
               .then(() => {
-                console.log(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`);
+                logger.debug(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`);
                 // Re-fetch to remove them from view
                 fetchAll();
               });

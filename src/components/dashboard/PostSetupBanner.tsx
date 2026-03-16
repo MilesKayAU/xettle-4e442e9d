@@ -127,7 +127,7 @@ export default function PostSetupBanner({
             .maybeSingle();
           if (boundaryRow?.value) {
             syncFromBoundary = boundaryRow.value;
-            console.log('[sync] Using Xero boundary for marketplace fetch:', syncFromBoundary);
+            logger.debug('[sync] Using Xero boundary for marketplace fetch:', syncFromBoundary);
           }
         } catch (err) {
           console.warn('[sync] Failed to read xero_oldest_outstanding_date:', err);

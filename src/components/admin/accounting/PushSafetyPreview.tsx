@@ -210,7 +210,7 @@ export default function PushSafetyPreview({
                   }
                 }
               }
-              console.log('[push-safety] CoA refreshed successfully');
+              logger.debug('[push-safety] CoA refreshed successfully');
             } else {
               console.warn('[push-safety] CoA refresh failed:', refreshError);
             }

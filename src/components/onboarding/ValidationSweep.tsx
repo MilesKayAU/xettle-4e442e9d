@@ -194,7 +194,7 @@ export default function ValidationSweep({
           }
           if (fixPromises.length > 0) {
             await Promise.all(fixPromises);
-            console.log(`[ValidationSweep] Fixed ${fixPromises.length} stale validation rows`);
+            logger.debug(`[ValidationSweep] Fixed ${fixPromises.length} stale validation rows`);
           }
         }
       }

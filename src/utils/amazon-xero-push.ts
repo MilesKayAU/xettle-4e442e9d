@@ -181,7 +181,7 @@ export function buildAmazonInvoiceLineItems(
     xeroTotal = round2(xeroTotal);
     const diff = round2(bankDeposit - xeroTotal);
     if (diff !== 0 && Math.abs(diff) <= TOL_PAYOUT_MATCH) {
-      console.info('[Rounding Adjustment]', { bankDeposit, xeroTotal, diff });
+      logger.info('[Rounding Adjustment]', { bankDeposit, xeroTotal, diff });
       lineItems.push({
         Description: `Rounding adjustment ${periodLabel}`,
         AccountCode: getAccountCode('Sales'),

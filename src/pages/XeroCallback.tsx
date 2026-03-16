@@ -105,7 +105,7 @@ const XeroCallback = () => {
               const signals = analyseCoA(coaRes.data, registryRes.data, processorRes.data);
               const highChannels = getHighConfidenceChannels(signals);
 
-              console.log(`[XeroCallback] CoA intelligence: ${highChannels.length} HIGH channels, ${signals.payment_providers.length} providers`);
+              logger.debug(`[XeroCallback] CoA intelligence: ${highChannels.length} HIGH channels, ${signals.payment_providers.length} providers`);
 
               // Insert suggested channels — never downgrade active to suggested
               const { upsertMarketplaceConnection } = await import('@/utils/marketplace-connections');

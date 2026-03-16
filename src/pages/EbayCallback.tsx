@@ -42,7 +42,7 @@ export default function EbayCallback() {
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
 
-        console.log('[eBay Callback] Token exchange successful, user:', data.ebay_username);
+        logger.debug('[eBay Callback] Token exchange successful, user:', data.ebay_username);
         setEbayUsername(data.ebay_username);
         setStatus('success');
 

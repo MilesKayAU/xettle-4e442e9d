@@ -235,7 +235,7 @@ export default function ActionCentre({
               supabase.from('settlements')
                 .update({ status: 'already_recorded', sync_origin: 'external' } as any)
                 .in('id', paidDbIds)
-                .then(() => console.log(`[ActionCentre] Auto-resolved ${paidDbIds.length} PAID external matches`));
+                .then(() => logger.debug(`[ActionCentre] Auto-resolved ${paidDbIds.length} PAID external matches`));
             }
             // Only non-PAID matches are "Duplicate Risk"
             const nonPaidMatchIds = new Set(

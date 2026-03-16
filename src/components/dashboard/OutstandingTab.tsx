@@ -930,7 +930,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       });
 
       if (resp.data?.bank_feed_empty) {
-        console.log('[OutstandingTab] verify-payment-matches reports bank feed empty — no verification attempted');
+        logger.debug('[OutstandingTab] verify-payment-matches reports bank feed empty — no verification attempted');
         return;
       }
 
