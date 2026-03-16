@@ -1146,7 +1146,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
       // Fail-fast on rate limit: stop processing remaining reports
       if (dlErr.message?.includes('RATE_LIMITED')) {
         earlyRateLimitCount++;
-        console.warn(`[smart-sync] Rate limited — aborting remaining ${sorted.length - i - 1} reports`);
+        logger.warn(`[smart-sync] Rate limited — aborting remaining ${sorted.length - i - 1} reports`);
         break;
       }
     }
