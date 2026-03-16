@@ -175,7 +175,7 @@ Deno.serve(async (req) => {
         }
       }
     } else {
-      console.warn('Tax rates fetch failed (non-fatal):', taxRatesResp.status)
+      logger.warn('Tax rates fetch failed (non-fatal):', taxRatesResp.status)
     }
 
     // ─── Log system event ────────────────────────────────────────────
