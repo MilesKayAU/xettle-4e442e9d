@@ -177,9 +177,21 @@ export default function AccountMapperCard() {
         .eq('key', 'accounting_xero_account_codes')
         .maybeSingle();
 
-      if (confirmedSetting?.value) {
+      // Also check for draft mapping
+      const { data: draftSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'accounting_xero_account_codes_draft')
+        .maybeSingle();
+
+      // Use confirmed if exists, otherwise fall back to draft
+      const activeSetting = confirmedSetting?.value ? confirmedSetting : (draftSetting?.value ? draftSetting : null);
+      const isFromDraft = !confirmedSetting?.value && !!draftSetting?.value;
+
+      if (activeSetting?.value) {
         try {
-          const codes = JSON.parse(confirmedSetting.value);
+          const codes = JSON.parse(activeSetting.value);
           const restored: Record<string, MappingEntry> = {};
           for (const cat of CATEGORIES) {
             if (codes[cat]) {
@@ -199,7 +211,8 @@ export default function AccountMapperCard() {
             editable[k] = v as string;
           }
           setEditableMapping(editable);
-          setState('confirmed');
+          // If draft only, go to review state so user can continue editing
+          setState(isFromDraft ? 'review' : 'confirmed');
         } catch { /* fall through */ }
         setLoading(false);
         return;
