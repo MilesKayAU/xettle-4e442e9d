@@ -70,6 +70,9 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [externalCandidate, setExternalCandidate] = useState<any>(null);
   const [dismissingCandidate, setDismissingCandidate] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [mappingBlocked, setMappingBlocked] = useState(false);
+  const [missingCategories, setMissingCategories] = useState<string[]>([]);
+  const [readinessKey, setReadinessKey] = useState(0);
 
   useAiPageContext(() => ({
     routeId: 'settlement_detail',
