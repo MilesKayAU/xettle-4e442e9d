@@ -435,7 +435,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     }
   }
 
-  console.info('[Parser v1.4.5] International order-ids detected:', intlOrderIds.size, [...intlOrderIds]);
+  logger.info('[Parser v1.4.5] International order-ids detected:', intlOrderIds.size, [...intlOrderIds]);
 
   if (!header) {
     throw new Error('No settlement header row found (expected row with total-amount but no transaction-type)');
