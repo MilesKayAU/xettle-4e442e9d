@@ -13,6 +13,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle, Search, ChevronsUpDown, Filter, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useSettingsPin } from '@/hooks/use-settings-pin';
+import SettingsPinDialog from '@/components/shared/SettingsPinDialog';
 import {
   refreshXeroCOA,
   getCachedXeroAccounts,
