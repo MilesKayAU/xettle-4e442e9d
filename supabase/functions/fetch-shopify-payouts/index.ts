@@ -456,9 +456,9 @@ async function syncPayoutsForUser(
 
 Deno.serve(async (req) => {
   console.info(`[fetch-shopify-payouts] ${req.method} received`);
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsHeaders = getCorsHeaders(req);
+  const preflightResponse = handleCorsPreflightResponse(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
     const action = req.headers.get("x-action");

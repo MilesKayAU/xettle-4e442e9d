@@ -1181,9 +1181,9 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
 // MAIN HANDLER
 // ═══════════════════════════════════════════════════════════════
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  const corsHeaders = getCorsHeaders(req)
+  const preflightResponse = handleCorsPreflightResponse(req)
+  if (preflightResponse) return preflightResponse
 
   try {
     const action = req.headers.get('x-action') || 'list';
