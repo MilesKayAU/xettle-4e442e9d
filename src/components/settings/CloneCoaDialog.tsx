@@ -14,6 +14,8 @@ import {
   getCoaLastSyncedAt,
   buildClonePreview,
   executeCoaClone,
+  validateTemplateEligibility,
+  logCloneEvent,
   type CachedXeroAccount,
   type CloneAccountRow,
 } from '@/actions';
@@ -53,9 +55,19 @@ export default function CloneCoaDialog({
 
   const isNonAuGst = taxProfile && taxProfile !== 'AU_GST';
 
+  // Validate template eligibility (prevent clone loops)
+  const templateEligibility = useMemo(() => {
+    if (!templateMarketplace) return { eligible: true };
+    return validateTemplateEligibility(templateMarketplace, coaAccounts);
+  }, [templateMarketplace, coaAccounts]);
+
   // When template changes, rebuild the clone rows via canonical action
   useEffect(() => {
     if (!templateMarketplace || !open) return;
+    if (!templateEligibility.eligible) {
+      setCloneRows([]);
+      return;
+    }
 
     const rows = buildClonePreview({
       templateMarketplace,
@@ -65,7 +77,7 @@ export default function CloneCoaDialog({
     });
 
     setCloneRows(rows);
-  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace]);
+  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible]);
 
   // Reset on open
   useEffect(() => {
@@ -82,6 +94,10 @@ export default function CloneCoaDialog({
       return;
     }
 
+    // Get user for event logging
+    const { data: { user } } = await (await import('@/integrations/supabase/client')).supabase.auth.getUser();
+    const userId = user?.id || 'unknown';
+
     setCreating(true);
     try {
       const result = await executeCoaClone({ rows: cloneRows });
@@ -95,11 +111,40 @@ export default function CloneCoaDialog({
       if (result.success) {
         const count = Object.keys(result.createdMappings).length;
         toast.success(`Created ${count} account${count !== 1 ? 's' : ''} in Xero for ${targetMarketplace}`);
+
+        // Log success event
+        await logCloneEvent({
+          userId,
+          eventType: 'coa_clone_executed',
+          templateMarketplace,
+          targetMarketplace,
+          accountsCreated: count,
+          taxProfile,
+        });
+
         onOpenChange(false);
         onComplete(result.createdMappings);
+      } else {
+        // Log failure event
+        await logCloneEvent({
+          userId,
+          eventType: 'coa_clone_failed',
+          templateMarketplace,
+          targetMarketplace,
+          taxProfile,
+          errors: result.errors.map(e => e.error),
+        });
       }
     } catch (err: any) {
       toast.error(`Error: ${err.message}`);
+      await logCloneEvent({
+        userId,
+        eventType: 'coa_clone_failed',
+        templateMarketplace,
+        targetMarketplace,
+        taxProfile,
+        errors: [err.message],
+      });
     } finally {
       setCreating(false);
     }
@@ -184,6 +229,16 @@ export default function CloneCoaDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Template eligibility warning (prevents clone loops) */}
+          {templateMarketplace && !templateEligibility.eligible && (
+            <Alert className="border-destructive/50 bg-destructive/5">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <AlertDescription className="text-xs text-destructive">
+                {templateEligibility.reason}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Preview table */}
           {cloneRows.length > 0 && (

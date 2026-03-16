@@ -34,7 +34,9 @@ export {
   pushSettlementToXero,
   rollbackFromXero,
   triggerAutoPost,
+  checkPushCategoryCoverage,
   type PushResult,
+  type PushEligibility,
   type RollbackResult,
 } from './xeroPush';
 
@@ -127,9 +129,12 @@ export {
 export {
   buildClonePreview,
   executeCoaClone,
+  validateTemplateEligibility,
+  logCloneEvent,
   CLONE_CATEGORIES,
   type CloneAccountRow,
   type ClonePreviewInput,
   type CloneExecuteInput,
   type CloneResult,
+  type CloneSystemEvent,
 } from './coaClone';

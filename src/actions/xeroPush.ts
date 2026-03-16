@@ -10,7 +10,21 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
+// ─── Required COA Categories for Push Eligibility ────────────────────────────
+
+/**
+ * Categories that MUST be mapped before a push is allowed.
+ * Missing any of these blocks the push with MAPPING_REQUIRED.
+ */
+const REQUIRED_PUSH_CATEGORIES = ['Sales', 'Seller Fees', 'Refunds', 'Other Fees', 'Shipping'];
+
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface PushEligibility {
+  eligible: boolean;
+  missingCategories: string[];
+  errorCode?: string;
+}
 
 export interface PushResult {
   success: boolean;
@@ -23,6 +37,38 @@ export interface PushResult {
 export interface RollbackResult {
   success: boolean;
   error?: string;
+}
+
+// ─── Push Eligibility Check ──────────────────────────────────────────────────
+
+/**
+ * Check if a marketplace has sufficient COA coverage to allow a push.
+ * This is the canonical pre-push gate — called before pushSettlementToXero.
+ *
+ * Invariant: if required categories are unmapped, push is blocked regardless
+ * of what the UI shows. This prevents cloned-but-wrong accounts from being pushed.
+ *
+ * @param marketplace - The marketplace code (e.g. "Amazon AU", "BigW")
+ * @param mappedCategories - Categories that have a valid Xero account code mapped
+ */
+export function checkPushCategoryCoverage(
+  marketplace: string,
+  mappedCategories: string[],
+): PushEligibility {
+  const mappedSet = new Set(mappedCategories.map(c => c.toLowerCase()));
+  const missing = REQUIRED_PUSH_CATEGORIES.filter(
+    cat => !mappedSet.has(cat.toLowerCase()),
+  );
+
+  if (missing.length > 0) {
+    return {
+      eligible: false,
+      missingCategories: missing,
+      errorCode: 'MAPPING_REQUIRED',
+    };
+  }
+
+  return { eligible: true, missingCategories: [] };
 }
 
 // ─── Manual Push ─────────────────────────────────────────────────────────────
