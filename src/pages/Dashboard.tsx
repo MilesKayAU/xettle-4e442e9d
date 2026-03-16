@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import SetupWizard from '@/components/onboarding/SetupWizard';
@@ -25,7 +26,7 @@ import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
-import AskAiButton from '@/components/ai-assistant/AskAiButton';
+
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -487,24 +488,42 @@ export default function Dashboard() {
     localStorage.setItem('xettle_insights_subtab', tab);
   }
 
-  // ─── AI Assistant context per view ─────────────────────────────
-  const aiContext = useMemo(() => {
-    const now = new Date();
-    const monthLabel = now.toLocaleString('en-AU', { month: 'long', year: 'numeric' });
-    if (activeView === 'insights') {
-      return { page: 'insights', period: monthLabel, marketplaces: userMarketplaces.map(m => m.marketplace_code) };
-    }
-    if (activeView === 'settlements') {
-      return { page: 'settlements', marketplace: selectedMarketplace, marketplaces: userMarketplaces.map(m => m.marketplace_code) };
-    }
-    return { page: 'dashboard', month: monthLabel, marketplaces: userMarketplaces.map(m => m.marketplace_code) };
-  }, [activeView, selectedMarketplace, userMarketplaces]);
+  // ─── AI Assistant context (sitewide via AiContextProvider) ─────
+  const aiRouteId = activeView === 'outstanding' ? 'outstanding' as const
+    : activeView === 'settings' ? 'settings' as const
+    : activeView === 'insights' ? 'insights' as const
+    : activeView === 'settlements' ? 'settlements' as const
+    : activeView === 'smart_upload' ? 'smart_upload' as const
+    : 'dashboard' as const;
 
   const aiSuggestedPrompts = useMemo(() => {
     if (activeView === 'insights') return ['Which marketplace is most profitable?', 'Why are my fees so high this month?', 'How does this month compare to last?'];
-    if (activeView === 'settlements') return ['Why is this settlement negative?', 'Is this ready to push to Xero?', 'Explain these fees', 'What does this gap mean?'];
+    if (activeView === 'outstanding') return ['Are these invoices pushed to Xero?', 'Which settlements are ready to push?', 'What does matched exact mean?'];
+    if (activeView === 'settlements') return ['Why is this settlement negative?', 'Is this ready to push to Xero?', 'Explain these fees'];
     return ['What needs my attention today?', 'Why do I have settlements missing?', 'Am I up to date with Xero?'];
   }, [activeView]);
+
+  useAiPageContext(() => ({
+    routeId: aiRouteId,
+    pageTitle: activeView === 'outstanding' ? 'Outstanding Invoices'
+      : activeView === 'settlements' ? 'Settlements'
+      : activeView === 'insights' ? 'Insights'
+      : activeView === 'settings' ? 'Settings'
+      : activeView === 'smart_upload' ? 'Upload Settlements'
+      : 'Dashboard',
+    primaryEntities: {
+      marketplace_codes: userMarketplaces.map(m => m.marketplace_code),
+    },
+    pageStateSummary: {
+      active_marketplaces: userMarketplaces.length,
+      outstanding_count: outstandingCount,
+      ready_to_push: readyToPushCount,
+      selected_marketplace: selectedMarketplace || 'none',
+      xero_connected: xeroConnected,
+    },
+    suggestedPrompts: aiSuggestedPrompts,
+    capabilities: ['view_settlements', 'view_outstanding', 'upload_files', 'view_insights'],
+  }));
 
   if (isLoading) {
     return (
@@ -1003,11 +1022,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* AI Assistant floating button */}
-      <AskAiButton
-        context={aiContext}
-        suggestedPrompts={aiSuggestedPrompts}
-      />
     </div>
   );
 }

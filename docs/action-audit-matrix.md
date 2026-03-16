@@ -205,3 +205,29 @@
 | `marketplace-token-map.ts` | Ghost cleanup (delete only) | ✅ Cleanup utility, no provisioning |
 
 **No allowlisted legacy bypasses remain.** All client-side paths route through canonical actions.
+
+---
+
+## I) AI Assistant
+
+| Entry Point | File | Edge Functions | Tables Read | Tables Written | Canonical Path |
+|---|---|---|---|---|---|
+| AskAiButton (sitewide) | `src/components/AuthenticatedLayout.tsx` | `ai-assistant` | — | `ai_usage` | via `use-ai-assistant` hook |
+| AiContextProvider | `src/ai/context/AiContextProvider.tsx` | — | — | — | `useAiPageContext()` per page |
+| Tool: getPageReadinessSummary | `ai-assistant/index.ts` | — | `settlements`, `outstanding_invoices_cache`, `marketplace_validation` | — | server-side tool |
+| Tool: getInvoiceStatusByXeroInvoiceId | `ai-assistant/index.ts` | — | `outstanding_invoices_cache`, `settlements` | — | server-side tool |
+| Tool: getSettlementStatus | `ai-assistant/index.ts` | — | `settlements`, `marketplace_account_mapping` | — | server-side tool |
+
+### Context Contract
+
+- Schema: `src/ai/context/aiContextContract.ts` — `AiPageContext` interface
+- Sanitizer: `sanitizeContext()` enforces 2KB cap, PII redaction, DOM blocking
+- Provider: `AiContextProvider` in `AuthenticatedLayout`
+- Hook: `useAiPageContext(builderFn)` — pages register structured context
+
+### Guardrails
+
+- No raw DOM/HTML may be passed to AI context (DOM_PATTERNS blocked in sanitizer)
+- Context size hard-capped at 2KB JSON
+- Tools execute server-side with user_id scoping (service role + filter)
+- Tool-calling loop limited to 3 rounds max

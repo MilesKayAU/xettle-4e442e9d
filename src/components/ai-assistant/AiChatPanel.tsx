@@ -6,17 +6,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, X, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useAiAssistant, type AiMessage } from '@/hooks/use-ai-assistant';
-
-interface AiChatPanelProps {
-  open: boolean;
-  onClose: () => void;
-  context?: Record<string, any>;
-  suggestedPrompts?: string[];
-}
+import { useAiContext } from '@/ai/context/AiContextProvider';
 
 const MONTHLY_LIMIT = 50;
 
-export default function AiChatPanel({ open, onClose, context, suggestedPrompts = [] }: AiChatPanelProps) {
+/**
+ * AiChatPanel — Sheet-based chat UI.
+ * Reads page context from AiContextProvider automatically.
+ */
+export default function AiChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { context } = useAiContext();
   const { messages, isLoading, error, usageCount, sendMessage, clearMessages, loadUsage } = useAiAssistant({ context });
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -48,6 +47,8 @@ export default function AiChatPanel({ open, onClose, context, suggestedPrompts =
 
   const used = usageCount ?? 0;
   const remaining = Math.max(0, MONTHLY_LIMIT - used);
+
+  const suggestedPrompts = context.suggestedPrompts || [];
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>

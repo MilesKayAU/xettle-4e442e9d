@@ -5,12 +5,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import AiChatPanel from './AiChatPanel';
 
-interface AskAiButtonProps {
-  context?: Record<string, any>;
-  suggestedPrompts?: string[];
-}
-
-export default function AskAiButton({ context, suggestedPrompts }: AskAiButtonProps) {
+/**
+ * AskAiButton — Floating AI assistant button.
+ * Reads context from AiContextProvider (no props needed).
+ * Mounted in AuthenticatedLayout for sitewide availability.
+ */
+export default function AskAiButton() {
   const [open, setOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isPro, setIsPro] = useState<boolean | null>(null);
@@ -64,8 +64,6 @@ export default function AskAiButton({ context, suggestedPrompts }: AskAiButtonPr
       <AiChatPanel
         open={open}
         onClose={() => setOpen(false)}
-        context={context}
-        suggestedPrompts={suggestedPrompts}
       />
     </>
   );
