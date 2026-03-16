@@ -588,7 +588,7 @@ Return JSON with this structure:
     const unmappedCategories = ['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements', 'Seller Fees', 'FBA Fees', 'Storage Fees', 'Advertising Costs', 'Other Fees']
       .filter(cat => !mapping[cat])
     if (unmappedCategories.length > 0) {
-      console.warn('[ai-account-mapper] Categories without valid mapping:', unmappedCategories)
+      logger.warn('[ai-account-mapper] Categories without valid mapping:', unmappedCategories)
       await supabase.from('system_events').insert({
         user_id: userId,
         event_type: 'ai_mapper_unmapped_categories',
