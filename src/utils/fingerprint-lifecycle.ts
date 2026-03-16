@@ -301,3 +301,106 @@ export async function logSaveBlocked(params: {
     } as any);
   } catch { /* non-blocking */ }
 }
+
+// ─── Admin Helpers: Status + Notes Updates ──────────────────────────────────
+
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  draft: ['active', 'rejected'],
+  active: ['rejected', 'draft'],
+  rejected: ['draft'],
+};
+
+export interface StatusUpdateResult {
+  success: boolean;
+  error?: string;
+  oldStatus?: string;
+  newStatus?: string;
+}
+
+/**
+ * Update fingerprint status with transition validation and system_events logging.
+ * UI must call this helper instead of writing directly.
+ */
+export async function updateFingerprintStatus({
+  fingerprintId,
+  newStatus,
+}: {
+  fingerprintId: string;
+  newStatus: FingerprintStatus;
+}): Promise<StatusUpdateResult> {
+  try {
+    const fp = await getFingerprintById(fingerprintId);
+    if (!fp) return { success: false, error: 'Fingerprint not found' };
+
+    const allowed = ALLOWED_TRANSITIONS[fp.status] || [];
+    if (!allowed.includes(newStatus)) {
+      return { success: false, error: `Transition from ${fp.status} to ${newStatus} is not allowed` };
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    const { error } = await supabase
+      .from('marketplace_file_fingerprints')
+      .update({ status: newStatus } as any)
+      .eq('id', fingerprintId);
+
+    if (error) return { success: false, error: error.message };
+
+    // Log system event
+    await supabase.from('system_events').insert({
+      user_id: user.id,
+      event_type: 'format_status_changed',
+      severity: 'info',
+      marketplace_code: fp.marketplace_code,
+      details: {
+        fingerprint_id: fingerprintId,
+        old_status: fp.status,
+        new_status: newStatus,
+        actor_user_id: user.id,
+      },
+    } as any);
+
+    return { success: true, oldStatus: fp.status, newStatus };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
+  }
+}
+
+/**
+ * Update fingerprint notes with system_events logging.
+ * UI must call this helper instead of writing directly.
+ */
+export async function updateFingerprintNotes({
+  fingerprintId,
+  notes,
+}: {
+  fingerprintId: string;
+  notes: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    const { error } = await supabase
+      .from('marketplace_file_fingerprints')
+      .update({ notes } as any)
+      .eq('id', fingerprintId);
+
+    if (error) return { success: false, error: error.message };
+
+    await supabase.from('system_events').insert({
+      user_id: user.id,
+      event_type: 'format_notes_updated',
+      severity: 'info',
+      details: {
+        fingerprint_id: fingerprintId,
+        actor_user_id: user.id,
+      },
+    } as any);
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
+  }
+}
