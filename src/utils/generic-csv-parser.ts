@@ -47,6 +47,33 @@ function parseAmount(raw: string | number | undefined | null): number {
   return isNaN(val) ? 0 : val;
 }
 
+/**
+ * Lightweight sanity check on aggregated settlement values.
+ * Returns true if sanity failed, false if OK.
+ */
+function checkParserSanity(grossSales: number, fees: number, netPayout: number, groupId: string, warnings: string[]): boolean {
+  const absSales = Math.abs(grossSales);
+  const absFees = Math.abs(fees);
+
+  if (absSales === 0 && absFees === 0 && netPayout === 0) {
+    warnings.push(`Settlement ${groupId}: All values are $0 — likely incorrect column mapping`);
+    return true;
+  }
+  if (absSales > 10_000_000) {
+    warnings.push(`Settlement ${groupId}: Sales of $${absSales.toLocaleString()} is implausibly large — likely incorrect column mapping`);
+    return true;
+  }
+  if (netPayout === 0 && absSales > 1000) {
+    warnings.push(`Settlement ${groupId}: Net payout is $0 but sales are $${absSales.toLocaleString()} — likely incorrect column mapping`);
+    return true;
+  }
+  if (absFees > absSales * 5 && absFees > 500) {
+    warnings.push(`Settlement ${groupId}: Fees ($${absFees.toLocaleString()}) exceed sales ($${absSales.toLocaleString()}) by 5× — likely incorrect column mapping`);
+    return true;
+  }
+  return false;
+}
+
 /** @deprecated Use parseDateOrEmpty from date-parser.ts */
 const normaliseDate = (raw: string | undefined) => parseDateOrEmpty(raw);
 
