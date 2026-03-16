@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
 
     if (!bankCacheCount || bankCacheCount === 0) {
       // ── EARLY EXIT: Cache empty — do NOT attempt verification ──
-      console.log(`[verify-payment-matches] Bank cache empty for ${userId} — exiting early. Run fetch-xero-bank-transactions first.`)
+      logger.info(`[verify-payment-matches] Bank cache empty for ${userId} — exiting early. Run fetch-xero-bank-transactions first.`)
       return new Response(JSON.stringify({
         candidates: {},
         gateways_checked: enabledGateways.map(g => g.code),
