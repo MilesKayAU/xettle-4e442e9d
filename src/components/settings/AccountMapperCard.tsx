@@ -22,6 +22,7 @@ import {
   createXeroAccounts,
   type CachedXeroAccount,
 } from '@/actions';
+import { Save, Upload } from 'lucide-react';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
 
