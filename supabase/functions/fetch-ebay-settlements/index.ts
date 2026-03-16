@@ -1,9 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-}
+import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
 
 const EBAY_API_BASE = 'https://apiz.ebay.com'
 const EBAY_TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
@@ -442,9 +438,9 @@ function clampSyncFrom(syncFrom: string): string {
 // ─── Main Handler ──────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  const corsHeaders = getCorsHeaders(req)
+  const preflightResponse = handleCorsPreflightResponse(req)
+  if (preflightResponse) return preflightResponse
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!

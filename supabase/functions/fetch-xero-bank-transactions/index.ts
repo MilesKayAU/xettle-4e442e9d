@@ -9,11 +9,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action',
-}
+import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
 
 // ── Keys ──
 const COOLDOWN_KEY = 'xero_bank_api_cooldown_until';      // Bank feed cooldown only (set on BankTransactions 429)
@@ -1023,9 +1019,9 @@ async function fetchBankTxnsForUser(
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsHeaders = getCorsHeaders(req)
+  const preflightResponse = handleCorsPreflightResponse(req)
+  if (preflightResponse) return preflightResponse
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

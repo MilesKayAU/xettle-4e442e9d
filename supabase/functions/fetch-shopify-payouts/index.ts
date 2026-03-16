@@ -1,10 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-action, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts";
 
 const SHOPIFY_API_VERSION = "2026-01";
 const RATE_LIMIT_DELAY_MS = 500;
@@ -461,9 +456,9 @@ async function syncPayoutsForUser(
 
 Deno.serve(async (req) => {
   console.info(`[fetch-shopify-payouts] ${req.method} received`);
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsHeaders = getCorsHeaders(req);
+  const preflightResponse = handleCorsPreflightResponse(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
     const action = req.headers.get("x-action");

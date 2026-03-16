@@ -1,30 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-
-const ALLOWED_ORIGINS = [
-  'https://xettle.app',
-  'https://xettle.lovable.app',
-  'https://id-preview--7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovable.app',
-];
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') || '';
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-action, x-redirect-uri',
-  };
-}
+import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
 
 const XERO_AUTH_URL = 'https://login.xero.com/identity/connect/authorize'
 const XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
 const XERO_CONNECTIONS_URL = 'https://api.xero.com/connections'
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  const corsHeaders = getCorsHeaders(req)
+  const preflightResponse = handleCorsPreflightResponse(req)
+  if (preflightResponse) return preflightResponse
 
   try {
     const url = new URL(req.url)

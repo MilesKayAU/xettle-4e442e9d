@@ -1,20 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const ALLOWED_ORIGINS = [
-  'https://xettle.app',
-  'https://xettle.lovable.app',
-  'https://id-preview--7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovable.app',
-];
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') || '';
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers':
-      'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-  };
-}
+import { getCorsHeaders, handleCorsPreflightResponse } from "../_shared/cors.ts";
 
 interface ShopifyOrder {
   id: number;
@@ -22,26 +7,21 @@ interface ShopifyOrder {
   created_at: string;
   processed_at: string;
   financial_status: string;
-  gateway: string;
-  note_attributes: { name: string; value: string }[];
-  tags: string;
-  subtotal_price: string;
-  total_shipping_price_set: unknown;
-  total_tax: string;
   total_price: string;
-  total_discounts?: string;
-  line_items: unknown[];
-  payment_gateway_names: string[];
-  source_name?: string;
+  total_tax: string;
+  total_discounts: string;
+  gateway: string;
+  source_name: string;
+  tags: string;
+  note_attributes: Array<{ name: string; value: string }>;
 }
 
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   console.log("[fetch-shopify-orders] Handler invoked", req.method);
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const preflightResponse = handleCorsPreflightResponse(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
     const authHeader = req.headers.get("Authorization");

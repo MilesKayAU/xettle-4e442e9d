@@ -1,66 +1,46 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
-
-const ALLOWED_ORIGINS = [
-  'https://xettle.app',
-  'https://xettle.lovable.app',
-  'https://id-preview--7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovable.app',
-];
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') || '';
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-  };
-}
+import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const xeroClientId = Deno.env.get('XERO_CLIENT_ID')!;
 const xeroClientSecret = Deno.env.get('XERO_CLIENT_SECRET')!;
 
-interface XeroToken {
-  id: string;
-  user_id: string;
-  tenant_id: string;
-  access_token: string;
-  refresh_token: string;
-  expires_at: string;
-}
-
-async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken> {
-  const expiresAt = new Date(token.expires_at);
-  if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) return token;
-
+// Token refresh helper
+async function refreshXeroToken(supabase: any, tokenRow: any) {
+  const basicAuth = btoa(`${xeroClientId}:${xeroClientSecret}`);
   const resp = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${btoa(`${xeroClientId}:${xeroClientSecret}`)}`,
-    },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: token.refresh_token }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${basicAuth}` },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokenRow.refresh_token }),
   });
-
-  if (!resp.ok) throw new Error(`Token refresh failed: ${await resp.text()}`);
+  if (!resp.ok) throw new Error(`Token refresh failed: ${resp.status}`);
   const data = await resp.json();
-  const newExpiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
-
   await supabase.from('xero_tokens').update({
     access_token: data.access_token,
     refresh_token: data.refresh_token,
-    expires_at: newExpiresAt,
+    expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
     updated_at: new Date().toISOString(),
-  }).eq('id', token.id);
+  }).eq('id', tokenRow.id);
+  return data.access_token;
+}
 
-  return { ...token, access_token: data.access_token, refresh_token: data.refresh_token, expires_at: newExpiresAt };
+// Get valid access token
+async function getValidToken(supabase: any, userId: string) {
+  const { data: tokens } = await supabase.from('xero_tokens').select('*').eq('user_id', userId).order('updated_at', { ascending: false }).limit(1);
+  if (!tokens?.length) throw new Error('No Xero connection found');
+  const token = tokens[0];
+  if (new Date(token.expires_at) < new Date()) {
+    const newAccessToken = await refreshXeroToken(supabase, token);
+    return { accessToken: newAccessToken, tenantId: token.tenant_id };
+  }
+  return { accessToken: token.access_token, tenantId: token.tenant_id };
 }
 
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const preflightResponse = handleCorsPreflightResponse(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
     const authHeader = req.headers.get('Authorization');
