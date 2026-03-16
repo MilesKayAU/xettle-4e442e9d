@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
     function computeTierServer(rail: string, taxProfile: string): 'SUPPORTED' | 'EXPERIMENTAL' | 'UNSUPPORTED' {
       if (AU_VALIDATED_RAILS.has(rail) && taxProfile === 'AU_GST') return 'SUPPORTED';
       if (AU_VALIDATED_RAILS.has(rail)) return 'EXPERIMENTAL';
-      return 'EXPERIMENTAL'; // Unknown rails default to EXPERIMENTAL (known in DB)
+      return 'UNSUPPORTED'; // Unknown rails are UNSUPPORTED (aligned with supportPolicy.ts)
     }
 
     // ─── Single settlement mode ──────────────────────────────────
