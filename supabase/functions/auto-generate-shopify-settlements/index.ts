@@ -503,7 +503,7 @@ Deno.serve(async (req) => {
           .from("settlement_lines")
           .insert(chunk);
         if (lineErr) {
-          console.error(`[auto-gen-settlements] lines insert error for ${settlementId}:`, lineErr);
+          logger.error(`[auto-gen-settlements] lines insert error for ${settlementId}:`, lineErr);
         } else {
           linesCreated += chunk.length;
         }
