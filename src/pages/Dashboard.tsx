@@ -939,36 +939,52 @@ export default function Dashboard() {
         {/* ─── Settings ──────────────────────────────────────────────── */}
         {activeView === 'settings' && (
           <ErrorBoundary>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
                 <h2 className="text-2xl font-bold text-foreground">Settings</h2>
-                <p className="text-muted-foreground mt-1">
-                  Manage API connections, account mappings, and reconciliation preferences.
+                <p className="text-sm text-muted-foreground mt-1">
+                  Manage connections, account mappings, posting rules, and reconciliation preferences.
                 </p>
               </div>
-              <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                <ApiConnectionsPanel
-                  isPaid={true}
-                  syncCutoffDate={undefined}
-                  onSettlementsAutoFetched={async () => {
-                    // Refresh settlements if needed
+
+              <SettingsAccordion title="API Connections" description="Connect marketplaces and accounting integrations" defaultOpen>
+                <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+                  <ApiConnectionsPanel
+                    isPaid={true}
+                    syncCutoffDate={undefined}
+                    onSettlementsAutoFetched={async () => {}}
+                    onRequestSettings={() => {}}
+                    onFetchStateChange={() => {}}
+                  />
+                </Suspense>
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts">
+                <DestinationAccountMapper />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Account Mapper" description="AI-assisted account code suggestions and overrides">
+                <AccountMapperCard />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Destination Posting Mode" description="Configure how each marketplace rail posts to Xero">
+                <RailPostingSettings />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Accounting Boundary" description="Set the start date and backfill horizon for settlement processing">
+                <AccountingBoundarySettings
+                  xeroConnected={xeroConnected}
+                  onConnectXero={() => {
+                    setWizardInitialStep(2);
+                    setShowWizard(true);
                   }}
-                  onRequestSettings={() => {}}
-                  onFetchStateChange={() => {}}
+                  onGoToUpload={() => switchView('smart_upload')}
                 />
-              </Suspense>
-              <DestinationAccountMapper />
-              <AccountMapperCard />
-              <RailPostingSettings />
-              <AccountingBoundarySettings
-                xeroConnected={xeroConnected}
-                onConnectXero={() => {
-                  setWizardInitialStep(2);
-                  setShowWizard(true);
-                }}
-                onGoToUpload={() => switchView('smart_upload')}
-              />
-              <PaymentVerificationSettings />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules">
+                <PaymentVerificationSettings />
+              </SettingsAccordion>
             </div>
           </ErrorBoundary>
         )}
