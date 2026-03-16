@@ -688,7 +688,7 @@ async function processSettlement(
 
     if (!pushResponse.ok || !pushResult.success) {
       const errMsg = pushResult.error || `HTTP ${pushResponse.status}`;
-      console.error(`[auto-post-settlement] Failed ${sid}: ${errMsg}`);
+      logger.error(`[auto-post-settlement] Failed ${sid}: ${errMsg}`);
 
       await supabase.from('settlements').update({
         posting_state: 'failed',
