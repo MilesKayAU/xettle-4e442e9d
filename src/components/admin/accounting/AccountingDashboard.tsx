@@ -626,173 +626,36 @@ export default function AccountingDashboard() {
       toast.error('Cannot push to Xero — settlement does not reconcile');
       return;
     }
+    // Open PushSafetyPreview instead of calling sync-amazon-journal directly
+    setPushPreviewSettlements([{ settlementId: parsed.header.settlementId, marketplace: selectedMarketplace }]);
+    setPushPreviewOpen(true);
+  }, [parsed, selectedMarketplace]);
+
+  // Confirm handler called from PushSafetyPreview modal
+  const handlePushPreviewConfirm = useCallback(async () => {
     setPushing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { header, splitMonth, lines: parsedLines } = parsed;
-      const period = `${formatDisplayDate(header.periodStart)} – ${formatDisplayDate(header.periodEnd)}`;
-
-      if (splitMonth.isSplitMonth && splitMonth.month1 && splitMonth.month2) {
-        // SPLIT MONTH — Account 612 Rollover Method (matches Link My Books)
-        // Split lines by ACTUAL posted date, not proportional ratio.
-        // Journal 1: Month-1 lines only + CR 612 → nets to $0.00
-        // Journal 2: DR 612 (clears rollover) + Month-2 lines → nets to bank deposit
-
-        const m1 = splitMonth.month1;
-        const m2 = splitMonth.month2;
-
-        // Split parsed lines by posted_date month
-        const m1EndDate = m1.end; // YYYY-MM-DD last day of month 1
-        const month1Lines = parsedLines.filter(l => {
-          if (!l.postedDate) return true; // lines without date default to month 1
-          return l.postedDate <= m1EndDate;
-        });
-        const month2Lines = parsedLines.filter(l => {
-          if (!l.postedDate) return false;
-          return l.postedDate > m1EndDate;
-        });
-
-        console.info('[Split Month By Date]', {
-          settlementId: header.settlementId,
-          month1Lines: month1Lines.length,
-          month2Lines: month2Lines.length,
-          totalLines: parsedLines.length,
-          m1End: m1EndDate,
-        });
-
-        // Invoice 1: Month-1 actual lines + balancing 612 line
-        const lines1 = buildInvoiceLineItems(month1Lines, `${m1.monthLabel}`, header.settlementId);
-        const rolloverAmount = computeXeroInclusiveTotal(lines1);
-
-        console.info('[Split Month Invoice Rollover]', {
-          settlementId: header.settlementId,
-          month1: m1.monthLabel,
-          month2: m2.monthLabel,
-          rolloverAmount,
-        });
-
-        // Add Account 612 balancing line: negative of rolloverAmount → invoice nets to $0
-        lines1.push({
-          Description: `Deferred revenue to ${m2.monthLabel}`,
-          AccountCode: XERO_ACCOUNT_MAP['Split Month Rollover'].code,
-          TaxType: 'BASEXCLUDED',
-          UnitAmount: round2(-rolloverAmount),
-          Quantity: 1,
-        });
-        // Reference generated server-side; just need splitPart
-        const date1 = m1.end;
-
-        // Invoice 2: DR 612 (clear rollover) + Month-2 actual lines
-        const lines2Month2 = buildInvoiceLineItems(month2Lines, `${m2.monthLabel}`, header.settlementId);
-        const rolloverLine = {
-          Description: `Deferred revenue from ${m1.monthLabel}`,
-          AccountCode: XERO_ACCOUNT_MAP['Split Month Rollover'].code,
-          TaxType: 'BASEXCLUDED',
-          UnitAmount: round2(rolloverAmount),
-          Quantity: 1,
-        };
-        const invoiceLines2 = [rolloverLine, ...lines2Month2];
-
-        // Rounding adjustment for Invoice 2 so it matches the bank deposit exactly
-        const bankDeposit = parsed.summary.bankDeposit;
-        let inv2XeroTotal = 0;
-        for (const item of invoiceLines2) {
-          if (item.TaxType === 'OUTPUT' || item.TaxType === 'INPUT') {
-            inv2XeroTotal += round2(round2(item.UnitAmount) * 1.1);
-          } else {
-            inv2XeroTotal += round2(item.UnitAmount);
-          }
+      let ok = 0, fail = 0;
+      for (const s of pushPreviewSettlements) {
+        const result = await syncSettlementToXero(s.settlementId, s.marketplace);
+        if (result.success) ok++;
+        else {
+          fail++;
+          toast.error(`Push failed for ${s.settlementId}: ${result.error}`);
         }
-        inv2XeroTotal = round2(inv2XeroTotal);
-        const inv2Diff = round2(bankDeposit - inv2XeroTotal);
-        if (inv2Diff !== 0 && Math.abs(inv2Diff) <= 0.05) {
-          console.info('[Split Month Rounding Adjustment]', { bankDeposit, inv2XeroTotal, inv2Diff });
-          invoiceLines2.push({
-            Description: `Rounding adjustment ${m2.monthLabel}`,
-            AccountCode: getAccountCode('Sales'),
-            TaxType: 'BASEXCLUDED',
-            UnitAmount: inv2Diff,
-            Quantity: 1,
-          });
-        } else if (inv2Diff !== 0 && Math.abs(inv2Diff) > 0.05) {
-          console.error('[Split Month Rounding BLOCKED]', { bankDeposit, inv2XeroTotal, inv2Diff });
-          throw new Error(
-            `Split month rounding discrepancy of ${formatAUD(Math.abs(inv2Diff))} exceeds ±$0.05. ` +
-            `Bank deposit: ${formatAUD(bankDeposit)}, Invoice 2 total: ${formatAUD(inv2XeroTotal)}.`
-          );
-        }
-
-        // Reference generated server-side; just need splitPart
-        const date2 = m2.start;
-
-        const { data: data1, error: err1 } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, settlementId: header.settlementId, splitPart: 1, date: date1, dueDate: date1, lineItems: lines1, country: selectedMarketplace },
-        });
-        if (err1) throw err1;
-        if (!data1?.success) throw new Error(data1?.error || 'Invoice 1 failed');
-
-        // Immediately save Invoice 1 ID so it can be rolled back if Invoice 2 fails
-        const invoice1Id = data1.invoiceId || data1.journalId;
-        await supabase
-          .from('settlements')
-          .update({
-            status: 'partial_push',
-            xero_journal_id_1: invoice1Id,
-          } as any)
-          .eq('settlement_id', header.settlementId);
-
-        const { data: data2, error: err2 } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, settlementId: header.settlementId, splitPart: 2, date: date2, dueDate: date2, lineItems: invoiceLines2, country: selectedMarketplace },
-        });
-        if (err2 || !data2?.success) {
-          // Invoice 2 failed but Invoice 1 exists in Xero — offer targeted rollback
-          const errorMsg = err2?.message || data2?.error || 'Invoice 2 failed';
-          toast.error(`Invoice 1 created (${invoice1Id}) but Invoice 2 failed: ${errorMsg}. Use rollback on this settlement to void Invoice 1.`);
-          await loadSettlements();
-          setPushing(false);
-          return;
-        }
-
-        const invoice2Id = data2.invoiceId || data2.journalId;
-        await supabase
-          .from('settlements')
-          .update({
-            status: 'draft_in_xero',
-            xero_journal_id_1: invoice1Id,
-            xero_journal_id_2: invoice2Id,
-          } as any)
-          .eq('settlement_id', header.settlementId);
-
-        setPushed(true);
-        toast.success(`Split settlement posted: ${m1.monthLabel} (${invoice1Id}) + ${m2.monthLabel} (${invoice2Id})`);
-      } else {
-        // SINGLE MONTH: Post one invoice with marketplace-aware TaxType
-        const lineItems = buildInvoiceLineItems(parsedLines, period, header.settlementId, undefined, parsed.summary.bankDeposit);
-
-        const { data, error } = await supabase.functions.invoke('sync-amazon-journal', {
-          body: { userId: user.id, settlementId: header.settlementId, date: header.periodEnd, dueDate: header.periodEnd, lineItems, country: selectedMarketplace },
-        });
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'Unknown error from Xero sync');
-
-        await supabase
-          .from('settlements')
-          .update({ status: 'draft_in_xero', xero_journal_id: data.invoiceId || data.journalId, xero_invoice_id: data.invoiceId || data.journalId, xero_status: 'DRAFT' } as any)
-          .eq('settlement_id', header.settlementId);
-
-        setPushed(true);
-        toast.success(`Draft invoice created in Xero ✓ Next: approve in Xero, then match against Amazon bank deposit.`);
       }
-
+      if (ok > 0) {
+        setPushed(true);
+        toast.success(`${ok} settlement(s) pushed to Xero as DRAFT ✓`);
+      }
       await loadSettlements();
     } catch (err: any) {
       toast.error(`Xero push failed: ${err.message}`);
     } finally {
       setPushing(false);
+      setPushPreviewOpen(false);
     }
-  }, [parsed, selectedMarketplace, loadSettlements, buildInvoiceLineItems]);
+  }, [pushPreviewSettlements, loadSettlements]);
 
   // ─── Review from History ─────────────────────────────────────────────
   const handleReviewFromHistory = useCallback(async (settlementTextId: string, settlementUuid: string) => {
