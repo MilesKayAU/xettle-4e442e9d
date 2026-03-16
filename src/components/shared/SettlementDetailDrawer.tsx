@@ -11,11 +11,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CheckCircle2, Clock, ExternalLink, Info, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, ExternalLink, GitCompare, Info, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import InvoiceRefreshButton from '@/components/shared/InvoiceRefreshButton';
+import XeroInvoiceCompareDrawer from '@/components/shared/XeroInvoiceCompareDrawer';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
