@@ -183,18 +183,28 @@ export default function MarketplaceSwitcher({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { error } = await supabase
-        .from('marketplace_connections')
-        .insert({
-          user_id: user.id,
-          marketplace_code: def.code,
-          marketplace_name: def.name,
-          country_code: def.country,
-          connection_type: def.connectionMethods[0] === 'sp_api' ? 'sp_api' : 'manual_csv',
-          connection_status: 'active',
-        } as any);
+      // Near-duplicate check
+      const existingCodes = userMarketplaces.map(m => m.marketplace_code);
+      const existingNames = userMarketplaces.map(m => m.marketplace_name);
+      const duplicate = findNearDuplicate(def.code, existingCodes, existingNames);
+      if (duplicate) {
+        const existingName = userMarketplaces.find(m => m.marketplace_code === duplicate)?.marketplace_name || duplicate;
+        if (!confirm(`You already have "${existingName}" connected. Add "${def.name}" anyway?`)) {
+          setAdding(false);
+          return;
+        }
+      }
 
-      if (error) throw error;
+      const result = await upsertMarketplaceConnection({
+        userId: user.id,
+        marketplaceCode: def.code,
+        marketplaceName: def.name,
+        connectionType: def.connectionMethods[0] === 'sp_api' ? 'sp_api' : 'manual_csv',
+        connectionStatus: 'active',
+        countryCode: def.country,
+      });
+
+      if (!result.success) throw new Error(result.error);
 
       toast.success(`${def.name} added to your dashboard`);
       setAddDialogOpen(false);

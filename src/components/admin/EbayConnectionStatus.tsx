@@ -39,8 +39,8 @@ export default function EbayConnectionStatus() {
           }
         }
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.warn('[EbayConnectionStatus] status check failed:', err);
     } finally {
       setLoading(false);
     }

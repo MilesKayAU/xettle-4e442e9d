@@ -440,23 +440,16 @@ export default function Dashboard() {
         const { saveSettlement } = await import('@/utils/settlement-engine');
         const { MARKETPLACE_CATALOG } = await import('@/components/admin/accounting/MarketplaceSwitcher');
 
-        const { data: existing } = await supabase
-          .from('marketplace_connections')
-          .select('id')
-          .eq('marketplace_code', marketplace)
-          .maybeSingle();
-
-        if (!existing) {
-          const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
-          await supabase.from('marketplace_connections').insert({
-            user_id: user.id,
-            marketplace_code: marketplace,
-            marketplace_name: catDef?.name || marketplace,
-            country_code: catDef?.country || 'AU',
-            connection_type: 'auto_detected',
-            connection_status: 'active',
-          } as any);
-        }
+        const { upsertMarketplaceConnection } = await import('@/utils/marketplace-connections');
+        const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
+        await upsertMarketplaceConnection({
+          userId: user.id,
+          marketplaceCode: marketplace,
+          marketplaceName: catDef?.name || marketplace,
+          connectionType: 'auto_detected',
+          connectionStatus: 'active',
+          countryCode: catDef?.country || 'AU',
+        });
 
         let saved = 0;
         for (const s of settlements) {
