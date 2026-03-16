@@ -12,10 +12,11 @@ interface TaskCounts {
   readyToPush: number;
   awaitingReconciliation: number;
   reconAlerts: number;
+  backfillGaps: number;
 }
 
 export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: DailyTaskStripProps) {
-  const [counts, setCounts] = useState<TaskCounts>({ filesToReview: 0, readyToPush: 0, awaitingReconciliation: 0, reconAlerts: 0 });
+  const [counts, setCounts] = useState<TaskCounts>({ filesToReview: 0, readyToPush: 0, awaitingReconciliation: 0, reconAlerts: 0, backfillGaps: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
           readyToPush,
           awaitingReconciliation,
           reconAlerts: reconAlerts.count ?? 0,
+          backfillGaps: 0, // Will be populated by coverage map logic post-onboarding
         });
       } catch {
         // silent

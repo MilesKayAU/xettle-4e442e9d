@@ -84,6 +84,8 @@ interface SmartUploadFlowProps {
   onViewSettlements?: () => void;
   missingSettlements?: MissingSettlement[];
   onReturnToDashboard?: () => void;
+  prefillMarketplace?: string;
+  prefillDateRange?: { start: string; end: string };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -140,7 +142,7 @@ const MARKETPLACE_SOURCE_HINTS: Record<string, string> = {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChanged, onViewSettlements, missingSettlements, onReturnToDashboard }: SmartUploadFlowProps) {
+export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChanged, onViewSettlements, missingSettlements, onReturnToDashboard, prefillMarketplace, prefillDateRange }: SmartUploadFlowProps) {
   const [files, setFiles] = useState<DetectedFile[]>([]);
   const [processingAll, setProcessingAll] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
