@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { logger } from '@/utils/logger';
 import { supabase } from '@/integrations/supabase/client';
 import {
   syncSettlementToXero,
@@ -131,7 +132,7 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
       } else {
         if (result.error?.includes('No Xero connection')) {
           // Silent — no Xero connected, don't show error
-          console.log('[XeroSync] No Xero connection — skipping audit');
+          logger.debug('[XeroSync] No Xero connection — skipping audit');
         } else {
           toast.error(result.error || 'Failed to refresh from Xero');
         }

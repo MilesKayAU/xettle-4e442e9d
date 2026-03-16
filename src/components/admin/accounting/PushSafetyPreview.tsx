@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { logger } from '@/utils/logger';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
 // Rule #11 enforcement is server-side: sync-settlement-to-xero requires
 // settlementId + settlementData. No order/payment path exists.
@@ -184,7 +185,7 @@ export default function PushSafetyPreview({
         const coaAgeMs = coaFreshness ? Date.now() - coaFreshness.getTime() : Infinity;
         const COA_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
         if (coaAgeMs > COA_MAX_AGE_MS) {
-          console.log('[push-safety] CoA cache stale or empty, attempting refresh…');
+          logger.debug('[push-safety] CoA cache stale or empty, attempting refresh…');
           try {
             const { error: refreshError } = await supabase.functions.invoke('fetch-xero-bank-accounts', {
               body: { action: 'refresh_coa' },
@@ -210,7 +211,7 @@ export default function PushSafetyPreview({
                   }
                 }
               }
-              console.log('[push-safety] CoA refreshed successfully');
+              logger.debug('[push-safety] CoA refreshed successfully');
             } else {
               console.warn('[push-safety] CoA refresh failed:', refreshError);
             }

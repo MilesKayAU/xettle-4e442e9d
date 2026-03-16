@@ -6,6 +6,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { upsertMarketplaceConnection } from './marketplace-connections';
+import { logger } from '@/utils/logger';
 
 /**
  * Payment processors / gateways — NOT marketplaces.
@@ -111,7 +112,7 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
     for (const conn of allConnections) {
       // Always delete payment processor connections — they are gateways, not marketplaces
       if (isPaymentProcessor(conn.marketplace_code)) {
-        console.log(`[ghost-cleanup] Removing payment processor connection: ${conn.marketplace_code}`);
+        logger.debug(`[ghost-cleanup] Removing payment processor connection: ${conn.marketplace_code}`);
         await supabase.from('marketplace_connections').delete().eq('id', conn.id);
         continue;
       }
@@ -134,7 +135,7 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
       // Channel alerts alone are NOT sufficient — a Xero contact or bank narration
       // doesn't prove the user sells on that platform. Only actual settlement data does.
       if (conn.connection_type === 'auto_detected') {
-        console.log(`[ghost-cleanup] Removing auto_detected connection with no settlements: ${conn.marketplace_code}`);
+        logger.debug(`[ghost-cleanup] Removing auto_detected connection with no settlements: ${conn.marketplace_code}`);
         await supabase.from('marketplace_connections').delete().eq('id', conn.id);
         continue;
       }
@@ -149,7 +150,7 @@ export async function provisionAllMarketplaceConnections(userId: string): Promis
       if (subChannelCount && subChannelCount > 0) continue;
 
       // No backing data anywhere — delete ghost
-      console.log(`[ghost-cleanup] Removing ghost connection: ${conn.marketplace_code}`);
+      logger.debug(`[ghost-cleanup] Removing ghost connection: ${conn.marketplace_code}`);
       await supabase
         .from('marketplace_connections')
         .delete()

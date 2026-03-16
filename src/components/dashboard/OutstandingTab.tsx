@@ -24,6 +24,7 @@
  */
 
 import { useState, useCallback, useEffect, Fragment, useMemo, useRef } from 'react';
+import { logger } from '@/utils/logger';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { Switch } from '@/components/ui/switch';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
@@ -543,13 +544,13 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
     // Throttle: skip if called within THROTTLE_MS (unless it's the first load)
     if (lastFetchTimestampRef.current > 0 && timeSinceLast < THROTTLE_MS && !options?.runSync) {
-      console.log(`[OutstandingTab] Throttled: ${Math.round(timeSinceLast / 1000)}s since last fetch (min ${THROTTLE_MS / 1000}s)`);
+      logger.debug(`[OutstandingTab] Throttled: ${Math.round(timeSinceLast / 1000)}s since last fetch (min ${THROTTLE_MS / 1000}s)`);
       return;
     }
 
     // Dedup: if a request is already in-flight, cancel it (latest wins)
     if (inflightRef.current) {
-      console.log('[OutstandingTab] Cancelling in-flight fetch — new request takes priority');
+      logger.debug('[OutstandingTab] Cancelling in-flight fetch — new request takes priority');
       inflightRef.current.abort();
     }
 
@@ -921,7 +922,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
 
       // Skip verification if we know bank feed is empty (from sync_info)
       if (data?.sync_info?.bank_feed_empty) {
-        console.log('[OutstandingTab] Bank feed empty — skipping payment verification');
+        logger.debug('[OutstandingTab] Bank feed empty — skipping payment verification');
         return;
       }
 
@@ -930,7 +931,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
       });
 
       if (resp.data?.bank_feed_empty) {
-        console.log('[OutstandingTab] verify-payment-matches reports bank feed empty — no verification attempted');
+        logger.debug('[OutstandingTab] verify-payment-matches reports bank feed empty — no verification attempted');
         return;
       }
 

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { logger } from '@/utils/logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -235,7 +236,7 @@ export default function ActionCentre({
               supabase.from('settlements')
                 .update({ status: 'already_recorded', sync_origin: 'external' } as any)
                 .in('id', paidDbIds)
-                .then(() => console.log(`[ActionCentre] Auto-resolved ${paidDbIds.length} PAID external matches`));
+                .then(() => logger.debug(`[ActionCentre] Auto-resolved ${paidDbIds.length} PAID external matches`));
             }
             // Only non-PAID matches are "Duplicate Risk"
             const nonPaidMatchIds = new Set(

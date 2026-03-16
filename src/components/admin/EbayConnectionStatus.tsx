@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { logger } from '@/utils/logger';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,7 +60,7 @@ export default function EbayConnectionStatus() {
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      console.log('[eBay OAuth] Requesting authorize URL...');
+      logger.debug('[eBay OAuth] Requesting authorize URL...');
       const { data, error } = await supabase.functions.invoke('ebay-auth', {
         headers: { 'x-action': 'authorize' },
       });
@@ -71,7 +72,7 @@ export default function EbayConnectionStatus() {
       }
 
       if (data?.authUrl) {
-        console.log('[eBay OAuth] Opening eBay login in new window...');
+        logger.debug('[eBay OAuth] Opening eBay login in new window...');
         if (data.state) {
           sessionStorage.setItem('ebay_oauth_state', data.state);
         }

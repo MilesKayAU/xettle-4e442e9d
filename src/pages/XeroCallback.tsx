@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { logger } from '@/utils/logger';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -70,13 +71,13 @@ const XeroCallback = () => {
             .maybeSingle();
 
           if (!existingCodes?.value) {
-            console.log('[XeroCallback] No account codes set — auto-triggering AI mapper');
+            logger.debug('[XeroCallback] No account codes set — auto-triggering AI mapper');
             const { data: mapResult } = await supabase.functions.invoke('ai-account-mapper', {
               body: { action: 'scan_and_match', autoTrigger: true },
             });
 
             if (mapResult?.success) {
-              console.log('[XeroCallback] AI mapper complete — running CoA intelligence');
+              logger.debug('[XeroCallback] AI mapper complete — running CoA intelligence');
             }
           }
 
@@ -105,7 +106,7 @@ const XeroCallback = () => {
               const signals = analyseCoA(coaRes.data, registryRes.data, processorRes.data);
               const highChannels = getHighConfidenceChannels(signals);
 
-              console.log(`[XeroCallback] CoA intelligence: ${highChannels.length} HIGH channels, ${signals.payment_providers.length} providers`);
+              logger.debug(`[XeroCallback] CoA intelligence: ${highChannels.length} HIGH channels, ${signals.payment_providers.length} providers`);
 
               // Insert suggested channels — never downgrade active to suggested
               const { upsertMarketplaceConnection } = await import('@/utils/marketplace-connections');

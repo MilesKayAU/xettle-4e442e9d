@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
+import { logger } from '../_shared/logger.ts';
 
 const SP_API_ENDPOINTS: Record<string, string> = {
   na: 'https://sellingpartnerapi-na.amazon.com',
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
     cutoffDate.setDate(cutoffDate.getDate() - days);
     const cutoffStr = cutoffDate.toISOString().split('T')[0];
 
-    console.log(`[historical-audit] User ${userId}: Auditing last ${days} days from ${cutoffStr}`);
+    logger.debug(`[historical-audit] User ${userId}: Auditing last ${days} days from ${cutoffStr}`);
 
     const results: AuditResult[] = [];
 
@@ -294,7 +295,7 @@ Deno.serve(async (req) => {
       },
     } as any);
 
-    console.log(`[historical-audit] User ${userId}: ${results.length} marketplaces audited, ${totalMissing} missing, ${overallReconPct}% reconciled`);
+    logger.debug(`[historical-audit] User ${userId}: ${results.length} marketplaces audited, ${totalMissing} missing, ${overallReconPct}% reconciled`);
 
     return new Response(JSON.stringify({
       success: true,

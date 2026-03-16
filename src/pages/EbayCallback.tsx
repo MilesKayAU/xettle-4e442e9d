@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { logger } from '@/utils/logger';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +19,7 @@ export default function EbayCallback() {
       const errorParam = searchParams.get('error');
       const errorDesc = searchParams.get('error_description');
 
-      console.log('[eBay Callback] Params:', { code: code ? `${code.substring(0, 10)}...` : null, error: errorParam });
+      logger.debug('[eBay Callback] Params:', { code: code ? `${code.substring(0, 10)}...` : null, error: errorParam });
 
       if (errorParam) {
         setStatus('error');
@@ -33,7 +34,7 @@ export default function EbayCallback() {
       }
 
       try {
-        console.log('[eBay Callback] Exchanging code for tokens...');
+        logger.debug('[eBay Callback] Exchanging code for tokens...');
         const { data, error } = await supabase.functions.invoke('ebay-auth', {
           headers: { 'x-action': 'connect' },
           body: { code },
@@ -42,7 +43,7 @@ export default function EbayCallback() {
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
 
-        console.log('[eBay Callback] Token exchange successful, user:', data.ebay_username);
+        logger.debug('[eBay Callback] Token exchange successful, user:', data.ebay_username);
         setEbayUsername(data.ebay_username);
         setStatus('success');
 

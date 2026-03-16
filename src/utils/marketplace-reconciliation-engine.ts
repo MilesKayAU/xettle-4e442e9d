@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/utils/logger';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -362,7 +363,7 @@ export async function autoReconcileSettlement(
     }
 
     if (orders.length === 0) {
-      console.log(`[autoReconcile] No Shopify order data found for ${marketplace} (${periodStart} to ${periodEnd}) — skipping`);
+      logger.debug(`[autoReconcile] No Shopify order data found for ${marketplace} (${periodStart} to ${periodEnd}) — skipping`);
       return; // No order data to reconcile
     }
 
@@ -422,7 +423,7 @@ export async function autoReconcileSettlement(
       if (promoteErr) {
         console.error('[autoReconcile] Failed to promote settlement to ready_to_push:', promoteErr);
       } else {
-        console.log(`[autoReconcile] Settlement ${settlementId} promoted to ready_to_push`);
+        logger.debug(`[autoReconcile] Settlement ${settlementId} promoted to ready_to_push`);
       }
     }
   } catch (err) {

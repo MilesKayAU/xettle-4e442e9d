@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { logger } from '../_shared/logger.ts'
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? ""
@@ -72,7 +73,7 @@ Deno.serve(async (req) => {
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
         `state=${encodeURIComponent(stateValue)}`
 
-      console.log('Generated Shopify auth URL for shop:', shop)
+      logger.debug('Generated Shopify auth URL for shop:', shop)
 
       return new Response(
         JSON.stringify({ authUrl }),
@@ -121,7 +122,7 @@ Deno.serve(async (req) => {
         )
       }
 
-      console.log('HMAC verified, validating OAuth state nonce...')
+      logger.debug('HMAC verified, validating OAuth state nonce...')
 
       // SECURITY: Validate state nonce to prevent CSRF attacks
       // State format: "{nonce}:{userId}"
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
       // Clean up the used nonce (one-time use)
       await supabaseAdmin.from('app_settings').delete().eq('user_id', userId).eq('key', 'shopify_oauth_state')
 
-      console.log('State nonce verified, exchanging code for access token...')
+      logger.debug('State nonce verified, exchanging code for access token...')
 
       // Exchange code for permanent access token
       const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -183,7 +184,7 @@ Deno.serve(async (req) => {
       const tokenData = await tokenResponse.json()
       const { access_token, scope } = tokenData
 
-      console.log('Token exchange successful, storing in database...')
+      logger.debug('Token exchange successful, storing in database...')
 
       // Upsert shopify_tokens (supabaseAdmin already created above)
       const { error: tokenError } = await supabaseAdmin
@@ -221,7 +222,7 @@ Deno.serve(async (req) => {
         // Non-fatal — token is already saved
       }
 
-      console.log('Shopify token stored successfully for shop:', shop)
+      logger.debug('Shopify token stored successfully for shop:', shop)
 
       return new Response(
         JSON.stringify({ success: true, shop, scope }),

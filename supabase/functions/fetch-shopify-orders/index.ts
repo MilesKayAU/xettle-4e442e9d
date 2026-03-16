@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logger } from '../_shared/logger.ts';
 
 interface ShopifyOrder {
   id: number;
@@ -19,7 +20,7 @@ interface ShopifyOrder {
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
-  console.log("[fetch-shopify-orders] Handler invoked", req.method);
+  logger.debug("[fetch-shopify-orders] Handler invoked", req.method);
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -61,7 +62,7 @@ Deno.serve(async (req) => {
       }
       authenticatedUserId = user.id;
     }
-    console.log("[fetch-shopify-orders] Auth OK, isServiceRole:", isServiceRole);
+    logger.debug("[fetch-shopify-orders] Auth OK, isServiceRole:", isServiceRole);
 
     let body: any = {};
     try {
@@ -80,13 +81,13 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    console.log("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit, channelDetectionOnly, resolvedUserId });
+    logger.debug("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit, channelDetectionOnly, resolvedUserId });
     const effectiveLimit = Math.min(limit || 250, 250);
 
     // ─── Boundary note: accounting_boundary_date only applies to entry creation,
     //     never to order fetching. All orders are fetched regardless of boundary. ─
     const effectiveDateFrom = dateFrom;
-    console.log("[fetch-shopify-orders] effectiveDateFrom:", effectiveDateFrom, "channelDetectionOnly:", channelDetectionOnly);
+    logger.debug("[fetch-shopify-orders] effectiveDateFrom:", effectiveDateFrom, "channelDetectionOnly:", channelDetectionOnly);
 
     // 1. Get access token from shopify_tokens
     // If shopDomain not provided, look up the user's token by user_id alone
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
     let tokenError: any = null;
 
     if (shopDomain) {
-      console.log("[fetch-shopify-orders] Querying shopify_tokens for domain:", shopDomain);
+      logger.debug("[fetch-shopify-orders] Querying shopify_tokens for domain:", shopDomain);
       const result = await supabase
         .from("shopify_tokens")
         .select("access_token, shop_domain")
@@ -107,7 +108,7 @@ Deno.serve(async (req) => {
 
     // Fallback: no shopDomain or domain lookup failed — get any token for this user
     if (!tokenRow) {
-      console.log("[fetch-shopify-orders] Falling back to user_id-only lookup");
+      logger.debug("[fetch-shopify-orders] Falling back to user_id-only lookup");
       const result = await supabase
         .from("shopify_tokens")
         .select("access_token, shop_domain")
@@ -118,11 +119,11 @@ Deno.serve(async (req) => {
       tokenError = result.error;
       if (tokenRow?.shop_domain) {
         shopDomain = tokenRow.shop_domain;
-        console.log("[fetch-shopify-orders] Resolved shopDomain from DB:", shopDomain);
+        logger.debug("[fetch-shopify-orders] Resolved shopDomain from DB:", shopDomain);
       }
     }
 
-    console.log("[fetch-shopify-orders] Token query result:", { found: !!tokenRow, error: tokenError?.message });
+    logger.debug("[fetch-shopify-orders] Token query result:", { found: !!tokenRow, error: tokenError?.message });
 
     if (tokenError || !tokenRow) {
       return new Response(
@@ -132,7 +133,7 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = tokenRow.access_token;
-    console.log("[fetch-shopify-orders] Got access token, length:", accessToken?.length);
+    logger.debug("[fetch-shopify-orders] Got access token, length:", accessToken?.length);
 
     // 2. Build Shopify API URL
     const buildUrl = (cursor?: string) => {
@@ -166,12 +167,12 @@ Deno.serve(async (req) => {
 
     do {
       const url = buildUrl(nextCursor);
-      console.log(`[fetch-shopify-orders] Fetching page ${page}:`, url.substring(0, 120));
+      logger.debug(`[fetch-shopify-orders] Fetching page ${page}:`, url.substring(0, 120));
       const res = await fetch(url, {
         headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
       });
 
-      console.log(`[fetch-shopify-orders] Shopify response: status=${res.status}`);
+      logger.debug(`[fetch-shopify-orders] Shopify response: status=${res.status}`);
 
       if (res.status === 401) {
         console.error("[fetch-shopify-orders] Shopify 401 — token invalid");
@@ -245,7 +246,7 @@ Deno.serve(async (req) => {
           console.error("[fetch-shopify-orders] upsert error:", upsertErr.message);
         }
       }
-      console.log(`[fetch-shopify-orders] Persisted ${rows.length} orders to shopify_orders`);
+      logger.debug(`[fetch-shopify-orders] Persisted ${rows.length} orders to shopify_orders`);
     }
 
     return new Response(

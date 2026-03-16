@@ -2,6 +2,7 @@
 export const PARSER_VERSION = 'v1.7.1';
 import { parseDateOrEmpty } from './date-parser';
 import { TOL_PARSER_TOTAL, TOL_LINE_SUM, TOL_COLUMN_TOTALS, TOL_GST_CONSISTENCY } from '@/constants/reconciliation-tolerance';
+import { logger } from '@/utils/logger';
 /**
  * Amazon Settlement Report (TSV) Parser
  * Parses the primary settlement data source and categorizes transactions
@@ -259,8 +260,8 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const colIdx: Record<string, number> = {};
   columnHeaders.forEach((h, i) => { colIdx[h] = i; });
 
-  console.info('[Parser] Column headers:', columnHeaders);
-  console.info('[Parser] Has marketplace-name column:', 'marketplace-name' in colIdx);
+  logger.info('[Parser] Column headers:', columnHeaders);
+  logger.info('[Parser] Has marketplace-name column:', 'marketplace-name' in colIdx);
 
   const getField = (row: string[], col: string): string => {
     const idx = colIdx[col.toLowerCase()];
@@ -329,7 +330,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
       intlOrderIds.add(orderKey);
     }
   }
-  console.info('[Pass 1] International order-ids detected:', intlOrderIds.size, 'heuristics: marketplace-name + LVGT', [...intlOrderIds].slice(0, 10));
+  logger.info('[Pass 1] International order-ids detected:', intlOrderIds.size, 'heuristics: marketplace-name + LVGT', [...intlOrderIds].slice(0, 10));
 
   // === PASS 2: Main classification loop ===
   let debugRowCount = 0;
@@ -372,12 +373,12 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
 
     // Debug: log first 10 transaction rows' marketplace names, and first non-AU row raw value
     if (transactionType && debugRowCount < 10) {
-      console.info(`[Parser] Row ${i} marketplace-name: "${marketplaceName}", isAU: ${isAuMarketplace}, txType: ${transactionType}, amount: ${amount}`);
+      logger.info(`[Parser] Row ${i} marketplace-name: "${marketplaceName}", isAU: ${isAuMarketplace}, txType: ${transactionType}, amount: ${amount}`);
       debugRowCount++;
     }
     if (transactionType && isExplicitNonAu && firstNonAuMarketplaceName === null) {
       firstNonAuMarketplaceName = marketplaceName;
-      console.info('[Marketplace Raw First Non-AU]', { row: i, marketplaceNameRaw: marketplaceName });
+      logger.info('[Marketplace Raw First Non-AU]', { row: i, marketplaceNameRaw: marketplaceName });
     }
 
     if (!transactionType) continue;
@@ -403,7 +404,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
 
       // Track AU vs international totals
       if (isIntlOrder && debugRowCount < 50) {
-        console.info(`[Intl Order Hit] order=${orderId || '(none)'}, orderKeys=${orderIdentifiers.join('|') || '(none)'}, category=${category}, amount=${amount}, marketplace="${marketplaceName}"`);
+        logger.info(`[Intl Order Hit] order=${orderId || '(none)'}, orderKeys=${orderIdentifiers.join('|') || '(none)'}, category=${category}, amount=${amount}, marketplace="${marketplaceName}"`);
       }
       if (INCOME_CATEGORIES.has(category)) {
         if (isIntlOrder) intlIncomeTotal += amount;
@@ -434,13 +435,13 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     }
   }
 
-  console.info('[Parser v1.4.5] International order-ids detected:', intlOrderIds.size, [...intlOrderIds]);
+  logger.info('[Parser v1.4.5] International order-ids detected:', intlOrderIds.size, [...intlOrderIds]);
 
   if (!header) {
     throw new Error('No settlement header row found (expected row with total-amount but no transaction-type)');
   }
 
-  console.info('[Marketplace Split]', {
+  logger.info('[Marketplace Split]', {
     settlementId: header.settlementId,
     auIncomeTotal: round2(auIncomeTotal),
     intlIncomeTotal: round2(intlIncomeTotal),
@@ -481,13 +482,13 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   const gstOnIncome = round2(auIncome / gstDivisor);
   const gstOnExpenses = round2(expenseTotal / gstDivisor); // negative result (expenses are negative)
 
-  console.info('[GST Base]', {
+  logger.info('[GST Base]', {
     auSalesGstBase: auIncome,
     intlSalesExcluded: round2(intlSalesExcludedFromGstBase),
     gstOnIncome,
   });
 
-  console.info('[GST Calculation]', {
+  logger.info('[GST Calculation]', {
     settlementId: header.settlementId,
     auIncomeGstBase: auIncome,
     intlSalesExcludedFromGstBase: round2(intlSalesExcludedFromGstBase),
@@ -701,7 +702,7 @@ function detectSplitMonth(
   // Rollover amount = gross total of month 1 lines (Journal 1 CR 612 to net to $0)
   const rolloverAmount = m1Agg.grossTotal;
 
-  console.info('[Split Month By Posted Date]', {
+  logger.info('[Split Month By Posted Date]', {
     settlementId: header.settlementId,
     month1Lines: month1Lines.length,
     month2Lines: month2Lines.length,

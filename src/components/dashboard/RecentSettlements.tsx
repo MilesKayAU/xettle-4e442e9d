@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { logger } from '@/utils/logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -352,7 +353,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         await supabase.from('settlements')
           .update({ status: 'ready_to_push' } as any)
           .in('id', stuckIds);
-        console.log(`[RecentSettlements] Promoted ${stuckIds.length} stuck ingested → ready_to_push`);
+        logger.debug(`[RecentSettlements] Promoted ${stuckIds.length} stuck ingested → ready_to_push`);
         // Re-fetch with updated statuses
         const { data: refreshed } = await supabase
           .from('settlements')
@@ -379,7 +380,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
               supabase.from('settlements')
                 .update({ status: 'already_recorded', sync_origin: 'external' } as any)
                 .in('id', paidDbIds)
-                .then(() => { console.log(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`); fetchAll(); });
+                .then(() => { logger.debug(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`); fetchAll(); });
             }
             setExternalMatchIds(new Set(
               matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
@@ -411,7 +412,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
               .update({ status: 'already_recorded', sync_origin: 'external' } as any)
               .in('id', paidDbIds)
               .then(() => {
-                console.log(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`);
+                logger.debug(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`);
                 // Re-fetch to remove them from view
                 fetchAll();
               });

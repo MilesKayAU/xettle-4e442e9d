@@ -5,6 +5,7 @@
 
 import { round2, formatAUD, XERO_ACCOUNT_MAP, type ParsedSettlement } from '@/utils/settlement-parser';
 import { TOL_PAYOUT_MATCH } from '@/constants/reconciliation-tolerance';
+import { logger } from '@/utils/logger';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ export function buildAmazonInvoiceLineItems(
     xeroTotal = round2(xeroTotal);
     const diff = round2(bankDeposit - xeroTotal);
     if (diff !== 0 && Math.abs(diff) <= TOL_PAYOUT_MATCH) {
-      console.info('[Rounding Adjustment]', { bankDeposit, xeroTotal, diff });
+      logger.info('[Rounding Adjustment]', { bankDeposit, xeroTotal, diff });
       lineItems.push({
         Description: `Rounding adjustment ${periodLabel}`,
         AccountCode: getAccountCode('Sales'),

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { logger } from '@/utils/logger';
 // pendingPushRef: triggers auto-push to Xero after history review loads parsed state
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -132,7 +133,7 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
     const refundsTotal = round2(summary.refunds);
     const reimbursementsTotal = round2(summary.reimbursements);
     const journalOneNet = round2(salesTotal + feesTotal + refundsTotal + reimbursementsTotal);
-    console.info('[Split Month Rollover Debug]', {
+    logger.info('[Split Month Rollover Debug]', {
       settlementId: header.settlementId, salesTotal, feesTotal, refundsTotal, reimbursementsTotal, journalOneNet,
       parserRolloverAmount: splitMonth.rolloverAmount,
     });
@@ -721,7 +722,7 @@ export default function AccountingDashboard() {
           if (oid) intlOrderIds.add(oid);
         }
       }
-      console.info('[History Reconstruction] International order-ids detected:', intlOrderIds.size);
+      logger.info('[History Reconstruction] International order-ids detected:', intlOrderIds.size);
 
       const reconstructedLines: ParsedSettlement['lines'] = (lineData || []).map((l: any) => {
         const mn = l.marketplace_name || 'Amazon.com.au';

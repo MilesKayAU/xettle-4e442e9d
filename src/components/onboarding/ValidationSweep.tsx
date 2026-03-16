@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { logger } from '@/utils/logger';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
@@ -194,7 +195,7 @@ export default function ValidationSweep({
           }
           if (fixPromises.length > 0) {
             await Promise.all(fixPromises);
-            console.log(`[ValidationSweep] Fixed ${fixPromises.length} stale validation rows`);
+            logger.debug(`[ValidationSweep] Fixed ${fixPromises.length} stale validation rows`);
           }
         }
       }
