@@ -188,6 +188,9 @@
 | Rail support ack | `acknowledgeRailSupport()` | n/a (rail_posting_settings) | ✅ canonical action |
 | Tier computation | `computeSupportTier()` | duplicated in edge fns | ✅ tier unit tests |
 | Rail eligibility | `getRailPostingEligibility()` | n/a | ✅ canonical action |
+| Invoice refresh | `refreshXeroInvoiceDetails()` | fetch-xero-invoice | ✅ invoke guard test |
+| Invoice rescan | `rescanMatchForInvoice()` | rescan-xero-invoice-match | ✅ invoke guard test |
+| Invoice compare | `getXeroVsXettlePayloadDiff()` | n/a (read-only) | ✅ canonical action |
 
 ### Remaining Migration Targets
 
