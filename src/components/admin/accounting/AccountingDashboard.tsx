@@ -350,13 +350,16 @@ export default function AccountingDashboard() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [parsed, saved, parsedBatch]);
 
-  // Auto-trigger Push to Xero after history review loads parsed state
+   // Auto-trigger Push to Xero after history review loads parsed state
+  // Now opens PushSafetyPreview instead of calling sync-amazon-journal directly
   useEffect(() => {
     if (pendingPushRef.current && parsed && !pushing) {
       pendingPushRef.current = false;
-      handlePushToXero();
+      // Open PushSafetyPreview for this settlement
+      setPushPreviewSettlements([{ settlementId: parsed.header.settlementId, marketplace: selectedMarketplace }]);
+      setPushPreviewOpen(true);
     }
-  }, [parsed, pushing]);
+  }, [parsed, pushing, selectedMarketplace]);
 
   const clearSettlementFiles = useCallback(() => {
     setSettlementFile(null);
