@@ -70,6 +70,21 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // Check period lock
+      const periodMonth = settlement.period_end?.substring(0, 7);
+      if (periodMonth) {
+        const { data: lockData } = await supabase
+          .from('period_locks')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('period_month', periodMonth)
+          .is('unlocked_at', null)
+          .maybeSingle();
+        if (lockData) {
+          throw new Error(`Period ${periodMonth} is locked. Unlock it first before reposting.`);
+        }
+      }
+
       // Step 1: Void existing invoices via sync-amazon-journal rollback
       const { data, error } = await supabase.functions.invoke('sync-amazon-journal', {
         body: {
