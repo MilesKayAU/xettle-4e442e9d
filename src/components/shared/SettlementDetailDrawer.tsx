@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import InvoiceRefreshButton from '@/components/shared/InvoiceRefreshButton';
 import XeroInvoiceCompareDrawer from '@/components/shared/XeroInvoiceCompareDrawer';
+import CoaBlockerCta from '@/components/shared/CoaBlockerCta';
+import { checkXeroReadinessForMarketplace } from '@/actions/xeroReadiness';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
@@ -68,6 +70,9 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [externalCandidate, setExternalCandidate] = useState<any>(null);
   const [dismissingCandidate, setDismissingCandidate] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [mappingBlocked, setMappingBlocked] = useState(false);
+  const [missingCategories, setMissingCategories] = useState<string[]>([]);
+  const [readinessKey, setReadinessKey] = useState(0);
 
   useAiPageContext(() => ({
     routeId: 'settlement_detail',
@@ -132,6 +137,30 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
       setLoading(false);
     })();
   }, [open, settlementId]);
+
+  // Check mapping readiness for unpushed settlements
+  useEffect(() => {
+    if (!settlement?.marketplace || settlement.status === 'pushed_to_xero' || settlement.status === 'already_recorded') {
+      setMappingBlocked(false);
+      setMissingCategories([]);
+      return;
+    }
+    (async () => {
+      try {
+        const result = await checkXeroReadinessForMarketplace(settlement.marketplace);
+        const catCheck = result.checks.find(c => c.key === 'category_coverage');
+        if (catCheck?.status === 'fail' && result.missingCategories?.length) {
+          setMappingBlocked(true);
+          setMissingCategories(result.missingCategories);
+        } else {
+          setMappingBlocked(false);
+          setMissingCategories([]);
+        }
+      } catch {
+        setMappingBlocked(false);
+      }
+    })();
+  }, [settlement?.marketplace, settlement?.status, readinessKey]);
 
   const handleDismissCandidate = useCallback(async () => {
     if (!externalCandidate?.id) return;
@@ -403,6 +432,16 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                 </table>
               </div>
             </div>
+
+            {/* COA Mapping Blocker CTA — shown for unpushed settlements with mapping gaps */}
+            {mappingBlocked && settlement.marketplace && (
+              <CoaBlockerCta
+                marketplace={settlement.marketplace}
+                missingCategories={missingCategories}
+                compact
+                onResolved={() => setReadinessKey(k => k + 1)}
+              />
+            )}
 
             {/* Bank deposit comparison */}
             {bankDeposit != null && (
