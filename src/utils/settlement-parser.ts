@@ -498,9 +498,9 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   // Net ex GST = gross total minus all GST components
   const netExGst = round2(grossTotal - gstOnIncome - gstOnExpenses);
 
-  // Rule 5 — Reconciliation gate (±$0.01 tolerance)
+  // Rule 5 — Reconciliation gate (±TOL_PARSER_TOTAL tolerance)
   const reconciliationDiff = round2(header.totalAmount - grossTotal);
-  const reconciliationMatch = Math.abs(reconciliationDiff) < 0.01;
+  const reconciliationMatch = Math.abs(reconciliationDiff) < TOL_PARSER_TOTAL;
 
   // ─── 5-point reconciliation diagnostics ─────────────────────────
   const reconciliationChecks: ReconciliationCheckResult[] = [];
@@ -508,7 +508,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
   // 1. Balance check: bank deposit vs sum of all line items
   reconciliationChecks.push({
     name: 'Balance check',
-    passed: Math.abs(reconciliationDiff) < 0.01,
+    passed: Math.abs(reconciliationDiff) < TOL_PARSER_TOTAL,
     detail: `Bank ${formatAUD(header.totalAmount)} vs Calculated ${formatAUD(grossTotal)} (diff ${formatAUD(reconciliationDiff)})`,
   });
 
