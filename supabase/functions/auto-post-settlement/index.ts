@@ -164,6 +164,19 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Support Tier Constants (duplicated from src/policy/supportPolicy.ts) ──
+    // Edge functions cannot import from src/, so minimal tier rules are here.
+    const AU_VALIDATED_RAILS = new Set([
+      'amazon_au', 'shopify_payments', 'ebay', 'bunnings', 'catch',
+      'kogan', 'mydeal', 'everyday_market', 'paypal',
+    ]);
+
+    function computeTierServer(rail: string, taxProfile: string): 'SUPPORTED' | 'EXPERIMENTAL' | 'UNSUPPORTED' {
+      if (AU_VALIDATED_RAILS.has(rail) && taxProfile === 'AU_GST') return 'SUPPORTED';
+      if (AU_VALIDATED_RAILS.has(rail)) return 'EXPERIMENTAL';
+      return 'EXPERIMENTAL'; // Unknown rails default to EXPERIMENTAL (known in DB)
+    }
+
     // ─── Single settlement mode ──────────────────────────────────
     if (targetSettlementId && targetUserId) {
       // Load rail setting for invoice_status in single mode
@@ -177,12 +190,27 @@ Deno.serve(async (req) => {
       if (targetSettlement?.marketplace) {
         const { data: railSetting } = await supabase
           .from('rail_posting_settings')
-          .select('invoice_status')
+          .select('invoice_status, tax_mode, support_acknowledged_at')
           .eq('user_id', targetUserId)
           .eq('rail', targetSettlement.marketplace)
           .single();
         if (railSetting?.invoice_status) {
           singleInvoiceStatus = railSetting.invoice_status;
+        }
+
+        // Tier enforcement for single mode
+        const { data: taxProfileSetting } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', targetUserId)
+          .eq('key', 'tax_profile')
+          .maybeSingle();
+        const orgTaxProfile = taxProfileSetting?.value || 'AU_GST';
+        const tier = computeTierServer(targetSettlement.marketplace, orgTaxProfile);
+
+        // Force DRAFT for non-SUPPORTED tiers
+        if (tier !== 'SUPPORTED') {
+          singleInvoiceStatus = 'DRAFT';
         }
       }
       const result = await processSettlement(supabase, targetSettlementId, targetUserId, singleInvoiceStatus);
@@ -191,7 +219,7 @@ Deno.serve(async (req) => {
       // ─── Batch mode: scan all users with auto-post rails ───────
       const { data: autoRails } = await supabase
         .from('rail_posting_settings')
-        .select('user_id, rail, require_bank_match, auto_post_enabled_at, invoice_status')
+        .select('user_id, rail, require_bank_match, auto_post_enabled_at, invoice_status, tax_mode, support_acknowledged_at')
         .eq('posting_mode', 'auto');
 
       if (!autoRails || autoRails.length === 0) {
@@ -201,15 +229,66 @@ Deno.serve(async (req) => {
       }
 
       // Group by user
-      const userRails = new Map<string, Array<{ rail: string; require_bank_match: boolean; auto_post_enabled_at: string | null; invoice_status: string }>>();
+      const userRails = new Map<string, Array<{ rail: string; require_bank_match: boolean; auto_post_enabled_at: string | null; invoice_status: string; tax_mode: string; support_acknowledged_at: string | null }>>();
       for (const r of autoRails) {
         const existing = userRails.get(r.user_id) || [];
-        existing.push({ rail: r.rail, require_bank_match: r.require_bank_match, auto_post_enabled_at: r.auto_post_enabled_at, invoice_status: r.invoice_status || 'DRAFT' });
+        existing.push({
+          rail: r.rail,
+          require_bank_match: r.require_bank_match,
+          auto_post_enabled_at: r.auto_post_enabled_at,
+          invoice_status: r.invoice_status || 'DRAFT',
+          tax_mode: r.tax_mode || 'AU_GST_STANDARD',
+          support_acknowledged_at: r.support_acknowledged_at || null,
+        });
         userRails.set(r.user_id, existing);
       }
 
       for (const [userId, rails] of userRails) {
-        const railCodes = rails.map(r => r.rail);
+        // Load org tax profile for tier computation
+        const { data: taxProfileSetting } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', userId)
+          .eq('key', 'tax_profile')
+          .maybeSingle();
+        const orgTaxProfile = taxProfileSetting?.value || 'AU_GST';
+
+        // Filter rails by tier eligibility
+        const eligibleRails = rails.filter(r => {
+          const tier = computeTierServer(r.rail, orgTaxProfile);
+
+          // UNSUPPORTED: always block autopost
+          if (tier === 'UNSUPPORTED') {
+            console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: UNSUPPORTED tier`);
+            return false;
+          }
+
+          // EXPERIMENTAL: only if acknowledged + force DRAFT
+          if (tier === 'EXPERIMENTAL') {
+            if (!r.support_acknowledged_at) {
+              console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: EXPERIMENTAL not acknowledged`);
+              return false;
+            }
+            // Force DRAFT for experimental rails
+            r.invoice_status = 'DRAFT';
+          }
+
+          // REVIEW_EACH_SETTLEMENT blocks autopost
+          if (r.tax_mode === 'REVIEW_EACH_SETTLEMENT') {
+            console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: REVIEW_EACH_SETTLEMENT tax mode`);
+            return false;
+          }
+
+          // SUPPORTED but AUTHORISED: only for SUPPORTED tier
+          if (tier !== 'SUPPORTED' && r.invoice_status === 'AUTHORISED') {
+            r.invoice_status = 'DRAFT';
+          }
+
+          return true;
+        });
+
+        const railCodes = eligibleRails.map(r => r.rail);
+        if (railCodes.length === 0) continue;
 
         // BLOCKER #1: require reconciliation_status = 'matched'
         const { data: settlements } = await supabase
@@ -228,20 +307,13 @@ Deno.serve(async (req) => {
 
         // Filter to only postable settlements
         const postable = settlements.filter(s => {
-          // Skip already posted
           if (s.posting_state === 'posted') return false;
-          // Skip actively posting (unless stale — already recovered above)
           if (s.posting_state === 'posting') return false;
-          // Skip manual_hold (repost waiting for manual push)
           if (s.posting_state === 'manual_hold') return false;
-          // Skip if over retry limit
           if (s.posting_state === 'failed' && (s.push_retry_count || 0) >= MAX_RETRY_COUNT) return false;
-          // Only allow null or failed posting_state
           if (s.posting_state !== null && s.posting_state !== 'failed') return false;
-          // Check bank match requirement
-          const railConfig = rails.find(r => r.rail === s.marketplace);
+          const railConfig = eligibleRails.find(r => r.rail === s.marketplace);
           if (railConfig?.require_bank_match && !s.bank_verified) return false;
-          // ── DATE GATE (Option A): only auto-post settlements created AFTER auto_post_enabled_at ──
           if (railConfig?.auto_post_enabled_at) {
             const enabledAt = new Date(railConfig.auto_post_enabled_at).getTime();
             const createdAt = new Date(s.created_at).getTime();
@@ -254,11 +326,10 @@ Deno.serve(async (req) => {
         const BATCH_SLEEP_MS = 2000;
         for (let i = 0; i < postable.length; i++) {
           const s = postable[i];
-          const railConfig = rails.find(r => r.rail === s.marketplace);
+          const railConfig = eligibleRails.find(r => r.rail === s.marketplace);
           const invoiceStatus = railConfig?.invoice_status || 'DRAFT';
           const result = await processSettlement(supabase, s.id, userId, invoiceStatus);
           results.push(result);
-          // Throttle: sleep between pushes (not after last one)
           if (i < postable.length - 1) {
             await new Promise(resolve => setTimeout(resolve, BATCH_SLEEP_MS));
           }

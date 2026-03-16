@@ -1200,15 +1200,44 @@ serve(async (req) => {
     }
 
     // ─── INVOICE STATUS: DRAFT (default) or AUTHORISED (stricter gates) ──
+    // Support tier enforcement (duplicated minimal rules from src/policy/supportPolicy.ts)
+    const AU_VALIDATED_RAILS = new Set([
+      'amazon_au', 'shopify_payments', 'ebay', 'bunnings', 'catch',
+      'kogan', 'mydeal', 'everyday_market', 'paypal',
+    ]);
+    const { data: orgTaxSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', 'tax_profile')
+      .maybeSingle();
+    const orgTaxProfile = orgTaxSetting?.value || 'AU_GST';
+    const railNormalised = (marketplace || '').toLowerCase();
+    const pushTier = (AU_VALIDATED_RAILS.has(railNormalised) && orgTaxProfile === 'AU_GST')
+      ? 'SUPPORTED'
+      : AU_VALIDATED_RAILS.has(railNormalised) ? 'EXPERIMENTAL' : 'EXPERIMENTAL';
+
     const requestedStatus = body.invoiceStatus || 'DRAFT';
     let finalInvoiceStatus = 'DRAFT';
 
     if (requestedStatus === 'AUTHORISED') {
-      // AUTHORISED requires ALL of: recon matched, no unmapped lines (already checked),
-      // contact exists (already checked), attachment will be created, tax types validated (already checked).
-      // We've passed all gates at this point — allow AUTHORISED.
-      finalInvoiceStatus = 'AUTHORISED';
-      console.log(`[invoice-status] AUTHORISED mode requested — all safety gates passed`);
+      if (pushTier !== 'SUPPORTED') {
+        // Non-SUPPORTED tier: force DRAFT, log event
+        console.warn(`[invoice-status] AUTHORISED blocked — tier is ${pushTier}, forcing DRAFT`);
+        await supabase.from('system_events').insert({
+          user_id: userId,
+          event_type: 'authorised_blocked_by_tier',
+          severity: 'warning',
+          settlement_id: settlementId,
+          marketplace_code: marketplace,
+          details: { requested: 'AUTHORISED', enforced: 'DRAFT', tier: pushTier },
+        });
+        finalInvoiceStatus = 'DRAFT';
+      } else {
+        // SUPPORTED tier + AUTHORISED: all gates already passed
+        finalInvoiceStatus = 'AUTHORISED';
+        console.log(`[invoice-status] AUTHORISED mode requested — all safety gates passed (tier: SUPPORTED)`);
+      }
     }
 
     const invoiceData: Record<string, any> = {

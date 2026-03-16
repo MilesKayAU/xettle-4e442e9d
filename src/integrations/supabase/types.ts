@@ -1300,6 +1300,8 @@ export type Database = {
           posting_mode: string
           rail: string
           require_bank_match: boolean
+          support_acknowledged_at: string | null
+          tax_mode: string
           updated_at: string
           user_id: string
         }
@@ -1313,6 +1315,8 @@ export type Database = {
           posting_mode?: string
           rail: string
           require_bank_match?: boolean
+          support_acknowledged_at?: string | null
+          tax_mode?: string
           updated_at?: string
           user_id: string
         }
@@ -1326,6 +1330,8 @@ export type Database = {
           posting_mode?: string
           rail?: string
           require_bank_match?: boolean
+          support_acknowledged_at?: string | null
+          tax_mode?: string
           updated_at?: string
           user_id?: string
         }

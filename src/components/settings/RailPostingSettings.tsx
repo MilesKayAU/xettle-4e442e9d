@@ -6,9 +6,11 @@
  * When multi-user orgs are added, this will be scoped by org_id.
  *
  * Shows each connected marketplace rail with:
- *   - manual/auto toggle
+ *   - support tier badge (Supported / Experimental / Unsupported)
+ *   - manual/auto toggle (gated by tier)
  *   - bank match checkbox
- *   - Draft vs Authorised invoice status selector
+ *   - Draft vs Authorised invoice status selector (gated by tier)
+ *   - Tax mode selector
  *   - Auto-repost after rollback toggle (advanced)
  */
 
@@ -20,25 +22,20 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Zap, Shield, AlertTriangle, RefreshCw, ChevronDown, FileCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { PHASE_1_RAILS, isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { computeSupportTier, getAutomationEligibility, type TaxMode, type TaxProfile } from '@/policy/supportPolicy';
+import { getOrgTaxProfile, acknowledgeRailSupport } from '@/actions/scopeConsent';
+import SupportTierBadge from '@/components/shared/SupportTierBadge';
 
 interface RailSetting {
   rail: string;
@@ -47,6 +44,8 @@ interface RailSetting {
   auto_post_enabled_at: string | null;
   invoice_status: 'DRAFT' | 'AUTHORISED';
   auto_repost_after_rollback: boolean;
+  tax_mode: TaxMode;
+  support_acknowledged_at: string | null;
 }
 
 interface FailedSettlement {
@@ -67,10 +66,11 @@ export default function RailPostingSettings() {
   const [confirmRail, setConfirmRail] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [taxProfile, setTaxProfile] = useState<TaxProfile>('AU_GST');
 
   const loadData = useCallback(async () => {
     try {
-      const [settingsRes, connectionsRes, failedRes] = await Promise.all([
+      const [settingsRes, connectionsRes, failedRes, orgTaxProfile] = await Promise.all([
         supabase.from('rail_posting_settings').select('*'),
         supabase.from('marketplace_connections').select('marketplace_code').neq('connection_status', 'suggested'),
         supabase.from('settlements')
@@ -78,7 +78,10 @@ export default function RailPostingSettings() {
           .eq('posting_state', 'failed')
           .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
+        getOrgTaxProfile(),
       ]);
+
+      setTaxProfile(orgTaxProfile);
 
       if (settingsRes.data) {
         const map = new Map<string, RailSetting>();
@@ -90,6 +93,8 @@ export default function RailPostingSettings() {
             auto_post_enabled_at: s.auto_post_enabled_at,
             invoice_status: s.invoice_status === 'AUTHORISED' ? 'AUTHORISED' : 'DRAFT',
             auto_repost_after_rollback: s.auto_repost_after_rollback ?? false,
+            tax_mode: ((s as any).tax_mode as TaxMode) || 'AU_GST_STANDARD',
+            support_acknowledged_at: (s as any).support_acknowledged_at || null,
           });
         }
         setSettings(map);
@@ -119,11 +124,32 @@ export default function RailPostingSettings() {
       auto_post_enabled_at: null,
       invoice_status: 'DRAFT',
       auto_repost_after_rollback: false,
+      tax_mode: 'AU_GST_STANDARD',
+      support_acknowledged_at: null,
     };
   };
 
+  const getTierForRail = (rail: string) => {
+    return computeSupportTier({ rail, taxProfile });
+  };
+
   const handleToggleAutoPost = async (rail: string, enable: boolean) => {
+    const tier = getTierForRail(rail);
+    const setting = getSettingForRail(rail);
+
     if (enable) {
+      const eligibility = getAutomationEligibility({
+        tier,
+        taxMode: setting.tax_mode,
+        supportAcknowledgedAt: setting.support_acknowledged_at,
+        isAutopost: true,
+      });
+
+      if (!eligibility.autopostAllowed) {
+        toast.error(eligibility.blockers[0] || 'Auto-post not available for this rail.');
+        return;
+      }
+
       setConfirmRail(rail);
       return;
     }
@@ -132,10 +158,18 @@ export default function RailPostingSettings() {
 
   const handleConfirmAutoPost = async () => {
     if (!confirmRail) return;
-    await saveRailSetting(confirmRail, {
+    const tier = getTierForRail(confirmRail);
+    const updates: Partial<RailSetting> & { auto_post_enabled_at?: string } = {
       posting_mode: 'auto',
       auto_post_enabled_at: new Date().toISOString(),
-    });
+    };
+
+    // Force DRAFT for experimental rails
+    if (tier === 'EXPERIMENTAL') {
+      updates.invoice_status = 'DRAFT';
+    }
+
+    await saveRailSetting(confirmRail, updates);
     setConfirmRail(null);
   };
 
@@ -144,11 +178,30 @@ export default function RailPostingSettings() {
   };
 
   const handleChangeInvoiceStatus = async (rail: string, status: 'DRAFT' | 'AUTHORISED') => {
+    const tier = getTierForRail(rail);
+    if (status === 'AUTHORISED' && tier !== 'SUPPORTED') {
+      toast.error('Authorised mode is only available for fully supported (AU-validated) rails.');
+      return;
+    }
     await saveRailSetting(rail, { invoice_status: status });
+  };
+
+  const handleChangeTaxMode = async (rail: string, mode: TaxMode) => {
+    await saveRailSetting(rail, { tax_mode: mode });
   };
 
   const handleToggleAutoRepost = async (rail: string, enabled: boolean) => {
     await saveRailSetting(rail, { auto_repost_after_rollback: enabled });
+  };
+
+  const handleAcknowledgeRail = async (rail: string) => {
+    const result = await acknowledgeRailSupport(rail);
+    if (result.success) {
+      toast.success(`Acknowledged experimental support for ${getRailLabel(rail)}`);
+      loadData();
+    } else {
+      toast.error(result.error || 'Failed to acknowledge');
+    }
   };
 
   const saveRailSetting = async (rail: string, updates: Partial<RailSetting> & { auto_post_enabled_at?: string }) => {
@@ -169,8 +222,10 @@ export default function RailPostingSettings() {
         auto_post_enabled_by: updates.posting_mode === 'auto' ? userData.user.id : null,
         invoice_status: newSetting.invoice_status,
         auto_repost_after_rollback: newSetting.auto_repost_after_rollback,
+        tax_mode: newSetting.tax_mode,
+        support_acknowledged_at: newSetting.support_acknowledged_at,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,rail' });
+      } as any, { onConflict: 'user_id,rail' });
 
     if (error) {
       toast.error('Failed to save setting');
@@ -192,6 +247,8 @@ export default function RailPostingSettings() {
       );
     } else if ('invoice_status' in updates) {
       toast.success(`${getRailLabel(rail)} invoices will be created as ${updates.invoice_status}`);
+    } else if ('tax_mode' in updates) {
+      toast.success(`Tax mode updated for ${getRailLabel(rail)}`);
     } else if ('auto_repost_after_rollback' in updates) {
       toast.success(updates.auto_repost_after_rollback ? 'Auto-repost after rollback enabled' : 'Auto-repost after rollback disabled');
     }
@@ -217,7 +274,7 @@ export default function RailPostingSettings() {
   };
 
   // Only show rails that are in PHASE_1_RAILS or connected
-  const allRails = PHASE_1_RAILS.map(r => r.code);
+  const allRails = PHASE_1_RAILS.map(r => r.code as string);
   const visibleRails = allRails.filter(r =>
     connectedRails.includes(r) || settings.has(r)
   );
@@ -249,6 +306,13 @@ export default function RailPostingSettings() {
                 const setting = getSettingForRail(rail);
                 const isAuto = setting.posting_mode === 'auto';
                 const defaultBankMatch = isBankMatchRequired(rail);
+                const tier = getTierForRail(rail);
+                const eligibility = getAutomationEligibility({
+                  tier,
+                  taxMode: setting.tax_mode,
+                  supportAcknowledgedAt: setting.support_acknowledged_at,
+                  isAutopost: isAuto,
+                });
 
                 return (
                   <div
@@ -262,6 +326,7 @@ export default function RailPostingSettings() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{getRailLabel(rail)}</span>
+                          <SupportTierBadge tier={tier} />
                           {isAuto && (
                             <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
                               <Zap className="h-2.5 w-2.5 mr-0.5" /> Auto
@@ -281,9 +346,34 @@ export default function RailPostingSettings() {
                         <Switch
                           checked={isAuto}
                           onCheckedChange={(checked) => handleToggleAutoPost(rail, checked)}
+                          disabled={!eligibility.autopostAllowed && !isAuto}
                         />
                       </div>
                     </div>
+
+                    {/* Tier warning for non-supported rails */}
+                    {tier !== 'SUPPORTED' && (
+                      <div className="mt-2 flex items-start gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-1.5">
+                        <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <span>
+                            {tier === 'EXPERIMENTAL'
+                              ? 'Experimental rail — auto-post creates DRAFT only. AUTHORISED blocked.'
+                              : 'Unsupported rail — auto-post blocked. Manual DRAFT push only after acknowledgement.'}
+                          </span>
+                          {!setting.support_acknowledged_at && (
+                            <Button
+                              size="sm"
+                              variant="link"
+                              className="h-auto p-0 text-[10px] ml-1"
+                              onClick={() => handleAcknowledgeRail(rail)}
+                            >
+                              Acknowledge →
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Sub-settings row */}
                     <div className="flex items-center gap-4 mt-2 flex-wrap">
@@ -307,20 +397,41 @@ export default function RailPostingSettings() {
                         <Select
                           value={setting.invoice_status}
                           onValueChange={(v) => handleChangeInvoiceStatus(rail, v as 'DRAFT' | 'AUTHORISED')}
+                          disabled={!eligibility.authorisedAllowed && setting.invoice_status === 'DRAFT'}
                         >
                           <SelectTrigger className="h-6 w-[110px] text-[11px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="DRAFT">Draft (safe)</SelectItem>
-                            <SelectItem value="AUTHORISED">Authorised</SelectItem>
+                            <SelectItem value="AUTHORISED" disabled={!eligibility.authorisedAllowed}>
+                              Authorised {!eligibility.authorisedAllowed ? '(blocked)' : ''}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Tax mode selector */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">Tax:</span>
+                        <Select
+                          value={setting.tax_mode}
+                          onValueChange={(v) => handleChangeTaxMode(rail, v as TaxMode)}
+                        >
+                          <SelectTrigger className="h-6 w-[150px] text-[11px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="AU_GST_STANDARD">AU GST Standard</SelectItem>
+                            <SelectItem value="EXPORT_NO_GST">Export (No GST)</SelectItem>
+                            <SelectItem value="REVIEW_EACH_SETTLEMENT">Review each</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
 
                     {/* Authorised mode warning */}
-                    {setting.invoice_status === 'AUTHORISED' && (
+                    {setting.invoice_status === 'AUTHORISED' && tier === 'SUPPORTED' && (
                       <div className="mt-2 flex items-start gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-1.5">
                         <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
                         <span>
@@ -334,6 +445,7 @@ export default function RailPostingSettings() {
                     {isAuto && setting.auto_post_enabled_at && (
                       <p className="text-[10px] text-muted-foreground mt-1.5">
                         Auto-posting since {new Date(setting.auto_post_enabled_at).toLocaleDateString()} — only settlements created after this date are auto-posted.
+                        {eligibility.autopostDraftOnly && ' (DRAFT only for this tier)'}
                       </p>
                     )}
                   </div>
@@ -440,6 +552,11 @@ export default function RailPostingSettings() {
               <p>
                 Auto-post will send settlements to Xero automatically once they pass all validations.
               </p>
+              {confirmRail && getTierForRail(confirmRail) === 'EXPERIMENTAL' && (
+                <p className="font-medium text-amber-700">
+                  ⚠️ This is an experimental rail — auto-post will create DRAFT invoices only.
+                </p>
+              )}
               <p className="font-medium text-foreground">
                 Only settlements created after enabling will be auto-posted — your historical data is safe.
               </p>

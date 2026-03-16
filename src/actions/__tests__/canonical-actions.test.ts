@@ -5,6 +5,7 @@
  * 1. REQUIRED_CATEGORIES stays in sync between client and server
  * 2. No direct table writes bypass canonical actions (grep-style)
  * 3. No direct edge function invokes bypass canonical wrappers
+ * 4. Support tier computation is correct
  * 
  * Scoped to src/ only (excludes supabase/, tests, actions/).
  * Prints exact file path + matching line number on failure for easy fixing.
@@ -12,6 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { REQUIRED_CATEGORIES } from '@/actions/xeroReadiness';
+import { computeSupportTier, getAutomationEligibility } from '@/policy/supportPolicy';
 import fs from 'fs';
 import path from 'path';
 
@@ -50,9 +52,12 @@ const ALLOWED_FILES = [
   'actions/xeroPush.ts',
   'actions/repost.ts',
   'actions/xeroReadiness.ts',
+  'actions/scopeConsent.ts',
   'actions/index.ts',
   // Integration files (auto-generated, read-only)
   'integrations/',
+  // Policy module (read-only constants, no DB writes)
+  'policy/',
 ];
 
 function isAllowed(filePath: string): boolean {
@@ -106,7 +111,6 @@ describe('REQUIRED_CATEGORIES sync check', () => {
 
 describe('Canonical action guardrails', () => {
   it('no direct settlement delete cascades outside canonical actions', () => {
-    // Detect files that do both settlement_lines.delete AND settlements.delete
     const files = findTsFiles(SRC_DIR, ['actions']);
     const violations: Violation[] = [];
 
@@ -156,5 +160,46 @@ describe('Canonical action guardrails', () => {
   it('no direct invoke of auto-post-settlement outside canonical actions', () => {
     const violations = scanForPattern(/functions\.invoke\(['"]auto-post-settlement['"]/);
     expect(violations, `Direct auto-post-settlement invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no UI files implement their own tier computation (must use supportPolicy)', () => {
+    // Guard against local tier/gating logic — reimplementing AU_VALIDATED_RAILS locally
+    // Importing from @/policy/supportPolicy is allowed (that's the canonical source)
+    const violations = scanForPattern(/AU_VALIDATED_RAILS/, ['actions', 'policy']);
+    expect(violations, `Local tier computation found outside policy module:\n${formatViolations(violations)}`).toEqual([]);
+  });
+});
+
+describe('Support tier computation', () => {
+  it('AU rail + AU_GST → SUPPORTED', () => {
+    expect(computeSupportTier({ rail: 'amazon_au', taxProfile: 'AU_GST' })).toBe('SUPPORTED');
+  });
+
+  it('AU rail + non-AU tax → EXPERIMENTAL', () => {
+    expect(computeSupportTier({ rail: 'amazon_au', taxProfile: 'EXPORT_NO_GST' })).toBe('EXPERIMENTAL');
+  });
+
+  it('unknown rail → UNSUPPORTED', () => {
+    expect(computeSupportTier({ rail: 'unknown_rail', taxProfile: 'AU_GST', knownRail: false })).toBe('UNSUPPORTED');
+  });
+
+  it('AUTHORISED blocked outside SUPPORTED tier', () => {
+    const result = getAutomationEligibility({
+      tier: 'EXPERIMENTAL',
+      taxMode: 'AU_GST_STANDARD',
+      supportAcknowledgedAt: '2026-01-01',
+      isAutopost: false,
+    });
+    expect(result.authorisedAllowed).toBe(false);
+  });
+
+  it('AUTHORISED allowed for SUPPORTED tier', () => {
+    const result = getAutomationEligibility({
+      tier: 'SUPPORTED',
+      taxMode: 'AU_GST_STANDARD',
+      supportAcknowledgedAt: null,
+      isAutopost: false,
+    });
+    expect(result.authorisedAllowed).toBe(true);
   });
 });

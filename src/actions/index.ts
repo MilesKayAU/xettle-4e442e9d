@@ -48,6 +48,34 @@ export {
 export {
   checkXeroReadinessForMarketplace,
   REQUIRED_CATEGORIES,
+  getRailPostingEligibility,
   type XeroReadinessResult,
   type XeroReadinessCheck,
+  type RailPostingEligibility,
 } from './xeroReadiness';
+
+// ─── Support Policy ──────────────────────────────────────────────────────────
+export {
+  computeSupportTier,
+  getSupportWarnings,
+  getAutomationEligibility,
+  SUPPORTED_TAX_PROFILES,
+  TAX_MODES,
+  SCOPE_VERSION,
+  type SupportTier,
+  type TaxProfile,
+  type TaxMode,
+  type ScopeConsent,
+  type TierInput,
+  type SupportWarning,
+  type AutomationEligibility,
+} from '@/policy/supportPolicy';
+
+// ─── Scope Consent ───────────────────────────────────────────────────────────
+export {
+  getScopeConsent,
+  acknowledgeScopeConsent,
+  getOrgTaxProfile,
+  setOrgTaxProfile,
+  acknowledgeRailSupport,
+} from './scopeConsent';
