@@ -541,7 +541,7 @@ Deno.serve(async (req) => {
       )
 
       if (tokenError || !access_token) {
-        console.error(`[fetch-ebay-settlements] Token error for ${userId}:`, tokenError)
+        logger.error(`[fetch-ebay-settlements] Token error for ${userId}:`, tokenError)
         results.push({ user_id: userId, error: tokenError || 'No access token', imported: 0 })
         continue
       }
