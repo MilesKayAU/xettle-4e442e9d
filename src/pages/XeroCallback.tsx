@@ -70,7 +70,7 @@ const XeroCallback = () => {
             .maybeSingle();
 
           if (!existingCodes?.value) {
-            console.log('[XeroCallback] No account codes set — auto-triggering AI mapper');
+            logger.debug('[XeroCallback] No account codes set — auto-triggering AI mapper');
             const { data: mapResult } = await supabase.functions.invoke('ai-account-mapper', {
               body: { action: 'scan_and_match', autoTrigger: true },
             });
