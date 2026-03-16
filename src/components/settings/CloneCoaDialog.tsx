@@ -230,6 +230,16 @@ export default function CloneCoaDialog({
             </Select>
           </div>
 
+          {/* Template eligibility warning (prevents clone loops) */}
+          {templateMarketplace && !templateEligibility.eligible && (
+            <Alert className="border-destructive/50 bg-destructive/5">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <AlertDescription className="text-xs text-destructive">
+                {templateEligibility.reason}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Preview table */}
           {cloneRows.length > 0 && (
             <div className="border rounded-lg overflow-hidden">
