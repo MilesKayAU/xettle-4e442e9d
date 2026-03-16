@@ -261,6 +261,30 @@ export default function ActionCentre({
       if (autoPostFailedRes.data) {
         setAutoPostFailed(autoPostFailedRes.data as any);
       }
+      // Build settlement-level pipeline fallback for cells without marketplace_validation rows
+      if (pipelineSettlementsRes.data) {
+        const pipeMap = new Map<string, PipelineStage>();
+        for (const s of pipelineSettlementsRes.data as any[]) {
+          const mp = MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || '';
+          if (!mp || GATEWAY_CODES.has(mp)) continue;
+          const month = s.period_start?.substring(0, 7);
+          if (!month) continue;
+          const key = `${mp}_${month}`;
+          const existing = pipeMap.get(key) || { settlement: false, xero: false, bank: false, reconciled: false };
+          // Settlement exists = stage 1 done
+          existing.settlement = true;
+          // Xero: has invoice or is pushed
+          const hasXero = !!s.xero_invoice_id || s.xero_status === 'AUTHORISED' || s.xero_status === 'PAID' || s.status === 'pushed_to_xero' || s.posting_state === 'posted';
+          if (hasXero) existing.xero = true;
+          // Bank: verified or settlement-confirmed rail
+          const bankDone = s.bank_verified || (hasXero && !isBankMatchRequired(mp));
+          if (bankDone) existing.bank = true;
+          // Reconciled: bank done + xero done
+          if (existing.xero && existing.bank) existing.reconciled = true;
+          pipeMap.set(key, existing);
+        }
+        setSettlementPipeline(pipeMap);
+      }
     } catch (err) {
       console.error('ActionCentre load error:', err);
     } finally {
