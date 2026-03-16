@@ -40,6 +40,7 @@ const severityIcon = (s: string) => {
 };
 
 export default function XeroInvoiceCompareDrawer({ open, onClose, settlementId, xeroInvoiceId }: Props) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CompareResult | null>(null);
 
