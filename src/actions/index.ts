@@ -96,3 +96,14 @@ export {
   type CompareVerdict,
   type XettlePreviewPayload,
 } from './xeroInvoice';
+
+// ─── Xero Chart of Accounts ─────────────────────────────────────────────────
+export {
+  refreshXeroCOA,
+  getCachedXeroAccounts,
+  getCachedXeroTaxRates,
+  getCoaLastSyncedAt,
+  type CachedXeroAccount,
+  type CachedXeroTaxRate,
+  type RefreshCoaResult,
+} from './xeroAccounts';
