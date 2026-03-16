@@ -1,10 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getCorsHeaders } from '../_shared/cors.ts';
 import { logger } from '../_shared/logger.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
 
 const MAX_ROWS = 5000;
 const PAGE_SIZE = 1000;
@@ -14,7 +10,6 @@ function summarizeDetails(details: unknown): string {
   if (typeof details === 'string') return details.slice(0, 120);
   if (typeof details === 'object') {
     const d = details as Record<string, unknown>;
-    // Extract safe summary fields only — never tokens/headers/payloads
     const parts: string[] = [];
     if (d.message) parts.push(String(d.message).slice(0, 80));
     if (d.reason) parts.push(String(d.reason).slice(0, 80));
@@ -23,7 +18,6 @@ function summarizeDetails(details: unknown): string {
     if (d.updated !== undefined) parts.push(`updated: ${d.updated}`);
     if (d.status) parts.push(`status: ${String(d.status).slice(0, 30)}`);
     if (parts.length === 0) {
-      // Fallback: safe keys only
       const safeKeys = Object.keys(d).filter(k =>
         !['token', 'access_token', 'refresh_token', 'authorization', 'headers', 'payload', 'raw_payload', 'body'].includes(k.toLowerCase())
       ).slice(0, 4);
@@ -42,12 +36,14 @@ function escapeCSV(val: string): string {
 }
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get('Origin') ?? '';
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Auth
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -72,14 +68,12 @@ Deno.serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    // Parse filters
     const body = req.method === 'POST' ? await req.json() : {};
     const dateFrom: string | undefined = body.date_from;
     const dateTo: string | undefined = body.date_to;
     const settlementId: string | undefined = body.settlement_id;
     const marketplaceCode: string | undefined = body.marketplace_code;
 
-    // Build query with pagination
     const csvHeader = 'created_at,event_type,settlement_id,marketplace_code,severity,details_summary\n';
     const chunks: string[] = [csvHeader];
     let fetched = 0;
