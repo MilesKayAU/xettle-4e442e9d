@@ -48,12 +48,11 @@
 | AutoImportedTab single delete | `AutoImportedTab.tsx:460` | (same cascade) | ✅ `deleteSettlement()` |
 | AutoImportedTab bulk delete | `AutoImportedTab.tsx:496` | (same cascade) | ✅ `deleteSettlement()` |
 | MarketplaceSwitcher cascade | `MarketplaceSwitcher.tsx` | (via `removeMarketplace()`) | ✅ `removeMarketplace()` |
-| settlement-engine.deleteSettlement | `settlement-engine.ts:1364` | `settlement_lines`, `settlement_unmapped`, `settlements` | ⚠️ legacy (still direct, allowed in allowlist) |
+| settlement-engine.deleteSettlement | `settlement-engine.ts:1359` | `settlement_lines`, `settlement_unmapped`, `settlements` | Delegates to `deleteSettlement()` | ✅ thin wrapper → `@/actions/settlements` |
 | admin-manage-users reset | `supabase/functions/admin-manage-users/` | `settlement_lines`, `settlement_unmapped`, `settlements` | ✅ (admin, server-side, service-role) |
 
 **Invariant risks:**
-- `settlement-engine.ts` still has a direct delete (in allowlist, will consolidate later)
-- Client-side delete cascades are RLS-protected but could leave orphan rows if RLS blocks a child delete silently — mitigated by always filtering by `user_id`
+- Client-side delete cascades are RLS-protected and always filter by `user_id`
 
 ---
 
