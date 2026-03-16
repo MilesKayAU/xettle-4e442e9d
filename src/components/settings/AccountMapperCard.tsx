@@ -20,6 +20,7 @@ import {
   getCachedXeroAccounts,
   getCoaLastSyncedAt,
   createXeroAccounts,
+  getMarketplaceCoverage,
   type CachedXeroAccount,
 } from '@/actions';
 import { Save, Upload, Copy } from 'lucide-react';
