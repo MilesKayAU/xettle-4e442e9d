@@ -1602,6 +1602,20 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
+    } finally {
+      // ─── RELEASE IDEMPOTENCY LOCK ──────────────────────────────────
+      try {
+        await supabase.rpc('release_sync_lock', {
+          p_user_id: userId,
+          p_integration: 'xero_push',
+          p_lock_key: pushLockKey,
+        });
+        console.log(`[idempotency-lock] Released push lock for ${cacheSettlementKey}`);
+      } catch (relErr: any) {
+        console.warn(`[idempotency-lock] Failed to release lock (will auto-expire): ${relErr.message}`);
+      }
+    }
+
   } catch (error) {
     console.error('Error in sync-amazon-journal:', error);
     return new Response(JSON.stringify({
