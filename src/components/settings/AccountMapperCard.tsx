@@ -107,36 +107,17 @@ export default function AccountMapperCard() {
     return map;
   }, [coaAccounts]);
 
-  // ─── Gap detection: find uncovered marketplaces ───────────────────
+  // ─── Gap detection: find uncovered marketplaces (via canonical action) ──
   const { uncoveredMarketplaces, coveredMarketplaces } = useMemo(() => {
     if (!splitByMarketplace || coaAccounts.length === 0 || activeMarketplaces.length === 0) {
       return { uncoveredMarketplaces: [] as string[], coveredMarketplaces: [] as string[] };
     }
 
-    const covered: string[] = [];
-    const uncovered: string[] = [];
-
-    for (const mp of activeMarketplaces) {
-      const mpLower = mp.toLowerCase();
-      // Check if any COA account name contains this marketplace name
-      const hasMatch = coaAccounts.some(acc => {
-        if (!acc.account_code || !acc.is_active) return false;
-        const nameLower = acc.account_name.toLowerCase();
-        // Check for marketplace name in account name
-        if (nameLower.includes(mpLower)) return true;
-        // Check individual words (e.g., "BigW" in "BigW Sales AU")
-        const mpWords = mpLower.split(/\s+/);
-        return mpWords.length > 0 && mpWords.every(w => nameLower.includes(w));
-      });
-
-      if (hasMatch) {
-        covered.push(mp);
-      } else {
-        uncovered.push(mp);
-      }
-    }
-
-    return { uncoveredMarketplaces: uncovered, coveredMarketplaces: covered };
+    const coverage = getMarketplaceCoverage(activeMarketplaces, coaAccounts);
+    return {
+      uncoveredMarketplaces: [...coverage.uncovered, ...coverage.partial],
+      coveredMarketplaces: coverage.covered,
+    };
   }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
 
   // ─── Clone COA banner renderer ───────────────────────────────────
