@@ -25,7 +25,10 @@ import {
 import {
   generateNextCode,
   getAccountTypeForCategory,
+  detectCodePattern,
+  generatePatternBatchCodes,
   type CodeGenerationInput,
+  type PatternAccount,
 } from '@/policy/accountCodePolicy';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
