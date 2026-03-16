@@ -211,8 +211,8 @@ export default function AccountMapperCard() {
             editable[k] = v as string;
           }
           setEditableMapping(editable);
-          // If draft only, go to review state so user can continue editing
-          setState(isFromDraft ? 'review' : 'confirmed');
+          // Always show editable fields so users can review/change mappings
+          setState('review');
         } catch { /* fall through */ }
         setLoading(false);
         return;
