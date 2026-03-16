@@ -30,6 +30,7 @@ import {
 } from '@/utils/settlement-engine';
 import {
   buildPostingLineItems, toLineItemPreviews, createAccountCodeResolver,
+  REQUIRED_MAPPING_CATEGORIES,
   type SettlementForPosting,
 } from '@/utils/xero-posting-line-items';
 import { cn } from '@/lib/utils';
