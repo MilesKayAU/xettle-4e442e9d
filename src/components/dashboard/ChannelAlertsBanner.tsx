@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Search, X, ArrowRight, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Tag, Link as LinkIcon, Banknote, Eye, Calendar, FileText, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import GatewayDepositEvidence from '@/components/dashboard/GatewayDepositEvidence';
 import ContactClassificationModal from '@/components/dashboard/ContactClassificationModal';
