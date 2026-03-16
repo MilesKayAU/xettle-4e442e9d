@@ -286,21 +286,43 @@ Deno.serve(async (req) => {
     for (const mp of activeMarketplaces) {
       const mpKeywords = MARKETPLACE_KEYWORDS[mp.name] || [mp.name.toLowerCase().replace(/[^a-z0-9]/g, '')]
       
+      // Derive country hint from marketplace name (e.g. "Amazon AU" → "au", "eBay AU" → "au")
+      const countryMatch = mp.name.match(/\b(AU|US|UK|NZ|SG|CA|DE|FR|IT|ES|JP|IN)\b/i)
+      const countryHint = countryMatch ? countryMatch[1].toLowerCase() : null
+      const countryLongForms: Record<string, string[]> = {
+        au: ['australia', 'australian'],
+        us: ['usa', 'united states', 'america'],
+        uk: ['united kingdom', 'britain'],
+        nz: ['new zealand'],
+        sg: ['singapore'],
+      }
+      
       for (const [cat, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
         const exclusions = CATEGORY_EXCLUSIONS[cat] || []
-        // Find accounts whose name contains a marketplace keyword AND a category keyword
-        // but does NOT contain any exclusion keyword for that category
-        const match = revenueAccounts.find((a: any) => {
+        // Find ALL accounts matching marketplace + category (not just the first)
+        const candidates = revenueAccounts.filter((a: any) => {
           const nameLower = (a.name || '').toLowerCase()
           const hasMarketplace = mpKeywords.some((kw: string) => nameLower.includes(kw))
           const hasCategory = catKeywords.some((kw: string) => nameLower.includes(kw))
           const hasExclusion = exclusions.some((kw: string) => nameLower.includes(kw))
           return hasMarketplace && hasCategory && !hasExclusion
         })
-        if (match && match.code) {
+        
+        if (candidates.length > 0) {
+          // Prefer the candidate whose name contains the country code or long form
+          let best = candidates[0]
+          if (countryHint && candidates.length > 1) {
+            const countryTerms = [countryHint, ...(countryLongForms[countryHint] || [])]
+            const countryMatch = candidates.find((a: any) => {
+              const nameLower = (a.name || '').toLowerCase()
+              return countryTerms.some(term => nameLower.includes(term))
+            })
+            if (countryMatch) best = countryMatch
+          }
+          
           const key = `${cat}:${mp.name}`
-          deterministicOverrides[key] = match.code
-          console.log(`[ai-account-mapper] Deterministic match: ${key} → ${match.code} (${match.name})`)
+          deterministicOverrides[key] = best.code
+          console.log(`[ai-account-mapper] Deterministic match: ${key} → ${best.code} (${best.name})`)
         }
       }
     }
