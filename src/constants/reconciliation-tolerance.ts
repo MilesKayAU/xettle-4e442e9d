@@ -41,3 +41,10 @@ export const TOL_GST_CONSISTENCY = 0.50;
  * Bunnings PDF reconciliation tolerance — PDFs have more extraction noise.
  */
 export const TOL_BUNNINGS_PDF = 0.10;
+
+/**
+ * Generic parser reconciliation tolerance — used when comparing calculated net
+ * vs reported net for any CSV/XLSX parsed through the generic parser.
+ * Slightly looser than strict line-sum to account for rounding across rows.
+ */
+export const TOL_GENERIC_PARSER = 0.10;
