@@ -256,6 +256,9 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
       warnings.push(`Settlement ${groupId}: calculated net ($${calculatedNet}) differs from reported net ($${netPayout}) by $${round2(Math.abs(calculatedNet - netPayout))}`);
     }
 
+    // ── Pre-save sanity check ──
+    const sanityFailed = checkParserSanity(grossSales, fees, netPayout, groupId, warnings);
+
     // Use today as fallback date
     const now = new Date();
     const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
@@ -283,6 +286,7 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
         currency: groupRows[0]?.currency || 'AUD',
         csvFormat: 'generic',
         parserVersion: 'generic-v1.0.0',
+        ...(sanityFailed ? { sanity_failed: true } : {}),
       },
     });
     idx++;

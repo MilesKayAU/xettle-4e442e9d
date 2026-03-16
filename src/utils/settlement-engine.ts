@@ -553,6 +553,16 @@ export interface SaveResult {
  */
 export async function saveSettlement(settlement: StandardSettlement): Promise<SaveResult> {
   try {
+    // ─── Sanity Validation Gate ─────────────────────────────────────
+    const sanity = validateSettlementSanity(settlement);
+    if (!sanity.passed) {
+      console.error(`[sanity-check] BLOCKED: ${settlement.settlement_id} — ${sanity.error}`);
+      return { success: false, error: sanity.error, sanityFailed: true };
+    }
+    if (sanity.warning) {
+      console.warn(`[sanity-check] WARNING: ${settlement.settlement_id} — ${sanity.warning}`);
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated' };
 
