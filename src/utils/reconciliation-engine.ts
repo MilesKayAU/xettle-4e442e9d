@@ -74,11 +74,11 @@ export function runReconciliation(
     id: 'column_totals',
     label: 'Column Totals',
     description: 'Sum of all line items matches summary totals',
-    status: colDiff <= 0.02 ? 'pass' : colDiff <= 1.00 ? 'warn' : 'fail',
-    detail: colDiff <= 0.02
+    status: colDiff <= TOL_COLUMN_TOTALS ? 'pass' : colDiff <= 1.00 ? 'warn' : 'fail',
+    detail: colDiff <= TOL_COLUMN_TOTALS
       ? `Line sum ${fmt(lineSum)} matches summary ${fmt(summaryGross)}`
       : `Line sum ${fmt(lineSum)} vs summary ${fmt(summaryGross)} — diff ${fmt(colDiff)}`,
-    severity: colDiff > 1.00 ? 'critical' : colDiff > 0.02 ? 'warning' : 'info',
+    severity: colDiff > 1.00 ? 'critical' : colDiff > TOL_COLUMN_TOTALS ? 'warning' : 'info',
   });
 
   // ─── 3. GST Consistency ──────────────────────────────────────────
