@@ -265,7 +265,7 @@ export default function Landing() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { step: '05', icon: FileSpreadsheet, title: 'Generate correct invoice', desc: 'Sales, shipping, commission, FBA, storage, refunds, reimbursements — each on the right Xero account code.' },
+              { step: '05', icon: FileSpreadsheet, title: 'Generate Xero invoice', desc: 'Sales, shipping, commission, FBA, storage, refunds, reimbursements — each mapped to your Xero account codes. We suggest mappings and flag missing accounts — your bookkeeper stays in control.' },
               { step: '06', icon: ShieldCheck, title: 'Post safely as DRAFT', desc: 'Duplicate guard active. Audit CSV attached. Raw payload stored. Your accountant reviews before authorising.' },
               { step: '07', icon: Lock, title: 'Full audit history', desc: 'Every posting logged. Void and repost with replacement chain. Period locks respected. Nothing lost.' },
             ].map((item) => {
