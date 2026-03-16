@@ -28,26 +28,10 @@ export interface StandardSettlement {
 }
 
 // ─── Marketplace Contact Names (for Xero invoices) ──────────────────────────
-
-export const MARKETPLACE_CONTACTS: Record<string, string> = {
-  amazon_au: 'Amazon.com.au',
-  amazon_us: 'Amazon.com',
-  amazon_uk: 'Amazon.co.uk',
-  amazon_ca: 'Amazon.ca',
-  bunnings: 'Bunnings Marketplace',
-  bigw: 'Big W Marketplace',
-  shopify_payments: 'Shopify Payments',
-  shopify_orders: 'Shopify', // Dynamic per-gateway contact name in metadata
-  catch: 'Catch Marketplace',
-  mydeal: 'MyDeal Marketplace',
-  kogan: 'Kogan Marketplace',
-  woolworths: 'Woolworths Marketplace',
-  woolworths_marketplus: 'Woolworths MarketPlus',
-  ebay_au: 'eBay Australia',
-  everyday_market: 'Everyday Market',
-  theiconic: 'THE ICONIC',
-  etsy: 'Etsy',
-};
+// Re-exported from canonical source. Do NOT define contacts here.
+// To add a marketplace: update src/constants/marketplace-contacts.ts
+import { MARKETPLACE_CONTACTS } from '@/constants/marketplace-contacts';
+export { MARKETPLACE_CONTACTS };
 
 export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
