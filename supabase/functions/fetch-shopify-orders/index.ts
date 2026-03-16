@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
 
     // Fallback: no shopDomain or domain lookup failed — get any token for this user
     if (!tokenRow) {
-      console.log("[fetch-shopify-orders] Falling back to user_id-only lookup");
+      logger.debug("[fetch-shopify-orders] Falling back to user_id-only lookup");
       const result = await supabase
         .from("shopify_tokens")
         .select("access_token, shop_domain")
