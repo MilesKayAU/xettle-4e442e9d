@@ -302,7 +302,7 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) {
       const delay = 5000; // Fixed 5s backoff
-      console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
+      logger.debug(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
       await new Promise(r => setTimeout(r, delay));
     }
     docResponse = await fetch(docUrl, { headers: { 'x-amz-access-token': accessToken } });
