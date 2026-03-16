@@ -9,6 +9,7 @@ export interface SyncCapabilities {
   hasXero: boolean;
   hasAmazon: boolean;
   hasShopify: boolean;
+  hasEbay: boolean;
   hasSettlements: boolean;
   hasShopifyOrders: boolean;
   shopDomain: string | null;
@@ -19,13 +20,14 @@ export interface SyncCapabilities {
 export async function detectCapabilities(): Promise<SyncCapabilities> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
-    return { hasXero: false, hasAmazon: false, hasShopify: false, hasSettlements: false, hasShopifyOrders: false, shopDomain: null, userId: null, accessToken: null };
+    return { hasXero: false, hasAmazon: false, hasShopify: false, hasEbay: false, hasSettlements: false, hasShopifyOrders: false, shopDomain: null, userId: null, accessToken: null };
   }
 
-  const [xeroRes, amazonRes, shopifyRes, settRes, ordersRes] = await Promise.all([
+  const [xeroRes, amazonRes, shopifyRes, ebayRes, settRes, ordersRes] = await Promise.all([
     supabase.from('xero_tokens').select('id').limit(1),
     supabase.from('amazon_tokens').select('id').limit(1),
     supabase.from('shopify_tokens').select('shop_domain').limit(1),
+    supabase.from('ebay_tokens').select('id').limit(1),
     supabase.from('settlements').select('id').limit(1),
     supabase.from('shopify_orders').select('id').limit(1),
   ]);
@@ -34,6 +36,7 @@ export async function detectCapabilities(): Promise<SyncCapabilities> {
     hasXero: !!(xeroRes.data && xeroRes.data.length > 0),
     hasAmazon: !!(amazonRes.data && amazonRes.data.length > 0),
     hasShopify: !!(shopifyRes.data && shopifyRes.data.length > 0),
+    hasEbay: !!(ebayRes.data && ebayRes.data.length > 0),
     hasSettlements: !!(settRes.data && settRes.data.length > 0),
     hasShopifyOrders: !!(ordersRes.data && ordersRes.data.length > 0),
     shopDomain: shopifyRes.data?.[0]?.shop_domain ?? null,
