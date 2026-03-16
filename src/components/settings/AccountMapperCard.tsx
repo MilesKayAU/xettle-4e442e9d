@@ -475,12 +475,9 @@ export default function AccountMapperCard() {
         }
       }
 
-      const { error } = await supabase.from('app_settings').upsert({
-        user_id: user.id,
-        key: 'accounting_xero_account_codes_draft',
-        value: JSON.stringify(draftCodes),
-      } as any, { onConflict: 'user_id,key' });
-      if (error) throw error;
+      const { saveDraftMappings } = await import('@/actions/accountMappings');
+      const result = await saveDraftMappings(draftCodes);
+      if (!result.success) throw new Error(result.error);
 
       toast.success('Draft saved locally — come back anytime to finish');
     } catch (err: any) {
