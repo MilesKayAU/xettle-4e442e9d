@@ -316,7 +316,7 @@ export default function Dashboard() {
         const userCreated = userRes.data?.user?.created_at ? new Date(userRes.data.user.created_at) : null;
         const userIsNew = userCreated ? (Date.now() - userCreated.getTime()) < 7 * 86400000 : false;
         const mappingLastChanged = (mappingResp.data && mappingResp.data.length > 0)
-          ? new Date(mappingResp.data[0].updated_at)
+          ? new Date(mappingResp.data[0].updated_at!)
           : null;
         const mappingRecentlyChanged = mappingLastChanged
           ? (Date.now() - mappingLastChanged.getTime()) < 7 * 86400000
