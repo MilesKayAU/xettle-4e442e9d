@@ -682,12 +682,14 @@ serve(async (req) => {
       console.error('Failed to load user account codes, using defaults:', e);
     }
 
-    const getCode = (category: string, marketplace?: string): string => {
+    const getCode = (category: string, marketplace?: string): string | null => {
       if (marketplace) {
         const mpKey = `${category}:${marketplace}`;
         if (userAccountCodes[mpKey]) return userAccountCodes[mpKey];
       }
-      return userAccountCodes[category] || DEFAULT_ACCOUNT_CODES[category] || '400';
+      if (userAccountCodes[category]) return userAccountCodes[category];
+      // No fallback — return null to block push
+      return null;
     };
 
     // ─── SERVER-SIDE LINE ITEM REBUILD (MANDATORY) ────────────────────
