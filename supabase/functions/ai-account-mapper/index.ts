@@ -477,6 +477,14 @@ Return JSON with this structure:
       }
     }
 
+    // Add marketplace overrides to enriched mapping
+    for (const [key, code] of Object.entries(marketplaceOverrides)) {
+      enrichedMapping[key] = {
+        code,
+        name: (accountLookup.get(code) as string) || `Account ${code}`,
+      }
+    }
+
     // If auto-trigger, save as suggested (not confirmed)
     if (body.autoTrigger) {
       await supabase.from('app_settings').upsert({
