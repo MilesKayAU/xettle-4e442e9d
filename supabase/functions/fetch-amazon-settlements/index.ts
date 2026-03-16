@@ -1340,7 +1340,7 @@ serve(async (req) => {
 
           const reportsData = await reportsResponse.json();
           const reports = reportsData.reports || [];
-          console.log(`[backfill] Chunk ${chunk + 1}: ${reports.length} reports found`);
+          logger.debug(`[backfill] Chunk ${chunk + 1}: ${reports.length} reports found`);
 
           // Get settings for parsing
           const { data: settingsData } = await supabase
