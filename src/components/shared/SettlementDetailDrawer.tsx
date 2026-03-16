@@ -138,6 +138,30 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     })();
   }, [open, settlementId]);
 
+  // Check mapping readiness for unpushed settlements
+  useEffect(() => {
+    if (!settlement?.marketplace || settlement.status === 'pushed_to_xero' || settlement.status === 'already_recorded') {
+      setMappingBlocked(false);
+      setMissingCategories([]);
+      return;
+    }
+    (async () => {
+      try {
+        const result = await checkXeroReadinessForMarketplace(settlement.marketplace);
+        const catCheck = result.checks.find(c => c.key === 'category_coverage');
+        if (catCheck?.status === 'fail' && result.missingCategories?.length) {
+          setMappingBlocked(true);
+          setMissingCategories(result.missingCategories);
+        } else {
+          setMappingBlocked(false);
+          setMissingCategories([]);
+        }
+      } catch {
+        setMappingBlocked(false);
+      }
+    })();
+  }, [settlement?.marketplace, settlement?.status, readinessKey]);
+
   const handleDismissCandidate = useCallback(async () => {
     if (!externalCandidate?.id) return;
     setDismissingCandidate(true);
