@@ -116,12 +116,19 @@ export default function AccountMapperCard() {
       // Load active marketplace connections to know which channels to show
       const { data: connections } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_name')
+        .select('marketplace_name, settings')
         .eq('user_id', user.id)
         .eq('connection_status', 'connected');
 
       if (connections && connections.length > 0) {
         setActiveMarketplaces(connections.map(c => c.marketplace_name));
+        // Load use_global_mappings flags from connection settings
+        const flags: Record<string, boolean> = {};
+        for (const c of connections) {
+          const settings = (c.settings || {}) as Record<string, any>;
+          flags[c.marketplace_name] = settings.use_global_mappings !== false; // default true
+        }
+        setGlobalMappingFlags(flags);
       } else {
         // Fallback: detect from settlements
         const { data: settlements } = await supabase
