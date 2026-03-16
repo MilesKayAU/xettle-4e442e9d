@@ -1306,7 +1306,7 @@ serve(async (req) => {
     // ─── Write to reference index cache (prevents future duplicates) ──
     if (invoiceId) {
       const sd = body.settlementData || {};
-      await supabase.from('xero_accounting_matches').upsert({
+      const xamResult = await safeUpsertXam(supabase, {
         user_id: userId,
         settlement_id: cacheSettlementKey,
         marketplace_code: sd.marketplace || 'unknown',
@@ -1321,8 +1321,12 @@ serve(async (req) => {
         matched_contact: contactName || null,
         matched_reference: reference,
         reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
-      }, { onConflict: 'user_id,settlement_id' });
-      console.log(`[cache-write] Indexed ${cacheSettlementKey} → ${invoiceId}`);
+      });
+      if (!xamResult.success) {
+        console.error(`[cache-write] XAM upsert conflict: ${xamResult.message}`);
+      } else {
+        console.log(`[cache-write] Indexed ${cacheSettlementKey} → ${invoiceId}`);
+      }
     }
 
     // ─── Balance check: settlement vs Xero invoice total ──────────
