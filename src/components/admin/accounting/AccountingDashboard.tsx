@@ -2408,6 +2408,15 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
           </div>
         </div>
       )}
+
+      {/* Safe Repost Modal */}
+      {repostTarget && (
+        <SafeRepostModal
+          settlement={repostTarget}
+          onClose={() => setRepostTarget(null)}
+          onComplete={onDeleted}
+        />
+      )}
     </Card>
   );
 }
