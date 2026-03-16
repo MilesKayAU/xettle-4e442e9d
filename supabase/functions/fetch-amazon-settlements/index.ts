@@ -1475,7 +1475,7 @@ serve(async (req) => {
               }
             } catch (dlErr: any) {
               if (dlErr.message?.includes('RATE_LIMITED')) {
-                console.warn('[backfill] Rate limited — stopping');
+                logger.warn('[backfill] Rate limited — stopping');
                 break;
               }
               console.error(`[backfill] Download error: ${dlErr.message}`);
