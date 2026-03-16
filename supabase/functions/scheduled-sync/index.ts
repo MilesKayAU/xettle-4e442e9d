@@ -222,6 +222,59 @@ Deno.serve(async (req) => {
     results.amazon = { skipped: true, reason: 'all_users_locked_or_rate_limited', users_checked: amazonUserIds.length };
   }
 
+  // 4.5. Fetch eBay settlements (per-user lock/cooldown)
+  console.log("[scheduled-sync] Step 4.5: eBay fetch (per-user locks)...");
+  const ebayUserIds = [...new Set((ebayTokens || []).map(t => t.user_id))];
+  {
+    const eligibleEbayUsers: string[] = [];
+    for (const uid of ebayUserIds) {
+      const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
+        p_user_id: uid,
+        p_integration: 'ebay',
+        p_lock_key: 'settlement_sync',
+        p_ttl_seconds: 300,
+      });
+      if (!lockResult?.acquired) {
+        console.log(`[scheduled-sync] eBay skipped for ${uid} — lock held`);
+        continue;
+      }
+
+      // Check rate limit cooldown
+      const { data: cooldownResult } = await adminClient.rpc('check_sync_cooldown', {
+        p_user_id: uid,
+        p_key: 'ebay_rate_limit_until',
+        p_window_seconds: 0,
+      });
+      if (cooldownResult && !cooldownResult.ok) {
+        await adminClient.rpc('release_sync_lock', { p_user_id: uid, p_integration: 'ebay', p_lock_key: 'settlement_sync' });
+        console.log(`[scheduled-sync] eBay rate limited for ${uid} — cooldown active`);
+        continue;
+      }
+
+      eligibleEbayUsers.push(uid);
+    }
+
+    if (eligibleEbayUsers.length > 0) {
+      const earliestEbaySyncFrom = eligibleEbayUsers.reduce((earliest, uid) => {
+        const sf = userSyncFromMap[uid] || defaultSyncFrom;
+        return sf < earliest ? sf : earliest;
+      }, defaultSyncFrom);
+
+      results.ebay = await callFunction("fetch-ebay-settlements", {}, {
+        time: new Date().toISOString(),
+        sync_from: earliestEbaySyncFrom,
+      });
+      if (results.ebay?.error) stepErrors.push('ebay');
+
+      // Release locks
+      for (const uid of eligibleEbayUsers) {
+        await adminClient.rpc('release_sync_lock', { p_user_id: uid, p_integration: 'ebay', p_lock_key: 'settlement_sync' });
+      }
+    } else {
+      results.ebay = { skipped: true, reason: 'all_users_locked_or_rate_limited', users_checked: ebayUserIds.length };
+    }
+  }
+
   // 5. Fetch Shopify payouts (with per-user Shopify mutex)
   console.log("[scheduled-sync] Step 5: Shopify payouts fetch (per-user locks)...");
   {
