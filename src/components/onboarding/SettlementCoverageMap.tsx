@@ -311,12 +311,14 @@ export default function SettlementCoverageMap({ lookbackDays, onIgnoreMarketplac
       onCoverageComputed?.(data);
 
       // Log metric event
-      await supabase.from('system_events').insert({
-        user_id: user.id,
-        event_type: 'onboarding_coverage_rendered',
-        severity: 'info',
-        details: { green: greenCount, amber: amberCount, red: redCount, grey: greyCount, marketplaces: marketplaces.length },
-      } as any).catch(() => {});
+      try {
+        await supabase.from('system_events').insert({
+          user_id: user.id,
+          event_type: 'onboarding_coverage_rendered',
+          severity: 'info',
+          details: { green: greenCount, amber: amberCount, red: redCount, grey: greyCount, marketplaces: marketplaces.length },
+        } as any);
+      } catch { /* silent */ }
     } catch (err) {
       console.error('[CoverageMap] load error:', err);
     } finally {

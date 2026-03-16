@@ -174,7 +174,7 @@ export default function OnboardingTodos({ coverageData, onUpload, onConnect, onR
           event_type: 'onboarding_todo_clicked',
           severity: 'info',
           details: { type: todo.type, marketplace: todo.marketplace },
-        } as any).catch(() => {});
+        } as any);
       }
     } catch { /* silent */ }
 
