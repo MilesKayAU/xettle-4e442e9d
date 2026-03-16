@@ -453,9 +453,9 @@ export default function InsightsDashboard() {
 
         {/* Header */}
         <div>
-          <h2 className="text-xl font-bold text-foreground">Marketplace Insights</h2>
+          <h2 className="text-xl font-bold text-foreground">Marketplace Profitability</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            How much each marketplace actually pays you — based on {stats.reduce((sum, s) => sum + s.settlementCount, 0)} analysed settlements.
+            Settlement revenue, fees and margins — based on {stats.reduce((sum, s) => sum + s.settlementCount, 0)} verified settlements.
           </p>
         </div>
 
