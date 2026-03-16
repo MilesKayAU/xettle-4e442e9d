@@ -77,6 +77,10 @@ interface DetectedFile {
   sampleRows?: string[][];
   /** Whether this file was low-confidence (for post-save banner) */
   wasLowConfidence?: boolean;
+  /** Fingerprint lifecycle status (draft/active/rejected) */
+  fingerprintStatus?: string;
+  /** Parser type from fingerprint */
+  fingerprintParserType?: string;
 }
 
 interface SmartUploadFlowProps {
