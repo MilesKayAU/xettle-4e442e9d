@@ -45,7 +45,7 @@ import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
-import { saveSettlement, type StandardSettlement } from '@/utils/settlement-engine';
+import { saveSettlement, validateSettlementSanity, type StandardSettlement } from '@/utils/settlement-engine';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import {
   detectMultiMarketplace,
@@ -973,7 +973,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           }
 
         } else if (result.duplicate) dupCount++;
-        else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
+        else if (result.sanityFailed) {
+          // Sanity check failure — show as error with specific messaging
+          setFiles(prev => {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], status: 'error', error: `⛔ Data integrity check failed: ${result.error}` };
+            return updated;
+          });
+          return; // Stop processing this file
+        } else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
       }
 
       const label = MARKETPLACE_LABELS[marketplace] || marketplace;
@@ -1777,6 +1785,19 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                         <span className="font-semibold text-foreground">Net Payout</span>
                         <span className="font-bold text-primary">{formatAUD(previewData.totalNet)}</span>
                       </div>
+                      {/* Collapsed preview sanity warnings */}
+                      {previewData.totalNet === 0 && previewData.totalSales > 500 && (
+                        <div className="flex items-center gap-1.5 mt-1.5 text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                          <span className="text-[10px] font-medium">⚠ Net is $0 with {formatAUD(previewData.totalSales)} in sales — check column mapping</span>
+                        </div>
+                      )}
+                      {settlements?.some(s => s.metadata?.sanity_failed) && (
+                        <div className="flex items-center gap-1.5 mt-1.5 text-destructive">
+                          <XCircle className="h-3 w-3 flex-shrink-0" />
+                          <span className="text-[10px] font-medium">⛔ Data integrity issue detected — review before saving</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1846,6 +1867,31 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                               <span className="font-semibold text-foreground">Net Payout</span>
                               <span className="font-bold text-primary">{formatAUD(s.net_payout)}</span>
                             </div>
+                            {/* Sanity warnings */}
+                            {s.net_payout === 0 && s.sales_ex_gst > 500 && (
+                              <div className="flex items-center gap-1.5 mt-1 text-amber-600 dark:text-amber-400">
+                                <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                                <span className="text-[10px] font-medium">Net is $0 — check column mapping</span>
+                              </div>
+                            )}
+                            {Math.abs(s.fees_ex_gst) > Math.abs(s.sales_ex_gst) * 3 && Math.abs(s.fees_ex_gst) > 500 && (
+                              <div className="flex items-center gap-1.5 mt-1 text-amber-600 dark:text-amber-400">
+                                <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                                <span className="text-[10px] font-medium">Fees seem disproportionate to sales</span>
+                              </div>
+                            )}
+                            {Math.abs(s.sales_ex_gst) > 10_000_000 && (
+                              <div className="flex items-center gap-1.5 mt-1 text-destructive">
+                                <XCircle className="h-3 w-3 flex-shrink-0" />
+                                <span className="text-[10px] font-medium">Sales value implausibly large — likely wrong mapping</span>
+                              </div>
+                            )}
+                            {s.metadata?.sanity_failed && (
+                              <div className="flex items-center gap-1.5 mt-1 text-destructive">
+                                <XCircle className="h-3 w-3 flex-shrink-0" />
+                                <span className="text-[10px] font-medium">⛔ This settlement will be blocked on save — data integrity check failed</span>
+                              </div>
+                            )}
                           </div>
                         );
                       })}

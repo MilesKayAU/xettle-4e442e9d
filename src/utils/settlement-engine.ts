@@ -489,12 +489,62 @@ export async function postInsertDuplicateCheck(
   }
 }
 
+// ─── Settlement Sanity Validation ────────────────────────────────────────────
+
+export interface SanityCheckResult {
+  passed: boolean;
+  error?: string;
+  warning?: string;
+}
+
+/**
+ * Validate settlement values before saving to prevent corrupted data.
+ * Catches bad column mappings that produce implausible numbers.
+ */
+export function validateSettlementSanity(settlement: StandardSettlement): SanityCheckResult {
+  const sales = Math.abs(settlement.sales_ex_gst);
+  const fees = Math.abs(settlement.fees_ex_gst);
+  const net = settlement.net_payout;
+
+  // All zeroes — empty/useless settlement
+  if (sales === 0 && fees === 0 && net === 0) {
+    return { passed: false, error: 'Settlement has no financial data (all values are $0). This likely indicates incorrect column mapping.' };
+  }
+
+  // Implausible magnitude — >$10M per settlement is almost certainly wrong
+  if (sales > 10_000_000) {
+    return { passed: false, error: `Sales of ${formatSanityAmount(sales)} per settlement is implausibly large. This likely indicates incorrect column mapping.` };
+  }
+
+  // Zero net with large sales — classic sign of wrong mapping
+  if (net === 0 && sales > 1000) {
+    return { passed: false, error: `Bank deposit is $0 but sales are ${formatSanityAmount(sales)}. This likely indicates incorrect column mapping.` };
+  }
+
+  // Fees wildly exceed sales — wrong column mapped to fees
+  if (fees > sales * 5 && fees > 500) {
+    return { passed: false, error: `Fees of ${formatSanityAmount(fees)} exceed sales of ${formatSanityAmount(sales)} by more than 5×. This likely indicates incorrect column mapping.` };
+  }
+
+  // Warning only: negative net with positive sales (valid for refund-heavy periods)
+  if (net < 0 && sales > 10000) {
+    return { passed: true, warning: `Net payout is negative (${formatSanityAmount(net)}) while sales are ${formatSanityAmount(sales)}. This may be a refund-heavy period — please verify.` };
+  }
+
+  return { passed: true };
+}
+
+function formatSanityAmount(amount: number): string {
+  return `$${Math.abs(amount).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 // ─── Save to Database ───────────────────────────────────────────────────────
 
 export interface SaveResult {
   success: boolean;
   error?: string;
   duplicate?: boolean;
+  sanityFailed?: boolean;
 }
 
 /**
@@ -503,6 +553,16 @@ export interface SaveResult {
  */
 export async function saveSettlement(settlement: StandardSettlement): Promise<SaveResult> {
   try {
+    // ─── Sanity Validation Gate ─────────────────────────────────────
+    const sanity = validateSettlementSanity(settlement);
+    if (!sanity.passed) {
+      console.error(`[sanity-check] BLOCKED: ${settlement.settlement_id} — ${sanity.error}`);
+      return { success: false, error: sanity.error, sanityFailed: true };
+    }
+    if (sanity.warning) {
+      console.warn(`[sanity-check] WARNING: ${settlement.settlement_id} — ${sanity.warning}`);
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated' };
 
