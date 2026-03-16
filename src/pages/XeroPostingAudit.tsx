@@ -217,7 +217,7 @@ export default function XeroPostingAudit() {
         <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             Xero Posting Audit
@@ -226,6 +226,15 @@ export default function XeroPostingAudit() {
             Everything posted by Xettle, detected externally, or unlinked — all from your database.
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setExportDialogOpen(true)}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export CSV
+        </Button>
       </div>
 
       {/* Summary cards */}
