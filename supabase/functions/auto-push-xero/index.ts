@@ -12,11 +12,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getCorsHeaders, handleCorsPreflightResponse } from '../_shared/cors.ts'
 
 // ⚠️ DEAD CODE: This function is permanently blocked at L66 (golden_rule_enforced).
 // This contact map is never reached. Canonical source: sync-settlement-to-xero/index.ts
