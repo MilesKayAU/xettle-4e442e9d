@@ -640,7 +640,7 @@ async function processSettlement(
       xero_invoice_id: pushResult.invoiceId || null,
       xero_invoice_number: pushResult.invoiceNumber || null,
       xero_journal_id: pushResult.invoiceId || null,
-      xero_status: 'DRAFT',
+      xero_status: invoiceStatus || 'DRAFT',
       xero_type: pushResult.xeroType || 'invoice',
     }).eq('id', settlementDbId);
 

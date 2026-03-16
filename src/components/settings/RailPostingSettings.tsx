@@ -170,7 +170,7 @@ export default function RailPostingSettings() {
         invoice_status: newSetting.invoice_status,
         auto_repost_after_rollback: newSetting.auto_repost_after_rollback,
         updated_at: new Date().toISOString(),
-      } as any, { onConflict: 'user_id,rail' });
+      }, { onConflict: 'user_id,rail' });
 
     if (error) {
       toast.error('Failed to save setting');
