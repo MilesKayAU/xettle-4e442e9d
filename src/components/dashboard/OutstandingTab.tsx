@@ -36,12 +36,14 @@ import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Upload, Banknote,
   FileText, Loader2, ChevronDown, ChevronUp, ExternalLink, CreditCard,
   MinusCircle, Clock3, Search, ArrowRight, Shield, Link2, ShoppingBag,
-  Info,
+  Info, GitCompare,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import InvoiceRefreshButton from '@/components/shared/InvoiceRefreshButton';
+import XeroInvoiceCompareDrawer from '@/components/shared/XeroInvoiceCompareDrawer';
 import { ACCOUNTING_RULES } from '@/constants/accounting-rules';
 
 interface SettlementEvidence {
@@ -297,6 +299,7 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [lastBankSyncResult, setLastBankSyncResult] = useState<BankSyncDiagnostics | null>(null);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [paymentVerifications, setPaymentVerifications] = useState<Record<string, PaymentVerificationCandidate[]>>({});
+  const [compareDrawer, setCompareDrawer] = useState<{ open: boolean; settlementId: string | null; xeroInvoiceId: string | null }>({ open: false, settlementId: null, xeroInvoiceId: null });
   const [depositCoverage, setDepositCoverage] = useState<Record<string, {
     siblings: Array<{ settlement_id: string; match_amount: number; confidence_score: number; period_start?: string; period_end?: string; marketplace?: string }>;
     depositAmount: number;
@@ -2156,6 +2159,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                     {row.xero_reference || '—'}
                                   </p>
                                 </div>
+                                <InvoiceRefreshButton
+                                  xeroInvoiceId={row.xero_invoice_id}
+                                  onRefreshComplete={() => fetchOutstanding({ runSync: false, background: true })}
+                                />
+                                {row.settlement_id && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCompareDrawer({ open: true, settlementId: row.settlement_id, xeroInvoiceId: row.xero_invoice_id });
+                                      }}>
+                                        <GitCompare className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">Compare Xero vs Xettle</TooltipContent>
+                                  </Tooltip>
+                                )}
                                 {row.settlement_evidence?.split_part && (
                                   <Badge variant="outline" className="text-[10px]">P{row.settlement_evidence.split_part}</Badge>
                                 )}
@@ -2426,6 +2446,12 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
         />
         </>
       )}
+      <XeroInvoiceCompareDrawer
+        open={compareDrawer.open}
+        onClose={() => setCompareDrawer({ open: false, settlementId: null, xeroInvoiceId: null })}
+        settlementId={compareDrawer.settlementId}
+        xeroInvoiceId={compareDrawer.xeroInvoiceId}
+      />
     </div>
   );
 }

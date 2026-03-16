@@ -46,17 +46,15 @@ function findTsFiles(dir: string, excludeDirs: string[] = []): string[] {
  * Everything else must go through src/actions/*.
  */
 const ALLOWED_FILES = [
-  // Canonical action modules (they ARE the source of truth)
   'actions/settlements.ts',
   'actions/marketplaces.ts',
   'actions/xeroPush.ts',
   'actions/repost.ts',
   'actions/xeroReadiness.ts',
   'actions/scopeConsent.ts',
+  'actions/xeroInvoice.ts',
   'actions/index.ts',
-  // Integration files (auto-generated, read-only)
   'integrations/',
-  // Policy module (read-only constants, no DB writes)
   'policy/',
 ];
 
@@ -160,6 +158,21 @@ describe('Canonical action guardrails', () => {
   it('no direct invoke of auto-post-settlement outside canonical actions', () => {
     const violations = scanForPattern(/functions\.invoke\(['"]auto-post-settlement['"]/);
     expect(violations, `Direct auto-post-settlement invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no direct invoke of fetch-xero-invoice outside canonical actions', () => {
+    const violations = scanForPattern(/functions\.invoke\(['"]fetch-xero-invoice['"]/);
+    expect(violations, `Direct fetch-xero-invoice invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no direct invoke of rescan-xero-invoice-match outside canonical actions', () => {
+    const violations = scanForPattern(/functions\.invoke\(['"]rescan-xero-invoice-match['"]/);
+    expect(violations, `Direct rescan-xero-invoice-match invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no direct writes to xero_invoice_cache outside canonical actions', () => {
+    const violations = scanForPattern(/from\(['"]xero_invoice_cache['"]\)\.\s*(?:insert|upsert|update|delete)/);
+    expect(violations, `Direct xero_invoice_cache writes found:\n${formatViolations(violations)}`).toEqual([]);
   });
 
   it('no UI files implement their own tier computation (must use supportPolicy)', () => {

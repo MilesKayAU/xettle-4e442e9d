@@ -11,11 +11,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CheckCircle2, Clock, ExternalLink, Info, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, ExternalLink, GitCompare, Info, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import InvoiceRefreshButton from '@/components/shared/InvoiceRefreshButton';
+import XeroInvoiceCompareDrawer from '@/components/shared/XeroInvoiceCompareDrawer';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
@@ -64,6 +66,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [hasSnapshot, setHasSnapshot] = useState(true);
   const [externalCandidate, setExternalCandidate] = useState<any>(null);
   const [dismissingCandidate, setDismissingCandidate] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !settlementId) return;
@@ -166,6 +169,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const mpLabel = MARKETPLACE_LABELS[marketplace] || marketplace;
 
   return (
+    <>
     <Sheet open={open} onOpenChange={() => onClose()}>
       <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
@@ -318,6 +322,20 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               )}
             </div>
 
+            {/* Refresh + Compare actions */}
+            {(settlement.xero_invoice_id || settlement.xero_journal_id) && (
+              <div className="flex items-center gap-2">
+                <InvoiceRefreshButton
+                  xeroInvoiceId={settlement.xero_invoice_id || settlement.xero_journal_id}
+                  size="sm"
+                />
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCompareOpen(true)}>
+                  <GitCompare className="h-3.5 w-3.5" />
+                  Compare to Xettle
+                </Button>
+              </div>
+            )}
+
             <Separator />
 
             {/* Source label */}
@@ -450,6 +468,13 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
         )}
       </SheetContent>
     </Sheet>
+    <XeroInvoiceCompareDrawer
+      open={compareOpen}
+      onClose={() => setCompareOpen(false)}
+      settlementId={settlementId}
+      xeroInvoiceId={settlement?.xero_invoice_id || settlement?.xero_journal_id || null}
+    />
+    </>
   );
 }
 
