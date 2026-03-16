@@ -362,7 +362,7 @@ export async function autoReconcileSettlement(
     }
 
     if (orders.length === 0) {
-      console.log(`[autoReconcile] No Shopify order data found for ${marketplace} (${periodStart} to ${periodEnd}) — skipping`);
+      logger.debug(`[autoReconcile] No Shopify order data found for ${marketplace} (${periodStart} to ${periodEnd}) — skipping`);
       return; // No order data to reconcile
     }
 
