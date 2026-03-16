@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
         diagnostics.accounts_checked++
         diagnostics.transactions_checked += transactions.length
 
-        console.log(`[verify-payment-matches] ${gateway.code}: ${transactions.length} cached RECEIVE txns from account ${gateway.accountId}`)
+        logger.info(`[verify-payment-matches] ${gateway.code}: ${transactions.length} cached RECEIVE txns from account ${gateway.accountId}`)
 
         if (transactions.length === 0) continue
 
