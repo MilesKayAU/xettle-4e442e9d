@@ -243,15 +243,20 @@
 | Confirm mapping | `AccountMapperCard.tsx` → `handleConfirm()` | `app_settings` (accounting_xero_account_codes) | `upsert` (user_id + key) | ✅ (canonical key) |
 | refresh-xero-coa | `supabase/functions/refresh-xero-coa/` | `xero_chart_of_accounts`, `xero_tax_rates`, `system_events` | `upsert` | ✅ (server-side) |
 
+| Create account in Xero | `AccountMapperCard.tsx` → `createXeroAccounts()` | Xero API (PUT /Accounts), `xero_chart_of_accounts`, `system_events` | dedup-check (code vs cached COA) | ✅ `createXeroAccounts()` |
+
 ### Canonical Action: `src/actions/xeroAccounts.ts`
 
 - `refreshXeroCOA()` — invokes `refresh-xero-coa` edge function
 - `getCachedXeroAccounts()` — reads cached COA from `xero_chart_of_accounts`
 - `getCachedXeroTaxRates()` — reads cached tax rates from `xero_tax_rates`
 - `getCoaLastSyncedAt()` — returns latest synced_at timestamp
+- `createXeroAccounts()` — invokes `create-xero-accounts` edge function (admin-only, creates accounts in Xero then refreshes COA cache)
 
 ### Guardrails
 
 - No component may invoke `refresh-xero-coa` directly (must use canonical action)
+- No component may invoke `create-xero-accounts` directly (must use canonical action)
 - No component may write directly to `xero_chart_of_accounts` or `xero_tax_rates`
 - Account codes validated against cached COA before save
+- Account creation gated server-side by admin role check

@@ -110,6 +110,46 @@ export async function getCachedXeroTaxRates(): Promise<CachedXeroTaxRate[]> {
   return (data || []) as unknown as CachedXeroTaxRate[];
 }
 
+// ─── Create Accounts in Xero ─────────────────────────────────────────────────
+
+export interface CreateXeroAccountInput {
+  code: string;
+  name: string;
+  type: string;
+  tax_type?: string;
+}
+
+export interface CreateXeroAccountsResult {
+  success: boolean;
+  created?: { code: string; name: string; xero_account_id: string }[];
+  errors?: { code: string; error: string }[];
+  error?: string;
+}
+
+/**
+ * Create new accounts in Xero Chart of Accounts (admin-only).
+ * Automatically refreshes the COA cache after creation.
+ */
+export async function createXeroAccounts(accounts: CreateXeroAccountInput[]): Promise<CreateXeroAccountsResult> {
+  const { data, error } = await supabase.functions.invoke('create-xero-accounts', {
+    body: { accounts },
+  });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  if (!data?.success) {
+    return { success: false, error: data?.error || 'Account creation failed' };
+  }
+
+  return {
+    success: true,
+    created: data.created,
+    errors: data.errors,
+  };
+}
+
 /**
  * Get the last sync timestamp for the COA cache.
  */

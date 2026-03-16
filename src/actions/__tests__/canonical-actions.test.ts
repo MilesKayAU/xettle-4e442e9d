@@ -224,6 +224,11 @@ describe('Canonical action guardrails', () => {
     const violations = scanForPattern(/from\(['"]xero_tax_rates['"]\)\.\s*(?:insert|upsert|update|delete)/);
     expect(violations, `Direct xero_tax_rates writes found:\n${formatViolations(violations)}`).toEqual([]);
   });
+
+  it('no direct invoke of create-xero-accounts outside canonical actions', () => {
+    const violations = scanForPattern(/functions\.invoke\(['"]create-xero-accounts['"]/);
+    expect(violations, `Direct create-xero-accounts invocations found:\n${formatViolations(violations)}`).toEqual([]);
+  });
 });
 
 describe('Support tier computation', () => {
