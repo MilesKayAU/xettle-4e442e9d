@@ -741,6 +741,9 @@ export default function Dashboard() {
                 <DestinationAccountMapper />
               )}
 
+              {/* Sync activity — per-rail last sync + manual trigger */}
+              <SyncStatusCard />
+
               {/* CoA-detected channels awaiting confirmation */}
               {suggestedConnections.length > 0 && (
                 <CoaDetectedPanel
