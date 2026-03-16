@@ -1305,7 +1305,7 @@ serve(async (req) => {
         const remainingMissing = stillMissing.filter(id => !foundIds.includes(id));
         if (remainingMissing.length === 0) break;
 
-        console.log(`[backfill] Chunk ${chunk + 1}/${MAX_CHUNKS}: ${chunkStart.toISOString()} to ${chunkEnd.toISOString()}`);
+        logger.debug(`[backfill] Chunk ${chunk + 1}/${MAX_CHUNKS}: ${chunkStart.toISOString()} to ${chunkEnd.toISOString()}`);
 
         try {
           // Get fresh token
