@@ -702,7 +702,7 @@ function detectSplitMonth(
   // Rollover amount = gross total of month 1 lines (Journal 1 CR 612 to net to $0)
   const rolloverAmount = m1Agg.grossTotal;
 
-  console.info('[Split Month By Posted Date]', {
+  logger.info('[Split Month By Posted Date]', {
     settlementId: header.settlementId,
     month1Lines: month1Lines.length,
     month2Lines: month2Lines.length,
