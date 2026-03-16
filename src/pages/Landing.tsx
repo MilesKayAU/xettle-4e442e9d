@@ -358,7 +358,7 @@ export default function Landing() {
               <h2 className="text-3xl md:text-4xl font-bold text-foreground">
                 Post to Xero safely.
                 <br />
-                <span className="text-muted-foreground text-2xl md:text-3xl font-semibold">Every time. No exceptions.</span>
+                <span className="text-muted-foreground text-2xl md:text-3xl font-semibold">With safeguards at every step.</span>
               </h2>
               <p className="text-lg text-muted-foreground">
                 Posting marketplace settlements to Xero shouldn't break your books. Xettle verifies totals, checks for duplicates, prevents locked-period edits, and keeps a full audit trail — so every settlement posts cleanly.
