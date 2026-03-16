@@ -156,6 +156,7 @@ export function buildSyncSummary(
   const suggestions: string[] = [];
   if (!caps.hasAmazon) suggestions.push('Connect Amazon to auto-fetch settlements');
   if (!caps.hasShopify) suggestions.push('Connect Shopify for order and payout sync');
+  if (!caps.hasEbay) suggestions.push('Connect eBay to auto-fetch payouts');
   if (!caps.hasXero) suggestions.push('Connect Xero to push settlements to your accounts');
 
   if (suggestions.length > 0 && parts.length > 0) {
