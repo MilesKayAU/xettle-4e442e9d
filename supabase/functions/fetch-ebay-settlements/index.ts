@@ -115,7 +115,7 @@ async function fetchPayouts(
 
     if (!res.ok) {
       const text = await res.text()
-      console.error(`[fetch-ebay-settlements] getPayouts failed (${res.status}):`, text)
+      logger.error(`[fetch-ebay-settlements] getPayouts failed (${res.status}):`, text)
       if (res.status === 429) return { payouts: allPayouts, error: 'rate_limited' }
       return { payouts: allPayouts, error: `API error ${res.status}` }
     }
