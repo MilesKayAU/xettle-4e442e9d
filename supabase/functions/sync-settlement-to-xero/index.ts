@@ -644,6 +644,8 @@ serve(async (req) => {
     // TTL of 120s covers the full push cycle (Xero API + attachment + DB writes).
     // If the lock is already held, the request is rejected immediately.
     const pushLockKey = `xero_push_${cacheSettlementKey}`;
+    let lockAcquired = false;
+
     const { data: lockResult, error: lockError } = await supabase.rpc('acquire_sync_lock', {
       p_user_id: userId,
       p_integration: 'xero_push',
@@ -669,6 +671,7 @@ serve(async (req) => {
       });
     }
 
+    lockAcquired = true;
     console.log(`[idempotency-lock] Acquired push lock for ${cacheSettlementKey}`);
 
     // Wrap the rest in try/finally to guarantee lock release
