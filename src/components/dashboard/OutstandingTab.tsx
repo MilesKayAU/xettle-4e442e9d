@@ -2159,6 +2159,23 @@ export default function OutstandingTab({ onSwitchToUpload }: Props) {
                                     {row.xero_reference || '—'}
                                   </p>
                                 </div>
+                                <InvoiceRefreshButton
+                                  xeroInvoiceId={row.xero_invoice_id}
+                                  onRefreshComplete={() => fetchOutstanding({ runSync: false, background: true })}
+                                />
+                                {row.settlement_id && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCompareDrawer({ open: true, settlementId: row.settlement_id, xeroInvoiceId: row.xero_invoice_id });
+                                      }}>
+                                        <GitCompare className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">Compare Xero vs Xettle</TooltipContent>
+                                  </Tooltip>
+                                )}
                                 {row.settlement_evidence?.split_part && (
                                   <Badge variant="outline" className="text-[10px]">P{row.settlement_evidence.split_part}</Badge>
                                 )}
