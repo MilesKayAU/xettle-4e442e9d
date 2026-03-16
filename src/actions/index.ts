@@ -103,7 +103,10 @@ export {
   getCachedXeroAccounts,
   getCachedXeroTaxRates,
   getCoaLastSyncedAt,
+  createXeroAccounts,
   type CachedXeroAccount,
   type CachedXeroTaxRate,
   type RefreshCoaResult,
+  type CreateXeroAccountInput,
+  type CreateXeroAccountsResult,
 } from './xeroAccounts';
