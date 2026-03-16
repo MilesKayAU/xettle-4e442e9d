@@ -1160,6 +1160,10 @@ export default function AccountingDashboard() {
               </div>
             </TabsContent>
 
+            {/* PERIOD CLOSE TAB */}
+            <TabsContent value="period-close">
+              <PeriodLockManager />
+            </TabsContent>
 
             {/* EXCEPTIONS TAB */}
             <TabsContent value="exceptions">
