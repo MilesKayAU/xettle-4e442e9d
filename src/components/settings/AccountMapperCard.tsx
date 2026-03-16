@@ -72,6 +72,8 @@ export default function AccountMapperCard() {
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
   // CoA validation state
   const [coaMap, setCoaMap] = useState<Map<string, CoaEntry>>(new Map());
+  // Per-marketplace use_global_mappings flags
+  const [globalMappingFlags, setGlobalMappingFlags] = useState<Record<string, boolean>>({});
 
   // Load current state on mount
   useEffect(() => {
