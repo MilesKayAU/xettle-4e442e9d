@@ -2194,9 +2194,9 @@ function SettlementHistory({ settlements, loading, onDeleted, onReview, onPushTo
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={async () => {
                                   try {
-                                    const { data: { user } } = await supabase.auth.getUser();
-                                    if (!user) throw new Error('Not authenticated');
-                                    await supabase.from('settlements').update({ status: 'saved' } as any).eq('id', s.id).eq('user_id', user.id);
+                                    const { revertSettlementToSaved } = await import('@/actions/settlements');
+                                    const result = await revertSettlementToSaved(s.id);
+                                    if (!result.success) throw new Error(result.error);
                                     toast.success('Reverted to Saved');
                                     onDeleted();
                                   } catch (err: any) { toast.error(err.message); }
