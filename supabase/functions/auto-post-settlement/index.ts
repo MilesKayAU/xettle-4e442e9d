@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
       // ─── Batch mode: scan all users with auto-post rails ───────
       const { data: autoRails } = await supabase
         .from('rail_posting_settings')
-        .select('user_id, rail, require_bank_match')
+        .select('user_id, rail, require_bank_match, auto_post_enabled_at, invoice_status')
         .eq('posting_mode', 'auto');
 
       if (!autoRails || autoRails.length === 0) {
