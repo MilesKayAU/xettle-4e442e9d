@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
       // Clean up the used nonce (one-time use)
       await supabaseAdmin.from('app_settings').delete().eq('user_id', userId).eq('key', 'shopify_oauth_state')
 
-      console.log('State nonce verified, exchanging code for access token...')
+      logger.debug('State nonce verified, exchanging code for access token...')
 
       // Exchange code for permanent access token
       const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
