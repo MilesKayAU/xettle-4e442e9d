@@ -468,7 +468,7 @@ export default function InsightsDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Total Sales</p>
+              <p className="text-xs text-muted-foreground">Settlement Revenue</p>
               <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totalAllSales)}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{stats.length} marketplace{stats.length !== 1 ? 's' : ''}</p>
             </CardContent>
