@@ -307,7 +307,7 @@ async function downloadReport(baseUrl: string, accessToken: string, reportDocume
     }
     docResponse = await fetch(docUrl, { headers: { 'x-amz-access-token': accessToken } });
     if (docResponse.status !== 429) break;
-    console.warn('SP-API 429 rate limited');
+    logger.warn('SP-API 429 rate limited');
   }
 
   if (docResponse?.status === 429) {
