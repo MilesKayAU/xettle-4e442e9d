@@ -809,7 +809,7 @@ export default function AccountMapperCard() {
                 onCheckedChange={handleSplitToggle}
               />
               <Label htmlFor="split-marketplace" className="text-xs text-muted-foreground cursor-pointer">
-                Split revenue by marketplace — map Sales & Shipping accounts per channel
+                Split by marketplace — map each category per channel (Sales, Fees, Refunds, etc.)
               </Label>
             </div>
           )}
