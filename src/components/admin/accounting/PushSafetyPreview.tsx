@@ -153,8 +153,8 @@ export default function PushSafetyPreview({
               active: acc.is_active !== false,
             });
             // Track freshness
-            if (acc.updated_at) {
-              const d = new Date(acc.updated_at);
+            if (acc.synced_at) {
+              const d = new Date(acc.synced_at);
               if (!coaFreshness || d > coaFreshness) coaFreshness = d;
             }
           }
