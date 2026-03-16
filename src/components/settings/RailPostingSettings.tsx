@@ -34,6 +34,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { PHASE_1_RAILS, isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useSettingsPin } from '@/hooks/use-settings-pin';
+import SettingsPinDialog from '@/components/shared/SettingsPinDialog';
 import { computeSupportTier, getAutomationEligibility, type TaxMode, type TaxProfile } from '@/policy/supportPolicy';
 import { getOrgTaxProfile, acknowledgeRailSupport } from '@/actions/scopeConsent';
 import SupportTierBadge from '@/components/shared/SupportTierBadge';
