@@ -716,6 +716,75 @@ serve(async (req) => {
 
     if (lineItems.length === 0) throw new Error('No non-zero line items to post');
 
+    // ─── UNMAPPED LINE ITEMS CHECK — hard block ────────────────────────
+    const unmappedLines = lineItems.filter(li => !li.AccountCode);
+    if (unmappedLines.length > 0) {
+      const unmappedCategories = unmappedLines.map(li => li.Description).join(', ');
+      console.error('MAPPING_REQUIRED: unmapped categories:', unmappedCategories);
+
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_push_mapping_required',
+        severity: 'error',
+        settlement_id: body.settlementData?.settlement_id || null,
+        marketplace_code: body.settlementData?.marketplace || null,
+        details: { unmapped_categories: unmappedLines.map(li => li.Description) },
+      });
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'MAPPING_REQUIRED',
+        unmappedCategories: unmappedLines.map(li => li.Description),
+        message: `Account mapping is missing for: ${unmappedCategories}. Configure your Account Mapper before pushing.`,
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ─── REQUIRED CATEGORIES COMPLETENESS CHECK ────────────────────────
+    const REQUIRED_CATEGORIES = ['Sales', 'Seller Fees', 'Refunds', 'Other Fees', 'Shipping'];
+    const missingRequired: string[] = [];
+    for (const reqCat of REQUIRED_CATEGORIES) {
+      // Check if this category has a non-zero value in settlement data
+      const catDef = SERVER_POSTING_CATEGORIES.find(c => {
+        const legacyKey = LEGACY_ACCOUNT_KEY_MAP[c.name] || c.name;
+        return legacyKey === reqCat || c.name === reqCat;
+      });
+      if (!catDef) continue;
+      const rawVal = body.settlementData?.[catDef.field];
+      const val = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal) || 0;
+      if (Math.abs(val) < 0.01) continue; // Zero amount — no mapping needed
+      
+      const resolvedCode = getCode(reqCat, contactName);
+      if (!resolvedCode) {
+        missingRequired.push(reqCat);
+      }
+    }
+
+    if (missingRequired.length > 0) {
+      console.error('MAPPING_INCOMPLETE: missing required categories:', missingRequired);
+
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_push_mapping_incomplete',
+        severity: 'error',
+        settlement_id: body.settlementData?.settlement_id || null,
+        marketplace_code: body.settlementData?.marketplace || null,
+        details: { missing_categories: missingRequired },
+      });
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'MAPPING_INCOMPLETE',
+        missingCategories: missingRequired,
+        message: `Required account mappings missing for: ${missingRequired.join(', ')}. Configure in Account Mapper.`,
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // ─── CoA VALIDATION: verify mapped codes exist and are correct type ──
     const REVENUE_CATEGORIES = ['Sales', 'Shipping', 'Refunds', 'Reimbursements', 'Promotional Discounts'];
     const EXPENSE_CATEGORIES = ['Seller Fees', 'FBA Fees', 'Storage Fees', 'Other Fees', 'Advertising Costs'];
