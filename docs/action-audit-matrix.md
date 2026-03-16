@@ -77,8 +77,8 @@
 | `auto-post-settlement` | `src/actions/xeroPush.ts` only | ✅ `triggerAutoPost()` |
 
 **Invariant risks:**
-- ⚠️ `settlement-engine.ts` still calls `functions.invoke('sync-settlement-to-xero')` directly — legacy, in allowlist
-- GenericMarketplaceDashboard reset-failed was direct, now uses ✅ `resetFailedSettlements()`
+- `settlement-engine.ts` now delegates to `pushSettlementToXero()` from `@/actions/xeroPush` for the actual edge function invoke
+- The legacy `syncSettlementToXero` wrapper is retained as the high-level orchestrator (line item building, post-push status updates, validation upserts, event logging)
 
 ---
 
