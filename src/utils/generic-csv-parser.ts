@@ -313,7 +313,8 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
         rowCount: groupRows.length,
         currency: groupRows[0]?.currency || 'AUD',
         csvFormat: 'generic',
-        parserVersion: 'generic-v1.0.0',
+        parserVersion: 'generic-v1.1.0',
+        dates_missing: !hasDates,
         ...(sanityFailed ? { sanity_failed: true } : {}),
       },
     });
