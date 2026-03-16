@@ -1240,25 +1240,10 @@ export default function AccountingDashboard() {
               <AutoImportedTab
                 existingSettlementIds={new Set(settlements.filter(s => (s as any).source !== 'api').map(s => s.settlement_id))}
                 onSyncToXero={async (settlementId) => {
-                  // Find the settlement to get its marketplace
-                  const { data: sett } = await supabase
-                    .from('settlements')
-                    .select('marketplace')
-                    .eq('settlement_id', settlementId)
-                    .maybeSingle();
-                  const marketplace = sett?.marketplace || 'amazon_au';
-                  const { syncSettlementToXero } = await import('@/utils/settlement-engine');
-                  const result = await syncSettlementToXero(settlementId, marketplace);
-                  if (result.success) {
-                    toast.success(`Invoice created in Xero for ${settlementId}`);
-                    loadSettlements();
-                  } else {
-                    if (result.error?.includes('already exists in Xero')) {
-                      toast.error('Duplicate invoice detected — void the existing one in Xero first.', { duration: 8000 });
-                    } else {
-                      toast.error(result.error || 'Failed to push to Xero');
-                    }
-                  }
+                  // Golden Rule: All pushes must go through PushSafetyPreview.
+                  // This callback is disabled — pushes should be done from 
+                  // the SettlementsOverview or ValidationSweep tabs which use PushSafetyPreview.
+                  toast.info('Use the Settlements Overview tab to push settlements to Xero via the safety preview.');
                 }}
               />
             </TabsContent>

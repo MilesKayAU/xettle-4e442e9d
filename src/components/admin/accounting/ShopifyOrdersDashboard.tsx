@@ -1615,6 +1615,14 @@ export default function ShopifyOrdersDashboard({ onMarketplacesChanged }: Shopif
           setUnknownEntities([]);
         }}
       />
+
+      {/* Golden Rule: All pushes go through PushSafetyPreview */}
+      <PushSafetyPreview
+        open={previewOpen}
+        onClose={() => { setPreviewOpen(false); setPreviewSettlements([]); }}
+        onConfirm={handlePreviewConfirm}
+        settlements={previewSettlements}
+      />
     </div>
   );
 }
