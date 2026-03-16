@@ -635,7 +635,7 @@ Return JSON with this structure:
       }, { onConflict: 'user_id,key' })
     }
 
-    console.log('[ai-account-mapper] Mapping complete:', { userId, confidence, categoriesMapped: Object.keys(mapping).length })
+    logger.debug('[ai-account-mapper] Mapping complete:', { userId, confidence, categoriesMapped: Object.keys(mapping).length })
 
     return new Response(JSON.stringify({
       success: true,
