@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Upload, HelpCircle, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { Upload, HelpCircle, ChevronDown, ChevronUp, Package, Zap, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Badge } from '@/components/ui/badge';
 
 interface ChannelDetectedEmptyStateProps {
   marketplaceCode: string;
   marketplaceName: string;
   onUpload?: () => void;
+  isApiConnected?: boolean;
+  onSyncNow?: () => void;
 }
 
 interface SubChannelInfo {
