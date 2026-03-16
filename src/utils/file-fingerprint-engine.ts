@@ -293,6 +293,25 @@ const FINGERPRINTS: Fingerprint[] = [
     priority: 95,
   },
 
+  // eBay Order Earnings Report (order-level, "Order earnings" column variant)
+  {
+    marketplace: 'ebay_au',
+    marketplaceLabel: 'eBay AU',
+    isSettlementFile: true,
+    requiredColumns: ['order earnings', 'gross amount'],
+    anyOfColumns: ['final value fee - fixed', 'final value fee - variable', 'expenses'],
+    columnMapping: {
+      gross_sales: 'Gross amount',
+      fees: 'Expenses',
+      refunds: 'Refunds',
+      net_payout: 'Order earnings',
+      order_id: 'Order number',
+      period_start: 'Order creation date',
+      currency: 'Payout currency',
+    },
+    priority: 98,
+  },
+
   // eBay Orders export (WRONG — no fee/net columns)
   {
     marketplace: 'ebay_au',
