@@ -56,6 +56,7 @@ const ALLOWED_FILES = [
   'actions/xeroAccounts.ts',
   'actions/coaCoverage.ts',
   'actions/coaClone.ts',
+  'actions/accountMappings.ts',
   'actions/index.ts',
   'integrations/',
   'policy/',

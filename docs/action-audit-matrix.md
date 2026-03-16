@@ -240,10 +240,24 @@
 |---|---|---|---|---|
 | Refresh COA button | `AccountMapperCard.tsx` → `refreshXeroCOA()` | `xero_chart_of_accounts`, `xero_tax_rates`, `system_events` | `upsert` (user_id + xero_account_id / tax_type) | ✅ `refreshXeroCOA()` |
 | AI Account Mapper scan | `ai-account-mapper` edge fn | `xero_chart_of_accounts`, `app_settings`, `system_events` | `upsert` | ✅ (server-side) |
-| Confirm mapping | `AccountMapperCard.tsx` → `handleConfirm()` | `app_settings` (accounting_xero_account_codes) | `upsert` (user_id + key) | ✅ (canonical key) |
+| Confirm mapping | `AccountMapperCard.tsx` → `confirmMappings()` | `app_settings` (accounting_xero_account_codes) | `upsert` (user_id + key) | ✅ `confirmMappings()` canonical action |
+| Save draft mapping | `AccountMapperCard.tsx` → `saveDraftMappings()` | `app_settings` (accounting_xero_account_codes_draft) | `upsert` (user_id + key) | ✅ `saveDraftMappings()` canonical action |
 | refresh-xero-coa | `supabase/functions/refresh-xero-coa/` | `xero_chart_of_accounts`, `xero_tax_rates`, `system_events` | `upsert` | ✅ (server-side) |
-
 | Create account in Xero | `AccountMapperCard.tsx` → `createXeroAccounts()` | Xero API (PUT /Accounts), `xero_chart_of_accounts`, `system_events` | dedup-check (code vs cached COA) | ✅ `createXeroAccounts()` |
+
+### Account Mapping Source of Truth
+
+**Canonical store:** `app_settings` table, key `accounting_xero_account_codes` (confirmed) / `accounting_xero_account_codes_draft` (draft).
+
+**Canonical actions:** `src/actions/accountMappings.ts`
+- `getMappings()` — load confirmed (falls back to draft)
+- `getMappingsRaw()` — load raw confirmed codes for posting builders
+- `getEffectiveMapping(codes, category, marketplace?)` — resolve with fallback
+- `saveDraftMappings(codes)` — save draft (no PIN)
+- `confirmMappings(codes)` — save confirmed + cleanup draft (PIN required by caller)
+- `mergeIntoConfirmedMappings(newCodes)` — merge after COA clone
+
+**DEPRECATED:** `marketplace_account_mapping` table. Legacy reads remain in edge functions (`auto-post-settlement`, `ai-assistant`) and will be migrated. No new writes should target this table.
 
 ### COA Clone Flow (Sitewide Guided)
 
@@ -260,7 +274,7 @@
 - Clone always shows preview before executing (no automatic creation)
 - `buildClonePreview()` is pure logic — no side effects
 - `executeCoaClone()` calls `createXeroAccounts()` canonical action (admin-gated server-side)
-- Auto-map after clone writes to `app_settings` (draft mappings only)
+- Auto-map after clone uses `mergeIntoConfirmedMappings()` canonical action
 - All events logged to `system_events`: `coa_clone_previewed`, `coa_clone_executed`, `coa_clone_failed`, `coa_clone_cancelled`
 
 ### Canonical Action: `src/actions/xeroAccounts.ts`
@@ -276,6 +290,7 @@
 - No component may invoke `refresh-xero-coa` directly (must use canonical action)
 - No component may invoke `create-xero-accounts` directly (must use canonical action)
 - No component may write directly to `xero_chart_of_accounts` or `xero_tax_rates`
+- No component may write directly to `accounting_xero_account_codes` — must use `confirmMappings()` or `saveDraftMappings()`
 - Account codes validated against cached COA before save
 - Account creation gated server-side by admin role check
 - COA clone reachable from multiple surfaces via `CoaBlockerCta` shared component (all use same canonical path)

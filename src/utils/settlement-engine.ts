@@ -159,24 +159,8 @@ async function loadUserAccountCodes(): Promise<(category: string, marketplace?: 
  * Used by the canonical builder's createAccountCodeResolver.
  */
 async function loadUserAccountCodesRaw(): Promise<Record<string, string> | null> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-
-    const { data: acSetting } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('user_id', user.id)
-      .eq('key', 'accounting_xero_account_codes')
-      .maybeSingle();
-
-    if (acSetting?.value) {
-      return JSON.parse(acSetting.value);
-    }
-  } catch (e) {
-    console.error('Failed to load user account codes raw:', e);
-  }
-  return null;
+  const { getMappingsRaw } = await import('@/actions/accountMappings');
+  return getMappingsRaw();
 }
 
 /**

@@ -103,31 +103,14 @@ export default function CoaBlockerCta({
   };
 
   const handleCloneComplete = async (createdCodes: Record<string, string>) => {
-    // Auto-save mappings to app_settings as draft
+    // Auto-merge into confirmed mappings via canonical action
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: existing } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('user_id', user.id)
-          .eq('key', 'accounting_xero_account_codes')
-          .maybeSingle();
-
-        let currentMappings: Record<string, string> = {};
-        if (existing?.value) {
-          try { currentMappings = JSON.parse(existing.value); } catch { /* */ }
-        }
-
-        // Merge new codes into existing mappings
-        const updatedMappings = { ...currentMappings, ...createdCodes };
-        await supabase.from('app_settings').upsert({
-          user_id: user.id,
-          key: 'accounting_xero_account_codes',
-          value: JSON.stringify(updatedMappings),
-        }, { onConflict: 'user_id,key' });
-
+      const { mergeIntoConfirmedMappings } = await import('@/actions/accountMappings');
+      const result = await mergeIntoConfirmedMappings(createdCodes);
+      if (result.success) {
         toast.success('COA created + mappings applied. Push readiness updated.');
+      } else {
+        toast.error(`Failed to save mappings: ${result.error}`);
       }
     } catch (err) {
       console.warn('[CoaBlockerCta] Failed to auto-save mappings:', err);

@@ -296,11 +296,11 @@ export default function Dashboard() {
             .select('key')
             .like('key', 'payout_account:%')
             .limit(1),
-          // Fetch marketplace account mappings to compute blocking count
+          // Fetch confirmed mapping timestamp from app_settings
           supabase
-            .from('marketplace_account_mapping')
-            .select('marketplace_code, category, updated_at')
-            .order('updated_at', { ascending: false }),
+            .from('app_settings')
+            .select('key, value, updated_at')
+            .eq('key', 'accounting_xero_account_codes'),
           supabase.auth.getUser(),
         ]);
         const flagMap = new Map(flagsResp.data?.map(f => [f.key, f.value]) || []);
@@ -316,7 +316,7 @@ export default function Dashboard() {
         const userCreated = userRes.data?.user?.created_at ? new Date(userRes.data.user.created_at) : null;
         const userIsNew = userCreated ? (Date.now() - userCreated.getTime()) < 7 * 86400000 : false;
         const mappingLastChanged = (mappingResp.data && mappingResp.data.length > 0)
-          ? new Date(mappingResp.data[0].updated_at)
+          ? new Date(mappingResp.data[0].updated_at!)
           : null;
         const mappingRecentlyChanged = mappingLastChanged
           ? (Date.now() - mappingLastChanged.getTime()) < 7 * 86400000
