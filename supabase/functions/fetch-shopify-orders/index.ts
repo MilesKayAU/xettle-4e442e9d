@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    console.log("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit, channelDetectionOnly, resolvedUserId });
+    logger.debug("[fetch-shopify-orders] Body:", { shopDomain, dateFrom, dateTo, limit, channelDetectionOnly, resolvedUserId });
     const effectiveLimit = Math.min(limit || 250, 250);
 
     // ─── Boundary note: accounting_boundary_date only applies to entry creation,
