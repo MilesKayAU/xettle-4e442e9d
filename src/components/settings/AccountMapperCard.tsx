@@ -237,7 +237,7 @@ export default function AccountMapperCard() {
         .from('marketplace_connections')
         .select('marketplace_name, settings')
         .eq('user_id', user.id)
-        .eq('connection_status', 'connected');
+        .in('connection_status', ACTIVE_CONNECTION_STATUSES);
 
       if (connections && connections.length > 0) {
         setActiveMarketplaces(connections.map(c => c.marketplace_name));
