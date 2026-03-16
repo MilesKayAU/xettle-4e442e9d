@@ -816,6 +816,13 @@ export default function AccountingDashboard() {
     return () => window.removeEventListener('xettle:open-settings', handler);
   }, []);
 
+  // Listen for deep-link to Formats tab (from SmartUploadFlow "View format" link)
+  useEffect(() => {
+    const handler = () => setActiveTab('formats');
+    window.addEventListener('xettle-open-formats-tab', handler);
+    return () => window.removeEventListener('xettle-open-formats-tab', handler);
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Amazon AU Settlements */}

@@ -110,11 +110,16 @@ export default function FormatInspector() {
   const loadFingerprints = useCallback(async () => {
     setLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
+
       const { data } = await supabase
         .from('marketplace_file_fingerprints')
         .select('id, marketplace_code, status, parser_type, confidence, created_at, created_by, last_seen_at, notes, column_signature, column_mapping')
+        .eq('user_id', user.id)
         .order('status', { ascending: true })
-        .order('last_seen_at', { ascending: false, nullsFirst: false });
+        .order('last_seen_at', { ascending: false, nullsFirst: false })
+        .limit(200);
       setFingerprints((data as any as FingerprintRow[]) || []);
     } catch {
       toast.error('Failed to load formats');
@@ -141,12 +146,15 @@ export default function FormatInspector() {
     setNotesValue(fp.notes || '');
     setEventsLoading(true);
 
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+
     // Load events + settlements in parallel
     const [eventsRes, settlementsRes] = await Promise.all([
       supabase
         .from('system_events')
         .select('id, event_type, severity, created_at, details, marketplace_code')
-        .or(`details->fingerprint_id.eq.${fp.id}`)
+        .filter('details->>fingerprint_id', 'eq', fp.id)
         .order('created_at', { ascending: false })
         .limit(50),
       supabase
@@ -159,11 +167,12 @@ export default function FormatInspector() {
 
     let eventsList = (eventsRes.data as any as SystemEvent[]) || [];
 
-    // Fallback: if no events matched via JSONB, try marketplace_code + event_type
-    if (eventsList.length === 0) {
+    // Fallback: if no events matched via JSONB, try marketplace_code + event_type (always scoped to user via RLS + explicit filter)
+    if (eventsList.length === 0 && userId) {
       const { data: fallbackEvents } = await supabase
         .from('system_events')
         .select('id, event_type, severity, created_at, details, marketplace_code')
+        .eq('user_id', userId)
         .eq('marketplace_code', fp.marketplace_code)
         .in('event_type', [
           'format_draft_created', 'format_promoted_to_active', 'format_save_blocked',
