@@ -24,11 +24,13 @@ Deno.serve(async (req) => {
   const { data: amazonTokens } = await adminClient.from('amazon_tokens').select('user_id');
   const { data: shopifyTokens } = await adminClient.from('shopify_tokens').select('user_id');
   const { data: xeroTokens } = await adminClient.from('xero_tokens').select('user_id');
+  const { data: ebayTokens } = await adminClient.from('ebay_tokens').select('user_id');
 
   const allUserIds = new Set<string>();
   for (const t of amazonTokens || []) allUserIds.add(t.user_id);
   for (const t of shopifyTokens || []) allUserIds.add(t.user_id);
   for (const t of xeroTokens || []) allUserIds.add(t.user_id);
+  for (const t of ebayTokens || []) allUserIds.add(t.user_id);
 
   // ─── Write interim "running" sync_history per user ─────────────
   const interimIds: Record<string, string> = {};
@@ -220,6 +222,59 @@ Deno.serve(async (req) => {
     results.amazon = { skipped: true, reason: 'all_users_locked_or_rate_limited', users_checked: amazonUserIds.length };
   }
 
+  // 4.5. Fetch eBay settlements (per-user lock/cooldown)
+  console.log("[scheduled-sync] Step 4.5: eBay fetch (per-user locks)...");
+  const ebayUserIds = [...new Set((ebayTokens || []).map(t => t.user_id))];
+  {
+    const eligibleEbayUsers: string[] = [];
+    for (const uid of ebayUserIds) {
+      const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
+        p_user_id: uid,
+        p_integration: 'ebay',
+        p_lock_key: 'settlement_sync',
+        p_ttl_seconds: 300,
+      });
+      if (!lockResult?.acquired) {
+        console.log(`[scheduled-sync] eBay skipped for ${uid} — lock held`);
+        continue;
+      }
+
+      // Check rate limit cooldown
+      const { data: cooldownResult } = await adminClient.rpc('check_sync_cooldown', {
+        p_user_id: uid,
+        p_key: 'ebay_rate_limit_until',
+        p_window_seconds: 0,
+      });
+      if (cooldownResult && !cooldownResult.ok) {
+        await adminClient.rpc('release_sync_lock', { p_user_id: uid, p_integration: 'ebay', p_lock_key: 'settlement_sync' });
+        console.log(`[scheduled-sync] eBay rate limited for ${uid} — cooldown active`);
+        continue;
+      }
+
+      eligibleEbayUsers.push(uid);
+    }
+
+    if (eligibleEbayUsers.length > 0) {
+      const earliestEbaySyncFrom = eligibleEbayUsers.reduce((earliest, uid) => {
+        const sf = userSyncFromMap[uid] || defaultSyncFrom;
+        return sf < earliest ? sf : earliest;
+      }, defaultSyncFrom);
+
+      results.ebay = await callFunction("fetch-ebay-settlements", {}, {
+        time: new Date().toISOString(),
+        sync_from: earliestEbaySyncFrom,
+      });
+      if (results.ebay?.error) stepErrors.push('ebay');
+
+      // Release locks
+      for (const uid of eligibleEbayUsers) {
+        await adminClient.rpc('release_sync_lock', { p_user_id: uid, p_integration: 'ebay', p_lock_key: 'settlement_sync' });
+      }
+    } else {
+      results.ebay = { skipped: true, reason: 'all_users_locked_or_rate_limited', users_checked: ebayUserIds.length };
+    }
+  }
+
   // 5. Fetch Shopify payouts (with per-user Shopify mutex)
   console.log("[scheduled-sync] Step 5: Shopify payouts fetch (per-user locks)...");
   {
@@ -335,11 +390,12 @@ Deno.serve(async (req) => {
   // ─── Aggregate totals ──────────────────────────────────────────
   const totalAmazonSynced = results.amazon?.imported || results.amazon?.total_synced || 0;
   const totalShopifySynced = results.shopify?.imported || results.shopify?.total_synced || 0;
+  const totalEbaySynced = results.ebay?.total_synced || 0;
   const totalXeroPushed = results.xero_push?.pushed || 0;
-  const totalSynced = totalAmazonSynced + totalShopifySynced;
+  const totalSynced = totalAmazonSynced + totalShopifySynced + totalEbaySynced;
 
   // ─── Determine overall status ─────────────────────────────────
-  const totalSteps = 9;
+  const totalSteps = 10;
   const uniqueStepErrors = [...new Set(stepErrors)];
   let overallStatus: string;
   if (uniqueStepErrors.length === 0) {
@@ -357,6 +413,7 @@ Deno.serve(async (req) => {
       pipeline: 'xero_first_v1',
       sync_from: userSyncFromMap[userId] || defaultSyncFrom,
       amazon: results.amazon?.results?.find((r: any) => r.user_id === userId) || (results.amazon?.error ? { error: results.amazon.error, timed_out: results.amazon.timed_out || false } : null),
+      ebay: results.ebay?.results?.find((r: any) => r.user_id === userId) || (results.ebay?.error ? { error: results.ebay.error, timed_out: results.ebay.timed_out || false } : null),
       shopify: results.shopify?.results?.find((r: any) => r.user_id === userId) || (results.shopify?.error ? { error: results.shopify.error, timed_out: results.shopify.timed_out || false } : null),
       xero_push: results.xero_push?.results?.find((r: any) => r.userId === userId) || null,
       xero_audit: results.xero_audit?.results?.find((r: any) => r.user_id === userId) || null,
@@ -389,7 +446,7 @@ Deno.serve(async (req) => {
     console.log("[scheduled-sync] No users with API tokens found. Nothing to sync.");
   }
 
-  console.log(`[scheduled-sync] Complete (${overallStatus}) in ${durationMs}ms. Amazon: ${totalAmazonSynced}, Shopify: ${totalShopifySynced}, Xero pushed: ${totalXeroPushed}, Xero audited: ${xeroUserIds.length} users. Errors: ${uniqueStepErrors.length > 0 ? uniqueStepErrors.join(', ') : 'none'}`);
+  console.log(`[scheduled-sync] Complete (${overallStatus}) in ${durationMs}ms. Amazon: ${totalAmazonSynced}, eBay: ${totalEbaySynced}, Shopify: ${totalShopifySynced}, Xero pushed: ${totalXeroPushed}, Xero audited: ${xeroUserIds.length} users. Errors: ${uniqueStepErrors.length > 0 ? uniqueStepErrors.join(', ') : 'none'}`);
 
   return new Response(
     JSON.stringify({
@@ -398,6 +455,7 @@ Deno.serve(async (req) => {
       pipeline: 'xero_first_v1',
       duration_ms: durationMs,
       amazon_synced: totalAmazonSynced,
+      ebay_synced: totalEbaySynced,
       shopify_synced: totalShopifySynced,
       xero_pushed: totalXeroPushed,
       xero_audited_users: xeroUserIds.length,
