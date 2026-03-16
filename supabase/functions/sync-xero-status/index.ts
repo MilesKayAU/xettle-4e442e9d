@@ -815,7 +815,7 @@ serve(async (req) => {
       // ─── SAFETY: Only auto-link Xettle-created invoices ─────────────
       const isXettleCreated = ref.toLowerCase().startsWith('xettle-');
 
-      await supabase.from('xero_accounting_matches').upsert({
+      await safeUpsertXam(supabase, {
         user_id: userId,
         settlement_id: settlementId,
         marketplace_code: detectedMarketplace,
@@ -833,7 +833,7 @@ serve(async (req) => {
         notes: isXettleCreated
           ? 'Pre-seeded from Xettle-created Xero invoice'
           : 'External invoice detected — requires user review before linking',
-      }, { onConflict: 'user_id,settlement_id' });
+      });
 
       seededCount++;
     }
