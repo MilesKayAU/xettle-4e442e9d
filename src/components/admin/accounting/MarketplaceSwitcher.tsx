@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, Plus, Loader2, X } from 'lucide-react';
+import { CheckCircle2, Plus, Loader2, X, Zap } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -133,12 +133,16 @@ export interface UserMarketplace {
   country_code: string;
 }
 
+/** Codes that have API auto-sync capability */
+const API_MARKETPLACE_CODES = new Set(['amazon_au', 'shopify_payments', 'shopify_orders']);
+
 interface MarketplaceSwitcherProps {
   selectedMarketplace: string;
   onMarketplaceChange: (code: string) => void;
   userMarketplaces: UserMarketplace[];
   onMarketplacesChanged: () => void;
   settlementCounts?: Record<string, number>;
+  apiConnectedCodes?: Set<string>;
 }
 
 export default function MarketplaceSwitcher({
@@ -147,6 +151,7 @@ export default function MarketplaceSwitcher({
   userMarketplaces,
   onMarketplacesChanged,
   settlementCounts = {},
+  apiConnectedCodes = new Set(),
 }: MarketplaceSwitcherProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addingCode, setAddingCode] = useState<string | null>(null);
@@ -279,7 +284,13 @@ export default function MarketplaceSwitcher({
                     {settlementCounts[um.marketplace_code]}
                   </Badge>
                 )}
-                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                {apiConnectedCodes.has(um.marketplace_code) ? (
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                    <Zap className="h-2.5 w-2.5" /> Auto
+                  </Badge>
+                ) : (
+                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                )}
               </button>
               {/* Delete X button - visible on hover */}
               <button
