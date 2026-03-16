@@ -25,7 +25,9 @@ export default function Auth() {
     email: '', 
     password: '', 
     confirmPassword: '',
-    fullName: ''
+    fullName: '',
+    settingsPin: '',
+    confirmSettingsPin: '',
   });
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
