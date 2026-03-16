@@ -20,7 +20,7 @@ interface ShopifyOrder {
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
   const corsHeaders = getCorsHeaders(origin);
-  console.log("[fetch-shopify-orders] Handler invoked", req.method);
+  logger.debug("[fetch-shopify-orders] Handler invoked", req.method);
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
