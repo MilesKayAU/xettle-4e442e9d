@@ -233,7 +233,18 @@ export default function CloneCoaDialog({
             </Select>
           </div>
 
-          {/* Template eligibility warning (prevents clone loops) */}
+          {/* Match numbering style toggle */}
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <div>
+              <Label className="text-xs font-medium">Match numbering style</Label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Replicate decimal conventions (e.g. 200 → 200.1) from the template
+              </p>
+            </div>
+            <Switch checked={matchPattern} onCheckedChange={setMatchPattern} />
+          </div>
+
+
           {templateMarketplace && !templateEligibility.eligible && (
             <Alert className="border-destructive/50 bg-destructive/5">
               <AlertTriangle className="h-4 w-4 text-destructive" />
