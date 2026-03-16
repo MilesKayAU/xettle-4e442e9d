@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
     function computeTierServer(rail: string, taxProfile: string): 'SUPPORTED' | 'EXPERIMENTAL' | 'UNSUPPORTED' {
       if (AU_VALIDATED_RAILS.has(rail) && taxProfile === 'AU_GST') return 'SUPPORTED';
       if (AU_VALIDATED_RAILS.has(rail)) return 'EXPERIMENTAL';
-      return 'EXPERIMENTAL'; // Unknown rails default to EXPERIMENTAL (known in DB)
+      return 'UNSUPPORTED'; // Unknown rails are UNSUPPORTED (aligned with supportPolicy.ts)
     }
 
     // ─── Single settlement mode ──────────────────────────────────
@@ -269,8 +269,16 @@ Deno.serve(async (req) => {
               console.log(`[auto-post] Skipping ${r.rail} for user ${userId}: EXPERIMENTAL not acknowledged`);
               return false;
             }
-            // Force DRAFT for experimental rails
+            // Force DRAFT for experimental rails — log for audit trail
+            const originalStatus = r.invoice_status;
             r.invoice_status = 'DRAFT';
+            await supabase.from('system_events').insert({
+              user_id: userId,
+              event_type: 'experimental_draft_forced',
+              severity: 'info',
+              marketplace_code: r.rail,
+              details: { tier: 'EXPERIMENTAL', original_status: originalStatus, enforced: 'DRAFT' },
+            });
           }
 
           // REVIEW_EACH_SETTLEMENT blocks autopost
