@@ -144,9 +144,11 @@
 | Per-row refresh (Outstanding) | `OutstandingTab.tsx` | `xero_invoice_cache`, `system_events` (via edge fn) | `upsert` (user_id, xero_invoice_id) | ✅ `refreshXeroInvoiceDetails()` in `xeroInvoice.ts` |
 | Per-row refresh (Settlement drawer) | `SettlementDetailDrawer.tsx` | same | same | ✅ `refreshXeroInvoiceDetails()` |
 | Rescan match | `OutstandingTab.tsx`, `SettlementDetailDrawer.tsx` | `xero_accounting_matches`, `system_events` (via edge fn) | `upsert` (user_id, xero_invoice_id) | ✅ `rescanMatchForInvoice()` in `xeroInvoice.ts` |
-| Compare payload | `OutstandingTab.tsx`, `SettlementDetailDrawer.tsx` | (read-only) | n/a | ✅ `getXeroVsXettlePayloadDiff()` in `xeroInvoice.ts` |
+| Compare payload (legacy) | `OutstandingTab.tsx`, `SettlementDetailDrawer.tsx` | `system_events` (via orchestrator) | n/a | ✅ `getXeroVsXettlePayloadDiff()` in `xeroInvoice.ts` (delegates to `compareXeroInvoiceToSettlement`) |
+| **Compare (canonical)** | `XeroInvoiceCompareDrawer`, `OutstandingTab`, `SettlementDetailDrawer`, `XeroPostingAudit` | `system_events` (via edge fn + orchestrator) | n/a (read-only diff) | ✅ `compareXeroInvoiceToSettlement()` in `xeroInvoice.ts` |
 | fetch-xero-invoice | `supabase/functions/fetch-xero-invoice/` | `xero_invoice_cache`, `system_events` | `upsert` + 30s cooldown | ✅ (server-side) |
 | rescan-xero-invoice-match | `supabase/functions/rescan-xero-invoice-match/` | `xero_accounting_matches`, `system_events` | `upsert` | ✅ (server-side) |
+| **preview-xettle-invoice-payload** | `supabase/functions/preview-xettle-invoice-payload/` | `system_events` | n/a (preview only) | ✅ (server-side canonical builder) |
 
 ### Client → Server Invoke Guard (Invoice)
 
@@ -154,6 +156,7 @@
 |---|---|---|
 | `fetch-xero-invoice` | `src/actions/xeroInvoice.ts` only | ✅ `refreshXeroInvoiceDetails()` |
 | `rescan-xero-invoice-match` | `src/actions/xeroInvoice.ts` only | ✅ `rescanMatchForInvoice()` |
+| `preview-xettle-invoice-payload` | `src/actions/xeroInvoice.ts` only | ✅ `compareXeroInvoiceToSettlement()` |
 
 ---
 
@@ -190,7 +193,7 @@
 | Rail eligibility | `getRailPostingEligibility()` | n/a | ✅ canonical action |
 | Invoice refresh | `refreshXeroInvoiceDetails()` | fetch-xero-invoice | ✅ invoke guard test |
 | Invoice rescan | `rescanMatchForInvoice()` | rescan-xero-invoice-match | ✅ invoke guard test |
-| Invoice compare | `getXeroVsXettlePayloadDiff()` | n/a (read-only) | ✅ canonical action |
+| Invoice compare | `compareXeroInvoiceToSettlement()` | fetch-xero-invoice, preview-xettle-invoice-payload | ✅ invoke guard test + local builder guard |
 
 ### Remaining Migration Targets
 
