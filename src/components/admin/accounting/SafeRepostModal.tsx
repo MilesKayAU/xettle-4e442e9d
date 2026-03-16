@@ -168,20 +168,15 @@ export default function SafeRepostModal({ settlement, onClose, onComplete }: Saf
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Step 1: Void existing invoices via sync-settlement-to-xero rollback
-      // This function is marketplace-agnostic — it voids by invoice ID
-      const { data, error } = await supabase.functions.invoke('sync-settlement-to-xero', {
-        body: {
-          action: 'rollback',
-          userId: user.id,
-          settlementId: settlement.settlement_id,
-          invoiceIds: invoiceIds,
-          rollbackScope: 'all',
-        },
+      // Step 1: Void existing invoices via canonical rollback action
+      const { rollbackFromXero } = await import('@/actions/xeroPush');
+      const rollbackResult = await rollbackFromXero({
+        settlementId: settlement.settlement_id,
+        marketplace: settlement.marketplace,
+        invoiceIds: invoiceIds,
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (!rollbackResult.success) throw new Error(rollbackResult.error);
 
       setVoidedInvoiceIds(invoiceIds);
 
