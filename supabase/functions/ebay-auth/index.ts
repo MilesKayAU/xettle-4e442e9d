@@ -70,6 +70,14 @@ serve(async (req) => {
 
       const authUrl = `${EBAY_AUTH_URL}?${params.toString()}`
 
+      // Debug: log the authorize URL components so we can verify credentials match
+      console.log('[ebay-auth] authorize URL built:', {
+        authUrl,
+        client_id_prefix: EBAY_CLIENT_ID.substring(0, 12) + '...',
+        runame: EBAY_RUNAME,
+        scopes: EBAY_SCOPES,
+      })
+
       return new Response(JSON.stringify({ authUrl, state }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
