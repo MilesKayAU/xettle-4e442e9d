@@ -349,7 +349,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[ai-account-mapper] Deterministic pre-scan found ${Object.keys(deterministicOverrides).length} marketplace overrides`)
+    logger.debug(`[ai-account-mapper] Deterministic pre-scan found ${Object.keys(deterministicOverrides).length} marketplace overrides`)
 
     // ─── STEP 2: AI Matching via Lovable AI ──────────────────────────
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
