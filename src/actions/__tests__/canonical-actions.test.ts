@@ -187,10 +187,26 @@ describe('Canonical action guardrails', () => {
   });
 
   it('no UI files implement their own tier computation (must use supportPolicy)', () => {
-    // Guard against local tier/gating logic — reimplementing AU_VALIDATED_RAILS locally
-    // Importing from @/policy/supportPolicy is allowed (that's the canonical source)
     const violations = scanForPattern(/AU_VALIDATED_RAILS/, ['actions', 'policy']);
     expect(violations, `Local tier computation found outside policy module:\n${formatViolations(violations)}`).toEqual([]);
+  });
+
+  it('no raw DOM content patterns passed to AI context', () => {
+    const violations = scanForPattern(/innerHTML|outerHTML|document\.body|\.innerText/, ['actions', 'ai']);
+    // Filter to only AI-related files to avoid false positives on DOM manipulation
+    const aiRelated = violations.filter(v => 
+      v.file.includes('ai-assistant') || v.file.includes('use-ai-assistant') || v.file.includes('AiContext')
+    );
+    expect(aiRelated, `Raw DOM patterns found in AI-related files:\n${formatViolations(aiRelated)}`).toEqual([]);
+  });
+
+  it('no direct invoke of ai-assistant tools outside edge function', () => {
+    // Tool names should not appear as direct function calls in components
+    const violations = scanForPattern(/getPageReadinessSummary|getInvoiceStatusByXeroInvoiceId|getSettlementStatus/, ['actions', 'ai']);
+    const componentViolations = violations.filter(v => 
+      !v.file.includes('toolRegistry') && !v.file.includes('test')
+    );
+    expect(componentViolations, `Direct AI tool calls found outside registry:\n${formatViolations(componentViolations)}`).toEqual([]);
   });
 });
 
