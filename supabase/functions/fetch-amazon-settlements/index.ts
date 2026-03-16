@@ -1218,7 +1218,7 @@ serve(async (req) => {
       } catch { /* no body */ }
 
       const result = await handleSync(supabaseAdmin, syncFromParam);
-      console.log(`[Sync Complete]`, result);
+      logger.debug(`[Sync Complete]`, result);
 
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
