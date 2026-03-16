@@ -897,77 +897,267 @@ function AccountCombobox({
   value,
   onChange,
   placeholder,
+  isAdmin = false,
+  suggestedType = 'REVENUE',
+  suggestedNameContext = '',
+  existingCodes = [],
+  onAccountCreated,
+  onSelectCreated,
 }: {
   accounts: CachedXeroAccount[];
   allAccounts: CachedXeroAccount[];
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  isAdmin?: boolean;
+  suggestedType?: string;
+  suggestedNameContext?: string;
+  existingCodes?: string[];
+  onAccountCreated?: () => Promise<void>;
+  onSelectCreated?: (code: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const displayAccounts = showAll ? allAccounts : accounts;
   const selectedAccount = allAccounts.find(a => a.account_code === value);
 
+  // Suggest next available code based on existing codes in the type range
+  const suggestNextCode = (): string => {
+    const numericCodes = existingCodes
+      .map(c => parseInt(c, 10))
+      .filter(n => !isNaN(n))
+      .sort((a, b) => a - b);
+    
+    // Find codes in the relevant range
+    const rangeStart = suggestedType === 'REVENUE' || suggestedType === 'OTHERINCOME' ? 200 : 400;
+    const rangeEnd = rangeStart + 199;
+    const codesInRange = numericCodes.filter(c => c >= rangeStart && c <= rangeEnd);
+    
+    if (codesInRange.length === 0) return String(rangeStart);
+    return String(Math.max(...codesInRange) + 1);
+  };
+
+  const suggestedName = suggestedNameContext
+    ? `${suggestedNameContext} AU`
+    : '';
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="h-7 w-[200px] justify-between text-xs font-normal"
-        >
-          {value ? (
-            <span className="truncate">
-              <span className="font-mono">{value}</span>
-              {selectedAccount && <span className="text-muted-foreground ml-1">— {selectedAccount.account_name}</span>}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">{placeholder || 'Select account…'}</span>
-          )}
-          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search by code or name…" className="text-xs" />
-          <CommandList>
-            <CommandEmpty>
-              <div className="py-3 text-center text-xs text-muted-foreground">
-                No matching account found in Xero
-              </div>
-            </CommandEmpty>
-            <CommandGroup heading={showAll ? 'All accounts' : 'Relevant accounts'}>
-              {displayAccounts.map((acc) => (
-                <CommandItem
-                  key={acc.xero_account_id}
-                  value={`${acc.account_code} ${acc.account_name}`}
-                  onSelect={() => {
-                    onChange(acc.account_code || '');
-                    setOpen(false);
-                  }}
-                  className="text-xs"
-                >
-                  <span className="font-mono mr-2 text-foreground">{acc.account_code}</span>
-                  <span className="truncate text-muted-foreground">{acc.account_name}</span>
-                  <Badge variant="outline" className="ml-auto text-[9px] shrink-0">{acc.account_type}</Badge>
-                  {acc.account_code === value && <CheckCircle2 className="ml-1 h-3 w-3 text-emerald-500 shrink-0" />}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            {!showAll && allAccounts.length > accounts.length && (
-              <div className="p-2 border-t">
-                <Button variant="ghost" size="sm" className="w-full h-6 text-xs" onClick={() => setShowAll(true)}>
-                  Show all {allAccounts.length} accounts
-                </Button>
-              </div>
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="h-7 w-[200px] justify-between text-xs font-normal"
+          >
+            {value ? (
+              <span className="truncate">
+                <span className="font-mono">{value}</span>
+                {selectedAccount && <span className="text-muted-foreground ml-1">— {selectedAccount.account_name}</span>}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">{placeholder || 'Select account…'}</span>
             )}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+            <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[320px] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search by code or name…" className="text-xs" />
+            <CommandList>
+              <CommandEmpty>
+                <div className="py-3 text-center text-xs text-muted-foreground space-y-2">
+                  <p>No matching account found in Xero</p>
+                  {isAdmin ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => {
+                        setOpen(false);
+                        setCreateDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Create in Xero…
+                    </Button>
+                  ) : (
+                    <p className="text-[10px]">Create this account in Xero manually, then Refresh</p>
+                  )}
+                </div>
+              </CommandEmpty>
+              <CommandGroup heading={showAll ? 'All accounts' : 'Relevant accounts'}>
+                {displayAccounts.map((acc) => (
+                  <CommandItem
+                    key={acc.xero_account_id}
+                    value={`${acc.account_code} ${acc.account_name}`}
+                    onSelect={() => {
+                      onChange(acc.account_code || '');
+                      setOpen(false);
+                    }}
+                    className="text-xs"
+                  >
+                    <span className="font-mono mr-2 text-foreground">{acc.account_code}</span>
+                    <span className="truncate text-muted-foreground">{acc.account_name}</span>
+                    <Badge variant="outline" className="ml-auto text-[9px] shrink-0">{acc.account_type}</Badge>
+                    {acc.account_code === value && <CheckCircle2 className="ml-1 h-3 w-3 text-emerald-500 shrink-0" />}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              {!showAll && allAccounts.length > accounts.length && (
+                <div className="p-2 border-t">
+                  <Button variant="ghost" size="sm" className="w-full h-6 text-xs" onClick={() => setShowAll(true)}>
+                    Show all {allAccounts.length} accounts
+                  </Button>
+                </div>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {isAdmin && (
+        <CreateAccountDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          suggestedCode={suggestNextCode()}
+          suggestedName={suggestedName}
+          suggestedType={suggestedType}
+          onCreated={async (code) => {
+            if (onAccountCreated) await onAccountCreated();
+            if (onSelectCreated) onSelectCreated(code);
+            onChange(code);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Create Account Dialog ───────────────────────────────────────────────────
+
+function CreateAccountDialog({
+  open,
+  onOpenChange,
+  suggestedCode,
+  suggestedName,
+  suggestedType,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  suggestedCode: string;
+  suggestedName: string;
+  suggestedType: string;
+  onCreated: (code: string) => Promise<void>;
+}) {
+  const [code, setCode] = useState(suggestedCode);
+  const [name, setName] = useState(suggestedName);
+  const [type, setType] = useState(suggestedType);
+  const [creating, setCreating] = useState(false);
+
+  // Reset when dialog opens
+  useEffect(() => {
+    if (open) {
+      setCode(suggestedCode);
+      setName(suggestedName);
+      setType(suggestedType);
+    }
+  }, [open, suggestedCode, suggestedName, suggestedType]);
+
+  const handleCreate = async () => {
+    if (!code || !name || !type) {
+      toast.error('Code, name, and type are required');
+      return;
+    }
+    setCreating(true);
+    try {
+      const result = await createXeroAccounts([{ code, name, type }]);
+      if (!result.success) {
+        toast.error(`Failed: ${result.error}`);
+        return;
+      }
+      if (result.errors && result.errors.length > 0) {
+        toast.error(`Xero error: ${result.errors[0].error}`);
+        return;
+      }
+      toast.success(`Created account ${code} — ${name} in Xero`);
+      onOpenChange(false);
+      await onCreated(code);
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">Create Account in Xero</DialogTitle>
+          <DialogDescription className="text-xs">
+            This will create a new account in your Xero Chart of Accounts.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Alert variant="destructive" className="border-amber-300 bg-amber-50 text-amber-900">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-xs">
+            This will create a new account in your Xero Chart of Accounts. This cannot be undone from Xettle.
+          </AlertDescription>
+        </Alert>
+
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Account Code</Label>
+            <Input
+              className="h-8 text-sm font-mono mt-1"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="e.g. 214"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Account Name</Label>
+            <Input
+              className="h-8 text-sm mt-1"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. BigW Sales AU"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Account Type</Label>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger className="h-8 text-sm mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="REVENUE">Revenue</SelectItem>
+                <SelectItem value="DIRECTCOSTS">Direct Costs</SelectItem>
+                <SelectItem value="EXPENSE">Expense</SelectItem>
+                <SelectItem value="OTHERINCOME">Other Income</SelectItem>
+                <SelectItem value="OVERHEADS">Overheads</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreate} disabled={creating || !code || !name} className="gap-1">
+            {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+            Create & Map
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
