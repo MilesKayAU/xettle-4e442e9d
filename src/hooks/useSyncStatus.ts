@@ -6,7 +6,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
+
 
 export type SyncStatusValue = 'success' | 'error' | 'running' | 'never';
 
