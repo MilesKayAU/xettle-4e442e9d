@@ -86,6 +86,10 @@ export default function AccountMapperCard() {
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
   const [globalMappingFlags, setGlobalMappingFlags] = useState<Record<string, boolean>>({});
 
+  // Clone COA state
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [cloneTarget, setCloneTarget] = useState('');
+
   // Build CoA lookup map
   const coaMap = useMemo(() => {
     const map = new Map<string, { name: string; type: string; active: boolean }>();
