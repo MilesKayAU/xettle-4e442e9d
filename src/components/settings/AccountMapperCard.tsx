@@ -831,8 +831,7 @@ export default function AccountMapperCard() {
         </CardHeader>
         <CardContent className="space-y-4">
           {renderCoaRefreshStrip()}
-
-          {/* Top controls */}
+          {renderCloneBanner()}
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={handleApplySuggestionsToMissing} className="h-7 text-xs gap-1">
               <CheckCircle2 className="h-3 w-3" />
