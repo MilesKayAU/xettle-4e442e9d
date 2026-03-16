@@ -53,6 +53,7 @@ const ALLOWED_FILES = [
   'actions/xeroReadiness.ts',
   'actions/scopeConsent.ts',
   'actions/xeroInvoice.ts',
+  'actions/xeroAccounts.ts',
   'actions/index.ts',
   'integrations/',
   'policy/',
