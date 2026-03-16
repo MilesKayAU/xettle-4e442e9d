@@ -41,6 +41,7 @@ import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPre
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 
 import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
+import ExceptionsInbox from '@/components/admin/accounting/ExceptionsInbox';
 
 // Marketplace context managed by MarketplaceSwitcher in Dashboard.tsx
 const SELECTED_MARKETPLACE = 'amazon_au';
