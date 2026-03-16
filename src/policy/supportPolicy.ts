@@ -80,7 +80,7 @@ export function computeSupportTier(input: TierInput): SupportTier {
   if (isAuRail) return 'EXPERIMENTAL';
 
   // Non-AU rail but known in registry → EXPERIMENTAL
-  if (input.knownRail !== false) return 'EXPERIMENTAL';
+  if (input.knownRail === undefined || input.knownRail === true) return 'EXPERIMENTAL';
 
   return 'UNSUPPORTED';
 }
