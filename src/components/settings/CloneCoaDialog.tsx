@@ -48,6 +48,7 @@ export default function CloneCoaDialog({
   const [templateMarketplace, setTemplateMarketplace] = useState('');
   const [cloneRows, setCloneRows] = useState<CloneAccountRow[]>([]);
   const [creating, setCreating] = useState(false);
+  const [matchPattern, setMatchPattern] = useState(true);
 
   const allCodes = useMemo(() =>
     coaAccounts.filter(a => a.account_code).map(a => a.account_code!),
