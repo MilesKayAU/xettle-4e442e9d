@@ -711,6 +711,7 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
         isSettlementFile: true,
         detectionLevel: 1,
         fileFormat: 'pdf',
+        dataCompleteness: 'full',
       };
     }
     return {
@@ -728,26 +729,29 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
 
   const fileFormat = name.endsWith('.tsv') || name.endsWith('.txt') ? 'tsv' : name.endsWith('.xlsx') || name.endsWith('.xls') ? 'xlsx' : 'csv';
 
+  const enrichResult = (result: FileDetectionResult): FileDetectionResult => {
+    result.recordCount = extracted.rowCount;
+    result.fileFormat = fileFormat;
+    if (extracted.preambleMetadata) {
+      result.preambleMetadata = extracted.preambleMetadata;
+    }
+    // Run completeness assessment
+    assessCompleteness(result);
+    return result;
+  };
+
   // Level 1: Hardcoded fingerprint only (not heuristic)
   const fp = detectByFingerprint(extracted.headers);
-  if (fp) {
-    fp.recordCount = extracted.rowCount;
-    fp.fileFormat = fileFormat;
-    return fp;
-  }
+  if (fp) return enrichResult(fp);
 
   // Level 1.5: Database fingerprint lookup (learned from First Contact)
   const dbResult = await detectFromDbFingerprints(extracted.headers);
-  if (dbResult) {
-    dbResult.recordCount = extracted.rowCount;
-    dbResult.fileFormat = fileFormat;
-    return dbResult;
-  }
+  if (dbResult) return enrichResult(dbResult);
 
   // Level 2: Heuristic (returned from detectFromHeaders which already tried L1)
   const heuristic = detectByHeuristic(extracted.headers);
   if (heuristic && heuristic.confidence >= 40) {
-    return {
+    return enrichResult({
       marketplace: 'unknown',
       marketplaceLabel: 'Unknown Marketplace',
       confidence: heuristic.confidence,
@@ -755,9 +759,7 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
       isSettlementFile: true,
       columnMapping: heuristic.mapping,
       detectionLevel: 2,
-      recordCount: extracted.rowCount,
-      fileFormat,
-    };
+    });
   }
 
   return null;

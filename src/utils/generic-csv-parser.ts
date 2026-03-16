@@ -98,7 +98,11 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
   const commaCount = (firstLine.match(/,/g) || []).length;
   const delimiter = tabCount > commaCount ? '\t' : ',';
 
-  const headers = parseCSVRow(lines[0], delimiter);
+  // Smart header detection — skip metadata preambles
+  const { findHeaderRow } = require('./file-fingerprint-engine');
+  const { headerIndex } = findHeaderRow(lines, delimiter);
+
+  const headers = parseCSVRow(lines[headerIndex], delimiter);
   const headerMap: Record<string, number> = {};
   headers.forEach((h, i) => { headerMap[h.toLowerCase().trim()] = i; });
 
