@@ -2000,6 +2000,38 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                           </div>
                         </div>
                       )}
+
+                      {/* Bookkeeper readiness checklist — collapsed by default, auto-expands on issues */}
+                      {readiness && (
+                        <Collapsible open={readinessOpen} onOpenChange={setReadinessOpen}>
+                          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-1.5 hover:bg-muted/30 rounded px-2 -mx-2 transition-colors">
+                            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${readinessOpen ? '' : '-rotate-90'}`} />
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {!readiness.canSave ? '⛔ Bookkeeper readiness' : readiness.checks.some(c => c.status === 'warn') ? '⚠ Bookkeeper readiness' : '✓ Bookkeeper readiness'}
+                            </span>
+                            {!readinessOpen && (
+                              <span className="text-[10px] text-muted-foreground/70 ml-auto">Show details</span>
+                            )}
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-1.5">
+                            <div className="bg-muted/30 rounded-lg p-2.5 space-y-1">
+                              {readiness.checks.map(check => (
+                                <div key={check.key} className="flex items-start gap-2">
+                                  {check.status === 'pass' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />}
+                                  {check.status === 'fail' && <XCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0 mt-0.5" />}
+                                  {check.status === 'warn' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />}
+                                  <div>
+                                    <span className="text-xs font-medium text-foreground">{check.label}</span>
+                                    {check.message && (
+                                      <p className="text-[10px] text-muted-foreground">{check.message}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
                     </div>
                   )}
 
