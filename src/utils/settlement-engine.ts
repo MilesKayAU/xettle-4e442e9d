@@ -770,6 +770,42 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       }
     }
 
+    // ─── Bookkeeper Minimum Data Gate (SmartUpload / CSV only) ─────
+    if (settlement.source === 'csv_upload' || (settlement.metadata as any)?.sourceType === 'smart_upload') {
+      const { validateBookkeeperMinimumData } = await import('./bookkeeper-readiness');
+      const bkResult = validateBookkeeperMinimumData({
+        settlement,
+        hasLineItems: !!(settlement.metadata as any)?.hasLineItems,
+        lineItemsExplicitlyNone: (settlement.metadata as any)?.line_items === 'none',
+        reconciles: settlement.reconciles,
+      });
+      if (!bkResult.canSave) {
+        // Log blocked save
+        try {
+          const { data: { user: bkUser } } = await supabase.auth.getUser();
+          if (bkUser) {
+            supabase.from('system_events').insert({
+              user_id: bkUser.id,
+              event_type: 'bookkeeper_minimum_data_blocked',
+              severity: 'warning',
+              marketplace_code: settlement.marketplace,
+              settlement_id: settlement.settlement_id,
+              details: {
+                blockingReasons: bkResult.blockingReasons,
+                fingerprint_id: settlement.fingerprint_id || null,
+                source: settlement.source,
+              },
+            } as any).then(() => {});
+          }
+        } catch {}
+        return {
+          success: false,
+          error: bkResult.errorMessage || 'Settlement does not meet minimum bookkeeper data requirements.',
+          blockedGates: bkResult.blockingReasons,
+        };
+      }
+    }
+
     // ─── Sanity Validation Gate ─────────────────────────────────────
     const sanity = validateSettlementSanity(settlement);
     if (!sanity.passed) {
