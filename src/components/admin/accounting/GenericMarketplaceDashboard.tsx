@@ -112,6 +112,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [bankAmountInput, setBankAmountInput] = useState('');
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
+  const [isApiConnected, setIsApiConnected] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [settlementFilter, setSettlementFilter] = useState<'all' | 'attention' | 'synced'>('all');
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
