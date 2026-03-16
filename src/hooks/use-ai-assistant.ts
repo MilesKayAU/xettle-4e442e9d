@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { type AiPageContext } from '@/ai/context/aiContextContract';
 
 export interface AiMessage {
   role: 'user' | 'assistant';
@@ -7,7 +8,7 @@ export interface AiMessage {
 }
 
 interface UseAiAssistantOptions {
-  context?: Record<string, any>;
+  context?: AiPageContext;
 }
 
 export function useAiAssistant({ context }: UseAiAssistantOptions = {}) {
@@ -72,7 +73,7 @@ export function useAiAssistant({ context }: UseAiAssistantOptions = {}) {
           },
           body: JSON.stringify({
             messages: allMessages.map(m => ({ role: m.role, content: m.content })),
-            context,
+            context: context || undefined,
           }),
           signal: controller.signal,
         }
