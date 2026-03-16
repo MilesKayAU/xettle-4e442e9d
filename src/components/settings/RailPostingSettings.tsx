@@ -70,6 +70,7 @@ export default function RailPostingSettings() {
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [taxProfile, setTaxProfile] = useState<TaxProfile>('AU_GST');
+  const settingsPin = useSettingsPin();
 
   useAiPageContext(() => ({
     routeId: 'rail_posting_settings',
