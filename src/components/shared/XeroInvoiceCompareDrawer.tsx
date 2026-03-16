@@ -134,7 +134,33 @@ export default function XeroInvoiceCompareDrawer({ open, onClose, settlementId, 
               result.verdict === 'FAIL' && 'bg-destructive/5 border-destructive/20 text-destructive',
               result.verdict === 'BLOCKED' && 'bg-muted border-border text-muted-foreground',
             )}>
-              {result.recommendation}
+              <div>{result.recommendation}</div>
+              {result.verdict === 'BLOCKED' && result.recommendation.toLowerCase().includes('unmap') && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 h-6 text-xs gap-1"
+                  onClick={() => {
+                    onClose();
+                    navigate('/admin?tab=settings&section=account-mapper&filter=missing');
+                  }}
+                >
+                  <ShieldAlert className="h-3 w-3" /> Fix missing mappings in Account Mapper →
+                </Button>
+              )}
+              {result.verdict === 'BLOCKED' && !result.recommendation.toLowerCase().includes('unmap') && result.xettleSide?.blockers?.some(b => b.toLowerCase().includes('map') || b.toLowerCase().includes('account')) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 h-6 text-xs gap-1"
+                  onClick={() => {
+                    onClose();
+                    navigate('/admin?tab=settings&section=account-mapper&filter=missing');
+                  }}
+                >
+                  <ShieldAlert className="h-3 w-3" /> Open Account Mapper →
+                </Button>
+              )}
             </div>
 
             {/* Differences */}
