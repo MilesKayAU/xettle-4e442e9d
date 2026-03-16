@@ -1,0 +1,1 @@
+DELETE FROM public.settlement_profit WHERE marketplace_code = 'kogan' AND gross_revenue > 5000;
