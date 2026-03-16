@@ -35,9 +35,10 @@ import { useBulkSelect } from '@/hooks/use-bulk-select';
 import BulkDeleteDialog from '@/components/admin/accounting/shared/BulkDeleteDialog';
 import { useXeroSync } from '@/hooks/use-xero-sync';
 import { useTransactionDrilldown } from '@/hooks/use-transaction-drilldown';
-import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplicateCheck } from '@/utils/settlement-engine';
+import { deleteSettlement, checkForDuplicate, registerAliases, postInsertDuplicateCheck, syncSettlementToXero } from '@/utils/settlement-engine';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 import { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from '@/utils/amazon-xero-push';
+import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 
 import GstAuditTab from '@/components/admin/accounting/GstAuditTab';
 
