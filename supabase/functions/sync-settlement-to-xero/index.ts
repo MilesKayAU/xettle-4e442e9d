@@ -794,10 +794,11 @@ serve(async (req) => {
 
     const { data: coaAccounts } = await supabase
       .from('xero_chart_of_accounts')
-      .select('account_code, account_name, account_type, is_active')
+      .select('account_code, account_name, account_type, is_active, synced_at')
       .eq('user_id', userId);
 
     const coaMap = new Map<string, { name: string; type: string; active: boolean }>();
+    let coaMaxSyncedAt: Date | null = null;
     for (const acc of (coaAccounts || [])) {
       if (acc.account_code) {
         coaMap.set(acc.account_code, {
@@ -805,7 +806,35 @@ serve(async (req) => {
           type: (acc.account_type || '').toUpperCase(),
           active: acc.is_active !== false,
         });
+        if (acc.synced_at) {
+          const d = new Date(acc.synced_at);
+          if (!coaMaxSyncedAt || d > coaMaxSyncedAt) coaMaxSyncedAt = d;
+        }
       }
+    }
+
+    // ─── CoA FRESHNESS CHECK — block if stale and cannot refresh ──
+    const COA_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    const coaAgeMs = coaMaxSyncedAt ? Date.now() - coaMaxSyncedAt.getTime() : Infinity;
+    if (coaAgeMs > COA_MAX_AGE_MS) {
+      console.warn(`[coa-freshness] CoA cache is stale (${Math.round(coaAgeMs / 3600000)}h old) or empty. Blocking push.`);
+
+      await supabase.from('system_events').insert({
+        user_id: userId,
+        event_type: 'xero_push_coa_stale',
+        severity: 'error',
+        settlement_id: body.settlementData?.settlement_id || null,
+        details: { coa_age_hours: Math.round(coaAgeMs / 3600000), coa_count: coaMap.size },
+      });
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'COA_STALE',
+        message: 'Chart of Accounts cache is stale or empty. Please refresh your Xero connection before pushing.',
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (coaMap.size > 0) {
