@@ -15,6 +15,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 import { getCorsHeaders } from '../_shared/cors.ts';
+import { safeUpsertXam } from '../_shared/xam-safe-upsert.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1091,7 +1092,7 @@ serve(async (req) => {
 
         // Backfill xero_accounting_matches cache
         const sd = body.settlementData || {};
-        await supabase.from('xero_accounting_matches').upsert({
+        const backfillResult = await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: cacheSettlementKey,
           marketplace_code: sd.marketplace || 'unknown',
@@ -1106,7 +1107,10 @@ serve(async (req) => {
           matched_contact: contactName || null,
           matched_reference: existing.matchedReference || reference,
           reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
-        }, { onConflict: 'user_id,settlement_id' });
+        });
+        if (!backfillResult.success) {
+          console.warn(`[retry-recovery] XAM upsert conflict: ${backfillResult.message}`);
+        }
 
         // Log recovery event
         await supabase.from('system_events').insert({
@@ -1302,7 +1306,7 @@ serve(async (req) => {
     // ─── Write to reference index cache (prevents future duplicates) ──
     if (invoiceId) {
       const sd = body.settlementData || {};
-      await supabase.from('xero_accounting_matches').upsert({
+      const xamResult = await safeUpsertXam(supabase, {
         user_id: userId,
         settlement_id: cacheSettlementKey,
         marketplace_code: sd.marketplace || 'unknown',
@@ -1317,8 +1321,12 @@ serve(async (req) => {
         matched_contact: contactName || null,
         matched_reference: reference,
         reference_hash: reference.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase(),
-      }, { onConflict: 'user_id,settlement_id' });
-      console.log(`[cache-write] Indexed ${cacheSettlementKey} → ${invoiceId}`);
+      });
+      if (!xamResult.success) {
+        console.error(`[cache-write] XAM upsert conflict: ${xamResult.message}`);
+      } else {
+        console.log(`[cache-write] Indexed ${cacheSettlementKey} → ${invoiceId}`);
+      }
     }
 
     // ─── Balance check: settlement vs Xero invoice total ──────────

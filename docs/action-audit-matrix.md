@@ -294,3 +294,24 @@
 - Account codes validated against cached COA before save
 - Account creation gated server-side by admin role check
 - COA clone reachable from multiple surfaces via `CoaBlockerCta` shared component (all use same canonical path)
+
+---
+
+## K) Xero Accounting Matches (Invoice Link Cache)
+
+| Entry Point | File | Tables Written | Idempotency | Conflict Handling | Canonical Path |
+|---|---|---|---|---|---|
+| Push to Xero (cache write) | `sync-settlement-to-xero/index.ts` | `xero_accounting_matches` | `safeUpsertXam` (user_id,settlement_id) | ✅ INVOICE_ALREADY_LINKED | ✅ via `safeUpsertXam` helper |
+| Retry recovery backfill | `sync-settlement-to-xero/index.ts` | `xero_accounting_matches` | `safeUpsertXam` (user_id,settlement_id) | ✅ INVOICE_ALREADY_LINKED | ✅ via `safeUpsertXam` helper |
+| Rescan invoice match | `rescan-xero-invoice-match/index.ts` | `xero_accounting_matches` | `safeUpsertXam` (user_id,xero_invoice_id) | ✅ returns 409 | ✅ via `safeUpsertXam` helper |
+| Xero status sync (6 paths) | `sync-xero-status/index.ts` | `xero_accounting_matches` | `safeUpsertXam` (user_id,settlement_id) | ✅ logged, skipped | ✅ via `safeUpsertXam` helper |
+| Rollback / void | `SafeRepostModal.tsx` | `xero_accounting_matches` (update status) | direct update | n/a (status change only) | ✅ |
+| Delete VOIDED match | `sync-settlement-to-xero/index.ts` | `xero_accounting_matches` (delete) | conditional delete | n/a | ✅ |
+
+### Data Integrity Constraints
+
+- **UNIQUE(user_id, settlement_id)** — one match row per settlement per user
+- **Partial UNIQUE(user_id, xero_invoice_id) WHERE xero_invoice_id IS NOT NULL** — one invoice cannot link to multiple settlements
+- All writes use `safeUpsertXam()` helper (`supabase/functions/_shared/xam-safe-upsert.ts`)
+- Conflicts return structured `{ errorCode: 'INVOICE_ALREADY_LINKED', xeroInvoiceId, existingSettlementId }`
+- All conflicts logged to `system_events` (event_type: `invoice_link_conflict`)

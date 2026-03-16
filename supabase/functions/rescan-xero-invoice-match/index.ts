@@ -15,6 +15,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 import { getCorsHeaders } from '../_shared/cors.ts';
+import { safeUpsertXam } from '../_shared/xam-safe-upsert.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -131,7 +132,7 @@ serve(async (req) => {
         .eq('settlement_id', matchResult.settlement_id)
         .maybeSingle();
 
-      await supabase.from('xero_accounting_matches').upsert({
+      const xamResult = await safeUpsertXam(supabase, {
         user_id: user.id,
         settlement_id: matchResult.settlement_id,
         marketplace_code: settlement?.marketplace || 'unknown',
@@ -146,7 +147,17 @@ serve(async (req) => {
         confidence: matchResult.confidence,
         notes: matchResult.evidence,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,xero_invoice_id' });
+      }, 'user_id,xero_invoice_id');
+
+      if (!xamResult.success && xamResult.errorCode === 'INVOICE_ALREADY_LINKED') {
+        return new Response(JSON.stringify({
+          success: false,
+          errorCode: 'INVOICE_ALREADY_LINKED',
+          xeroInvoiceId,
+          existingSettlementId: xamResult.existingSettlementId,
+          message: xamResult.message,
+        }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
 
     // Log event

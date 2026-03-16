@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 import { getCorsHeaders } from '../_shared/cors.ts';
+import { safeUpsertXam } from '../_shared/xam-safe-upsert.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -530,7 +531,7 @@ serve(async (req) => {
           }
         }
 
-        await supabase.from('xero_accounting_matches').upsert({
+        await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: sid,
           marketplace_code: detectedMarketplace,
@@ -548,7 +549,7 @@ serve(async (req) => {
           notes: confirmedXettle
             ? 'Pre-seeded from Xettle-created Xero invoice (push event verified)'
             : 'External invoice detected — requires user review before linking',
-        }, { onConflict: 'user_id,settlement_id' });
+        });
 
         seededCount++;
       }
@@ -695,7 +696,7 @@ serve(async (req) => {
       // External invoices are stored as candidates for user review, not auto-linked.
       if (!isXettleFormat) {
         const refHash = ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null;
-        await supabase.from('xero_accounting_matches').upsert({
+        await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: settlementId,
           marketplace_code: detectedMarketplace,
@@ -711,7 +712,7 @@ serve(async (req) => {
           matched_reference: ref,
           reference_hash: refHash,
           notes: 'External invoice detected — requires user review before linking',
-        }, { onConflict: 'user_id,settlement_id' });
+        });
         console.log(`[step-4] External invoice ${inv.InvoiceNumber || inv.InvoiceID} stored as candidate for settlement ${settlementId}`);
         continue;
       }
@@ -731,7 +732,7 @@ serve(async (req) => {
       if (!pushEvent || pushEvent.length === 0) {
         // No push event found — treat as external candidate, not Xettle-posted
         console.warn(`[step-4] Xettle-prefixed ref "${ref}" but NO xero_push_success event for ${settlementId} — treating as external_candidate`);
-        await supabase.from('xero_accounting_matches').upsert({
+        await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: settlementId,
           marketplace_code: detectedMarketplace,
@@ -747,7 +748,7 @@ serve(async (req) => {
           matched_reference: ref,
           reference_hash: ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
           notes: 'Xettle-prefixed but no push event found — possible external creation. Requires user review.',
-        }, { onConflict: 'user_id,settlement_id' });
+        });
         continue;
       }
 
@@ -774,7 +775,7 @@ serve(async (req) => {
         updated++;
         const refHash = ref.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null;
 
-        await supabase.from('xero_accounting_matches').upsert({
+        await safeUpsertXam(supabase, {
           user_id: userId,
           settlement_id: settlementId,
           marketplace_code: detectedMarketplace,
@@ -789,7 +790,7 @@ serve(async (req) => {
           matched_contact: contactName,
           matched_reference: ref,
           reference_hash: refHash,
-        }, { onConflict: 'user_id,settlement_id' });
+        });
       }
     }
     console.log(`[step-4] Reference matching: ${updated} NEW settlements linked`);
@@ -814,7 +815,7 @@ serve(async (req) => {
       // ─── SAFETY: Only auto-link Xettle-created invoices ─────────────
       const isXettleCreated = ref.toLowerCase().startsWith('xettle-');
 
-      await supabase.from('xero_accounting_matches').upsert({
+      await safeUpsertXam(supabase, {
         user_id: userId,
         settlement_id: settlementId,
         marketplace_code: detectedMarketplace,
@@ -832,7 +833,7 @@ serve(async (req) => {
         notes: isXettleCreated
           ? 'Pre-seeded from Xettle-created Xero invoice'
           : 'External invoice detected — requires user review before linking',
-      }, { onConflict: 'user_id,settlement_id' });
+      });
 
       seededCount++;
     }
@@ -971,7 +972,7 @@ serve(async (req) => {
           await supabase.from('settlements').update(fuzzyUpdatePayload)
             .eq('settlement_id', settlement.settlement_id).eq('user_id', userId);
 
-          await supabase.from('xero_accounting_matches').upsert({
+          await safeUpsertXam(supabase, {
             user_id: userId,
             settlement_id: settlement.settlement_id,
             marketplace_code: marketplace,
@@ -987,7 +988,7 @@ serve(async (req) => {
             matched_reference: bestMatch.Reference || null,
             reference_hash: (bestMatch.Reference || '').replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || null,
             notes: `Auto-detected: amount diff $${Math.abs((bestMatch.Total || 0) - Math.abs(settlement.bank_deposit || 0)).toFixed(2)}, contact: ${bestMatch.Contact?.Name || 'unknown'}`,
-          }, { onConflict: 'user_id,settlement_id' });
+          });
 
           matchedInvoiceIds.add(bestMatch.InvoiceID);
           fuzzyMatched++;
