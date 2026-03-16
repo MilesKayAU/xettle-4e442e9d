@@ -565,6 +565,7 @@ async function processSettlement(
         lineItems,
         contactName,
         netAmount,
+        invoiceStatus,
         settlementData: {
           settlement_id: sid,
           period_start: settlement.period_start,
