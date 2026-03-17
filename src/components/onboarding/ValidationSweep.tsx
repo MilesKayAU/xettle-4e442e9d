@@ -218,6 +218,30 @@ export default function ValidationSweep({
     }
   }, []);
 
+  // Load API-synced marketplace codes
+  useEffect(() => {
+    const loadApiSyncedCodes = async () => {
+      try {
+        const [connRes, amazonRes, ebayRes] = await Promise.all([
+          supabase.from('marketplace_connections')
+            .select('marketplace_code, connection_type, connection_status')
+            .eq('connection_type', 'api')
+            .in('connection_status', [...ACTIVE_CONNECTION_STATUSES]),
+          supabase.from('amazon_tokens').select('id').limit(1),
+          supabase.from('ebay_tokens').select('id').limit(1),
+        ]);
+        const codes = new Set<string>();
+        (connRes.data || []).forEach(c => codes.add(c.marketplace_code));
+        if (amazonRes.data && amazonRes.data.length > 0) codes.add('amazon_au');
+        if (ebayRes.data && ebayRes.data.length > 0) codes.add('ebay_au');
+        setApiSyncedCodes(codes);
+      } catch (err) {
+        logger.debug('[ValidationSweep] Failed to load API-synced codes', err);
+      }
+    };
+    loadApiSyncedCodes();
+  }, []);
+
   useEffect(() => { loadData(); }, [loadData]);
 
   // Realtime subscription
