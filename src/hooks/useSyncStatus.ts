@@ -30,10 +30,10 @@ export interface SyncStatusResult {
 
 // API-synced integrations only — no CSV-only channels
 const API_INTEGRATIONS = [
-  { rail: 'xero', name: 'Xero', tokenTable: 'xero_tokens' as const, historyTypes: ['xero_sync', 'xero_push', 'xero_refresh', 'xero_status', 'xero_coa'], eventTypes: ['xero_sync_complete', 'xero_sync_error', 'xero_push_complete', 'xero_coa_refreshed'] },
-  { rail: 'amazon_au', name: 'Amazon AU', tokenTable: 'amazon_tokens' as const, historyTypes: ['amazon'], eventTypes: ['amazon_fetch_complete', 'settlement_imported'] },
-  { rail: 'shopify', name: 'Shopify', tokenTable: 'shopify_tokens' as const, historyTypes: ['shopify'], eventTypes: ['shopify_fetch_complete', 'settlement_imported'] },
-  { rail: 'ebay_au', name: 'eBay AU', tokenTable: 'ebay_tokens' as const, historyTypes: ['ebay'], eventTypes: ['ebay_fetch_complete', 'settlement_imported'] },
+  { rail: 'xero', name: 'Xero', tokenTable: 'xero_tokens' as const, historyTypes: ['xero', 'scheduled_sync'], eventTypes: ['xero_api_call', 'xero_audit_complete', 'xero_scan_completed', 'xero_invoice_refreshed', 'xero_sync_complete', 'xero_sync_error', 'xero_push_complete', 'xero_coa_refreshed'] },
+  { rail: 'amazon_au', name: 'Amazon AU', tokenTable: 'amazon_tokens' as const, historyTypes: ['amazon'], eventTypes: ['amazon_settlement_synced', 'amazon_fetch_complete', 'settlement_imported'] },
+  { rail: 'shopify', name: 'Shopify', tokenTable: 'shopify_tokens' as const, historyTypes: ['shopify', 'scheduled_sync'], eventTypes: ['shopify_payout_synced', 'shopify_fetch_complete', 'settlement_imported'] },
+  { rail: 'ebay_au', name: 'eBay AU', tokenTable: 'ebay_tokens' as const, historyTypes: ['ebay'], eventTypes: ['ebay_settlement_imported', 'ebay_sync_debug', 'ebay_fetch_complete'] },
 ] as const;
 
 async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
@@ -79,7 +79,7 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
 
     const eventMatch = systemEvents?.find(e =>
       eventTypes.includes(e.event_type) &&
-      (!marketplaceCode || e.marketplace_code === marketplaceCode)
+      (!marketplaceCode || !e.marketplace_code || e.marketplace_code === marketplaceCode || e.marketplace_code.startsWith(marketplaceCode))
     );
 
     const candidates: { date: Date; isError: boolean; message?: string }[] = [];
