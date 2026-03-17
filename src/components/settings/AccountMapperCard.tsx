@@ -1,3 +1,8 @@
+// ══════════════════════════════════════════════════════════════
+// BEFORE adding new utility logic here, check src/utils/index.ts
+// for existing capabilities. Key utils: coa-intelligence.ts,
+// xero-mapping-readiness.ts, bookkeeper-readiness.ts
+// ══════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { analyseCoA, type RegistryEntry, type ProcessorEntry, type CoaAccount as CoaIntelAccount } from '@/utils/coa-intelligence';

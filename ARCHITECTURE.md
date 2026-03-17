@@ -658,4 +658,51 @@ Xero bank feeds, PayPal API, Stripe API, Shopify payouts, Wise feeds, and all fu
 
 ---
 
+## 12. Utility Capability Map
+
+**Source of truth:** `src/utils/index.ts` — always check this barrel file before writing new utility logic.
+
+| File | Capability | Key Exports |
+|------|-----------|-------------|
+| `coa-intelligence.ts` | COA scanning, account mapping suggestions from chart of accounts | `analyseCoA`, `XETTLE_COA_RULES` |
+| `xero-mapping-readiness.ts` | Validates account mappings are complete before push | `checkXeroMappingReadiness` |
+| `bookkeeper-readiness.ts` | Pre-push safety checks, readiness scoring | `assessBookkeeperReadiness` |
+| `settlement-parser.ts` | Amazon TSV → structured 13-category settlement | `parseSettlementTSV`, `PARSER_VERSION` |
+| `settlement-engine.ts` | Settlement CRUD, save/update, net calculation | `saveSettlement`, `getSettlementNet` |
+| `settlement-components.ts` | Component-level financial breakdown | `buildSettlementComponents` |
+| `file-marketplace-detector.ts` | Sniff CSV/PDF to detect marketplace | `detectFileMarketplace` |
+| `file-fingerprint-engine.ts` | CSV/XLSX header fingerprinting | `detectFromHeaders`, `extractFileHeaders` |
+| `fingerprint-library.ts` | Known file format signatures | `FINGERPRINT_LIBRARY` |
+| `fingerprint-lifecycle.ts` | Create, confirm, retire fingerprints | `createFingerprint`, `confirmFingerprint` |
+| `reconciliation-engine.ts` | Amazon-specific recon checks | `runReconciliation` |
+| `universal-reconciliation.ts` | Marketplace-agnostic recon | `runUniversalReconciliation` |
+| `marketplace-reconciliation-engine.ts` | Per-marketplace recon with tolerance | `reconcileMarketplace` |
+| `xero-entries.ts` | Line-item builders for Xero invoices | `buildXeroEntries` |
+| `xero-posting-line-items.ts` | Posting line items with GST & account codes | `buildXeroPostingLineItems` |
+| `xero-csv-export.ts` | Export as Xero-compatible CSV | `exportToXeroCsv` |
+| `parse-xero-date.ts` | Normalise Xero `/Date()/` format | `parseXeroDate` |
+| `amazon-xero-push.ts` | Amazon-specific push-to-Xero orchestration | `pushAmazonToXero` |
+| `generic-csv-parser.ts` | Parse any CSV with header detection | `parseGenericCsv` |
+| `bunnings-summary-parser.ts` | Bunnings PDF/CSV → structured data | `parseBunningsSummary` |
+| `woolworths-marketplus-parser.ts` | Woolworths CSV → structured settlement | `parseWoolworthsMarketPlus` |
+| `shopify-payments-parser.ts` | Shopify payout CSV → structured settlement | `parseShopifyPayments` |
+| `shopify-orders-parser.ts` | Shopify orders CSV → order-level data | `parseShopifyOrders` |
+| `shopify-order-detector.ts` | Detect Shopify orders vs payments file | `detectShopifyOrderFile` |
+| `shopify-api-adapter.ts` | Typed Shopify REST API wrappers | `fetchShopifyPayouts` |
+| `date-parser.ts` | Flexible AU/US/ISO date parsing | `parseFlexibleDate` |
+| `entity-detection.ts` | Detect entities from line descriptions | `detectEntity` |
+| `fee-observation-engine.ts` | Track marketplace fee rate changes | `observeFees` |
+| `multi-marketplace-splitter.ts` | Split multi-marketplace files | `splitByMarketplace` |
+| `sub-channel-detection.ts` | Detect Shopify sub-channels | `detectSubChannel` |
+| `marketplace-registry.ts` | Known marketplace definitions & patterns | `MARKETPLACE_REGISTRY` |
+| `marketplace-codes.ts` | Canonical marketplace code constants | `MARKETPLACE_CODES` |
+| `marketplace-connections.ts` | Connection status helpers | `getMarketplaceConnections` |
+| `marketplace-token-map.ts` | Marketplace code → token table mapping | `MARKETPLACE_TOKEN_MAP` |
+| `sync-capabilities.ts` | API sync vs CSV-only capabilities | `SYNC_CAPABILITIES` |
+| `profit-engine.ts` | Per-settlement/SKU gross profit calc | `calculateProfit` |
+| `input-sanitization.ts` | XSS prevention, HTML stripping | `sanitizeInput` |
+| `logger.ts` | Structured logging | `logger` |
+
+---
+
 *This document is the single source of truth for Xettle's architecture. Update it when systems change.*
