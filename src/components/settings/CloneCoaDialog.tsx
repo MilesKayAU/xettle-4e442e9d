@@ -208,6 +208,21 @@ export default function CloneCoaDialog({
     return conflicts;
   }, [cloneRows, allCodes]);
 
+  // Detect which rows would collide with existing Xero accounts
+  const existingCodeSet = useMemo(() => new Set(allCodes), [allCodes]);
+  const existingCollisions = useMemo(() => {
+    const collisions = new Set<number>();
+    for (let i = 0; i < cloneRows.length; i++) {
+      if (cloneRows[i].enabled && existingCodeSet.has(cloneRows[i].newCode)) {
+        collisions.add(i);
+      }
+    }
+    return collisions;
+  }, [cloneRows, existingCodeSet]);
+
+  const allNewAccounts = enabledRows.length > 0 && existingCollisions.size === 0 && codeConflicts.size === 0;
+  const hasOverwriteRisk = existingCollisions.size > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
