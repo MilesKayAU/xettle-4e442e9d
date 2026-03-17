@@ -352,6 +352,10 @@ export default function AccountMapperCard() {
       if (activeSetting?.value) {
         try {
           const codes = JSON.parse(activeSetting.value);
+          // Store confirmed codes for overwrite detection
+          if (confirmedSetting?.value) {
+            try { setConfirmedCodes(JSON.parse(confirmedSetting.value)); } catch { /* */ }
+          }
           const restored: Record<string, MappingEntry> = {};
           for (const cat of CATEGORIES) {
             if (codes[cat]) {
