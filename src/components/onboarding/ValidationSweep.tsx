@@ -220,7 +220,7 @@ export default function ValidationSweep({
   const handleSyncRow = async (row: ValidationRow) => {
     setSyncingRow(row.id);
     try {
-      const result = await runDirectMarketplaceSync(row.marketplace_code, row.period_start, row.period_end);
+      const result = await runDirectMarketplaceSync(row.marketplace_code);
       if (result?.success) {
         toast.success(`Synced ${row.marketplace_code} for ${row.period_label}`);
         loadData();
