@@ -50,6 +50,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     connectionsRes,
     settingsRes,
     alertsRes,
+    xeroTokensRes,
   ] = await Promise.all([
     // Settlements with status breakdowns (non-hidden, non-pre-boundary)
     supabase
@@ -72,7 +73,6 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .select('key, value')
       .in('key', [
         'accounting_xero_account_codes',
-        'xero_tenant_id',
         'scope_acknowledged_at',
         'scope_version',
         'tax_profile',
@@ -83,6 +83,11 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .from('marketplace_validation')
       .select('id', { count: 'exact', head: true })
       .in('overall_status', ['missing', 'partial']),
+
+    // Xero tokens — the actual source of truth for Xero connection
+    supabase
+      .from('xero_tokens')
+      .select('id', { count: 'exact', head: true }),
   ]);
 
   const settlements = settlementsRes.data || [];
