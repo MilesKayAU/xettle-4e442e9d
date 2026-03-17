@@ -335,6 +335,38 @@ export default function ValidationSweep({
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
+  // Reset selection when filters change
+  useEffect(() => { setSelectedIds(new Set()); }, [filter, marketplaceFilter, dateFrom, dateTo]);
+
+  // Selectable rows (only ready_to_push)
+  const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id), [filteredRows]);
+  const allSelectableSelected = selectableRows.length > 0 && selectableRows.every(r => selectedIds.has(r.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allSelectableSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableRows.map(r => r.id)));
+    }
+  };
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkPush = () => {
+    const selected = filteredRows.filter(r => selectedIds.has(r.id) && r.settlement_id);
+    if (selected.length === 0) return;
+    setPreviewSettlements(selected.map(r => ({ settlementId: r.settlement_id!, marketplace: r.marketplace_code })));
+    setPreviewOpen(true);
+  };
+
   // Pagination
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
