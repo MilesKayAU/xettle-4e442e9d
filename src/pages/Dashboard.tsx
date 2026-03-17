@@ -47,8 +47,8 @@ const OutstandingTab = lazy(() => import('@/components/dashboard/OutstandingTab'
 import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
 const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
 
-type DashboardView = 'dashboard' | 'outstanding' | 'smart_upload' | 'settlements' | 'insights' | 'settings';
-type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
+type DashboardView = 'home' | 'settlements' | 'insights' | 'settings';
+type SettlementsSubTab = 'overview' | 'all' | 'outstanding' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
 function AiMapperBanner({ show: showProp }: { show?: boolean }) {
