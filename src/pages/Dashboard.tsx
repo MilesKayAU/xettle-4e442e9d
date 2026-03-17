@@ -1020,7 +1020,7 @@ export default function Dashboard() {
                     setWizardInitialStep(2);
                     setShowWizard(true);
                   }}
-                  onGoToUpload={() => switchView('smart_upload')}
+                  onGoToUpload={() => setShowUploadSheet(true)}
                 />
               </SettingsAccordion>
 
