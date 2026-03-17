@@ -45,7 +45,9 @@ export default function CoaBlockerCta({
   missingCategories,
   onResolved,
   compact = false,
+  onNavigateToMapper,
 }: CoaBlockerCtaProps) {
+  const navigate = useNavigate();
   const [coaAccounts, setCoaAccounts] = useState<CachedXeroAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
