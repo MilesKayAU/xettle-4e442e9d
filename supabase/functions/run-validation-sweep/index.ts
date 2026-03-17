@@ -476,7 +476,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
 
     const periodKeys = new Set<string>()
     for (const s of (settlements || [])) {
-      if (s.marketplace === mc) periodKeys.add(`${s.period_start} → ${s.period_end}`)
+      if (s.marketplace === mc && s.status !== 'duplicate_suppressed') periodKeys.add(`${s.period_start} → ${s.period_end}`)
     }
     // Only create synthetic monthly periods if NO real settlement periods exist for this marketplace
     // This prevents phantom "full month" rows when actual settlements are fortnightly/weekly
