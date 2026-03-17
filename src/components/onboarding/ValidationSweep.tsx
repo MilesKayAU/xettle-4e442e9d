@@ -23,7 +23,7 @@ import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/s
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
-import { runMarketplaceSync } from '@/actions/sync';
+import { runMarketplaceSync, runDirectMarketplaceSync } from '@/actions/sync';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 
 interface ValidationRow {
@@ -724,11 +724,12 @@ export default function ValidationSweep({
                       onSync={async () => {
                         setSyncingRow(row.id);
                         try {
-                          const result = await runMarketplaceSync(row.marketplace_code);
+                          const result = await runDirectMarketplaceSync(row.marketplace_code);
                           if (result.success) {
                             toast.success(`Sync triggered for ${MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}`);
-                            // Refresh after a short delay to let the sync complete
-                            setTimeout(() => loadData(), 3000);
+                            // First reload after 5s, safety net at 12s
+                            setTimeout(() => loadData(), 5000);
+                            setTimeout(() => loadData(), 12000);
                           } else {
                             toast.error(result.error || 'Sync failed');
                           }
@@ -805,10 +806,11 @@ export default function ValidationSweep({
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
                   const codes = [...new Set(syncNeededRows.map(r => r.marketplace_code))];
                   for (const code of codes) {
-                    await runMarketplaceSync(code);
+                    await runDirectMarketplaceSync(code);
                   }
                   toast.success('Sync triggered for API-connected marketplaces');
-                  setTimeout(() => loadData(), 3000);
+                  setTimeout(() => loadData(), 6000);
+                  setTimeout(() => loadData(), 14000);
                 }}>
                   <RefreshCw className="h-3.5 w-3.5" /> Sync All
                 </Button>

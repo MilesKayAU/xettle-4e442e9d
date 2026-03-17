@@ -57,3 +57,71 @@ export async function runMarketplaceSync(rail?: string): Promise<SyncActionResul
 
   return { success: true, detail: result.data?.message };
 }
+
+/**
+ * Marketplace code → dedicated edge function mapping.
+ * Only marketplaces with direct API fetch functions are listed.
+ */
+const DIRECT_FETCH_MAP: Record<string, string> = {
+  amazon_au: 'fetch-amazon-settlements',
+  ebay_au: 'fetch-ebay-settlements',
+  ebay: 'fetch-ebay-settlements',
+  shopify_payments: 'fetch-shopify-payouts',
+};
+
+/**
+ * Targeted per-marketplace sync: calls the dedicated fetch edge function
+ * for the given marketplace, then triggers a validation sweep to update
+ * the marketplace_validation table.
+ *
+ * Falls back to the full scheduled-sync pipeline for marketplaces
+ * without a dedicated API fetch function.
+ */
+export async function runDirectMarketplaceSync(code: string): Promise<SyncActionResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { success: false, error: 'Not authenticated' };
+
+  const normalized = code.trim().toLowerCase();
+  const edgeFn = DIRECT_FETCH_MAP[normalized];
+
+  if (!edgeFn) {
+    // No dedicated function — fall back to full pipeline
+    return runMarketplaceSync(normalized);
+  }
+
+  // Calculate a 2-month lookback window
+  const syncFrom = new Date();
+  syncFrom.setMonth(syncFrom.getMonth() - 2);
+  const syncFromStr = syncFrom.toISOString().split('T')[0];
+
+  // Step 1: Call the dedicated fetch function
+  const fetchResult = await callEdgeFunctionSafe(
+    edgeFn,
+    session.access_token,
+    { sync_from: syncFromStr },
+  );
+
+  if (!fetchResult.ok) {
+    if (fetchResult.rateLimited) {
+      return { success: false, error: 'Sync rate limited — try again shortly' };
+    }
+    return { success: false, error: fetchResult.error || `${edgeFn} failed` };
+  }
+
+  // Step 2: Trigger validation sweep to update marketplace_validation table
+  const sweepResult = await callEdgeFunctionSafe(
+    'run-validation-sweep',
+    session.access_token,
+    {},
+  );
+
+  if (!sweepResult.ok) {
+    // Fetch succeeded but sweep failed — still report partial success
+    return {
+      success: true,
+      detail: `Data fetched but validation sweep failed: ${sweepResult.error}`,
+    };
+  }
+
+  return { success: true, detail: fetchResult.data?.message || 'Sync complete' };
+}
