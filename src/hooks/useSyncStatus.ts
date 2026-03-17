@@ -79,7 +79,7 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
 
     const eventMatch = systemEvents?.find(e =>
       eventTypes.includes(e.event_type) &&
-      (!marketplaceCode || e.marketplace_code === marketplaceCode)
+      (!marketplaceCode || !e.marketplace_code || e.marketplace_code === marketplaceCode || e.marketplace_code.startsWith(marketplaceCode))
     );
 
     const candidates: { date: Date; isError: boolean; message?: string }[] = [];
