@@ -697,11 +697,10 @@ export default function Dashboard() {
 
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
-        {activeView === 'dashboard' && <SetupInProgressBanner show={showSetupBanner} />}
+        {activeView === 'home' && <SetupInProgressBanner show={showSetupBanner} />}
 
-        {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
-        {/* ─── Dashboard (always useful — strip, actions, validation) ──── */}
-        {activeView === 'dashboard' && (
+        {/* ─── Home (command centre — strip, actions, status) ──── */}
+        {activeView === 'home' && (
           <ErrorBoundary>
             <div className="space-y-6">
               {/* Today's Tasks — what needs doing right now */}
