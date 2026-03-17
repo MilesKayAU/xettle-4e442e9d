@@ -505,28 +505,24 @@ export default function Dashboard() {
   }
 
   // ─── AI Assistant context (sitewide via AiContextProvider) ─────
-  const aiRouteId = activeView === 'outstanding' ? 'outstanding' as const
-    : activeView === 'settings' ? 'settings' as const
+  const aiRouteId = activeView === 'settings' ? 'settings' as const
     : activeView === 'insights' ? 'insights' as const
-    : activeView === 'settlements' ? 'settlements' as const
-    : activeView === 'smart_upload' ? 'smart_upload' as const
+    : activeView === 'settlements' ? (settlementsSubTab === 'outstanding' ? 'outstanding' as const : 'settlements' as const)
     : 'dashboard' as const;
 
   const aiSuggestedPrompts = useMemo(() => {
     if (activeView === 'insights') return ['Which marketplace is most profitable?', 'Why are my fees so high this month?', 'How does this month compare to last?'];
-    if (activeView === 'outstanding') return ['Are these invoices pushed to Xero?', 'Which settlements are ready to push?', 'What does matched exact mean?'];
+    if (activeView === 'settlements' && settlementsSubTab === 'outstanding') return ['Are these invoices pushed to Xero?', 'Which settlements are ready to push?', 'What does matched exact mean?'];
     if (activeView === 'settlements') return ['Why is this settlement negative?', 'Is this ready to push to Xero?', 'Explain these fees'];
     return ['What needs my attention today?', 'Why do I have settlements missing?', 'Am I up to date with Xero?'];
-  }, [activeView]);
+  }, [activeView, settlementsSubTab]);
 
   useAiPageContext(() => ({
     routeId: aiRouteId,
-    pageTitle: activeView === 'outstanding' ? 'Outstanding Invoices'
-      : activeView === 'settlements' ? 'Settlements'
+    pageTitle: activeView === 'settlements' ? (settlementsSubTab === 'outstanding' ? 'Awaiting Payment' : 'Settlements')
       : activeView === 'insights' ? 'Insights'
       : activeView === 'settings' ? 'Settings'
-      : activeView === 'smart_upload' ? 'Upload Settlements'
-      : 'Dashboard',
+      : 'Home',
     primaryEntities: {
       marketplace_codes: userMarketplaces.map(m => m.marketplace_code),
     },
