@@ -92,7 +92,7 @@ export default function RailPostingSettings() {
     try {
       const [settingsRes, connectionsRes, failedRes, orgTaxProfile] = await Promise.all([
         supabase.from('rail_posting_settings').select('*'),
-        supabase.from('marketplace_connections').select('marketplace_code').neq('connection_status', 'suggested'),
+        supabase.from('marketplace_connections').select('marketplace_code').in('connection_status', ['active', 'connected']),
         supabase.from('settlements')
           .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, posting_error')
           .eq('posting_state', 'failed')

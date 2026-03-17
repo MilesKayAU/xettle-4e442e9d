@@ -160,7 +160,7 @@ export default function ActionCentre({
         supabase.auth.getUser(),
         supabase.from('settlements').select('marketplace').eq('source', 'api'),
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
-        supabase.from('marketplace_connections').select('marketplace_code').order('created_at'),
+        supabase.from('marketplace_connections').select('marketplace_code').in('connection_status', ['active', 'connected']).order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('settlements')
           .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status, posting_state')

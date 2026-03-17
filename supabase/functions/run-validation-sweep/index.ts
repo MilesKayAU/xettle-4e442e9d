@@ -376,6 +376,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
     .from('marketplace_connections')
     .select('marketplace_code, marketplace_name')
     .eq('user_id', userId)
+    .in('connection_status', ['active', 'connected'])
 
   if (!connections || connections.length === 0) return summary
 
