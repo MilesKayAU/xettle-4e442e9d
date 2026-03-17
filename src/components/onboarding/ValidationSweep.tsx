@@ -14,8 +14,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw,
   Upload, ArrowRight, Send, Search, PartyPopper, Clock, Filter,
-  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp,
+  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp, Square, CheckSquare,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
