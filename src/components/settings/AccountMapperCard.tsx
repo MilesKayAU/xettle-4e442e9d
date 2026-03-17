@@ -725,13 +725,20 @@ export default function AccountMapperCard() {
         updated[cat] = mapping[cat].code;
       }
     }
-    // Apply per-marketplace override suggestions from AI
+    // Apply per-marketplace override suggestions from AI + COA scan
     if (splitByMarketplace) {
       for (const mp of getEffectiveMarketplaces()) {
         for (const cat of SPLITTABLE_CATEGORIES) {
           const key = `${cat}:${mp}`;
-          if (!updated[key] && mapping[key]?.code) {
-            updated[key] = mapping[key].code;
+          if (!updated[key]) {
+            // Try AI mapping first, then COA suggestion
+            const aiCode = mapping[key]?.code;
+            const coaCode = coaSuggestions.get(key)?.code;
+            if (aiCode) {
+              updated[key] = aiCode;
+            } else if (coaCode) {
+              updated[key] = coaCode;
+            }
           }
         }
       }
