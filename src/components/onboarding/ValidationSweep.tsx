@@ -23,7 +23,7 @@ import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/s
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
-import { runMarketplaceSync } from '@/actions/sync';
+import { runMarketplaceSync, runDirectMarketplaceSync } from '@/actions/sync';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 
 interface ValidationRow {
