@@ -813,63 +813,52 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
 
-        {/* ─── Outstanding (Xero reconciliation action tab) ────────── */}
-        {activeView === 'outstanding' && (
+        {/* ─── Settlements → Awaiting Payment ──────────────────────── */}
+        {activeView === 'settlements' && settlementsSubTab === 'outstanding' && (
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-              <OutstandingTab onSwitchToUpload={() => switchView('smart_upload')} />
+              <OutstandingTab onSwitchToUpload={() => setShowUploadSheet(true)} />
             </Suspense>
           </ErrorBoundary>
         )}
 
-        {/* ─── Upload Hub — uploader first, everything else below ── */}
-        {activeView === 'smart_upload' && (
-          <ErrorBoundary>
-            <div className="space-y-6">
-              {/* Hero message — stronger AI detection messaging */}
-              <div className="text-center space-y-2 pt-2">
-                <h2 className="text-2xl font-bold text-foreground">
-                  Upload any settlement file — Xettle handles the rest
-                </h2>
-                <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-                  Drop a CSV, XLSX, or PDF from any marketplace. Xettle automatically detects the platform,
-                  extracts fees, refunds, sales & GST, and prepares it for Xero.
-                </p>
-                <p className="text-xs text-muted-foreground/70 max-w-md mx-auto">
-                  Works alongside your API connections — use automated imports for Amazon & Shopify, 
-                  then upload files for everything else. Xettle learns new formats instantly.
-                </p>
+        {/* ─── Upload Sheet (modal overlay) ─────────────────────────── */}
+        {showUploadSheet && (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
+            <div className="fixed inset-x-0 top-0 bottom-0 z-50 overflow-y-auto bg-background">
+              <div className="container-custom py-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="text-center flex-1 space-y-2">
+                    <h2 className="text-2xl font-bold text-foreground">
+                      Upload any settlement file — Xettle handles the rest
+                    </h2>
+                    <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+                      Drop a CSV, XLSX, or PDF from any marketplace. Xettle automatically detects the platform,
+                      extracts fees, refunds, sales & GST, and prepares it for Xero.
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowUploadSheet(false); setMissingSettlements([]); }} className="shrink-0 ml-4">
+                    ✕ Close
+                  </Button>
+                </div>
+                <ErrorBoundary>
+                  <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+                    <SmartUploadFlow
+                      onSettlementsSaved={loadMarketplaces}
+                      onMarketplacesChanged={loadMarketplaces}
+                      onViewSettlements={() => { setShowUploadSheet(false); switchView('settlements'); }}
+                      missingSettlements={missingSettlements}
+                      onReturnToDashboard={() => {
+                        setMissingSettlements([]);
+                        setShowUploadSheet(false);
+                      }}
+                    />
+                  </Suspense>
+                  <RecentUploads />
+                </ErrorBoundary>
               </div>
-
-              {/* Smart Upload drop zone — PRIMARY action, front and center */}
-              <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                <SmartUploadFlow
-                  onSettlementsSaved={loadMarketplaces}
-                  onMarketplacesChanged={loadMarketplaces}
-                  onViewSettlements={() => switchView('settlements')}
-                  missingSettlements={missingSettlements}
-                  onReturnToDashboard={() => {
-                    setMissingSettlements([]);
-                    switchView('dashboard');
-                  }}
-                />
-              </Suspense>
-
-              {/* Recent uploads — confirmation that files were processed */}
-              <RecentUploads />
-
-              {/* Workflow options — below the uploader */}
-              <WelcomeGuide
-                onUpload={() => {
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                onConnectStore={() => {
-                  setWizardInitialStep(1);
-                  setShowWizard(true);
-                }}
-              />
             </div>
-          </ErrorBoundary>
+          </div>
         )}
 
         {/* ─── Settlements → All Settlements ─────────────────────────── */}
