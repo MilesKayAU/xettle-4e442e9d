@@ -89,6 +89,8 @@ export default function AccountMapperCard() {
   const [splitByMarketplace, setSplitByMarketplace] = useState(false);
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
   const [globalMappingFlags, setGlobalMappingFlags] = useState<Record<string, boolean>>({});
+  const [registryEntries, setRegistryEntries] = useState<RegistryEntry[]>([]);
+  const [processorEntries, setProcessorEntries] = useState<ProcessorEntry[]>([]);
 
   // Clone COA state
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
