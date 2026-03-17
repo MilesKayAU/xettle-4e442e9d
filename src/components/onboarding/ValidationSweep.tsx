@@ -708,7 +708,7 @@ export default function ValidationSweep({
 
                   {/* Status */}
                   <td className="px-4 py-3 text-center">
-                    <StatusPill status={row.overall_status} />
+                    <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
                   </td>
 
                   {/* Action */}
@@ -716,8 +716,27 @@ export default function ValidationSweep({
                     <RowAction
                       row={row}
                       pushing={pushing === row.id}
+                      syncing={syncingRow === row.id}
+                      isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
                       onUpload={() => onSwitchToUpload?.()}
                       onPush={() => openPushPreview(row)}
+                      onSync={async () => {
+                        setSyncingRow(row.id);
+                        try {
+                          const result = await runMarketplaceSync(row.marketplace_code);
+                          if (result.success) {
+                            toast.success(`Sync triggered for ${MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}`);
+                            // Refresh after a short delay to let the sync complete
+                            setTimeout(() => loadData(), 3000);
+                          } else {
+                            toast.error(result.error || 'Sync failed');
+                          }
+                        } catch (err: any) {
+                          toast.error(err.message || 'Sync failed');
+                        } finally {
+                          setSyncingRow(null);
+                        }
+                      }}
                     />
                   </td>
                 </tr>
