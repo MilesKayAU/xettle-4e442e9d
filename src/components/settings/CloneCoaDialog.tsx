@@ -331,8 +331,18 @@ export default function CloneCoaDialog({
                           onChange={(e) => updateRowCode(idx, e.target.value)}
                           disabled={!row.enabled}
                         />
-                        {codeConflicts.has(idx) && (
+                        {codeConflicts.has(idx) && existingCollisions.has(idx) && (
+                          <span className="text-[9px] text-destructive flex items-center gap-0.5 mt-0.5">
+                            <AlertTriangle className="h-2.5 w-2.5" /> Exists in Xero — will be blocked
+                          </span>
+                        )}
+                        {codeConflicts.has(idx) && !existingCollisions.has(idx) && (
                           <span className="text-[9px] text-destructive">Code conflict</span>
+                        )}
+                        {!codeConflicts.has(idx) && row.enabled && (
+                          <span className="text-[9px] text-emerald-600 flex items-center gap-0.5 mt-0.5">
+                            <CheckCircle2 className="h-2.5 w-2.5" /> New
+                          </span>
                         )}
                       </td>
                       <td className="p-2">
