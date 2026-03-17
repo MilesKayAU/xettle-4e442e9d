@@ -537,52 +537,78 @@ export default function AccountMapperCard() {
     }
   };
 
+  const buildFinalCodes = () => {
+    const finalCodes: Record<string, string> = {};
+    for (const cat of CATEGORIES) {
+      finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
+    }
+    if (splitByMarketplace) {
+      for (const mp of getEffectiveMarketplaces()) {
+        for (const cat of SPLITTABLE_CATEGORIES) {
+          const key = `${cat}:${mp}`;
+          if (editableMapping[key]) {
+            finalCodes[key] = editableMapping[key];
+          }
+        }
+      }
+    }
+    return finalCodes;
+  };
+
+  const executeConfirm = async (finalCodes: Record<string, string>) => {
+    try {
+      const { confirmMappings } = await import('@/actions/accountMappings');
+      const result = await confirmMappings(finalCodes);
+      if (!result.success) throw new Error(result.error);
+
+      const updatedMapping: Record<string, MappingEntry> = {};
+      for (const cat of CATEGORIES) {
+        const code = finalCodes[cat];
+        const coaEntry = coaAccounts.find(a => a.account_code === code);
+        updatedMapping[cat] = {
+          code,
+          name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
+        };
+      }
+      for (const key of Object.keys(finalCodes)) {
+        if (key.includes(':')) {
+          const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
+          updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
+        }
+      }
+      setMapping(updatedMapping);
+      setConfirmedCodes(finalCodes);
+      setState('confirmed');
+      toast.success('Account mapping confirmed — all Xero pushes will use these codes');
+    } catch (err: any) {
+      toast.error(`Failed to save mapping: ${err.message}`);
+    }
+  };
+
   const handleConfirm = async () => {
     settingsPin.requirePin(async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error('Not authenticated'); return; }
 
-        const finalCodes: Record<string, string> = {};
-        for (const cat of CATEGORIES) {
-          finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
-        }
+      const finalCodes = buildFinalCodes();
 
-        if (splitByMarketplace) {
-          for (const mp of getEffectiveMarketplaces()) {
-            for (const cat of SPLITTABLE_CATEGORIES) {
-              const key = `${cat}:${mp}`;
-              if (editableMapping[key]) {
-                finalCodes[key] = editableMapping[key];
-              }
-            }
-          }
+      // Detect overwrites of existing confirmed codes
+      const changes: Array<{ category: string; oldCode: string; newCode: string }> = [];
+      for (const [key, newCode] of Object.entries(finalCodes)) {
+        const oldCode = confirmedCodes[key];
+        if (oldCode && newCode && oldCode !== newCode) {
+          changes.push({ category: key, oldCode, newCode });
         }
+      }
 
-        const { confirmMappings } = await import('@/actions/accountMappings');
-        const result = await confirmMappings(finalCodes);
-        if (!result.success) throw new Error(result.error);
-
-        const updatedMapping: Record<string, MappingEntry> = {};
-        for (const cat of CATEGORIES) {
-          const code = finalCodes[cat];
-          const coaEntry = coaAccounts.find(a => a.account_code === code);
-          updatedMapping[cat] = {
-            code,
-            name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
-          };
-        }
-        for (const key of Object.keys(finalCodes)) {
-          if (key.includes(':')) {
-            const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
-            updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
-          }
-        }
-        setMapping(updatedMapping);
-        setState('confirmed');
-        toast.success('Account mapping confirmed — all Xero pushes will use these codes');
-      } catch (err: any) {
-        toast.error(`Failed to save mapping: ${err.message}`);
+      if (changes.length > 0) {
+        // Show overwrite confirmation
+        setOverwriteChanges(changes);
+        setPendingConfirmAction(() => () => executeConfirm(finalCodes));
+        setOverwriteConfirmOpen(true);
+      } else {
+        // No overwrites — save directly
+        await executeConfirm(finalCodes);
       }
     });
   };
