@@ -96,9 +96,9 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
 
   // ─── Setup checks ─────────────────────────────────────────────────────
 
-  // 1. Xero connected?
-  const xeroTenantId = settingsMap.get('xero_tenant_id');
-  if (!xeroTenantId) {
+  // 1. Xero connected? Check xero_tokens table (source of truth)
+  const hasXeroTokens = (xeroTokensRes.count ?? 0) > 0;
+  if (!hasXeroTokens) {
     setupWarnings.push({
       key: 'xero_not_connected',
       label: 'Xero not connected',
