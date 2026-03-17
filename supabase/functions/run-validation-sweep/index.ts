@@ -400,10 +400,22 @@ async function sweepUser(adminSupabase: any, userId: string) {
   // Order lines kept as flat array — we'll filter per-period below instead of pre-aggregating by month
   const allOrderLines = (orderLines || []) as Array<{ marketplace_name: string | null; posted_date: string | null; amount: number | null; order_id: string | null; amount_type: string | null }>
 
-  const settlementMap = new Map<string, any>()
+  // Store arrays of settlements per key, then pick the best one for each period
+  const settlementArrayMap = new Map<string, any[]>()
   for (const s of (settlements || [])) {
+    if (s.status === 'duplicate_suppressed') continue // skip suppressed duplicates
     const pl = `${s.period_start} → ${s.period_end}`
-    settlementMap.set(`${s.marketplace}|${pl}`, s)
+    const key = `${s.marketplace}|${pl}`
+    if (!settlementArrayMap.has(key)) settlementArrayMap.set(key, [])
+    settlementArrayMap.get(key)!.push(s)
+  }
+
+  // Pick the best settlement per key: prefer pushed_to_xero > ready_to_push > saved > ingested
+  const STATUS_PRIORITY: Record<string, number> = { pushed_to_xero: 4, synced_external: 4, ready_to_push: 3, saved: 2, ingested: 1, already_recorded: 5 }
+  const settlementMap = new Map<string, any>()
+  for (const [key, arr] of settlementArrayMap) {
+    arr.sort((a: any, b: any) => (STATUS_PRIORITY[b.status] || 0) - (STATUS_PRIORITY[a.status] || 0))
+    settlementMap.set(key, arr[0])
   }
 
   const reconMap = new Map<string, any>()
@@ -464,7 +476,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
 
     const periodKeys = new Set<string>()
     for (const s of (settlements || [])) {
-      if (s.marketplace === mc) periodKeys.add(`${s.period_start} → ${s.period_end}`)
+      if (s.marketplace === mc && s.status !== 'duplicate_suppressed') periodKeys.add(`${s.period_start} → ${s.period_end}`)
     }
     // Only create synthetic monthly periods if NO real settlement periods exist for this marketplace
     // This prevents phantom "full month" rows when actual settlements are fortnightly/weekly
