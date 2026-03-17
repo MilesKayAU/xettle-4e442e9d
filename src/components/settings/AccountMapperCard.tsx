@@ -131,6 +131,67 @@ export default function AccountMapperCard() {
     };
   }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
 
+  // ─── COA-based suggestions for marketplace-specific rows ─────────
+  const coaSuggestions = useMemo(() => {
+    if (!splitByMarketplace || coaAccounts.length === 0) return new Map<string, { code: string; name: string }>();
+
+    const CATEGORY_KEYWORDS: Record<string, string[]> = {
+      Sales: ['sales', 'revenue', 'income'],
+      Shipping: ['shipping', 'freight', 'postage'],
+      'Promotional Discounts': ['discount', 'promotion'],
+      Refunds: ['refund', 'return'],
+      Reimbursements: ['reimbursement'],
+      'Seller Fees': ['seller fee', 'referral fee', 'commission', 'fees'],
+      'FBA Fees': ['fba', 'fulfilment', 'fulfillment'],
+      'Storage Fees': ['storage', 'warehouse'],
+      'Advertising Costs': ['advertising', 'sponsored', 'ppc', 'ad spend'],
+      'Other Fees': ['other fee', 'miscellaneous', 'adjustment'],
+    };
+
+    const suggestions = new Map<string, { code: string; name: string }>();
+    const marketplaces = activeMarketplaces.length > 0 ? activeMarketplaces : [];
+
+    for (const mp of marketplaces) {
+      const mpNorm = mp.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+      // Also try common abbreviations
+      const mpTokens = mpNorm.split(/\s+/);
+
+      for (const cat of SPLITTABLE_CATEGORIES) {
+        const key = `${cat}:${mp}`;
+        const catKeywords = CATEGORY_KEYWORDS[cat] || [];
+
+        // Find COA accounts that match BOTH marketplace name AND category keyword
+        let bestMatch: { code: string; name: string; score: number } | null = null;
+
+        for (const acc of coaAccounts) {
+          if (!acc.account_code || !acc.is_active) continue;
+          const accNorm = acc.account_name.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+
+          // Check if account name contains marketplace identifier
+          const hasMarketplace = mpTokens.some(t => t.length >= 3 && accNorm.includes(t)) || accNorm.includes(mpNorm);
+          if (!hasMarketplace) continue;
+
+          // Check if account name matches category
+          for (const kw of catKeywords) {
+            if (accNorm.includes(kw)) {
+              const score = accNorm === `${mpNorm} ${kw}` ? 10 : 5;
+              if (!bestMatch || score > bestMatch.score) {
+                bestMatch = { code: acc.account_code, name: acc.account_name, score };
+              }
+              break;
+            }
+          }
+        }
+
+        if (bestMatch) {
+          suggestions.set(key, { code: bestMatch.code, name: bestMatch.name });
+        }
+      }
+    }
+
+    return suggestions;
+  }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
+
   // User-selected marketplaces for COA cloning
   const [selectedForClone, setSelectedForClone] = useState<Set<string>>(new Set());
 
@@ -664,13 +725,20 @@ export default function AccountMapperCard() {
         updated[cat] = mapping[cat].code;
       }
     }
-    // Apply per-marketplace override suggestions from AI
+    // Apply per-marketplace override suggestions from AI + COA scan
     if (splitByMarketplace) {
       for (const mp of getEffectiveMarketplaces()) {
         for (const cat of SPLITTABLE_CATEGORIES) {
           const key = `${cat}:${mp}`;
-          if (!updated[key] && mapping[key]?.code) {
-            updated[key] = mapping[key].code;
+          if (!updated[key]) {
+            // Try AI mapping first, then COA suggestion
+            const aiCode = mapping[key]?.code;
+            const coaCode = coaSuggestions.get(key)?.code;
+            if (aiCode) {
+              updated[key] = aiCode;
+            } else if (coaCode) {
+              updated[key] = coaCode;
+            }
           }
         }
       }
@@ -802,16 +870,18 @@ export default function AccountMapperCard() {
       const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
       const overrideCode = editableMapping[key] || '';
       const aiSuggestion = mapping[key]; // AI-suggested per-rail mapping
+      const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
+      const suggestion = aiSuggestion || (coaSuggestion ? { code: coaSuggestion.code, name: coaSuggestion.name } : null);
       return (
         <tr key={key} className="border-b last:border-b-0 bg-muted/20">
           <td className="p-2 pl-6">
             <div className="text-xs text-muted-foreground">↳ {mp} {baseCat}</div>
           </td>
           <td className="p-2">
-            {aiSuggestion?.code ? (
+            {suggestion?.code ? (
               <span className="text-xs">
-                <span className="font-mono">{aiSuggestion.code}</span>
-                <span className="text-muted-foreground ml-1">— {aiSuggestion.name}</span>
+                <span className="font-mono">{suggestion.code}</span>
+                <span className="text-muted-foreground ml-1">— {suggestion.name}</span>
               </span>
             ) : (
               <span className="text-xs text-muted-foreground">
