@@ -566,7 +566,7 @@ export default function ValidationSweep({
           borderClass={filter === 'ready_to_push' ? 'border-blue-400 ring-1 ring-blue-400' : 'border-blue-200 dark:border-blue-800'}
         />
         <SummaryCard
-          label="Upload Needed"
+          label="Action Needed"
           count={counts.settlement_needed}
           emoji="🟡"
           active={filter === 'settlement_needed'}
