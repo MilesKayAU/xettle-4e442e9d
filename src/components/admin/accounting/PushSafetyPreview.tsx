@@ -300,14 +300,38 @@ export default function PushSafetyPreview({
         const periodMonth = s.period_end?.substring(0, 7);
         const periodLocked = periodMonth ? lockedMonths.has(periodMonth) : false;
 
+        // ─── Detect if previously pushed (for overwrite warning) ───
+        let xeroPushedBefore = false;
+        let previousAccountCodes: Record<string, string> | null = null;
+        if (user) {
+          // Check marketplace_validation for xero_pushed flag
+          const { data: valRow } = await supabase
+            .from('marketplace_validation')
+            .select('xero_pushed')
+            .eq('user_id', user.id)
+            .eq('settlement_id', settlementId)
+            .maybeSingle();
+          if (valRow?.xero_pushed) xeroPushedBefore = true;
+
+          // Check if there's a previous xero_entries snapshot with account codes
+          if (s.xero_entries && typeof s.xero_entries === 'object') {
+            try {
+              const entries = s.xero_entries as Record<string, any>;
+              if (entries.account_codes && typeof entries.account_codes === 'object') {
+                previousAccountCodes = entries.account_codes as Record<string, string>;
+              }
+            } catch { /* ignore */ }
+          }
+        }
+
         // Build line items for display using canonical builder
         const resolver = createAccountCodeResolver(userCodes);
         const mpLabel = MARKETPLACE_LABELS[settlement.marketplace] || settlement.marketplace;
         const xeroLines = buildPostingLineItems(settlement as SettlementForPosting, resolver, mpLabel);
         const lineItems = toLineItemPreviews(xeroLines);
 
-        // Build validation checks (now with CoA awareness + already-in-Xero + period lock + CoA freshness)
-        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck, periodLocked, periodMonth, isCoaStale);
+        // Build validation checks (now with CoA awareness + already-in-Xero + period lock + CoA freshness + overwrite protection)
+        const checks = buildValidationChecks(settlement, lineItems, coaMap, userCodes, alreadyInXeroCheck, periodLocked, periodMonth, isCoaStale, xeroPushedBefore, previousAccountCodes);
 
         const contactName = MARKETPLACE_CONTACTS[settlement.marketplace] || `${settlement.marketplace} Marketplace`;
         const reference = `Xettle-${settlement.settlement_id}`;
@@ -589,6 +613,8 @@ function buildValidationChecks(
   periodLocked?: boolean,
   periodMonth?: string | null,
   isCoaStale?: boolean,
+  xeroPushedBefore?: boolean,
+  previousAccountCodes?: Record<string, string> | null,
 ): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
 
@@ -606,6 +632,33 @@ function buildValidationChecks(
     checks.push(alreadyInXeroCheck);
   } else {
     checks.push({ label: 'No existing invoice found in Xero ✓', status: 'green' });
+  }
+
+  // 0x. Overwrite warning — amber if previously pushed (re-push scenario)
+  if (!alreadyInXeroCheck && xeroPushedBefore) {
+    checks.push({
+      label: 'This settlement was previously pushed to Xero',
+      status: 'amber',
+      detail: 'Pushing will create a new invoice — ensure the previous one was voided or deleted.',
+    });
+  }
+
+  // 0y. COA conflict — amber if current account codes differ from previous push
+  if (previousAccountCodes && userCodes && !alreadyInXeroCheck) {
+    const changedCodes: string[] = [];
+    for (const [category, prevCode] of Object.entries(previousAccountCodes)) {
+      const currentCode = userCodes[category];
+      if (currentCode && prevCode && currentCode !== prevCode) {
+        changedCodes.push(`${category}: ${prevCode} → ${currentCode}`);
+      }
+    }
+    if (changedCodes.length > 0) {
+      checks.push({
+        label: 'Account codes differ from previous push',
+        status: 'amber',
+        detail: `Changed: ${changedCodes.join(', ')}. Review before confirming.`,
+      });
+    }
   }
 
   // 0b. UNMAPPED account codes — hard block (MAPPING_REQUIRED)

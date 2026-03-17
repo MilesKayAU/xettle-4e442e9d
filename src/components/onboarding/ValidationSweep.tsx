@@ -3,7 +3,7 @@
  * Used as Settlements → Overview tab and triggered after boundary confirmation.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { logger } from '@/utils/logger';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +14,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw,
   Upload, ArrowRight, Send, Search, PartyPopper, Clock, Filter,
-  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp,
+  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp, Square, CheckSquare,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -117,6 +118,8 @@ export default function ValidationSweep({
   const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>>([]);
   const [showPaused, setShowPaused] = useState(false);
   const [togglingPause, setTogglingPause] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPushing, setBulkPushing] = useState(false);
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
@@ -332,6 +335,38 @@ export default function ValidationSweep({
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
+  // Reset selection when filters change
+  useEffect(() => { setSelectedIds(new Set()); }, [filter, marketplaceFilter, dateFrom, dateTo]);
+
+  // Selectable rows (only ready_to_push)
+  const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id), [filteredRows]);
+  const allSelectableSelected = selectableRows.length > 0 && selectableRows.every(r => selectedIds.has(r.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allSelectableSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableRows.map(r => r.id)));
+    }
+  };
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkPush = () => {
+    const selected = filteredRows.filter(r => selectedIds.has(r.id) && r.settlement_id);
+    if (selected.length === 0) return;
+    setPreviewSettlements(selected.map(r => ({ settlementId: r.settlement_id!, marketplace: r.marketplace_code })));
+    setPreviewOpen(true);
+  };
+
   // Pagination
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -466,6 +501,15 @@ export default function ValidationSweep({
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/30">
+                  <th className="px-2 py-2 text-center w-8">
+                    {selectableRows.length > 0 && (
+                      <Checkbox
+                        checked={allSelectableSelected}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all ready rows"
+                      />
+                    )}
+                  </th>
                   <th className="px-3 py-2 text-left font-medium cursor-pointer" onClick={() => handleSort('marketplace_code')}>
                     <span className="inline-flex items-center">Marketplace<SortIcon col="marketplace_code" /></span>
                   </th>
@@ -490,13 +534,22 @@ export default function ValidationSweep({
               <tbody>
                 {pagedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                       {rows.length === 0 ? 'No validation data yet. Run a scan to get started.' : 'No periods match your filters.'}
                     </td>
                   </tr>
                 ) : (
                   pagedRows.map((row) => (
-                    <tr key={row.id} className="border-b hover:bg-muted/20 transition-colors group">
+                    <tr key={row.id} className={cn("border-b hover:bg-muted/20 transition-colors group", selectedIds.has(row.id) && "bg-primary/5")}>
+                      <td className="px-2 py-2 text-center w-8">
+                        {row.overall_status === 'ready_to_push' && row.settlement_id ? (
+                          <Checkbox
+                            checked={selectedIds.has(row.id)}
+                            onCheckedChange={() => toggleSelectRow(row.id)}
+                            aria-label={`Select ${row.marketplace_code} ${row.period_label}`}
+                          />
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2 font-medium">
                         <span className="inline-flex items-center gap-1">
                           {MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}
@@ -569,12 +622,39 @@ export default function ValidationSweep({
         </CardContent>
       </Card>
 
+      {/* Floating bulk action bar */}
+      {someSelected && (
+        <div className="sticky bottom-4 z-20 mx-auto max-w-md">
+          <div className="flex items-center gap-3 bg-primary text-primary-foreground rounded-lg shadow-lg px-4 py-3">
+            <span className="text-sm font-medium flex-1">
+              {selectedIds.size} settlement{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs gap-1 bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+              onClick={handleBulkPush}
+            >
+              <Send className="h-3 w-3" />
+              Push {selectedIds.size} to Xero →
+            </Button>
+          </div>
+        </div>
+      )}
+
       {previewOpen && (
         <PushSafetyPreview
           settlements={previewSettlements}
           open={previewOpen}
-          onClose={() => setPreviewOpen(false)}
-          onConfirm={async () => { setPreviewOpen(false); loadData(); }}
+          onClose={() => { setPreviewOpen(false); setSelectedIds(new Set()); }}
+          onConfirm={async () => { setPreviewOpen(false); setSelectedIds(new Set()); loadData(); }}
         />
       )}
     </div>

@@ -94,6 +94,14 @@ export default function AccountMapperCard() {
   const [cloneTarget, setCloneTarget] = useState('');
   const [taxProfile, setTaxProfile] = useState<string | null>(null);
 
+  // Overwrite confirmation state
+  const [overwriteConfirmOpen, setOverwriteConfirmOpen] = useState(false);
+  const [overwriteChanges, setOverwriteChanges] = useState<Array<{ category: string; oldCode: string; newCode: string }>>([]);
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
+
+  // Confirmed (saved) codes for comparison
+  const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
+
   // Build CoA lookup map
   const coaMap = useMemo(() => {
     const map = new Map<string, { name: string; type: string; active: boolean }>();
@@ -216,6 +224,49 @@ export default function AccountMapperCard() {
       </div>
     );
   };
+
+  const renderOverwriteConfirmDialog = () => (
+    <Dialog open={overwriteConfirmOpen} onOpenChange={(v) => { if (!v) { setOverwriteConfirmOpen(false); setPendingConfirmAction(null); } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Confirm Account Code Changes
+          </DialogTitle>
+          <DialogDescription>
+            You are about to overwrite existing confirmed account mappings. These codes are used for all Xero pushes.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 max-h-60 overflow-y-auto">
+          {overwriteChanges.map((change, i) => (
+            <div key={i} className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 px-3 py-2 text-xs">
+              <span className="font-medium">{change.category}</span>
+              <span className="font-mono">
+                <span className="text-muted-foreground">{change.oldCode}</span>
+                <span className="mx-1.5">→</span>
+                <span className="font-semibold text-foreground">{change.newCode}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => { setOverwriteConfirmOpen(false); setPendingConfirmAction(null); }}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={async () => {
+              setOverwriteConfirmOpen(false);
+              if (pendingConfirmAction) await pendingConfirmAction();
+              setPendingConfirmAction(null);
+            }}
+          >
+            Overwrite {overwriteChanges.length} mapping{overwriteChanges.length !== 1 ? 's' : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   const renderCloneDialog = () => (
     <CloneCoaDialog
@@ -344,6 +395,10 @@ export default function AccountMapperCard() {
       if (activeSetting?.value) {
         try {
           const codes = JSON.parse(activeSetting.value);
+          // Store confirmed codes for overwrite detection
+          if (confirmedSetting?.value) {
+            try { setConfirmedCodes(JSON.parse(confirmedSetting.value)); } catch { /* */ }
+          }
           const restored: Record<string, MappingEntry> = {};
           for (const cat of CATEGORIES) {
             if (codes[cat]) {
@@ -525,52 +580,78 @@ export default function AccountMapperCard() {
     }
   };
 
+  const buildFinalCodes = () => {
+    const finalCodes: Record<string, string> = {};
+    for (const cat of CATEGORIES) {
+      finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
+    }
+    if (splitByMarketplace) {
+      for (const mp of getEffectiveMarketplaces()) {
+        for (const cat of SPLITTABLE_CATEGORIES) {
+          const key = `${cat}:${mp}`;
+          if (editableMapping[key]) {
+            finalCodes[key] = editableMapping[key];
+          }
+        }
+      }
+    }
+    return finalCodes;
+  };
+
+  const executeConfirm = async (finalCodes: Record<string, string>) => {
+    try {
+      const { confirmMappings } = await import('@/actions/accountMappings');
+      const result = await confirmMappings(finalCodes);
+      if (!result.success) throw new Error(result.error);
+
+      const updatedMapping: Record<string, MappingEntry> = {};
+      for (const cat of CATEGORIES) {
+        const code = finalCodes[cat];
+        const coaEntry = coaAccounts.find(a => a.account_code === code);
+        updatedMapping[cat] = {
+          code,
+          name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
+        };
+      }
+      for (const key of Object.keys(finalCodes)) {
+        if (key.includes(':')) {
+          const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
+          updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
+        }
+      }
+      setMapping(updatedMapping);
+      setConfirmedCodes(finalCodes);
+      setState('confirmed');
+      toast.success('Account mapping confirmed — all Xero pushes will use these codes');
+    } catch (err: any) {
+      toast.error(`Failed to save mapping: ${err.message}`);
+    }
+  };
+
   const handleConfirm = async () => {
     settingsPin.requirePin(async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error('Not authenticated'); return; }
 
-        const finalCodes: Record<string, string> = {};
-        for (const cat of CATEGORIES) {
-          finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
-        }
+      const finalCodes = buildFinalCodes();
 
-        if (splitByMarketplace) {
-          for (const mp of getEffectiveMarketplaces()) {
-            for (const cat of SPLITTABLE_CATEGORIES) {
-              const key = `${cat}:${mp}`;
-              if (editableMapping[key]) {
-                finalCodes[key] = editableMapping[key];
-              }
-            }
-          }
+      // Detect overwrites of existing confirmed codes
+      const changes: Array<{ category: string; oldCode: string; newCode: string }> = [];
+      for (const [key, newCode] of Object.entries(finalCodes)) {
+        const oldCode = confirmedCodes[key];
+        if (oldCode && newCode && oldCode !== newCode) {
+          changes.push({ category: key, oldCode, newCode });
         }
+      }
 
-        const { confirmMappings } = await import('@/actions/accountMappings');
-        const result = await confirmMappings(finalCodes);
-        if (!result.success) throw new Error(result.error);
-
-        const updatedMapping: Record<string, MappingEntry> = {};
-        for (const cat of CATEGORIES) {
-          const code = finalCodes[cat];
-          const coaEntry = coaAccounts.find(a => a.account_code === code);
-          updatedMapping[cat] = {
-            code,
-            name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
-          };
-        }
-        for (const key of Object.keys(finalCodes)) {
-          if (key.includes(':')) {
-            const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
-            updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
-          }
-        }
-        setMapping(updatedMapping);
-        setState('confirmed');
-        toast.success('Account mapping confirmed — all Xero pushes will use these codes');
-      } catch (err: any) {
-        toast.error(`Failed to save mapping: ${err.message}`);
+      if (changes.length > 0) {
+        // Show overwrite confirmation
+        setOverwriteChanges(changes);
+        setPendingConfirmAction(() => () => executeConfirm(finalCodes));
+        setOverwriteConfirmOpen(true);
+      } else {
+        // No overwrites — save directly
+        await executeConfirm(finalCodes);
       }
     });
   };
@@ -978,6 +1059,7 @@ export default function AccountMapperCard() {
         </CardContent>
       </Card>
       {renderCloneDialog()}
+      {renderOverwriteConfirmDialog()}
       </>
     );
   }
@@ -1107,6 +1189,7 @@ export default function AccountMapperCard() {
       </CardContent>
     </Card>
     {renderCloneDialog()}
+    {renderOverwriteConfirmDialog()}
     </>
   );
 }
