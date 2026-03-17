@@ -383,8 +383,8 @@ export default function Dashboard() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        // Separate active channels from suggested (CoA-detected)
-        const activeConnections = data.filter((m: any) => m.connection_status !== 'suggested');
+        // Separate active channels from suggested and paused (CoA-detected / user-hidden)
+        const activeConnections = data.filter((m: any) => m.connection_status !== 'suggested' && m.connection_status !== 'paused');
         const suggested = data.filter((m: any) => m.connection_status === 'suggested');
 
         setUserMarketplaces(activeConnections as UserMarketplace[]);
