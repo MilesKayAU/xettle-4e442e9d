@@ -316,6 +316,171 @@ export default function ValidationSweep({
     }
   };
 
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6 space-y-3">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-40 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (sweeping) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+          <p className="text-sm font-medium">{SWEEP_STEPS[sweepStep]}</p>
+          <div className="flex gap-1 justify-center">
+            {SWEEP_STEPS.map((_, i) => (
+              <div key={i} className={cn('h-1.5 w-8 rounded-full', i <= sweepStep ? 'bg-primary' : 'bg-muted')} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <SummaryCard label="All Periods" count={statusCounts.all} emoji="📋" active={filter === 'all'} onClick={() => setFilter('all')} bgClass="bg-muted/50" borderClass="border-border" />
+        <SummaryCard label="Complete" count={statusCounts.complete} emoji="✅" active={filter === 'complete'} onClick={() => setFilter('complete')} bgClass="bg-emerald-50 dark:bg-emerald-900/20" borderClass="border-emerald-200 dark:border-emerald-800" />
+        <SummaryCard label="Ready to Push" count={statusCounts.ready_to_push} emoji="🚀" active={filter === 'ready_to_push'} onClick={() => setFilter('ready_to_push')} bgClass="bg-blue-50 dark:bg-blue-900/20" borderClass="border-blue-200 dark:border-blue-800" />
+        <SummaryCard label="Upload Needed" count={statusCounts.settlement_needed} emoji="📤" active={filter === 'settlement_needed'} onClick={() => setFilter('settlement_needed')} bgClass="bg-amber-50 dark:bg-amber-900/20" borderClass="border-amber-200 dark:border-amber-800" />
+        <SummaryCard label="Gaps" count={statusCounts.gap_detected} emoji="⚠️" active={filter === 'gap_detected'} onClick={() => setFilter('gap_detected')} bgClass="bg-red-50 dark:bg-red-900/20" borderClass="border-red-200 dark:border-red-800" />
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
+          <SelectTrigger className="w-[180px] h-8 text-xs">
+            <Filter className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="All Marketplaces" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Marketplaces</SelectItem>
+            {uniqueMarketplaces.map((m) => (
+              <SelectItem key={m} value={m}>{MARKETPLACE_LABELS[m] || m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1">
+          <CalendarDays className="h-3 w-3 text-muted-foreground" />
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 w-[130px] text-xs" placeholder="From" />
+          <span className="text-xs text-muted-foreground">–</span>
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 w-[130px] text-xs" placeholder="To" />
+        </div>
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1 ml-auto" onClick={handleRunSweep} disabled={sweeping}>
+          <RefreshCw className={cn('h-3 w-3', sweeping && 'animate-spin')} />
+          Re-scan
+        </Button>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="px-3 py-2 text-left font-medium cursor-pointer" onClick={() => handleSort('marketplace_code')}>
+                    <span className="inline-flex items-center">Marketplace<SortIcon col="marketplace_code" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium cursor-pointer" onClick={() => handleSort('period_start')}>
+                    <span className="inline-flex items-center">Period<SortIcon col="period_start" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium cursor-pointer" onClick={() => handleSort('orders_count')}>
+                    <span className="inline-flex items-center">Orders<SortIcon col="orders_count" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium">Settlement</th>
+                  <th className="px-3 py-2 text-right font-medium cursor-pointer" onClick={() => handleSort('settlement_net')}>
+                    <span className="inline-flex items-center justify-end">Net<SortIcon col="settlement_net" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium">Xero</th>
+                  <th className="px-3 py-2 text-center font-medium">Bank</th>
+                  <th className="px-3 py-2 text-center font-medium cursor-pointer" onClick={() => handleSort('overall_status')}>
+                    <span className="inline-flex items-center">Status<SortIcon col="overall_status" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                      {rows.length === 0 ? 'No validation data yet. Run a scan to get started.' : 'No periods match your filters.'}
+                    </td>
+                  </tr>
+                ) : (
+                  pagedRows.map((row) => (
+                    <tr key={row.id} className="border-b hover:bg-muted/20 transition-colors">
+                      <td className="px-3 py-2 font-medium">{MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}</td>
+                      <td className="px-3 py-2">{row.period_label}</td>
+                      <td className="px-3 py-2 text-center">{row.orders_found ? row.orders_count : '—'}</td>
+                      <td className="px-3 py-2 text-center"><SettlementCell row={row} /></td>
+                      <td className="px-3 py-2 text-right font-mono">{row.settlement_net ? formatAUD(row.settlement_net) : '—'}</td>
+                      <td className="px-3 py-2 text-center">
+                        {row.xero_pushed ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {row.bank_matched ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <RowAction
+                          row={row}
+                          pushing={pushing === row.id}
+                          syncing={syncingRow === row.id}
+                          isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
+                          onUpload={() => onSwitchToUpload?.()}
+                          onPush={() => handlePush(row)}
+                          onSync={() => handleSyncRow(row)}
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {!maxRows && displayRows.length > pageSize && (
+            <TablePaginationBar
+              page={page}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={displayRows.length}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+            />
+          )}
+          {maxRows && filteredRows.length > maxRows && onViewAll && (
+            <div className="p-3 text-center border-t">
+              <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={onViewAll}>
+                View all {filteredRows.length} periods <ArrowRight className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {previewOpen && (
+        <PushSafetyPreview
+          settlements={previewSettlements}
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          onConfirm={() => { setPreviewOpen(false); loadData(); }}
+        />
+      )}
+    </div>
+  );
+}
+
 function SummaryCard({
   label, count, emoji, active, onClick, bgClass, borderClass,
 }: {
