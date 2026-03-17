@@ -94,6 +94,14 @@ export default function AccountMapperCard() {
   const [cloneTarget, setCloneTarget] = useState('');
   const [taxProfile, setTaxProfile] = useState<string | null>(null);
 
+  // Overwrite confirmation state
+  const [overwriteConfirmOpen, setOverwriteConfirmOpen] = useState(false);
+  const [overwriteChanges, setOverwriteChanges] = useState<Array<{ category: string; oldCode: string; newCode: string }>>([]);
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
+
+  // Confirmed (saved) codes for comparison
+  const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
+
   // Build CoA lookup map
   const coaMap = useMemo(() => {
     const map = new Map<string, { name: string; type: string; active: boolean }>();
