@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { analyseCoA, type RegistryEntry, type ProcessorEntry, type CoaAccount as CoaIntelAccount } from '@/utils/coa-intelligence';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -88,6 +89,8 @@ export default function AccountMapperCard() {
   const [splitByMarketplace, setSplitByMarketplace] = useState(false);
   const [activeMarketplaces, setActiveMarketplaces] = useState<string[]>([]);
   const [globalMappingFlags, setGlobalMappingFlags] = useState<Record<string, boolean>>({});
+  const [registryEntries, setRegistryEntries] = useState<RegistryEntry[]>([]);
+  const [processorEntries, setProcessorEntries] = useState<ProcessorEntry[]>([]);
 
   // Clone COA state
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
@@ -131,66 +134,61 @@ export default function AccountMapperCard() {
     };
   }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
 
-  // ─── COA-based suggestions for marketplace-specific rows ─────────
+  // ─── COA-based suggestions via coa-intelligence scanner ─────────
   const coaSuggestions = useMemo(() => {
     if (!splitByMarketplace || coaAccounts.length === 0) return new Map<string, { code: string; name: string }>();
 
-    const CATEGORY_KEYWORDS: Record<string, string[]> = {
-      Sales: ['sales', 'revenue', 'income'],
-      Shipping: ['shipping', 'freight', 'postage'],
-      'Promotional Discounts': ['discount', 'promotion'],
-      Refunds: ['refund', 'return'],
-      Reimbursements: ['reimbursement'],
-      'Seller Fees': ['seller fee', 'referral fee', 'commission', 'fees'],
-      'FBA Fees': ['fba', 'fulfilment', 'fulfillment'],
-      'Storage Fees': ['storage', 'warehouse'],
-      'Advertising Costs': ['advertising', 'sponsored', 'ppc', 'ad spend'],
-      'Other Fees': ['other fee', 'miscellaneous', 'adjustment'],
+    // Map coa-intelligence lowercase categories → AccountMapper display names
+    const CATEGORY_DISPLAY_MAP: Record<string, string> = {
+      sales: 'Sales',
+      seller_fees: 'Seller Fees',
+      fba_fees: 'FBA Fees',
+      storage_fees: 'Storage Fees',
+      advertising: 'Advertising Costs',
+      refunds: 'Refunds',
+      shipping: 'Shipping',
+      other_fees: 'Other Fees',
     };
 
+    // Build CoaAccount[] compatible with coa-intelligence
+    const coaInput: CoaIntelAccount[] = coaAccounts.map(a => ({
+      account_code: a.account_code,
+      account_name: a.account_name,
+      account_type: a.account_type || null,
+      tax_type: null,
+    }));
+
+    const signals = analyseCoA(coaInput, registryEntries, processorEntries);
+
+    // Build marketplace_code → display name lookup from active marketplaces
+    // The mapping_suggestions use marketplace_code (e.g. 'amazon_au'),
+    // but the Map key needs the display name (e.g. 'Amazon AU')
+    const codeToDisplayName = new Map<string, string>();
+    // Build from registry entries
+    for (const entry of registryEntries) {
+      codeToDisplayName.set(entry.marketplace_code, entry.marketplace_name);
+    }
+
     const suggestions = new Map<string, { code: string; name: string }>();
-    const marketplaces = activeMarketplaces.length > 0 ? activeMarketplaces : [];
 
-    for (const mp of marketplaces) {
-      const mpNorm = mp.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
-      // Also try common abbreviations
-      const mpTokens = mpNorm.split(/\s+/);
+    for (const s of signals.mapping_suggestions) {
+      const displayCategory = CATEGORY_DISPLAY_MAP[s.category];
+      if (!displayCategory) continue;
 
-      for (const cat of SPLITTABLE_CATEGORIES) {
-        const key = `${cat}:${mp}`;
-        const catKeywords = CATEGORY_KEYWORDS[cat] || [];
+      // Find matching active marketplace display name
+      const displayName = codeToDisplayName.get(s.marketplace_code) || s.marketplace_code;
+      // Only suggest for active marketplaces
+      if (!activeMarketplaces.includes(displayName)) continue;
 
-        // Find COA accounts that match BOTH marketplace name AND category keyword
-        let bestMatch: { code: string; name: string; score: number } | null = null;
-
-        for (const acc of coaAccounts) {
-          if (!acc.account_code || !acc.is_active) continue;
-          const accNorm = acc.account_name.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
-
-          // Check if account name contains marketplace identifier
-          const hasMarketplace = mpTokens.some(t => t.length >= 3 && accNorm.includes(t)) || accNorm.includes(mpNorm);
-          if (!hasMarketplace) continue;
-
-          // Check if account name matches category
-          for (const kw of catKeywords) {
-            if (accNorm.includes(kw)) {
-              const score = accNorm === `${mpNorm} ${kw}` ? 10 : 5;
-              if (!bestMatch || score > bestMatch.score) {
-                bestMatch = { code: acc.account_code, name: acc.account_name, score };
-              }
-              break;
-            }
-          }
-        }
-
-        if (bestMatch) {
-          suggestions.set(key, { code: bestMatch.code, name: bestMatch.name });
-        }
+      const key = `${displayCategory}:${displayName}`;
+      // Keep highest confidence match
+      if (!suggestions.has(key)) {
+        suggestions.set(key, { code: s.account_code, name: s.account_name });
       }
     }
 
     return suggestions;
-  }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
+  }, [splitByMarketplace, coaAccounts, activeMarketplaces, registryEntries, processorEntries]);
 
   // User-selected marketplaces for COA cloning
   const [selectedForClone, setSelectedForClone] = useState<Set<string>>(new Set());
@@ -382,12 +380,16 @@ export default function AccountMapperCard() {
         .maybeSingle();
       setTaxProfile(taxSetting?.value || 'AU_GST');
       // Load cached COA + last sync in parallel
-      const [accounts, lastSynced] = await Promise.all([
+      const [accounts, lastSynced, { data: registryRows }, { data: processorRows }] = await Promise.all([
         getCachedXeroAccounts(),
         getCoaLastSyncedAt(),
+        supabase.from('marketplace_registry').select('marketplace_code, marketplace_name, detection_keywords').eq('is_active', true),
+        supabase.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords').eq('is_active', true),
       ]);
       setCoaAccounts(accounts);
       setCoaLastSynced(lastSynced);
+      setRegistryEntries((registryRows || []) as RegistryEntry[]);
+      setProcessorEntries((processorRows || []) as ProcessorEntry[]);
 
       // Load split toggle state
       const { data: splitSetting } = await supabase
