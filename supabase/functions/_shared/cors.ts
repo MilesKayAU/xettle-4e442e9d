@@ -24,6 +24,7 @@ const ALLOWED_ORIGINS = [
   "https://www.xettle.com.au",
   "https://xettle.lovable.app",
   "https://id-preview--7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovable.app",
+  "https://7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovableproject.com",
   "http://localhost:5173",
   "http://localhost:3000",
 ]
