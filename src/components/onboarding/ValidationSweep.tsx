@@ -113,6 +113,10 @@ export default function ValidationSweep({
   const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
   const [apiSyncedCodes, setApiSyncedCodes] = useState<Set<string>>(new Set());
   const [syncingRow, setSyncingRow] = useState<string | null>(null);
+  const [pausedCodes, setPausedCodes] = useState<Set<string>>(new Set());
+  const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>>([]);
+  const [showPaused, setShowPaused] = useState(false);
+  const [togglingPause, setTogglingPause] = useState<string | null>(null);
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
