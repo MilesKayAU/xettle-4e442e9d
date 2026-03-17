@@ -1,348 +1,206 @@
-# Xettle Complete Technical Audit — Cross-Referenced
-**Date: 9 March 2026 (v2 — verified against codebase)**
-**Scope: Full codebase — frontend, backend, parsers, engines, edge functions, database, security**
+
+
+# Runbook: Bootstrap xettle-prod from Scratch
+
+This runbook assumes **this project is DEV** and a brand-new Lovable project will be created as **PROD**, with `xettle.app` as the canonical production domain.
 
 ---
 
-## 1. Architecture Overview
+## Phase 1 — Create the Prod Project
 
-### Stack
-- **Frontend**: React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
-- **Backend**: Lovable Cloud (Supabase) — Postgres, Edge Functions, Auth, RLS
-- **Integrations**: Xero (OAuth2), Amazon SP-API (OAuth2)
-- **State**: React Query (5-min stale time), Supabase Realtime subscriptions
-- **Routing**: React Router v6 with lazy-loaded pages
-
-### Key Pages
-| Route | Component | Purpose |
-|-------|-----------|---------|
-| `/` | Landing | Marketing page |
-| `/auth` | Auth | Sign in / Sign up with email verification |
-| `/dashboard` | Dashboard | Main app — marketplace tabs, Smart Upload, Insights |
-| `/admin` | Admin | Admin panel (role-gated) |
-| `/pricing` | Pricing | Plan tiers |
-| `/xero/callback` | XeroCallback | OAuth2 callback for Xero |
-| `/amazon/callback` | AmazonCallback | OAuth2 callback for Amazon SP-API |
-| `/reset-password` | ResetPassword | Password reset flow |
-
-### Architecture Rules (ARCHITECTURE.md)
-Three enforced rules:
-1. **All dashboards MUST use shared hooks** — useSettlementManager, useBulkSelect, useXeroSync, useReconciliation, useTransactionDrilldown
-2. **No direct color classes** — use semantic design tokens only
-3. **Secrets never in code** — use Lovable Cloud secrets
+1. Create a new Lovable project (e.g. "xettle-prod")
+2. Enable Lovable Cloud on the new project (this provisions an isolated database, auth, edge functions, storage, and secrets)
+3. Connect the same GitHub repo to the prod project, pointed at a `prod` or `main` branch
 
 ---
 
-## 2. Database Schema (17 tables)
+## Phase 2 — Database Bootstrap (176 Migrations)
 
-| Table | Purpose | RLS |
-|-------|---------|-----|
-| `settlements` | Core settlement records — one per marketplace period | ✅ user_id scoped |
-| `settlement_lines` | Transaction-level line items per settlement | ✅ user_id scoped |
-| `settlement_unmapped` | Rows that couldn't be categorized during parsing | ✅ user_id scoped |
-| `marketplace_connections` | User's active marketplace tabs | ✅ user_id scoped |
-| `marketplaces` | Global marketplace metadata (admin-managed) | ✅ read=all, write=admin |
-| `marketplace_fee_observations` | Fee rate observations per settlement | ✅ user_id scoped |
-| `marketplace_fee_alerts` | Anomaly alerts when fee rates deviate | ✅ user_id + admin read |
-| `marketplace_ad_spend` | Manual ad spend entries per marketplace | ⚠️ public role (Gap 4) |
-| `marketplace_shipping_costs` | Estimated shipping cost per order | ⚠️ public role (Gap 4) |
-| `marketplace_file_fingerprints` | User-specific column signature fingerprints | ✅ user_id scoped |
-| `marketplace_fingerprints` | Global + user-specific marketplace detection patterns | ✅ mixed |
-| `product_costs` | SKU-level COGS data | ✅ user_id scoped |
-| `xero_tokens` | Xero OAuth2 tokens | ✅ user_id scoped |
-| `amazon_tokens` | Amazon SP-API OAuth2 tokens | ✅ user_id scoped |
-| `app_settings` | Per-user key/value settings | ✅ user_id scoped |
-| `sync_history` | Xero sync event log | ✅ user_id scoped |
-| `user_roles` | RBAC roles (admin, paid, starter, pro) | ✅ read-only for user |
+The dev project has 176 migrations in `supabase/migrations/`. These must be applied to prod in order.
+
+**Steps:**
+1. In the prod project, sync code from the `prod` GitHub branch (which contains all migration files)
+2. Lovable Cloud will detect unapplied migrations and prompt for approval
+3. Review each migration batch before approving — watch for:
+   - Any `DROP COLUMN` / `DROP TABLE` statements (should be none on fresh DB)
+   - Any references to dev-specific data or IDs
+4. Approve migrations in chronological order
+5. **Verify** by spot-checking key tables exist: `settlements`, `xero_tokens`, `amazon_tokens`, `shopify_tokens`, `ebay_tokens`, `user_roles`, `app_settings`, `sync_locks`, `marketplace_file_fingerprints`, `xero_accounting_matches`, `system_events`, `sync_history`
+6. Verify database functions exist: `has_role`, `acquire_sync_lock`, `release_sync_lock`, `promote_and_save_settlement`, `generate_settlement_fingerprint`, `calculate_validation_status`, `assign_trial_role`
+7. Create the `audit-csvs` storage bucket (private) if not auto-created by migrations
 
 ---
 
-## 3. Verified ✅ — What IS Built
+## Phase 3 — Secrets Checklist
 
-### Parsers (all working)
-| Parser | File | Lines | Status |
-|--------|------|-------|--------|
-| Amazon AU Settlement | `settlement-parser.ts` | ~400 | ✅ Production |
-| Shopify Payments | `shopify-payments-parser.ts` | ~300 | ✅ Production |
-| Shopify Orders | `shopify-orders-parser.ts` | ~250 | ✅ Production |
-| Bunnings Billing Cycle | `bunnings-summary-parser.ts` | ~200 | ✅ Production |
-| Woolworths MarketPlus | `woolworths-marketplus-parser.ts` | 481 | ✅ Production — splits by Order Source column |
-| Generic CSV | `generic-csv-parser.ts` | ~200 | ✅ Fallback for any marketplace |
+Every secret must be set independently in the prod project. **Never copy dev secret values to prod.**
 
-### Engines (all working)
-| Engine | File | Lines | Purpose |
-|--------|------|-------|---------|
-| Settlement Engine | `settlement-engine.ts` | ~500 | CRUD operations, dedup (app-level), Supabase persistence |
-| Reconciliation Engine | `reconciliation-engine.ts` | ~300 | Amazon-specific recon |
-| Universal Reconciliation | `universal-reconciliation.ts` | ~250 | Balance + GST + Sanity checks for any marketplace |
-| Fee Observation Engine | `fee-observation-engine.ts` | ~350 | Fee rate tracking + anomaly alerts |
-| Profit Engine | `profit-engine.ts` | 135 | COGS calculation from product_costs table |
-| File Fingerprint Engine | `file-fingerprint-engine.ts` | ~200 | Column signature detection |
-| File Marketplace Detector | `file-marketplace-detector.ts` | ~300 | 3-level detection pipeline |
+| Secret | Source | Notes |
+|---|---|---|
+| `XERO_CLIENT_ID` | Xero Developer Portal — prod app | Must be a separate Xero app from dev |
+| `XERO_CLIENT_SECRET` | Xero Developer Portal — prod app | |
+| `AMAZON_SP_CLIENT_ID` | Amazon SP API Console — prod app | |
+| `AMAZON_SP_CLIENT_SECRET` | Amazon SP API Console — prod app | |
+| `SHOPIFY_CLIENT_ID` | Shopify Partners — prod app | |
+| `SHOPIFY_CLIENT_SECRET` | Shopify Partners — prod app | |
+| `EBAY_CLIENT_ID` | eBay Developer Portal — prod keyset | |
+| `EBAY_CERT_ID` | eBay Developer Portal — prod keyset | |
+| `EBAY_RUNAME` | eBay Developer Portal — prod RuName | Must point to `xettle.app/ebay/callback` |
+| `RESEND_API_KEY` | Resend dashboard | Can share with dev or use separate |
+| `ANTHROPIC_API_KEY` | Anthropic console | Can share with dev |
+| `CORS_ALLOWED_ORIGINS` | Set manually | `https://xettle.app,https://www.xettle.app,https://xettle.com.au,https://www.xettle.com.au` |
+| `CORS_ALLOW_LOCALHOST` | Set to `false` | **Must be false in prod** |
 
-### Shared Hooks (all built, GenericMarketplaceDashboard uses them)
-| Hook | File | Purpose |
-|------|------|---------|
-| `useSettlementManager` | `use-settlement-manager.ts` | Fetch + filter + loading states |
-| `useBulkSelect` | `use-bulk-select.ts` | Checkbox selection + Xero-aware bulk delete |
-| `useXeroSync` | `use-xero-sync.ts` | Push/sync/rollback with Xero |
-| `useReconciliation` | `use-reconciliation.ts` | Inline Balance/GST/Sanity checks |
-| `useTransactionDrilldown` | `use-transaction-drilldown.ts` | Line-item drill-down per settlement |
-
-### Shared UI Components (all built)
-| Component | File | Purpose |
-|-----------|------|---------|
-| `SettlementStatusBadge` | `shared/SettlementStatusBadge.tsx` | Consistent status badges |
-| `ReconChecksInline` | `shared/ReconChecksInline.tsx` | Expandable recon results |
-| `BulkDeleteDialog` | `shared/BulkDeleteDialog.tsx` | Xero-aware delete confirmation |
-| `GapDetector` | `shared/GapDetector.tsx` | Missing period detection |
-
-### Dashboard Components (verified)
-| Component | File | Status |
-|-----------|------|--------|
-| `GenericMarketplaceDashboard` | ✅ Fully refactored — uses all shared hooks, ~700 lines |
-| `AccountingDashboard` | ❌ 4,395 lines — NOT on shared hooks (Gap 2) |
-| `ShopifyPaymentsDashboard` | ❌ ~800 lines — NOT on shared hooks (Gap 2) |
-| `BunningsDashboard` | ❌ ~1,230 lines — NOT on shared hooks (Gap 2) |
-| `ShopifyOrdersDashboard` | ❌ ~1,315 lines — NOT on shared hooks (Gap 2) |
-| `InsightsDashboard` | ✅ Cross-marketplace analytics |
-| `SkuCostManager` | ✅ SKU cost CRUD UI |
-| `MonthlyReconciliationStatus` | ✅ Built |
-| `OnboardingChecklist` | ✅ Built |
-| `MarketplaceReturnRatio` | ✅ Built |
-
-### Edge Functions (10 deployed)
-| Function | Purpose | JWT |
-|----------|---------|-----|
-| `ai-file-interpreter` | AI-powered file classification | verify_jwt=false |
-| `sync-xero-status` | Sync-back invoice status from Xero | verify_jwt=false |
-| `sync-settlement-to-xero` | Push settlement as Xero invoice | auth in code |
-| `auto-push-xero` | Batch auto-push new settlements | auth in code |
-| `xero-auth` | Xero OAuth2 token exchange | auth in code |
-| `amazon-auth` | Amazon SP-API OAuth2 token exchange | auth in code |
-| `fetch-amazon-settlements` | Pull settlements from Amazon SP-API | auth in code |
-| `sync-amazon-journal` | Create Xero journal from Amazon data | auth in code |
-| `admin-list-users` | List users (admin only) | auth in code |
-| `admin-manage-users` | Manage user roles (admin only) | auth in code |
-
-### Other Verified
-- ✅ Rollback flow (void Xero invoice + reset local status)
-- ✅ Xero reference format: `Xettle-{settlement_id}` (new) + legacy `(ID)` parsing
-- ✅ Duplicate prevention: pre-push Xero API search + local journal ID check
-- ✅ Smart Upload Flow with marketplace auto-detection
-- ✅ MarketplaceSwitcher with tab management
-- ✅ Marketplace config tab (admin)
-- ✅ Seller Central Guide for Amazon
-- ✅ Shopify onboarding flow
+Auto-provisioned (do not set manually): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `SUPABASE_PUBLISHABLE_KEY`, `LOVABLE_API_KEY`
 
 ---
 
-## 4. THE REAL GAPS — Priority Ordered
+## Phase 4 — CORS Configuration
 
-### Gap 1 — CRITICAL: No DB Unique Constraint on Settlements
-**Risk**: Race condition = duplicate settlements possible
-**Current state**: Dedup is application-level only in `settlement-engine.ts`
-**Fix**: Single migration:
-```sql
-CREATE UNIQUE INDEX idx_settlement_dedup ON settlements (settlement_id, marketplace, user_id);
-```
-**Effort**: 5 minutes
+The shared CORS helper (`supabase/functions/_shared/cors.ts`) has hardcoded origins. For the **prod project**, the allowlist must be updated to remove dev-only origins:
 
-### Gap 2 — CRITICAL: 4 Dashboards NOT on Shared Hooks
-**Risk**: Feature drift, inconsistent UX, duplicated bug-prone code
-
-| Dashboard | Lines | Missing Features |
-|-----------|-------|-----------------|
-| `AccountingDashboard.tsx` | 4,395 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `ShopifyPaymentsDashboard.tsx` | ~800 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `BunningsDashboard.tsx` | ~1,230 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-| `ShopifyOrdersDashboard.tsx` | ~1,315 | Rollback, Refresh from Xero, Inline recon, Xero-aware bulk delete, Gap detection, Mark Already in Xero, Bank verification |
-
-**Fix**: Migrate each to use shared hooks + components (follow GenericMarketplaceDashboard pattern)
-**Effort**: 2-4 hours per dashboard
-
-### Gap 3 — CRITICAL: Stripe/Billing = Zero
-**Current state**:
-- No Stripe code anywhere in codebase
-- No subscription enforcement
-- Roles exist in DB (`paid`, `starter`, `pro`) but nothing gates features
-- Users can use everything for free forever
-
-**Fix needed**:
-1. Enable Stripe integration
-2. Create subscription products/prices
-3. Implement plan-gating middleware
-4. Wire role assignment on subscription events
-**Effort**: 1-2 days
-
-### Gap 4 — SECURITY: RLS Tightening
-| Table | Issue | Fix |
-|-------|-------|-----|
-| `marketplace_ad_spend` | Uses `public` role instead of `authenticated` | Change RLS policies to `authenticated` |
-| `marketplace_shipping_costs` | Uses `public` role instead of `authenticated` | Change RLS policies to `authenticated` |
-| Edge functions | No rate limiting | Add rate limiting logic |
-
-**Fix**: Migration to update RLS policies + edge function code updates
-**Effort**: 30 minutes for RLS, 1-2 hours for rate limiting
-
----
-
-## 5. File Detection Pipeline (3-Level)
-
-```
-Upload → Fingerprint DB match (highest confidence)
-       → Heuristic detection (column pattern matching via fingerprint-library.ts)
-       → AI fallback (ai-file-interpreter edge function using Gemini)
+```text
+Prod CORS allowlist:
+  https://xettle.app
+  https://www.xettle.app
+  https://xettle.com.au
+  https://www.xettle.com.au
+  https://[prod-project].lovable.app          ← prod published subdomain
+  https://id-preview--[prod-project-id].lovable.app  ← prod preview URL
 ```
 
-Each level populates `marketplace_fingerprints` and `marketplace_file_fingerprints` tables for future auto-detection.
+**Remove from prod:**
+- `http://localhost:5173`
+- `http://localhost:3000`
+- The dev preview URL (`id-preview--7fd99b7a-...`)
+
+**Implementation:** After syncing code to prod, edit `_shared/cors.ts` in the prod project to replace the dev preview origin with the prod preview origin. This deploys immediately.
 
 ---
 
-## 6. Xero Integration Architecture
+## Phase 5 — OAuth Redirect Setup
 
-### Flow
-1. **OAuth2**: `xero-auth` edge function handles token exchange + refresh
-2. **Push**: `sync-settlement-to-xero` creates Xero invoice with line items
-3. **Sync-back**: `sync-xero-status` queries Xero for invoice status updates
-4. **Auto-push**: `auto-push-xero` batch-pushes new settlements
-5. **Rollback**: Void Xero invoice + reset local `xero_journal_id` and `status`
+Each marketplace OAuth flow has hardcoded redirect URIs. These already point to `xettle.app`, which is correct for prod. Verify each:
 
-### Duplicate Prevention (3-layer)
-1. Local check: `xero_journal_id` already set → skip
-2. Pre-push API search: Query Xero by reference `Xettle-{id}` → skip if found
-3. Legacy format support: `sync-xero-status` parses both new and legacy reference formats
+| Integration | Redirect URI in Code | Third-Party Console Must Match |
+|---|---|---|
+| **Xero** | Passed dynamically from frontend (`redirect_uri` param) | Xero app → Redirect URIs: add `https://xettle.app/xero/callback` |
+| **Amazon** | Hardcoded: `https://xettle.app/amazon/callback` | Amazon SP API → App URLs: `https://xettle.app/amazon/callback` |
+| **Shopify** | Hardcoded: `https://xettle.app/shopify/callback` | Shopify Partners → App setup: `https://xettle.app/shopify/callback` |
+| **eBay** | Uses `EBAY_RUNAME` secret | eBay Developer Portal → RuName must resolve to `https://xettle.app/ebay/callback` |
 
-### Reference Format
-- **New**: `Xettle-{settlement_id}` (in Reference field)
-- **Legacy**: Human-readable with `(settlement_id)` suffix
-- Both parsed by sync-back function
+**For dev project**, these hardcoded URIs mean OAuth callbacks only work when accessed via `xettle.app`. If you need dev OAuth testing, you would need to temporarily change these or use the Xero dynamic approach.
 
 ---
 
-## 7. Secrets Configuration (Verified)
+## Phase 6 — Auto-Push Safety Flag
 
-| Secret | Purpose | Status |
-|--------|---------|--------|
-| `XERO_CLIENT_ID` | Xero OAuth2 | ✅ Set |
-| `XERO_CLIENT_SECRET` | Xero OAuth2 | ✅ Set |
-| `AMAZON_SP_CLIENT_ID` | Amazon SP-API OAuth2 | ✅ Set |
-| `AMAZON_SP_CLIENT_SECRET` | Amazon SP-API OAuth2 | ✅ Set |
-| `LOVABLE_API_KEY` | AI file interpreter | ✅ Set |
-| `RESEND_API_KEY` | Email sending | ✅ Set |
-| `SUPABASE_URL` | Edge function access | ✅ Auto |
-| `SUPABASE_SERVICE_ROLE_KEY` | Edge function admin access | ✅ Auto |
-| `SUPABASE_PUBLISHABLE_KEY` | Client-side access | ✅ Auto |
-| `SUPABASE_ANON_KEY` | Client-side access | ✅ Auto |
-| `SUPABASE_DB_URL` | Direct DB access | ✅ Auto |
+The `auto-push-xero` edge function checks `app_settings` for the key `automation_xero_auto_push`. It only pushes to Xero when the value is `'true'`.
+
+**Prod safety steps:**
+1. Do **not** seed any `automation_xero_auto_push = 'true'` rows in prod
+2. Users must explicitly enable auto-push in their settings after connecting Xero
+3. The `scheduled-sync` function also checks `auto_push_live_mode` — ensure no prod rows have this set to `'true'` until ready
+4. Recommend: after first publish, manually verify no `app_settings` rows exist with these keys before announcing to users
 
 ---
 
-## 8. Recommended Fix Order
+## Phase 7 — Domain Setup
 
-### Phase 1 — Integrity (Day 1)
-1. ✅ Gap 1: Add DB unique constraint (5 min)
-2. ✅ Gap 4: Fix RLS `public` → `authenticated` (30 min)
-
-### Phase 2 — Dashboard Migration (Day 1-3)
-3. Gap 2: Migrate `AccountingDashboard.tsx` to shared hooks (largest, highest impact)
-4. Gap 2: Migrate `ShopifyPaymentsDashboard.tsx`
-5. Gap 2: Migrate `BunningsDashboard.tsx`
-6. Gap 2: Migrate `ShopifyOrdersDashboard.tsx`
-
-### Phase 3 — Monetisation (Day 3-5)
-7. Gap 3: Enable Stripe
-8. Gap 3: Create subscription tiers matching existing roles
-9. Gap 3: Implement plan-gating
-10. Gap 3: Wire webhook for role assignment
-
-### Phase 4 — Hardening (Day 5+)
-11. Rate limiting on edge functions
-12. Unit tests (Vitest) for parsers and engines
-13. E2E tests for critical flows
-14. Error monitoring setup
+1. In the prod Lovable project, go to **Settings → Domains**
+2. Add `xettle.app` as a custom domain
+3. Add `www.xettle.app` as a second domain entry
+4. At your DNS registrar, set:
+   - `A` record for `@` → `185.158.133.1`
+   - `A` record for `www` → `185.158.133.1`
+   - `TXT` record for `_lovable` → value provided by Lovable
+5. Set `xettle.app` as the **Primary** domain (www redirects to it)
+6. Wait for SSL provisioning (up to 72 hours, usually minutes)
+7. Repeat for `xettle.com.au` / `www.xettle.com.au` if needed
 
 ---
 
-## 9. Code Quality Notes
+## Phase 8 — First Publish
 
-### Strengths
-- Clean separation: parsers → engines → hooks → components
-- Consistent RLS pattern across 17 tables
-- Smart 3-level file detection with learning
-- Universal reconciliation works for any marketplace
-- Well-structured edge functions with proper CORS
-
-### Weaknesses
-- `AccountingDashboard.tsx` at 4,395 lines is unmaintainable
-- Some `as any` type casts in dashboard components
-- No automated tests anywhere
-- No error boundary at dashboard level (only app-level)
-- Console.log statements in production code
-
----
-
-## 10. Summary Stats
-
-| Metric | Count |
-|--------|-------|
-| Total files | ~120 |
-| React components | ~60 |
-| Custom hooks | 8 |
-| Utility modules | 14 |
-| Edge functions | 10 |
-| Database tables | 17 |
-| RLS policies | ~40 |
-| Parsers | 6 |
-| Engines | 7 |
-| Lines of dashboard code | ~8,500 |
-| Lines on shared hooks | ~700 (GenericMarketplaceDashboard only) |
-| Lines NOT on shared hooks | ~7,800 |
+1. **Pre-publish checks** (run in dev first, verify code is identical in prod branch):
+   - [ ] All 215+ vitest tests pass
+   - [ ] CORS guardrails test passes
+   - [ ] Canonical actions test passes
+   - [ ] Edge function compile check passes
+2. **Verify backend is ready:**
+   - [ ] All 176 migrations applied successfully
+   - [ ] All 14 secrets configured with prod values
+   - [ ] `audit-csvs` storage bucket exists
+   - [ ] CORS origins in `_shared/cors.ts` are prod-only
+3. **Publish:**
+   - Click **Publish → Update** in the prod project
+   - This deploys the frontend SPA only (edge functions are already live)
+4. **Post-publish smoke test:**
+   - [ ] `https://xettle.app` loads the landing page
+   - [ ] Sign-up flow works (email verification)
+   - [ ] Login redirects to dashboard
+   - [ ] File upload parses correctly
+   - [ ] Xero OAuth connect flow completes
+   - [ ] Settlement push preview renders (do NOT push on first test)
+   - [ ] No console errors in browser
+   - [ ] No CORS errors in network tab
 
 ---
 
-## Session 10+ — Gateway-Aware Payout Splitting
+## Recommended Workflow Checklist (paste into policy)
 
-### Problem
-Shopify payouts aggregate all transactions (direct + marketplace) into a single payout. Gateway names like "Mirakl", "Commercium by constacloud", and "Manual" indicate marketplace or non-standard origins but are not currently used to split settlements.
+```text
+## Prod Bootstrap Checklist
 
-### Approach (Approved)
-1. **Cross-reference `source_order_id`**: Each Shopify Balance Transaction has a `source_order_id`. Look this up against the cached `shopify_orders` table to get the `gateway` field.
-2. **Group by gateway**: Within each payout, group transactions by resolved gateway → generate sub-settlements per marketplace.
-3. **Mirakl resolution**: When gateway = "mirakl", cross-reference the order's `source_name` or tags to resolve the specific marketplace (Bunnings, Kmart, Target AU).
-4. **Registry entries**: `mirakl` and `manual_bank_transfer` are already in `payment_processor_registry` (added Session 9).
+### Infrastructure
+- [ ] New Lovable project created with Cloud enabled
+- [ ] GitHub repo connected (prod branch)
+- [ ] All 176 migrations reviewed and applied
+- [ ] Storage bucket "audit-csvs" created (private)
 
-### Performance Considerations
-- Large payout histories (1000+ transactions) need batched lookups against `shopify_orders`
-- Consider pre-building a gateway map during `fetch-shopify-orders` sync
-- May need an index on `shopify_orders(shopify_order_id)` for fast joins
+### Secrets (all set independently, never copied from dev)
+- [ ] XERO_CLIENT_ID (prod Xero app)
+- [ ] XERO_CLIENT_SECRET (prod Xero app)
+- [ ] AMAZON_SP_CLIENT_ID (prod SP app)
+- [ ] AMAZON_SP_CLIENT_SECRET (prod SP app)
+- [ ] SHOPIFY_CLIENT_ID (prod Shopify app)
+- [ ] SHOPIFY_CLIENT_SECRET (prod Shopify app)
+- [ ] EBAY_CLIENT_ID (prod keyset)
+- [ ] EBAY_CERT_ID (prod keyset)
+- [ ] EBAY_RUNAME (prod RuName → xettle.app/ebay/callback)
+- [ ] RESEND_API_KEY
+- [ ] ANTHROPIC_API_KEY
+- [ ] CORS_ALLOWED_ORIGINS (prod domains only)
+- [ ] CORS_ALLOW_LOCALHOST = false
 
-### Registry Data (already seeded)
-- `mirakl` → type: `marketplace_operator`, needs source_name cross-reference
-- `manual_bank_transfer` → type: `bank_transfer`, exclude from channel alerts
-- `commercium by constacloud` → already in `GATEWAY_REGISTRY` → maps to Kogan
+### CORS
+- [ ] _shared/cors.ts updated with prod origins only
+- [ ] localhost origins removed
+- [ ] Dev preview URL removed
 
-### Implementation Steps
-1. Add `gateway` column awareness to `fetch-shopify-payouts` transaction processing
-2. Build gateway→marketplace resolver function
-3. Generate sub-settlement records per marketplace within a single payout
-4. Update `marketplace_validation` to track split payouts
-5. UI: Show split payout breakdown in Shopify Payments dashboard
+### OAuth Redirects (verified in third-party consoles)
+- [ ] Xero → https://xettle.app/xero/callback
+- [ ] Amazon → https://xettle.app/amazon/callback
+- [ ] Shopify → https://xettle.app/shopify/callback
+- [ ] eBay → RuName resolves to https://xettle.app/ebay/callback
 
----
+### Safety
+- [ ] No automation_xero_auto_push rows in app_settings
+- [ ] No auto_push_live_mode rows in app_settings
+- [ ] auto-push-xero edge function verified as gated
 
-## Session 10+ — Amazon Aggregate Bank Deposit Matching
+### Domains
+- [ ] xettle.app A record → 185.158.133.1
+- [ ] www.xettle.app A record → 185.158.133.1
+- [ ] _lovable TXT record set
+- [ ] SSL provisioned and active
+- [ ] xettle.app set as Primary domain
 
-### Problem
-Amazon batches multiple settlements into a single bank deposit. The current matching engine compares individual invoice amounts against individual bank transactions, which will never match for Amazon.
+### First Publish
+- [ ] All tests pass in dev
+- [ ] Frontend published via Update dialog
+- [ ] Smoke test: landing → signup → login → upload → parse → preview push
+- [ ] No CORS errors in network tab
+- [ ] No console errors
+```
 
-### Approach
-1. **Group Amazon invoices by settlement period**: Cluster by `deposit_date` or `period_end` within 3-day windows
-2. **Sum net deposit amounts across settlements**: Calculate the expected aggregate deposit total
-3. **Match sum against single bank transaction**: $1.00 tolerance and ±5-day date window
-4. **Amazon deposit narration**: Typically contains "AMAZON" or seller account reference number — use for fuzzy matching
-
-### UI Changes
-- Outstanding tab: Show "Matched (aggregated)" badge for Amazon invoices matched via aggregate
-- Bank deposit card: Show aggregate match count separately
-- Drill-down: Show which settlements were grouped into the aggregate match
