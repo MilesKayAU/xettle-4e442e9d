@@ -615,17 +615,15 @@ export default function Dashboard() {
         <div className="container-custom">
           <nav className="flex gap-1 py-2">
             {([
-              { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
-              { key: 'outstanding' as DashboardView, label: 'Outstanding', icon: ClipboardList, badgeCount: outstandingCount },
-              { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
-              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, badgeCount: readyToPushCount },
+              { key: 'home' as DashboardView, label: 'Home', icon: LayoutDashboard },
+              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, badgeCount: readyToPushCount + outstandingCount },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
               { key: 'settings' as DashboardView, label: 'Settings', icon: Settings },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
-              const showDot = (tab.key === 'dashboard' && pendingChannelAlerts > 0) || ((tab as any).badgeCount > 0);
-              const badgeNum = tab.key === 'dashboard' ? pendingChannelAlerts : (tab as any).badgeCount || 0;
+              const showDot = (tab.key === 'home' && pendingChannelAlerts > 0) || ((tab as any).badgeCount > 0);
+              const badgeNum = tab.key === 'home' ? pendingChannelAlerts : (tab as any).badgeCount || 0;
               return (
                 <button
                   key={tab.key}
