@@ -501,6 +501,15 @@ export default function ValidationSweep({
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/30">
+                  <th className="px-2 py-2 text-center w-8">
+                    {selectableRows.length > 0 && (
+                      <Checkbox
+                        checked={allSelectableSelected}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all ready rows"
+                      />
+                    )}
+                  </th>
                   <th className="px-3 py-2 text-left font-medium cursor-pointer" onClick={() => handleSort('marketplace_code')}>
                     <span className="inline-flex items-center">Marketplace<SortIcon col="marketplace_code" /></span>
                   </th>
