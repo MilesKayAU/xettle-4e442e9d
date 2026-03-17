@@ -665,13 +665,16 @@ export default function Dashboard() {
                 <button
                   key={tab.key}
                   onClick={() => switchSettlementsSubTab(tab.key)}
-                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
                     settlementsSubTab === tab.key
                       ? 'border-primary text-primary'
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {tab.label}
+                  {tab.badgeCount && tab.badgeCount > 0 ? (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-destructive text-destructive-foreground font-bold">{tab.badgeCount}</span>
+                  ) : null}
                 </button>
               ))}
               {activeView === 'insights' && insightsSubTabs.map(tab => (

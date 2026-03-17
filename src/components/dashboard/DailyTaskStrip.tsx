@@ -96,8 +96,8 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: D
   const clickMap: Record<string, () => void> = {
     setup: () => onNavigate('settings'),
     review: () => onNavigate('settlements', 'overview'),
-    post: () => onScrollToActionCentre?.() ?? onNavigate('dashboard'),
-    recon: () => onNavigate('outstanding'),
+    post: () => onScrollToActionCentre?.() ?? onNavigate('home'),
+    recon: () => onNavigate('settlements', 'outstanding'),
     alerts: () => onNavigate('settlements', 'reconciliation'),
   };
 
