@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw,
   Upload, ArrowRight, Send, Search, PartyPopper, Clock, Filter,
-  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays,
+  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -113,6 +113,10 @@ export default function ValidationSweep({
   const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
   const [apiSyncedCodes, setApiSyncedCodes] = useState<Set<string>>(new Set());
   const [syncingRow, setSyncingRow] = useState<string | null>(null);
+  const [pausedCodes, setPausedCodes] = useState<Set<string>>(new Set());
+  const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>>([]);
+  const [showPaused, setShowPaused] = useState(false);
+  const [togglingPause, setTogglingPause] = useState<string | null>(null);
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
@@ -158,16 +162,24 @@ export default function ValidationSweep({
       if (valRes.error) throw valRes.error;
       const validationRows = (valRes.data || []) as ValidationRow[];
 
-      // Load API-synced marketplace codes
+      // Load marketplace connections (API-synced codes + paused codes)
       const { data: connData } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_code, connection_type, connection_status');
+        .select('marketplace_code, marketplace_name, connection_type, connection_status');
+      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_type: string; connection_status: string }>;
+      setAllConnections(allConns.map(c => ({ marketplace_code: c.marketplace_code, marketplace_name: c.marketplace_name, connection_status: c.connection_status })));
       const apiCodes = new Set<string>(
-        (connData || [])
-          .filter((c: any) => c.connection_type === 'api' && ACTIVE_CONNECTION_STATUSES.includes(c.connection_status))
-          .map((c: any) => c.marketplace_code)
+        allConns
+          .filter((c) => c.connection_type === 'api' && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
+          .map((c) => c.marketplace_code)
       );
       setApiSyncedCodes(apiCodes);
+      const paused = new Set<string>(
+        allConns
+          .filter((c) => c.connection_status === 'paused')
+          .map((c) => c.marketplace_code)
+      );
+      setPausedCodes(paused);
 
       if (boundaryRes.data?.value) {
         setBoundaryDate(boundaryRes.data.value);
@@ -236,7 +248,8 @@ export default function ValidationSweep({
 
   // Memoized filtering + sorting
   const filteredRows = useMemo(() => {
-    let result = rows;
+    // Filter out paused marketplace rows
+    let result = rows.filter((r) => !pausedCodes.has(r.marketplace_code));
     if (filter !== 'all') {
       result = result.filter((r) => {
         if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched';
@@ -266,20 +279,44 @@ export default function ValidationSweep({
         : String(bVal).localeCompare(String(aVal));
     });
     return result;
-  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir]);
+  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes]);
 
   const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
 
+  const pausedCount = useMemo(() => {
+    const pausedMarketplaceCodes = new Set(allConnections.filter(c => c.connection_status === 'paused').map(c => c.marketplace_code));
+    return rows.filter(r => pausedMarketplaceCodes.has(r.marketplace_code)).length;
+  }, [rows, allConnections]);
+
   const statusCounts = useMemo(() => {
-    const counts: Record<FilterStatus, number> = { all: rows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
-    rows.forEach((r) => {
+    const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
+    const counts: Record<FilterStatus, number> = { all: activeRows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
+    activeRows.forEach((r) => {
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') counts.complete++;
       else if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') counts.ready_to_push++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') counts.settlement_needed++;
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
     return counts;
-  }, [rows]);
+  }, [rows, pausedCodes]);
+
+  const handleTogglePause = async (marketplaceCode: string, currentStatus: string) => {
+    setTogglingPause(marketplaceCode);
+    try {
+      const newStatus = currentStatus === 'paused' ? 'active' : 'paused';
+      const { error } = await supabase
+        .from('marketplace_connections')
+        .update({ connection_status: newStatus })
+        .eq('marketplace_code', marketplaceCode);
+      if (error) throw error;
+      toast.success(newStatus === 'paused' ? `${marketplaceCode} paused — hidden from overview` : `${marketplaceCode} resumed`);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update');
+    } finally {
+      setTogglingPause(null);
+    }
+  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -380,6 +417,48 @@ export default function ValidationSweep({
         </Button>
       </div>
 
+      {/* Paused channels indicator */}
+      {pausedCount > 0 && (
+        <div className="rounded-lg border border-border bg-muted/30 px-4 py-2">
+          <button
+            onClick={() => setShowPaused(!showPaused)}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+          >
+            <Pause className="h-3 w-3" />
+            <span>{pausedCount} period{pausedCount !== 1 ? 's' : ''} hidden ({allConnections.filter(c => c.connection_status === 'paused').length} paused channel{allConnections.filter(c => c.connection_status === 'paused').length !== 1 ? 's' : ''})</span>
+            {showPaused ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+          </button>
+          {showPaused && (
+            <div className="mt-2 space-y-1.5 pt-2 border-t border-border">
+              {allConnections
+                .filter(c => c.connection_status === 'paused')
+                .map(conn => (
+                  <div key={conn.marketplace_code} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      <Pause className="h-3 w-3 inline mr-1.5" />
+                      {MARKETPLACE_LABELS[conn.marketplace_code] || conn.marketplace_name || conn.marketplace_code}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs gap-1 px-2"
+                      disabled={togglingPause === conn.marketplace_code}
+                      onClick={() => handleTogglePause(conn.marketplace_code, 'paused')}
+                    >
+                      {togglingPause === conn.marketplace_code ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      Resume
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <Card>
         <CardContent className="p-0">
@@ -417,8 +496,30 @@ export default function ValidationSweep({
                   </tr>
                 ) : (
                   pagedRows.map((row) => (
-                    <tr key={row.id} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-3 py-2 font-medium">{MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}</td>
+                    <tr key={row.id} className="border-b hover:bg-muted/20 transition-colors group">
+                      <td className="px-3 py-2 font-medium">
+                        <span className="inline-flex items-center gap-1">
+                          {MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+                                  onClick={() => handleTogglePause(row.marketplace_code, 'active')}
+                                  disabled={togglingPause === row.marketplace_code}
+                                >
+                                  {togglingPause === row.marketplace_code ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Pause className="h-3 w-3" />
+                                  )}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="text-xs">Pause this channel — hides from overview</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </span>
+                      </td>
                       <td className="px-3 py-2">{row.period_label}</td>
                       <td className="px-3 py-2 text-center">{row.orders_found ? row.orders_count : '—'}</td>
                       <td className="px-3 py-2 text-center"><SettlementCell row={row} /></td>
