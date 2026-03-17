@@ -157,9 +157,328 @@ export default function ValidationSweep({
 
       if (valRes.error) throw valRes.error;
       const validationRows = (valRes.data || []) as ValidationRow[];
-      
 
+      // Load API-synced marketplace codes
+      const { data: connData } = await supabase
+        .from('marketplace_connections')
+        .select('marketplace_code, connection_type, connection_status');
+      const apiCodes = new Set<string>(
+        (connData || [])
+          .filter((c: any) => c.connection_type === 'api' && ACTIVE_CONNECTION_STATUSES.includes(c.connection_status))
+          .map((c: any) => c.marketplace_code)
+      );
+      setApiSyncedCodes(apiCodes);
 
+      if (boundaryRes.data?.value) {
+        setBoundaryDate(boundaryRes.data.value);
+      }
+
+      setRows(validationRows);
+    } catch (err: any) {
+      logger.error('[ValidationSweep] loadData error:', err);
+      toast.error('Failed to load validation data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Sweep animation effect
+  useEffect(() => {
+    if (!sweeping) return;
+    setSweepStartTime(Date.now());
+    const interval = setInterval(() => {
+      setSweepStep((prev) => {
+        if (prev >= SWEEP_STEPS.length - 1) {
+          clearInterval(interval);
+          setTimeout(() => {
+            setSweeping(false);
+            setSweepDuration(Date.now() - (sweepStartTime || Date.now()));
+            loadData();
+          }, 600);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1200);
+    return () => clearInterval(interval);
+  }, [sweeping]);
+
+  const handleRunSweep = async () => {
+    setSweeping(true);
+    setSweepStep(0);
+    setSweepStartTime(Date.now());
+    try {
+      await triggerValidationSweep();
+    } catch (err: any) {
+      toast.error('Sweep failed: ' + (err.message || 'Unknown error'));
+      setSweeping(false);
+    }
+  };
+
+  const handleSyncRow = async (row: ValidationRow) => {
+    setSyncingRow(row.id);
+    try {
+      const result = await runDirectMarketplaceSync(row.marketplace_code);
+      if (result?.success) {
+        toast.success(`Synced ${row.marketplace_code} for ${row.period_label}`);
+        loadData();
+      } else {
+        toast.error(result?.error || 'Sync failed');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Sync failed');
+    } finally {
+      setSyncingRow(null);
+    }
+  };
+
+  // Memoized filtering + sorting
+  const filteredRows = useMemo(() => {
+    let result = rows;
+    if (filter !== 'all') {
+      result = result.filter((r) => {
+        if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched';
+        return r.overall_status === filter;
+      });
+    }
+    if (marketplaceFilter !== 'all') {
+      result = result.filter((r) => r.marketplace_code === marketplaceFilter);
+    }
+    if (dateFrom) {
+      result = result.filter((r) => r.period_start >= dateFrom);
+    }
+    if (dateTo) {
+      result = result.filter((r) => r.period_end <= dateTo);
+    }
+    result = [...result].sort((a, b) => {
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return 1;
+      if (bVal == null) return -1;
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      return sortDir === 'asc'
+        ? String(aVal).localeCompare(String(bVal))
+        : String(bVal).localeCompare(String(aVal));
+    });
+    return result;
+  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir]);
+
+  const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<FilterStatus, number> = { all: rows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
+    rows.forEach((r) => {
+      if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') counts.complete++;
+      else if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') counts.ready_to_push++;
+      else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') counts.settlement_needed++;
+      else if (r.overall_status === 'gap_detected') counts.gap_detected++;
+    });
+    return counts;
+  }, [rows]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const displayRows = maxRows ? filteredRows.slice(0, maxRows) : filteredRows;
+  const totalPages = Math.ceil(displayRows.length / pageSize);
+  const pagedRows = displayRows.slice((page - 1) * pageSize, page * pageSize);
+
+  const handlePush = async (row: ValidationRow) => {
+    if (!row.settlement_id || !onPushToXero) return;
+    setPushing(row.id);
+    try {
+      await onPushToXero(row.settlement_id, row.marketplace_code);
+      toast.success(`Pushed ${row.marketplace_code} ${row.period_label} to Xero`);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Push failed');
+    } finally {
+      setPushing(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6 space-y-3">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-40 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (sweeping) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+          <p className="text-sm font-medium">{SWEEP_STEPS[sweepStep]}</p>
+          <div className="flex gap-1 justify-center">
+            {SWEEP_STEPS.map((_, i) => (
+              <div key={i} className={cn('h-1.5 w-8 rounded-full', i <= sweepStep ? 'bg-primary' : 'bg-muted')} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <SummaryCard label="All Periods" count={statusCounts.all} emoji="📋" active={filter === 'all'} onClick={() => setFilter('all')} bgClass="bg-muted/50" borderClass="border-border" />
+        <SummaryCard label="Complete" count={statusCounts.complete} emoji="✅" active={filter === 'complete'} onClick={() => setFilter('complete')} bgClass="bg-emerald-50 dark:bg-emerald-900/20" borderClass="border-emerald-200 dark:border-emerald-800" />
+        <SummaryCard label="Ready to Push" count={statusCounts.ready_to_push} emoji="🚀" active={filter === 'ready_to_push'} onClick={() => setFilter('ready_to_push')} bgClass="bg-blue-50 dark:bg-blue-900/20" borderClass="border-blue-200 dark:border-blue-800" />
+        <SummaryCard label="Upload Needed" count={statusCounts.settlement_needed} emoji="📤" active={filter === 'settlement_needed'} onClick={() => setFilter('settlement_needed')} bgClass="bg-amber-50 dark:bg-amber-900/20" borderClass="border-amber-200 dark:border-amber-800" />
+        <SummaryCard label="Gaps" count={statusCounts.gap_detected} emoji="⚠️" active={filter === 'gap_detected'} onClick={() => setFilter('gap_detected')} bgClass="bg-red-50 dark:bg-red-900/20" borderClass="border-red-200 dark:border-red-800" />
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={marketplaceFilter} onValueChange={setMarketplaceFilter}>
+          <SelectTrigger className="w-[180px] h-8 text-xs">
+            <Filter className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="All Marketplaces" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Marketplaces</SelectItem>
+            {uniqueMarketplaces.map((m) => (
+              <SelectItem key={m} value={m}>{MARKETPLACE_LABELS[m] || m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1">
+          <CalendarDays className="h-3 w-3 text-muted-foreground" />
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 w-[130px] text-xs" placeholder="From" />
+          <span className="text-xs text-muted-foreground">–</span>
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 w-[130px] text-xs" placeholder="To" />
+        </div>
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1 ml-auto" onClick={handleRunSweep} disabled={sweeping}>
+          <RefreshCw className={cn('h-3 w-3', sweeping && 'animate-spin')} />
+          Re-scan
+        </Button>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="px-3 py-2 text-left font-medium cursor-pointer" onClick={() => handleSort('marketplace_code')}>
+                    <span className="inline-flex items-center">Marketplace<SortIcon col="marketplace_code" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium cursor-pointer" onClick={() => handleSort('period_start')}>
+                    <span className="inline-flex items-center">Period<SortIcon col="period_start" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium cursor-pointer" onClick={() => handleSort('orders_count')}>
+                    <span className="inline-flex items-center">Orders<SortIcon col="orders_count" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium">Settlement</th>
+                  <th className="px-3 py-2 text-right font-medium cursor-pointer" onClick={() => handleSort('settlement_net')}>
+                    <span className="inline-flex items-center justify-end">Net<SortIcon col="settlement_net" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium">Xero</th>
+                  <th className="px-3 py-2 text-center font-medium">Bank</th>
+                  <th className="px-3 py-2 text-center font-medium cursor-pointer" onClick={() => handleSort('overall_status')}>
+                    <span className="inline-flex items-center">Status<SortIcon col="overall_status" /></span>
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                      {rows.length === 0 ? 'No validation data yet. Run a scan to get started.' : 'No periods match your filters.'}
+                    </td>
+                  </tr>
+                ) : (
+                  pagedRows.map((row) => (
+                    <tr key={row.id} className="border-b hover:bg-muted/20 transition-colors">
+                      <td className="px-3 py-2 font-medium">{MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}</td>
+                      <td className="px-3 py-2">{row.period_label}</td>
+                      <td className="px-3 py-2 text-center">{row.orders_found ? row.orders_count : '—'}</td>
+                      <td className="px-3 py-2 text-center"><SettlementCell row={row} /></td>
+                      <td className="px-3 py-2 text-right font-mono">{row.settlement_net ? formatAUD(row.settlement_net) : '—'}</td>
+                      <td className="px-3 py-2 text-center">
+                        {row.xero_pushed ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {row.bank_matched ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <RowAction
+                          row={row}
+                          pushing={pushing === row.id}
+                          syncing={syncingRow === row.id}
+                          isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
+                          onUpload={() => onSwitchToUpload?.()}
+                          onPush={() => handlePush(row)}
+                          onSync={() => handleSyncRow(row)}
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {!maxRows && displayRows.length > pageSize && (
+            <TablePaginationBar
+              page={page}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={displayRows.length}
+              onPageChange={setPage}
+            />
+          )}
+          {maxRows && filteredRows.length > maxRows && onViewAll && (
+            <div className="p-3 text-center border-t">
+              <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={onViewAll}>
+                View all {filteredRows.length} periods <ArrowRight className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {previewOpen && (
+        <PushSafetyPreview
+          settlements={previewSettlements}
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          onConfirm={async () => { setPreviewOpen(false); loadData(); }}
+        />
+      )}
+    </div>
+  );
+}
 
 function SummaryCard({
   label, count, emoji, active, onClick, bgClass, borderClass,
