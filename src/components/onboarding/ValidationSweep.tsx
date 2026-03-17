@@ -473,7 +473,7 @@ export default function ValidationSweep({
           settlements={previewSettlements}
           open={previewOpen}
           onClose={() => setPreviewOpen(false)}
-          onConfirm={() => { setPreviewOpen(false); loadData(); }}
+          onConfirm={async () => { setPreviewOpen(false); loadData(); }}
         />
       )}
     </div>
