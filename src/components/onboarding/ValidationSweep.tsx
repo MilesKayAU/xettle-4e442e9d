@@ -417,6 +417,48 @@ export default function ValidationSweep({
         </Button>
       </div>
 
+      {/* Paused channels indicator */}
+      {pausedCount > 0 && (
+        <div className="rounded-lg border border-border bg-muted/30 px-4 py-2">
+          <button
+            onClick={() => setShowPaused(!showPaused)}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+          >
+            <Pause className="h-3 w-3" />
+            <span>{pausedCount} period{pausedCount !== 1 ? 's' : ''} hidden ({allConnections.filter(c => c.connection_status === 'paused').length} paused channel{allConnections.filter(c => c.connection_status === 'paused').length !== 1 ? 's' : ''})</span>
+            {showPaused ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+          </button>
+          {showPaused && (
+            <div className="mt-2 space-y-1.5 pt-2 border-t border-border">
+              {allConnections
+                .filter(c => c.connection_status === 'paused')
+                .map(conn => (
+                  <div key={conn.marketplace_code} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      <Pause className="h-3 w-3 inline mr-1.5" />
+                      {MARKETPLACE_LABELS[conn.marketplace_code] || conn.marketplace_name || conn.marketplace_code}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs gap-1 px-2"
+                      disabled={togglingPause === conn.marketplace_code}
+                      onClick={() => handleTogglePause(conn.marketplace_code, 'paused')}
+                    >
+                      {togglingPause === conn.marketplace_code ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      Resume
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <Card>
         <CardContent className="p-0">
