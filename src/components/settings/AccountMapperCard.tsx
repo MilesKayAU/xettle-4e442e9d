@@ -131,6 +131,67 @@ export default function AccountMapperCard() {
     };
   }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
 
+  // ─── COA-based suggestions for marketplace-specific rows ─────────
+  const coaSuggestions = useMemo(() => {
+    if (!splitByMarketplace || coaAccounts.length === 0) return new Map<string, { code: string; name: string }>();
+
+    const CATEGORY_KEYWORDS: Record<string, string[]> = {
+      Sales: ['sales', 'revenue', 'income'],
+      Shipping: ['shipping', 'freight', 'postage'],
+      'Promotional Discounts': ['discount', 'promotion'],
+      Refunds: ['refund', 'return'],
+      Reimbursements: ['reimbursement'],
+      'Seller Fees': ['seller fee', 'referral fee', 'commission', 'fees'],
+      'FBA Fees': ['fba', 'fulfilment', 'fulfillment'],
+      'Storage Fees': ['storage', 'warehouse'],
+      'Advertising Costs': ['advertising', 'sponsored', 'ppc', 'ad spend'],
+      'Other Fees': ['other fee', 'miscellaneous', 'adjustment'],
+    };
+
+    const suggestions = new Map<string, { code: string; name: string }>();
+    const marketplaces = activeMarketplaces.length > 0 ? activeMarketplaces : [];
+
+    for (const mp of marketplaces) {
+      const mpNorm = mp.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+      // Also try common abbreviations
+      const mpTokens = mpNorm.split(/\s+/);
+
+      for (const cat of SPLITTABLE_CATEGORIES) {
+        const key = `${cat}:${mp}`;
+        const catKeywords = CATEGORY_KEYWORDS[cat] || [];
+
+        // Find COA accounts that match BOTH marketplace name AND category keyword
+        let bestMatch: { code: string; name: string; score: number } | null = null;
+
+        for (const acc of coaAccounts) {
+          if (!acc.account_code || !acc.is_active) continue;
+          const accNorm = acc.account_name.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+
+          // Check if account name contains marketplace identifier
+          const hasMarketplace = mpTokens.some(t => t.length >= 3 && accNorm.includes(t)) || accNorm.includes(mpNorm);
+          if (!hasMarketplace) continue;
+
+          // Check if account name matches category
+          for (const kw of catKeywords) {
+            if (accNorm.includes(kw)) {
+              const score = accNorm === `${mpNorm} ${kw}` ? 10 : 5;
+              if (!bestMatch || score > bestMatch.score) {
+                bestMatch = { code: acc.account_code, name: acc.account_name, score };
+              }
+              break;
+            }
+          }
+        }
+
+        if (bestMatch) {
+          suggestions.set(key, { code: bestMatch.code, name: bestMatch.name });
+        }
+      }
+    }
+
+    return suggestions;
+  }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
+
   // User-selected marketplaces for COA cloning
   const [selectedForClone, setSelectedForClone] = useState<Set<string>>(new Set());
 
