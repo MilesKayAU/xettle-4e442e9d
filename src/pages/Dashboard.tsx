@@ -534,7 +534,7 @@ export default function Dashboard() {
       xero_connected: xeroConnected,
     },
     suggestedPrompts: aiSuggestedPrompts,
-    capabilities: ['view_settlements', 'view_outstanding', 'upload_files', 'view_insights'],
+    capabilities: ['view_settlements', 'view_outstanding', 'view_insights'],
   }));
 
   if (isLoading) {
