@@ -551,10 +551,11 @@ export default function Dashboard() {
   const isShopifyOrders = selectedMarketplace === 'shopify_orders';
   const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
 
-  const settlementSubTabs: { key: SettlementsSubTab; label: string }[] = [
-    { key: 'all', label: 'All Settlements' },
+  const settlementSubTabs: { key: SettlementsSubTab; label: string; badgeCount?: number }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'reconciliation', label: 'Reconciliation Hub' },
+    { key: 'all', label: 'All Settlements' },
+    { key: 'outstanding', label: 'Awaiting Payment', badgeCount: outstandingCount },
+    { key: 'reconciliation', label: 'Action Queue' },
   ];
 
   const insightsSubTabs: { key: InsightsSubTab; label: string; pro?: boolean }[] = [
