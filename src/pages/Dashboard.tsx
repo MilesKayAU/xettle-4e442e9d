@@ -745,7 +745,7 @@ export default function Dashboard() {
                   window.dispatchEvent(new CustomEvent('open-settings-tab'));
                 }}
                 onMapBankAccounts={() => setShowBankMapper(!showBankMapper)}
-                onConnect={() => setShowUploadSheet(true)}}
+                onConnect={() => setShowUploadSheet(true)}
                 onRefreshStatus={() => {
                   // Trigger the validation sweep via ActionCentre's existing mechanism
                   import('@/utils/settlement-engine').then(({ triggerValidationSweep }) => {
