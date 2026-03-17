@@ -540,7 +540,16 @@ export default function ValidationSweep({
                   </tr>
                 ) : (
                   pagedRows.map((row) => (
-                    <tr key={row.id} className="border-b hover:bg-muted/20 transition-colors group">
+                    <tr key={row.id} className={cn("border-b hover:bg-muted/20 transition-colors group", selectedIds.has(row.id) && "bg-primary/5")}>
+                      <td className="px-2 py-2 text-center w-8">
+                        {row.overall_status === 'ready_to_push' && row.settlement_id ? (
+                          <Checkbox
+                            checked={selectedIds.has(row.id)}
+                            onCheckedChange={() => toggleSelectRow(row.id)}
+                            aria-label={`Select ${row.marketplace_code} ${row.period_label}`}
+                          />
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2 font-medium">
                         <span className="inline-flex items-center gap-1">
                           {MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}
