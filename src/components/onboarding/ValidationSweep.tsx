@@ -775,13 +775,18 @@ export default function ValidationSweep({
       </Card>
 
       {/* Bottom action bar */}
-      {(readyToPushRows.length > 0 || uploadNeededRows.length > 0) && (
+      {(readyToPushRows.length > 0 || uploadNeededRows.length > 0 || syncNeededRows.length > 0) && (
         <Card className="border-border">
           <CardContent className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="space-y-1">
               {readyToPushRows.length > 0 && (
                 <p className="text-sm font-medium">
                   {readyToPushRows.length} settlement{readyToPushRows.length > 1 ? 's' : ''} validated and ready for Xero
+                </p>
+              )}
+              {syncNeededRows.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {syncNeededRows.length} API-connected settlement{syncNeededRows.length > 1 ? 's' : ''} can be synced
                 </p>
               )}
               {uploadNeededRows.length > 0 && (
@@ -794,6 +799,18 @@ export default function ValidationSweep({
               {readyToPushRows.length > 0 && (
                 <Button size="sm" className="gap-1.5" onClick={openPushAllPreview}>
                   <Send className="h-3.5 w-3.5" /> Push all to Xero
+                </Button>
+              )}
+              {syncNeededRows.length > 0 && (
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                  const codes = [...new Set(syncNeededRows.map(r => r.marketplace_code))];
+                  for (const code of codes) {
+                    await runMarketplaceSync(code);
+                  }
+                  toast.success('Sync triggered for API-connected marketplaces');
+                  setTimeout(() => loadData(), 3000);
+                }}>
+                  <RefreshCw className="h-3.5 w-3.5" /> Sync All
                 </Button>
               )}
               {uploadNeededRows.length > 0 && onSwitchToUpload && (
