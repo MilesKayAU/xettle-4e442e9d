@@ -208,6 +208,21 @@ export default function CloneCoaDialog({
     return conflicts;
   }, [cloneRows, allCodes]);
 
+  // Detect which rows would collide with existing Xero accounts
+  const existingCodeSet = useMemo(() => new Set(allCodes), [allCodes]);
+  const existingCollisions = useMemo(() => {
+    const collisions = new Set<number>();
+    for (let i = 0; i < cloneRows.length; i++) {
+      if (cloneRows[i].enabled && existingCodeSet.has(cloneRows[i].newCode)) {
+        collisions.add(i);
+      }
+    }
+    return collisions;
+  }, [cloneRows, existingCodeSet]);
+
+  const allNewAccounts = enabledRows.length > 0 && existingCollisions.size === 0 && codeConflicts.size === 0;
+  const hasOverwriteRisk = existingCollisions.size > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -316,8 +331,18 @@ export default function CloneCoaDialog({
                           onChange={(e) => updateRowCode(idx, e.target.value)}
                           disabled={!row.enabled}
                         />
-                        {codeConflicts.has(idx) && (
+                        {codeConflicts.has(idx) && existingCollisions.has(idx) && (
+                          <span className="text-[9px] text-destructive flex items-center gap-0.5 mt-0.5">
+                            <AlertTriangle className="h-2.5 w-2.5" /> Exists in Xero — will be blocked
+                          </span>
+                        )}
+                        {codeConflicts.has(idx) && !existingCollisions.has(idx) && (
                           <span className="text-[9px] text-destructive">Code conflict</span>
+                        )}
+                        {!codeConflicts.has(idx) && row.enabled && (
+                          <span className="text-[9px] text-emerald-600 flex items-center gap-0.5 mt-0.5">
+                            <CheckCircle2 className="h-2.5 w-2.5" /> New
+                          </span>
                         )}
                       </td>
                       <td className="p-2">
@@ -345,19 +370,29 @@ export default function CloneCoaDialog({
             </Alert>
           )}
 
-          {enabledRows.length > 0 && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+          {enabledRows.length > 0 && allNewAccounts && (
+            <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 rounded-md px-3 py-2 border border-emerald-200 dark:border-emerald-800">
+              <CheckCircle2 className="h-3.5 w-3.5" />
               <span>
-                {enabledRows.length} account{enabledRows.length !== 1 ? 's' : ''} will be created in Xero
+                All {enabledRows.length} account{enabledRows.length !== 1 ? 's' : ''} are new — no existing Xero data will be affected.
                 {enabledRows.length > 10 && ` (in ${Math.ceil(enabledRows.length / 10)} batches)`}
               </span>
             </div>
           )}
 
-          <Alert className="border-amber-300 bg-amber-50">
+          {enabledRows.length > 0 && hasOverwriteRisk && (
+            <Alert className="border-destructive/50 bg-destructive/5">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <AlertDescription className="text-xs">
+                <strong>{existingCollisions.size} account code{existingCollisions.size !== 1 ? 's' : ''} already exist in Xero</strong> and will be blocked from creation.
+                Change the conflicting codes above or deselect those rows before proceeding.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-xs text-amber-900">
+            <AlertDescription className="text-xs text-amber-900 dark:text-amber-300">
               This will create new accounts in your Xero Chart of Accounts. Tax types are inherited from the template.
               Cloning accounts does not change support tier — push gating still applies per marketplace.
             </AlertDescription>
