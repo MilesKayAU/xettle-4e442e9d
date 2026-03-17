@@ -118,6 +118,8 @@ export default function ValidationSweep({
   const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>>([]);
   const [showPaused, setShowPaused] = useState(false);
   const [togglingPause, setTogglingPause] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPushing, setBulkPushing] = useState(false);
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
