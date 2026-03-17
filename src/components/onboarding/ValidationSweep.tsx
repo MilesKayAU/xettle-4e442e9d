@@ -724,11 +724,12 @@ export default function ValidationSweep({
                       onSync={async () => {
                         setSyncingRow(row.id);
                         try {
-                          const result = await runMarketplaceSync(row.marketplace_code);
+                          const result = await runDirectMarketplaceSync(row.marketplace_code);
                           if (result.success) {
                             toast.success(`Sync triggered for ${MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}`);
-                            // Refresh after a short delay to let the sync complete
-                            setTimeout(() => loadData(), 3000);
+                            // First reload after 5s, safety net at 12s
+                            setTimeout(() => loadData(), 5000);
+                            setTimeout(() => loadData(), 12000);
                           } else {
                             toast.error(result.error || 'Sync failed');
                           }
