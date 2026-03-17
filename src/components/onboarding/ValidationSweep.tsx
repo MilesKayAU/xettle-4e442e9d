@@ -157,9 +157,164 @@ export default function ValidationSweep({
 
       if (valRes.error) throw valRes.error;
       const validationRows = (valRes.data || []) as ValidationRow[];
-      
 
+      // Load API-synced marketplace codes
+      const { data: connData } = await supabase
+        .from('marketplace_connections')
+        .select('marketplace_code, connection_type, connection_status');
+      const apiCodes = new Set<string>(
+        (connData || [])
+          .filter((c: any) => c.connection_type === 'api' && ACTIVE_CONNECTION_STATUSES.includes(c.connection_status))
+          .map((c: any) => c.marketplace_code)
+      );
+      setApiSyncedCodes(apiCodes);
 
+      if (boundaryRes.data?.value) {
+        setBoundaryDate(boundaryRes.data.value);
+      }
+
+      setRows(validationRows);
+    } catch (err: any) {
+      logger.error('[ValidationSweep] loadData error:', err);
+      toast.error('Failed to load validation data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Sweep animation effect
+  useEffect(() => {
+    if (!sweeping) return;
+    setSweepStartTime(Date.now());
+    const interval = setInterval(() => {
+      setSweepStep((prev) => {
+        if (prev >= SWEEP_STEPS.length - 1) {
+          clearInterval(interval);
+          setTimeout(() => {
+            setSweeping(false);
+            setSweepDuration(Date.now() - (sweepStartTime || Date.now()));
+            loadData();
+          }, 600);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1200);
+    return () => clearInterval(interval);
+  }, [sweeping]);
+
+  const handleRunSweep = async () => {
+    setSweeping(true);
+    setSweepStep(0);
+    setSweepStartTime(Date.now());
+    try {
+      await triggerValidationSweep();
+    } catch (err: any) {
+      toast.error('Sweep failed: ' + (err.message || 'Unknown error'));
+      setSweeping(false);
+    }
+  };
+
+  const handleSyncRow = async (row: ValidationRow) => {
+    setSyncingRow(row.id);
+    try {
+      const result = await runDirectMarketplaceSync(row.marketplace_code, row.period_start, row.period_end);
+      if (result?.success) {
+        toast.success(`Synced ${row.marketplace_code} for ${row.period_label}`);
+        loadData();
+      } else {
+        toast.error(result?.error || 'Sync failed');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Sync failed');
+    } finally {
+      setSyncingRow(null);
+    }
+  };
+
+  // Memoized filtering + sorting
+  const filteredRows = useMemo(() => {
+    let result = rows;
+    if (filter !== 'all') {
+      result = result.filter((r) => {
+        if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched';
+        return r.overall_status === filter;
+      });
+    }
+    if (marketplaceFilter !== 'all') {
+      result = result.filter((r) => r.marketplace_code === marketplaceFilter);
+    }
+    if (dateFrom) {
+      result = result.filter((r) => r.period_start >= dateFrom);
+    }
+    if (dateTo) {
+      result = result.filter((r) => r.period_end <= dateTo);
+    }
+    result = [...result].sort((a, b) => {
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return 1;
+      if (bVal == null) return -1;
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      return sortDir === 'asc'
+        ? String(aVal).localeCompare(String(bVal))
+        : String(bVal).localeCompare(String(aVal));
+    });
+    return result;
+  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir]);
+
+  const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<FilterStatus, number> = { all: rows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
+    rows.forEach((r) => {
+      if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') counts.complete++;
+      else if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') counts.ready_to_push++;
+      else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') counts.settlement_needed++;
+      else if (r.overall_status === 'gap_detected') counts.gap_detected++;
+    });
+    return counts;
+  }, [rows]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const displayRows = maxRows ? filteredRows.slice(0, maxRows) : filteredRows;
+  const totalPages = Math.ceil(displayRows.length / pageSize);
+  const pagedRows = displayRows.slice((page - 1) * pageSize, page * pageSize);
+
+  const handlePush = async (row: ValidationRow) => {
+    if (!row.settlement_id || !onPushToXero) return;
+    setPushing(row.id);
+    try {
+      await onPushToXero(row.settlement_id, row.marketplace_code);
+      toast.success(`Pushed ${row.marketplace_code} ${row.period_label} to Xero`);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Push failed');
+    } finally {
+      setPushing(null);
+    }
+  };
 
 function SummaryCard({
   label, count, emoji, active, onClick, bgClass, borderClass,
