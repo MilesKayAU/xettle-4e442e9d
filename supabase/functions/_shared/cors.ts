@@ -24,6 +24,7 @@ const ALLOWED_ORIGINS = [
   "https://www.xettle.com.au",
   "https://xettle.lovable.app",
   "https://id-preview--7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovable.app",
+  "https://7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovableproject.com",
   "http://localhost:5173",
   "http://localhost:3000",
 ]
@@ -35,7 +36,7 @@ export function getCorsHeaders(origin?: string): Record<string, string> {
     return {
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Headers":
-        "authorization, x-client-info, apikey, content-type",
+        "authorization, x-client-info, apikey, content-type, x-action, x-redirect-uri",
       "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
       "Access-Control-Allow-Credentials": "true",
     }
