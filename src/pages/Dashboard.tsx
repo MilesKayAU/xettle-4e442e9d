@@ -717,7 +717,7 @@ export default function Dashboard() {
               />
               {/* Post-setup scan banner — triggers adaptive sync on first load */}
               <PostSetupBanner
-                onSwitchToUpload={() => switchView('smart_upload')}
+                onSwitchToUpload={() => setShowUploadSheet(true)}
                 hasXero={xeroConnected}
                 hasAmazon={hasAmazon}
                 hasShopify={hasShopify}
