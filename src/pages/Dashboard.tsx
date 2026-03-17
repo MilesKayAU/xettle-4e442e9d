@@ -47,8 +47,8 @@ const OutstandingTab = lazy(() => import('@/components/dashboard/OutstandingTab'
 import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
 const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
 
-type DashboardView = 'dashboard' | 'outstanding' | 'smart_upload' | 'settlements' | 'insights' | 'settings';
-type SettlementsSubTab = 'all' | 'overview' | 'reconciliation';
+type DashboardView = 'home' | 'settlements' | 'insights' | 'settings';
+type SettlementsSubTab = 'overview' | 'all' | 'outstanding' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
 function AiMapperBanner({ show: showProp }: { show?: boolean }) {
@@ -236,11 +236,18 @@ export default function Dashboard() {
 
   // Dashboard is always the default landing page
   const [activeView, setActiveView] = useState<DashboardView>(() => {
-    return (localStorage.getItem('xettle_dashboard_view') as DashboardView) || 'dashboard';
+    const stored = localStorage.getItem('xettle_dashboard_view');
+    // Migrate legacy view names
+    if (stored === 'dashboard') return 'home';
+    if (stored === 'outstanding') { localStorage.setItem('xettle_settlements_subtab', 'outstanding'); return 'settlements'; }
+    if (stored === 'smart_upload') return 'home';
+    if (stored === 'home' || stored === 'settlements' || stored === 'insights' || stored === 'settings') return stored as DashboardView;
+    return 'home';
   });
   const [settlementsSubTab, setSettlementsSubTab] = useState<SettlementsSubTab>(() => {
-    return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'all';
+    return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'overview';
   });
+  const [showUploadSheet, setShowUploadSheet] = useState(false);
   const [insightsSubTab, setInsightsSubTab] = useState<InsightsSubTab>(() => {
     return (localStorage.getItem('xettle_insights_subtab') as InsightsSubTab) || 'overview';
   });
@@ -467,6 +474,7 @@ export default function Dashboard() {
         await loadMarketplaces();
         setSelectedMarketplace(marketplace);
         switchView('settlements');
+        switchSettlementsSubTab('all');
       } catch (err) {
         console.error('Failed to claim demo session:', err);
       }
@@ -497,28 +505,24 @@ export default function Dashboard() {
   }
 
   // ─── AI Assistant context (sitewide via AiContextProvider) ─────
-  const aiRouteId = activeView === 'outstanding' ? 'outstanding' as const
-    : activeView === 'settings' ? 'settings' as const
+  const aiRouteId = activeView === 'settings' ? 'settings' as const
     : activeView === 'insights' ? 'insights' as const
-    : activeView === 'settlements' ? 'settlements' as const
-    : activeView === 'smart_upload' ? 'smart_upload' as const
+    : activeView === 'settlements' ? (settlementsSubTab === 'outstanding' ? 'outstanding' as const : 'settlements' as const)
     : 'dashboard' as const;
 
   const aiSuggestedPrompts = useMemo(() => {
     if (activeView === 'insights') return ['Which marketplace is most profitable?', 'Why are my fees so high this month?', 'How does this month compare to last?'];
-    if (activeView === 'outstanding') return ['Are these invoices pushed to Xero?', 'Which settlements are ready to push?', 'What does matched exact mean?'];
+    if (activeView === 'settlements' && settlementsSubTab === 'outstanding') return ['Are these invoices pushed to Xero?', 'Which settlements are ready to push?', 'What does matched exact mean?'];
     if (activeView === 'settlements') return ['Why is this settlement negative?', 'Is this ready to push to Xero?', 'Explain these fees'];
     return ['What needs my attention today?', 'Why do I have settlements missing?', 'Am I up to date with Xero?'];
-  }, [activeView]);
+  }, [activeView, settlementsSubTab]);
 
   useAiPageContext(() => ({
     routeId: aiRouteId,
-    pageTitle: activeView === 'outstanding' ? 'Outstanding Invoices'
-      : activeView === 'settlements' ? 'Settlements'
+    pageTitle: activeView === 'settlements' ? (settlementsSubTab === 'outstanding' ? 'Awaiting Payment' : 'Settlements')
       : activeView === 'insights' ? 'Insights'
       : activeView === 'settings' ? 'Settings'
-      : activeView === 'smart_upload' ? 'Upload Settlements'
-      : 'Dashboard',
+      : 'Home',
     primaryEntities: {
       marketplace_codes: userMarketplaces.map(m => m.marketplace_code),
     },
@@ -530,7 +534,7 @@ export default function Dashboard() {
       xero_connected: xeroConnected,
     },
     suggestedPrompts: aiSuggestedPrompts,
-    capabilities: ['view_settlements', 'view_outstanding', 'upload_files', 'view_insights'],
+    capabilities: ['view_settlements', 'view_outstanding', 'view_insights'],
   }));
 
   if (isLoading) {
@@ -547,15 +551,16 @@ export default function Dashboard() {
   const isShopifyOrders = selectedMarketplace === 'shopify_orders';
   const selectedUserMarketplace = userMarketplaces.find(m => m.marketplace_code === selectedMarketplace);
 
-  const settlementSubTabs: { key: SettlementsSubTab; label: string }[] = [
-    { key: 'all', label: 'All Settlements' },
+  const settlementSubTabs: { key: SettlementsSubTab; label: string; badgeCount?: number }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'reconciliation', label: 'Reconciliation Hub' },
+    { key: 'all', label: 'All Settlements' },
+    { key: 'outstanding', label: 'Awaiting Payment', badgeCount: outstandingCount },
+    { key: 'reconciliation', label: 'Action Queue' },
   ];
 
   const insightsSubTabs: { key: InsightsSubTab; label: string; pro?: boolean }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'reconciliation', label: 'Reconciliation' },
+    { key: 'reconciliation', label: 'Reconciliation Health' },
     { key: 'profit', label: 'Profit Analysis', pro: true },
     { key: 'sku', label: 'SKU Comparison', pro: true },
   ];
@@ -610,17 +615,15 @@ export default function Dashboard() {
         <div className="container-custom">
           <nav className="flex gap-1 py-2">
             {([
-              { key: 'dashboard' as DashboardView, label: 'Dashboard', icon: LayoutDashboard },
-              { key: 'outstanding' as DashboardView, label: 'Outstanding', icon: ClipboardList, badgeCount: outstandingCount },
-              { key: 'smart_upload' as DashboardView, label: 'Upload', icon: Upload },
-              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, badgeCount: readyToPushCount },
+              { key: 'home' as DashboardView, label: 'Home', icon: LayoutDashboard },
+              { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, badgeCount: readyToPushCount + outstandingCount },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
               { key: 'settings' as DashboardView, label: 'Settings', icon: Settings },
             ]).map(tab => {
               const Icon = tab.icon;
               const isActive = activeView === tab.key;
-              const showDot = (tab.key === 'dashboard' && pendingChannelAlerts > 0) || ((tab as any).badgeCount > 0);
-              const badgeNum = tab.key === 'dashboard' ? pendingChannelAlerts : (tab as any).badgeCount || 0;
+              const showDot = (tab.key === 'home' && pendingChannelAlerts > 0) || ((tab as any).badgeCount > 0);
+              const badgeNum = tab.key === 'home' ? pendingChannelAlerts : (tab as any).badgeCount || 0;
               return (
                 <button
                   key={tab.key}
@@ -641,6 +644,14 @@ export default function Dashboard() {
                 </button>
               );
             })}
+            {/* Upload action button — always visible in nav */}
+            <button
+              onClick={() => setShowUploadSheet(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ml-auto bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20"
+            >
+              <Upload className="h-4 w-4" />
+              Upload
+            </button>
           </nav>
         </div>
       </div>
@@ -654,13 +665,16 @@ export default function Dashboard() {
                 <button
                   key={tab.key}
                   onClick={() => switchSettlementsSubTab(tab.key)}
-                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
                     settlementsSubTab === tab.key
                       ? 'border-primary text-primary'
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {tab.label}
+                  {tab.badgeCount && tab.badgeCount > 0 ? (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-destructive text-destructive-foreground font-bold">{tab.badgeCount}</span>
+                  ) : null}
                 </button>
               ))}
               {activeView === 'insights' && insightsSubTabs.map(tab => (
@@ -686,11 +700,10 @@ export default function Dashboard() {
 
       <div className="container-custom py-8">
         <BugReportNotificationBanner />
-        {activeView === 'dashboard' && <SetupInProgressBanner show={showSetupBanner} />}
+        {activeView === 'home' && <SetupInProgressBanner show={showSetupBanner} />}
 
-        {/* ─── Dashboard (Data hub — tables, actions, validation) ──── */}
-        {/* ─── Dashboard (always useful — strip, actions, validation) ──── */}
-        {activeView === 'dashboard' && (
+        {/* ─── Home (command centre — strip, actions, status) ──── */}
+        {activeView === 'home' && (
           <ErrorBoundary>
             <div className="space-y-6">
               {/* Today's Tasks — what needs doing right now */}
@@ -707,7 +720,7 @@ export default function Dashboard() {
               />
               {/* Post-setup scan banner — triggers adaptive sync on first load */}
               <PostSetupBanner
-                onSwitchToUpload={() => switchView('smart_upload')}
+                onSwitchToUpload={() => setShowUploadSheet(true)}
                 hasXero={xeroConnected}
                 hasAmazon={hasAmazon}
                 hasShopify={hasShopify}
@@ -735,7 +748,7 @@ export default function Dashboard() {
                   window.dispatchEvent(new CustomEvent('open-settings-tab'));
                 }}
                 onMapBankAccounts={() => setShowBankMapper(!showBankMapper)}
-                onConnect={() => switchView('smart_upload')}
+                onConnect={() => setShowUploadSheet(true)}
                 onRefreshStatus={() => {
                   // Trigger the validation sweep via ActionCentre's existing mechanism
                   import('@/utils/settlement-engine').then(({ triggerValidationSweep }) => {
@@ -767,7 +780,7 @@ export default function Dashboard() {
               <ActionCentre
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);
-                  switchView('smart_upload');
+                  setShowUploadSheet(true);
                 }}
                 onSwitchToSettlements={() => {
                   switchView('settlements');
@@ -803,63 +816,52 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
 
-        {/* ─── Outstanding (Xero reconciliation action tab) ────────── */}
-        {activeView === 'outstanding' && (
+        {/* ─── Settlements → Awaiting Payment ──────────────────────── */}
+        {activeView === 'settlements' && settlementsSubTab === 'outstanding' && (
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-              <OutstandingTab onSwitchToUpload={() => switchView('smart_upload')} />
+              <OutstandingTab onSwitchToUpload={() => setShowUploadSheet(true)} />
             </Suspense>
           </ErrorBoundary>
         )}
 
-        {/* ─── Upload Hub — uploader first, everything else below ── */}
-        {activeView === 'smart_upload' && (
-          <ErrorBoundary>
-            <div className="space-y-6">
-              {/* Hero message — stronger AI detection messaging */}
-              <div className="text-center space-y-2 pt-2">
-                <h2 className="text-2xl font-bold text-foreground">
-                  Upload any settlement file — Xettle handles the rest
-                </h2>
-                <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-                  Drop a CSV, XLSX, or PDF from any marketplace. Xettle automatically detects the platform,
-                  extracts fees, refunds, sales & GST, and prepares it for Xero.
-                </p>
-                <p className="text-xs text-muted-foreground/70 max-w-md mx-auto">
-                  Works alongside your API connections — use automated imports for Amazon & Shopify, 
-                  then upload files for everything else. Xettle learns new formats instantly.
-                </p>
+        {/* ─── Upload Sheet (modal overlay) ─────────────────────────── */}
+        {showUploadSheet && (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
+            <div className="fixed inset-x-0 top-0 bottom-0 z-50 overflow-y-auto bg-background">
+              <div className="container-custom py-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="text-center flex-1 space-y-2">
+                    <h2 className="text-2xl font-bold text-foreground">
+                      Upload any settlement file — Xettle handles the rest
+                    </h2>
+                    <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+                      Drop a CSV, XLSX, or PDF from any marketplace. Xettle automatically detects the platform,
+                      extracts fees, refunds, sales & GST, and prepares it for Xero.
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowUploadSheet(false); setMissingSettlements([]); }} className="shrink-0 ml-4">
+                    ✕ Close
+                  </Button>
+                </div>
+                <ErrorBoundary>
+                  <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+                    <SmartUploadFlow
+                      onSettlementsSaved={loadMarketplaces}
+                      onMarketplacesChanged={loadMarketplaces}
+                      onViewSettlements={() => { setShowUploadSheet(false); switchView('settlements'); }}
+                      missingSettlements={missingSettlements}
+                      onReturnToDashboard={() => {
+                        setMissingSettlements([]);
+                        setShowUploadSheet(false);
+                      }}
+                    />
+                  </Suspense>
+                  <RecentUploads />
+                </ErrorBoundary>
               </div>
-
-              {/* Smart Upload drop zone — PRIMARY action, front and center */}
-              <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                <SmartUploadFlow
-                  onSettlementsSaved={loadMarketplaces}
-                  onMarketplacesChanged={loadMarketplaces}
-                  onViewSettlements={() => switchView('settlements')}
-                  missingSettlements={missingSettlements}
-                  onReturnToDashboard={() => {
-                    setMissingSettlements([]);
-                    switchView('dashboard');
-                  }}
-                />
-              </Suspense>
-
-              {/* Recent uploads — confirmation that files were processed */}
-              <RecentUploads />
-
-              {/* Workflow options — below the uploader */}
-              <WelcomeGuide
-                onUpload={() => {
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                onConnectStore={() => {
-                  setWizardInitialStep(1);
-                  setShowWizard(true);
-                }}
-              />
             </div>
-          </ErrorBoundary>
+          </div>
         )}
 
         {/* ─── Settlements → All Settlements ─────────────────────────── */}
@@ -889,7 +891,7 @@ export default function Dashboard() {
                 <div className="rounded-lg border border-border bg-card p-8 text-center space-y-3">
                   <h3 className="text-lg font-semibold text-foreground">No marketplaces connected yet</h3>
                   <p className="text-sm text-muted-foreground">Upload a settlement file or connect a store to get started. Xettle will auto-detect your marketplace.</p>
-                  <Button onClick={() => switchView('smart_upload')} className="mt-2">
+                  <Button onClick={() => setShowUploadSheet(true)} className="mt-2">
                     <Upload className="h-4 w-4 mr-2" />
                     Upload Your First File
                   </Button>
@@ -901,7 +903,7 @@ export default function Dashboard() {
                   <ShopifyOrdersDashboard onMarketplacesChanged={loadMarketplaces} />
                 </Suspense>
               ) : selectedUserMarketplace ? (
-                <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => switchView('smart_upload')} />
+                <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => setShowUploadSheet(true)} />
               ) : null}
             </div>
           </ErrorBoundary>
@@ -912,7 +914,7 @@ export default function Dashboard() {
           <ErrorBoundary>
             <div className="space-y-6">
               <ValidationSweep
-                onSwitchToUpload={() => switchView('smart_upload')}
+                onSwitchToUpload={() => setShowUploadSheet(true)}
               />
             </div>
           </ErrorBoundary>
@@ -1021,7 +1023,7 @@ export default function Dashboard() {
                     setWizardInitialStep(2);
                     setShowWizard(true);
                   }}
-                  onGoToUpload={() => switchView('smart_upload')}
+                  onGoToUpload={() => setShowUploadSheet(true)}
                 />
               </SettingsAccordion>
 

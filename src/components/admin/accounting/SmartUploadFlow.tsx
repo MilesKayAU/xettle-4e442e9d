@@ -2186,10 +2186,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                               variant="outline"
                               className="text-xs h-7 gap-1"
                               onClick={() => {
-                                const params = new URLSearchParams(window.location.search);
-                                params.set('tab', 'settings');
-                                window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-                                window.dispatchEvent(new CustomEvent('xettle-open-settings-tab'));
+                                window.dispatchEvent(new CustomEvent('open-settings-tab'));
                               }}
                             >
                               <MapPin className="h-3 w-3" />
@@ -2202,10 +2199,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                               variant="outline"
                               className="text-xs h-7 gap-1"
                               onClick={() => {
-                                const params = new URLSearchParams(window.location.search);
-                                params.set('tab', 'settings');
-                                window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-                                window.dispatchEvent(new CustomEvent('xettle-open-settings-tab'));
+                                window.dispatchEvent(new CustomEvent('open-settings-tab'));
                               }}
                             >
                               <RefreshCw className="h-3 w-3" />
