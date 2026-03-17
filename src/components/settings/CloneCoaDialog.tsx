@@ -370,19 +370,29 @@ export default function CloneCoaDialog({
             </Alert>
           )}
 
-          {enabledRows.length > 0 && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+          {enabledRows.length > 0 && allNewAccounts && (
+            <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 rounded-md px-3 py-2 border border-emerald-200 dark:border-emerald-800">
+              <CheckCircle2 className="h-3.5 w-3.5" />
               <span>
-                {enabledRows.length} account{enabledRows.length !== 1 ? 's' : ''} will be created in Xero
+                All {enabledRows.length} account{enabledRows.length !== 1 ? 's' : ''} are new — no existing Xero data will be affected.
                 {enabledRows.length > 10 && ` (in ${Math.ceil(enabledRows.length / 10)} batches)`}
               </span>
             </div>
           )}
 
-          <Alert className="border-amber-300 bg-amber-50">
+          {enabledRows.length > 0 && hasOverwriteRisk && (
+            <Alert className="border-destructive/50 bg-destructive/5">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <AlertDescription className="text-xs">
+                <strong>{existingCollisions.size} account code{existingCollisions.size !== 1 ? 's' : ''} already exist in Xero</strong> and will be blocked from creation.
+                Change the conflicting codes above or deselect those rows before proceeding.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-xs text-amber-900">
+            <AlertDescription className="text-xs text-amber-900 dark:text-amber-300">
               This will create new accounts in your Xero Chart of Accounts. Tax types are inherited from the template.
               Cloning accounts does not change support tier — push gating still applies per marketplace.
             </AlertDescription>
