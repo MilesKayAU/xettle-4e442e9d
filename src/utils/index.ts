@@ -11,10 +11,10 @@
 export { analyseCoA, XETTLE_COA_RULES } from './coa-intelligence';
 
 // ─── Xero Mapping Readiness (validates account mappings are complete before push) ───
-export { getReadinessReport } from './xero-mapping-readiness';
+export { checkXeroReadinessForMarketplace } from './xero-mapping-readiness';
 
 // ─── Bookkeeper Readiness (pre-push safety checks, readiness scoring) ───
-export { getBookkeeperReadiness } from './bookkeeper-readiness';
+export { validateBookkeeperMinimumData } from './bookkeeper-readiness';
 
 // ─── Settlement Parsing (Amazon TSV → structured 13-category settlement) ───
 export { parseSettlementTSV, PARSER_VERSION } from './settlement-parser';
@@ -31,8 +31,8 @@ export { detectFileMarketplace, MARKETPLACE_LABELS } from './file-marketplace-de
 // ─── File Fingerprint Engine (CSV/XLSX header fingerprinting, column signature matching) ───
 export { detectFromHeaders, extractFileHeaders } from './file-fingerprint-engine';
 
-// ─── Fingerprint Library (known file format signatures for auto-detection) ───
-export { KNOWN_FINGERPRINTS } from './fingerprint-library';
+// ─── Fingerprint Library (known file format signatures, session-cached DB load) ───
+export { loadFingerprints, detectFromFingerprints, saveFingerprint, invalidateFingerprintCache } from './fingerprint-library';
 
 // ─── Fingerprint Lifecycle (create, confirm, retire fingerprint records) ───
 export { createDraftFingerprint } from './fingerprint-lifecycle';
@@ -44,22 +44,22 @@ export { runReconciliation } from './reconciliation-engine';
 export { runUniversalReconciliation } from './universal-reconciliation';
 
 // ─── Marketplace Reconciliation Engine (per-marketplace recon with tolerance) ───
-export { runMarketplaceReconciliation } from './marketplace-reconciliation-engine';
+export { calculateReconciliation, saveReconciliationResult, autoReconcileSettlement } from './marketplace-reconciliation-engine';
 
-// ─── Xero Entries (line-item builders for Xero invoices/journals) ───
-export { buildXeroInvoiceLines } from './xero-entries';
+// ─── Xero Entries (read/build xero_entries JSON array on settlement rows) ───
+export { readXeroEntries, hasXeroEntries, buildSingleEntry, buildSplitEntries, buildClearedEntries } from './xero-entries';
 
 // ─── Xero Posting Line Items (detailed posting line items with GST, account codes) ───
 export { buildPostingLineItems } from './xero-posting-line-items';
 
-// ─── Xero CSV Export (export settlement data as Xero-compatible CSV) ───
-export { generateXeroCSV } from './xero-csv-export';
+// ─── Xero CSV Export (export orders as Xero-compatible bill CSV) ───
+export { downloadXeroCSV, ordersToXeroCSV, orderToXeroRows } from './xero-csv-export';
 
-// ─── Parse Xero Date (normalise Xero's /Date()/ format to JS Date) ───
+// ─── Parse Xero Date (normalise Xero's /Date()/ format to ISO string) ───
 export { parseXeroDate } from './parse-xero-date';
 
-// ─── Amazon Xero Push (Amazon-specific push-to-Xero helpers) ───
-export { buildAmazonXeroPushPayload } from './amazon-xero-push';
+// ─── Amazon Xero Push (Amazon invoice line-item builders, split-month rollover) ───
+export { buildAmazonInvoiceLineItems, computeXeroInclusiveTotal, buildJournalPreviewRows, computeSplitMonthRollover } from './amazon-xero-push';
 
 // ─── Generic CSV Parser (parse any CSV with header detection) ───
 export { parseGenericCSV } from './generic-csv-parser';
@@ -76,11 +76,11 @@ export { parseShopifyPayoutCSV } from './shopify-payments-parser';
 // ─── Shopify Orders Parser (Shopify orders CSV → order-level data) ───
 export { parseShopifyOrdersCSV } from './shopify-orders-parser';
 
-// ─── Shopify Order Detector (detect if a file is Shopify orders vs payments) ───
-export { isShopifyOrdersFile } from './shopify-order-detector';
+// ─── Shopify Order Detector (detect marketplace from Shopify orders, 6-priority pipeline) ───
+export { detectMarketplaceFromOrder, detectMarketplaceFromOrderAsync, detectAllMarketplaces } from './shopify-order-detector';
 
-// ─── Shopify API Adapter (typed wrappers around Shopify REST API calls) ───
-export type { ShopifyPayout } from './shopify-api-adapter';
+// ─── Shopify API Adapter (convert API orders to parsed rows, fetch+parse pipeline) ───
+export { convertApiOrdersToRows, fetchAndParseShopifyOrders } from './shopify-api-adapter';
 
 // ─── Date Parser (flexible AU/US/ISO date parsing for settlement files) ───
 export { parseDate, parseDateOrEmpty, detectDateColumn } from './date-parser';
@@ -92,7 +92,7 @@ export type { DetectedEntity } from './entity-detection';
 export { extractFeeObservations, extractAmazonFeeObservations } from './fee-observation-engine';
 
 // ─── Multi-Marketplace Splitter (split a multi-marketplace file into per-marketplace chunks) ───
-export { splitMultiMarketplaceFile } from './multi-marketplace-splitter';
+export { detectMultiMarketplace, findSplitColumn, resolveMarketplaceName, checkCachedSplitPattern, saveSplitFingerprint } from './multi-marketplace-splitter';
 
 // ─── Sub-Channel Detection (detect Shopify sub-channels from order source_name) ───
 export type { DetectedSubChannel } from './sub-channel-detection';
@@ -100,13 +100,13 @@ export type { DetectedSubChannel } from './sub-channel-detection';
 // ─── Marketplace Registry (known marketplace definitions, codes, detection patterns) ───
 export { MARKETPLACE_REGISTRY } from './marketplace-registry';
 
-// ─── Marketplace Codes (canonical marketplace code helpers) ───
-export { getMarketplaceLabel } from './marketplace-codes';
+// ─── Marketplace Codes (canonical code normalisation, alias resolution) ───
+export { normalizeMarketplaceCode, isMarketplaceAlias, MARKETPLACE_ALIASES } from './marketplace-codes';
 
 // ─── Marketplace Connections (connection upsert/status helpers) ───
 export { upsertMarketplaceConnection } from './marketplace-connections';
 
-// ─── Marketplace Token Map (map marketplace codes → token table names) ───
+// ─── Marketplace Token Map (payment processor registry, non-marketplace gateways) ───
 export { PAYMENT_PROCESSORS } from './marketplace-token-map';
 
 // ─── Sync Capabilities (which marketplaces support API sync vs CSV-only) ───
@@ -115,8 +115,8 @@ export type { SyncCapabilities } from './sync-capabilities';
 // ─── Profit Engine (calculate per-settlement / per-SKU gross profit) ───
 export { calculateProfit } from './profit-engine';
 
-// ─── Input Sanitization (XSS prevention, HTML stripping) ───
-export { sanitize } from './input-sanitization';
+// ─── Input Sanitization (XSS prevention, text/email/phone sanitizers) ───
+export { sanitizeText, sanitizeEmail } from './input-sanitization';
 
 // ─── Logger (structured logging utility) ───
 export { logger } from './logger';
