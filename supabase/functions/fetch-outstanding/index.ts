@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
     const accountingBoundary = boundaryRow?.value || null;
 
     // ─── CACHE-FIRST: Check outstanding_invoices_cache before hitting Xero ───
-    const CACHE_TTL_MINUTES = 30;
+    const CACHE_TTL_MINUTES = 120; // 2 hours — daily pg_cron sync keeps data fresh
     let allInvoices: any[] = [];
     let usingCacheFallback = false;
     let xeroWasRateLimited = false;
