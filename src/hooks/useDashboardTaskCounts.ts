@@ -136,7 +136,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     ? (() => { try { return JSON.parse(accountCodes); } catch { return {}; } })()
     : {};
 
-  if (xeroTenantId && connections.length > 0) {
+  if (hasXeroTokens && connections.length > 0) {
     let anyMissing = false;
     for (const conn of connections) {
       const code = conn.marketplace_code;
