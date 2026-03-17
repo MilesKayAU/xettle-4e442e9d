@@ -429,7 +429,8 @@ export default function ValidationSweep({
     : null;
 
   const readyToPushRows = actionableRows.filter(r => r.overall_status === 'ready_to_push');
-  const uploadNeededRows = actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+  const uploadNeededRows = actionableRows.filter(r => (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') && !apiSyncedCodes.has(r.marketplace_code));
+  const syncNeededRows = actionableRows.filter(r => (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') && apiSyncedCodes.has(r.marketplace_code));
 
   // ─── Sweep Animation ──────────────────────────────────────────────
   if (sweeping) {
