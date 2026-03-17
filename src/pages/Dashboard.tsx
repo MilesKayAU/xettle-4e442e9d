@@ -911,7 +911,7 @@ export default function Dashboard() {
           <ErrorBoundary>
             <div className="space-y-6">
               <ValidationSweep
-                onSwitchToUpload={() => switchView('smart_upload')}
+                onSwitchToUpload={() => setShowUploadSheet(true)}
               />
             </div>
           </ErrorBoundary>
