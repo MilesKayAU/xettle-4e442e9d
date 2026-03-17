@@ -380,12 +380,16 @@ export default function AccountMapperCard() {
         .maybeSingle();
       setTaxProfile(taxSetting?.value || 'AU_GST');
       // Load cached COA + last sync in parallel
-      const [accounts, lastSynced] = await Promise.all([
+      const [accounts, lastSynced, { data: registryRows }, { data: processorRows }] = await Promise.all([
         getCachedXeroAccounts(),
         getCoaLastSyncedAt(),
+        supabase.from('marketplace_registry').select('marketplace_code, marketplace_name, detection_keywords').eq('is_active', true),
+        supabase.from('payment_processor_registry').select('processor_code, processor_name, detection_keywords').eq('is_active', true),
       ]);
       setCoaAccounts(accounts);
       setCoaLastSynced(lastSynced);
+      setRegistryEntries((registryRows || []) as RegistryEntry[]);
+      setProcessorEntries((processorRows || []) as ProcessorEntry[]);
 
       // Load split toggle state
       const { data: splitSetting } = await supabase
