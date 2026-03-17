@@ -644,6 +644,14 @@ export default function Dashboard() {
                 </button>
               );
             })}
+            {/* Upload action button — always visible in nav */}
+            <button
+              onClick={() => setShowUploadSheet(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ml-auto bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20"
+            >
+              <Upload className="h-4 w-4" />
+              Upload
+            </button>
           </nav>
         </div>
       </div>
