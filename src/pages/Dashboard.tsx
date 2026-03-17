@@ -777,7 +777,7 @@ export default function Dashboard() {
               <ActionCentre
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);
-                  switchView('smart_upload');
+                  setShowUploadSheet(true);
                 }}
                 onSwitchToSettlements={() => {
                   switchView('settlements');
