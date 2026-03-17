@@ -105,8 +105,6 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
     ]),
     Promise.all(
       API_INTEGRATIONS.map(async integration => {
-        if (integration.historyTypes.length === 0) return [] as SyncHistoryRow[];
-
         const { data } = await supabase
           .from('sync_history')
           .select('event_type, status, created_at, error_message, details')
