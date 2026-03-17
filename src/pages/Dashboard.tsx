@@ -900,7 +900,7 @@ export default function Dashboard() {
                   <ShopifyOrdersDashboard onMarketplacesChanged={loadMarketplaces} />
                 </Suspense>
               ) : selectedUserMarketplace ? (
-                <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => switchView('smart_upload')} />
+                <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => setShowUploadSheet(true)} />
               ) : null}
             </div>
           </ErrorBoundary>
