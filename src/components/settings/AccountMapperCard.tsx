@@ -1146,6 +1146,7 @@ export default function AccountMapperCard() {
       </CardContent>
     </Card>
     {renderCloneDialog()}
+    {renderOverwriteConfirmDialog()}
     </>
   );
 }
