@@ -50,6 +50,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     connectionsRes,
     settingsRes,
     alertsRes,
+    xeroTokensRes,
   ] = await Promise.all([
     // Settlements with status breakdowns (non-hidden, non-pre-boundary)
     supabase
@@ -72,7 +73,6 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .select('key, value')
       .in('key', [
         'accounting_xero_account_codes',
-        'xero_tenant_id',
         'scope_acknowledged_at',
         'scope_version',
         'tax_profile',
@@ -83,6 +83,11 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .from('marketplace_validation')
       .select('id', { count: 'exact', head: true })
       .in('overall_status', ['missing', 'partial']),
+
+    // Xero tokens — the actual source of truth for Xero connection
+    supabase
+      .from('xero_tokens')
+      .select('id', { count: 'exact', head: true }),
   ]);
 
   const settlements = settlementsRes.data || [];
@@ -91,9 +96,9 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
 
   // ─── Setup checks ─────────────────────────────────────────────────────
 
-  // 1. Xero connected?
-  const xeroTenantId = settingsMap.get('xero_tenant_id');
-  if (!xeroTenantId) {
+  // 1. Xero connected? Check xero_tokens table (source of truth)
+  const hasXeroTokens = (xeroTokensRes.count ?? 0) > 0;
+  if (!hasXeroTokens) {
     setupWarnings.push({
       key: 'xero_not_connected',
       label: 'Xero not connected',
@@ -131,7 +136,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     ? (() => { try { return JSON.parse(accountCodes); } catch { return {}; } })()
     : {};
 
-  if (xeroTenantId && connections.length > 0) {
+  if (hasXeroTokens && connections.length > 0) {
     let anyMissing = false;
     for (const conn of connections) {
       const code = conn.marketplace_code;
