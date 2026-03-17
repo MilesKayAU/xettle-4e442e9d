@@ -36,6 +36,8 @@ interface CoaBlockerCtaProps {
   onResolved?: (createdCodes: Record<string, string>) => void;
   /** Compact mode for inline use */
   compact?: boolean;
+  /** Optional callback to navigate to Account Mapper contextually */
+  onNavigateToMapper?: () => void;
 }
 
 export default function CoaBlockerCta({
