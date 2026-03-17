@@ -248,7 +248,8 @@ export default function ValidationSweep({
 
   // Memoized filtering + sorting
   const filteredRows = useMemo(() => {
-    let result = rows;
+    // Filter out paused marketplace rows
+    let result = rows.filter((r) => !pausedCodes.has(r.marketplace_code));
     if (filter !== 'all') {
       result = result.filter((r) => {
         if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched';
