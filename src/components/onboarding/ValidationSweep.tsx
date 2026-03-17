@@ -162,16 +162,24 @@ export default function ValidationSweep({
       if (valRes.error) throw valRes.error;
       const validationRows = (valRes.data || []) as ValidationRow[];
 
-      // Load API-synced marketplace codes
+      // Load marketplace connections (API-synced codes + paused codes)
       const { data: connData } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_code, connection_type, connection_status');
+        .select('marketplace_code, marketplace_name, connection_type, connection_status');
+      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_type: string; connection_status: string }>;
+      setAllConnections(allConns.map(c => ({ marketplace_code: c.marketplace_code, marketplace_name: c.marketplace_name, connection_status: c.connection_status })));
       const apiCodes = new Set<string>(
-        (connData || [])
-          .filter((c: any) => c.connection_type === 'api' && ACTIVE_CONNECTION_STATUSES.includes(c.connection_status))
-          .map((c: any) => c.marketplace_code)
+        allConns
+          .filter((c) => c.connection_type === 'api' && ACTIVE_CONNECTION_STATUSES.includes(c.connection_status))
+          .map((c) => c.marketplace_code)
       );
       setApiSyncedCodes(apiCodes);
+      const paused = new Set<string>(
+        allConns
+          .filter((c) => c.connection_status === 'paused')
+          .map((c) => c.marketplace_code)
+      );
+      setPausedCodes(paused);
 
       if (boundaryRes.data?.value) {
         setBoundaryDate(boundaryRes.data.value);
