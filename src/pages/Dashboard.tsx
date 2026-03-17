@@ -474,6 +474,7 @@ export default function Dashboard() {
         await loadMarketplaces();
         setSelectedMarketplace(marketplace);
         switchView('settlements');
+        switchSettlementsSubTab('all');
       } catch (err) {
         console.error('Failed to claim demo session:', err);
       }
