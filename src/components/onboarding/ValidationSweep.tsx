@@ -1012,11 +1012,14 @@ function SummaryCard({
   );
 }
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({ status, isApiSynced }: { status: string; isApiSynced?: boolean }) {
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.missing;
+  const label = isApiSynced && (status === 'settlement_needed' || status === 'missing')
+    ? 'Sync Needed'
+    : config.label;
   return (
     <Badge className={cn('text-[10px] font-medium', config.bgClass, config.color, config.borderClass)}>
-      {config.label}
+      {label}
     </Badge>
   );
 }
