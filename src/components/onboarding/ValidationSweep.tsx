@@ -622,12 +622,39 @@ export default function ValidationSweep({
         </CardContent>
       </Card>
 
+      {/* Floating bulk action bar */}
+      {someSelected && (
+        <div className="sticky bottom-4 z-20 mx-auto max-w-md">
+          <div className="flex items-center gap-3 bg-primary text-primary-foreground rounded-lg shadow-lg px-4 py-3">
+            <span className="text-sm font-medium flex-1">
+              {selectedIds.size} settlement{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs gap-1 bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+              onClick={handleBulkPush}
+            >
+              <Send className="h-3 w-3" />
+              Push {selectedIds.size} to Xero →
+            </Button>
+          </div>
+        </div>
+      )}
+
       {previewOpen && (
         <PushSafetyPreview
           settlements={previewSettlements}
           open={previewOpen}
-          onClose={() => setPreviewOpen(false)}
-          onConfirm={async () => { setPreviewOpen(false); loadData(); }}
+          onClose={() => { setPreviewOpen(false); setSelectedIds(new Set()); }}
+          onConfirm={async () => { setPreviewOpen(false); setSelectedIds(new Set()); loadData(); }}
         />
       )}
     </div>

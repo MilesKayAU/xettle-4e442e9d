@@ -589,6 +589,8 @@ function buildValidationChecks(
   periodLocked?: boolean,
   periodMonth?: string | null,
   isCoaStale?: boolean,
+  xeroPushedBefore?: boolean,
+  previousAccountCodes?: Record<string, string> | null,
 ): ValidationCheck[] {
   const checks: ValidationCheck[] = [];
 
@@ -606,6 +608,33 @@ function buildValidationChecks(
     checks.push(alreadyInXeroCheck);
   } else {
     checks.push({ label: 'No existing invoice found in Xero ✓', status: 'green' });
+  }
+
+  // 0x. Overwrite warning — amber if previously pushed (re-push scenario)
+  if (!alreadyInXeroCheck && xeroPushedBefore) {
+    checks.push({
+      label: 'This settlement was previously pushed to Xero',
+      status: 'amber',
+      detail: 'Pushing will create a new invoice — ensure the previous one was voided or deleted.',
+    });
+  }
+
+  // 0y. COA conflict — amber if current account codes differ from previous push
+  if (previousAccountCodes && userCodes && !alreadyInXeroCheck) {
+    const changedCodes: string[] = [];
+    for (const [category, prevCode] of Object.entries(previousAccountCodes)) {
+      const currentCode = userCodes[category];
+      if (currentCode && prevCode && currentCode !== prevCode) {
+        changedCodes.push(`${category}: ${prevCode} → ${currentCode}`);
+      }
+    }
+    if (changedCodes.length > 0) {
+      checks.push({
+        label: 'Account codes differ from previous push',
+        status: 'amber',
+        detail: `Changed: ${changedCodes.join(', ')}. Review before confirming.`,
+      });
+    }
   }
 
   // 0b. UNMAPPED account codes — hard block (MAPPING_REQUIRED)
