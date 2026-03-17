@@ -496,8 +496,30 @@ export default function ValidationSweep({
                   </tr>
                 ) : (
                   pagedRows.map((row) => (
-                    <tr key={row.id} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-3 py-2 font-medium">{MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}</td>
+                    <tr key={row.id} className="border-b hover:bg-muted/20 transition-colors group">
+                      <td className="px-3 py-2 font-medium">
+                        <span className="inline-flex items-center gap-1">
+                          {MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+                                  onClick={() => handleTogglePause(row.marketplace_code, 'active')}
+                                  disabled={togglingPause === row.marketplace_code}
+                                >
+                                  {togglingPause === row.marketplace_code ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Pause className="h-3 w-3" />
+                                  )}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="text-xs">Pause this channel — hides from overview</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </span>
+                      </td>
                       <td className="px-3 py-2">{row.period_label}</td>
                       <td className="px-3 py-2 text-center">{row.orders_found ? row.orders_count : '—'}</td>
                       <td className="px-3 py-2 text-center"><SettlementCell row={row} /></td>
