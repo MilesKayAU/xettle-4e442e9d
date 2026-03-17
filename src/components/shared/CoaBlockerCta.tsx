@@ -164,9 +164,14 @@ export default function CoaBlockerCta({
               variant="outline"
               className="gap-1.5 text-xs h-7"
               onClick={() => {
-                // Navigate to settings with marketplace filter
-                window.location.hash = '#settings-mapper';
-                window.location.href = '/admin?tab=settings';
+                if (onNavigateToMapper) {
+                  onNavigateToMapper();
+                } else {
+                  navigate('/dashboard');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('open-settings-tab'));
+                  }, 100);
+                }
               }}
             >
               <Settings className="h-3 w-3" />

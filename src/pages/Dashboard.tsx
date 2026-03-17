@@ -479,6 +479,13 @@ export default function Dashboard() {
     localStorage.setItem('xettle_dashboard_view', view);
   }
 
+  // Listen for open-settings-tab events from other components (e.g. CoaBlockerCta)
+  useEffect(() => {
+    const handler = () => switchView('settings');
+    window.addEventListener('open-settings-tab', handler);
+    return () => window.removeEventListener('open-settings-tab', handler);
+  }, []);
+
   function switchSettlementsSubTab(tab: SettlementsSubTab) {
     setSettlementsSubTab(tab);
     localStorage.setItem('xettle_settlements_subtab', tab);
