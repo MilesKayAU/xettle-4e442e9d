@@ -456,7 +456,6 @@ export default function ValidationSweep({
               pageSize={pageSize}
               totalItems={displayRows.length}
               onPageChange={setPage}
-              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
             />
           )}
           {maxRows && filteredRows.length > maxRows && onViewAll && (
