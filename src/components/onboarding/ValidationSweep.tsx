@@ -534,7 +534,7 @@ export default function ValidationSweep({
               <tbody>
                 {pagedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                       {rows.length === 0 ? 'No validation data yet. Run a scan to get started.' : 'No periods match your filters.'}
                     </td>
                   </tr>
