@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +36,8 @@ interface CoaBlockerCtaProps {
   onResolved?: (createdCodes: Record<string, string>) => void;
   /** Compact mode for inline use */
   compact?: boolean;
+  /** Optional callback to navigate to Account Mapper contextually */
+  onNavigateToMapper?: () => void;
 }
 
 export default function CoaBlockerCta({
@@ -42,7 +45,9 @@ export default function CoaBlockerCta({
   missingCategories,
   onResolved,
   compact = false,
+  onNavigateToMapper,
 }: CoaBlockerCtaProps) {
+  const navigate = useNavigate();
   const [coaAccounts, setCoaAccounts] = useState<CachedXeroAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
@@ -159,9 +164,14 @@ export default function CoaBlockerCta({
               variant="outline"
               className="gap-1.5 text-xs h-7"
               onClick={() => {
-                // Navigate to settings with marketplace filter
-                window.location.hash = '#settings-mapper';
-                window.location.href = '/admin?tab=settings';
+                if (onNavigateToMapper) {
+                  onNavigateToMapper();
+                } else {
+                  navigate('/dashboard');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('open-settings-tab'));
+                  }, 100);
+                }
               }}
             >
               <Settings className="h-3 w-3" />
