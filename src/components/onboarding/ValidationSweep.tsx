@@ -1066,12 +1066,20 @@ function SettlementCell({ row }: { row: ValidationRow }) {
 }
 
 function RowAction({
-  row, pushing, onUpload, onPush,
+  row, pushing, syncing, isApiSynced, onUpload, onPush, onSync,
 }: {
-  row: ValidationRow; pushing: boolean;
-  onUpload: () => void; onPush: () => void;
+  row: ValidationRow; pushing: boolean; syncing?: boolean; isApiSynced?: boolean;
+  onUpload: () => void; onPush: () => void; onSync?: () => void;
 }) {
   if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
+    if (isApiSynced && onSync) {
+      return (
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onSync} disabled={syncing}>
+          {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          {syncing ? 'Syncing...' : 'Sync'}
+        </Button>
+      );
+    }
     return (
       <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onUpload}>
         <Upload className="h-3 w-3" /> Upload
