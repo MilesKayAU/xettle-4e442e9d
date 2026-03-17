@@ -23,17 +23,24 @@ interface ConnectionStatusBarProps {
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionInfo[]> {
-  const [shopifyRes, amazonRes, xeroRes, ebayRes] = await Promise.all([
-    supabase.from('shopify_tokens').select('shop_domain, installed_at').limit(1),
-    supabase.from('amazon_tokens').select('selling_partner_id, created_at').limit(1),
-    supabase.from('xero_tokens').select('tenant_name, created_at').limit(1),
-    supabase.from('ebay_tokens').select('ebay_username, created_at').limit(1),
+  // Verify connections via edge functions (validates tokens are actually working)
+  // Fall back to token-row check if the edge function call fails (e.g. network error)
+  const [shopifyRes, amazonRes, xeroRes, ebayRes] = await Promise.allSettled([
+    supabase.functions.invoke('shopify-auth', { method: 'GET', headers: { 'x-action': 'status' } }),
+    supabase.functions.invoke('amazon-auth', { headers: { 'x-action': 'status' } }),
+    supabase.functions.invoke('xero-auth', { method: 'GET', headers: { 'x-action': 'status' } }),
+    supabase.functions.invoke('ebay-auth', { headers: { 'x-action': 'status' } }),
   ]);
 
-  const shopify = shopifyRes.data?.[0];
-  const amazon = amazonRes.data?.[0];
-  const xero = xeroRes.data?.[0];
-  const ebay = ebayRes.data?.[0];
+  const resolve = (res: PromiseSettledResult<any>) => {
+    if (res.status === 'fulfilled' && !res.value.error) return res.value.data;
+    return null;
+  };
+
+  const shopify = resolve(shopifyRes);
+  const amazon = resolve(amazonRes);
+  const xero = resolve(xeroRes);
+  const ebay = resolve(ebayRes);
 
   const formatDate = (d: string | null | undefined) => {
     if (!d) return undefined;
@@ -45,15 +52,15 @@ async function fetchConnectionStatus(): Promise<ConnectionInfo[]> {
       key: 'shopify',
       label: 'Shopify',
       icon: '🛍',
-      connected: !!shopify,
-      detail: shopify?.shop_domain || undefined,
-      connectedAt: formatDate(shopify?.installed_at),
+      connected: !!(shopify?.connected),
+      detail: shopify?.shops?.[0]?.shop_domain || undefined,
+      connectedAt: formatDate(shopify?.shops?.[0]?.installed_at),
     },
     {
       key: 'amazon',
       label: 'Amazon',
       icon: '📦',
-      connected: !!amazon,
+      connected: !!(amazon?.connected),
       detail: amazon?.selling_partner_id || undefined,
       connectedAt: formatDate(amazon?.created_at),
     },
@@ -61,7 +68,7 @@ async function fetchConnectionStatus(): Promise<ConnectionInfo[]> {
       key: 'ebay',
       label: 'eBay',
       icon: '🏷️',
-      connected: !!ebay,
+      connected: !!(ebay?.connected),
       detail: ebay?.ebay_username || undefined,
       connectedAt: formatDate(ebay?.created_at),
     },
@@ -69,9 +76,9 @@ async function fetchConnectionStatus(): Promise<ConnectionInfo[]> {
       key: 'xero',
       label: 'Xero',
       icon: '📊',
-      connected: !!xero,
+      connected: !!(xero?.connected),
       detail: xero?.tenant_name || undefined,
-      connectedAt: formatDate(xero?.created_at),
+      connectedAt: formatDate(xero?.connected_at),
     },
   ];
 }
