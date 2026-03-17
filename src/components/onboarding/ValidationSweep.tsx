@@ -806,10 +806,11 @@ export default function ValidationSweep({
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
                   const codes = [...new Set(syncNeededRows.map(r => r.marketplace_code))];
                   for (const code of codes) {
-                    await runMarketplaceSync(code);
+                    await runDirectMarketplaceSync(code);
                   }
                   toast.success('Sync triggered for API-connected marketplaces');
-                  setTimeout(() => loadData(), 3000);
+                  setTimeout(() => loadData(), 6000);
+                  setTimeout(() => loadData(), 14000);
                 }}>
                   <RefreshCw className="h-3.5 w-3.5" /> Sync All
                 </Button>
