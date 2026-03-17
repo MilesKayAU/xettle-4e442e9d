@@ -225,6 +225,49 @@ export default function AccountMapperCard() {
     );
   };
 
+  const renderOverwriteConfirmDialog = () => (
+    <Dialog open={overwriteConfirmOpen} onOpenChange={(v) => { if (!v) { setOverwriteConfirmOpen(false); setPendingConfirmAction(null); } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Confirm Account Code Changes
+          </DialogTitle>
+          <DialogDescription>
+            You are about to overwrite existing confirmed account mappings. These codes are used for all Xero pushes.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 max-h-60 overflow-y-auto">
+          {overwriteChanges.map((change, i) => (
+            <div key={i} className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 px-3 py-2 text-xs">
+              <span className="font-medium">{change.category}</span>
+              <span className="font-mono">
+                <span className="text-muted-foreground">{change.oldCode}</span>
+                <span className="mx-1.5">→</span>
+                <span className="font-semibold text-foreground">{change.newCode}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => { setOverwriteConfirmOpen(false); setPendingConfirmAction(null); }}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={async () => {
+              setOverwriteConfirmOpen(false);
+              if (pendingConfirmAction) await pendingConfirmAction();
+              setPendingConfirmAction(null);
+            }}
+          >
+            Overwrite {overwriteChanges.length} mapping{overwriteChanges.length !== 1 ? 's' : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   const renderCloneDialog = () => (
     <CloneCoaDialog
       open={cloneDialogOpen}
