@@ -23,6 +23,8 @@ import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS } from '@/utils/s
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
+import { runMarketplaceSync } from '@/actions/sync';
+import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 
 interface ValidationRow {
   id: string;
@@ -109,6 +111,8 @@ export default function ValidationSweep({
   const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
+  const [apiSyncedCodes, setApiSyncedCodes] = useState<Set<string>>(new Set());
+  const [syncingRow, setSyncingRow] = useState<string | null>(null);
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
@@ -212,6 +216,30 @@ export default function ValidationSweep({
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Load API-synced marketplace codes
+  useEffect(() => {
+    const loadApiSyncedCodes = async () => {
+      try {
+        const [connRes, amazonRes, ebayRes] = await Promise.all([
+          supabase.from('marketplace_connections')
+            .select('marketplace_code, connection_type, connection_status')
+            .eq('connection_type', 'api')
+            .in('connection_status', [...ACTIVE_CONNECTION_STATUSES]),
+          supabase.from('amazon_tokens').select('id').limit(1),
+          supabase.from('ebay_tokens').select('id').limit(1),
+        ]);
+        const codes = new Set<string>();
+        (connRes.data || []).forEach(c => codes.add(c.marketplace_code));
+        if (amazonRes.data && amazonRes.data.length > 0) codes.add('amazon_au');
+        if (ebayRes.data && ebayRes.data.length > 0) codes.add('ebay_au');
+        setApiSyncedCodes(codes);
+      } catch (err) {
+        logger.debug('[ValidationSweep] Failed to load API-synced codes', err);
+      }
+    };
+    loadApiSyncedCodes();
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -401,7 +429,8 @@ export default function ValidationSweep({
     : null;
 
   const readyToPushRows = actionableRows.filter(r => r.overall_status === 'ready_to_push');
-  const uploadNeededRows = actionableRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
+  const uploadNeededRows = actionableRows.filter(r => (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') && !apiSyncedCodes.has(r.marketplace_code));
+  const syncNeededRows = actionableRows.filter(r => (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') && apiSyncedCodes.has(r.marketplace_code));
 
   // ─── Sweep Animation ──────────────────────────────────────────────
   if (sweeping) {
@@ -538,7 +567,7 @@ export default function ValidationSweep({
           borderClass={filter === 'ready_to_push' ? 'border-blue-400 ring-1 ring-blue-400' : 'border-blue-200 dark:border-blue-800'}
         />
         <SummaryCard
-          label="Upload Needed"
+          label="Action Needed"
           count={counts.settlement_needed}
           emoji="🟡"
           active={filter === 'settlement_needed'}
@@ -680,7 +709,7 @@ export default function ValidationSweep({
 
                   {/* Status */}
                   <td className="px-4 py-3 text-center">
-                    <StatusPill status={row.overall_status} />
+                    <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
                   </td>
 
                   {/* Action */}
@@ -688,8 +717,27 @@ export default function ValidationSweep({
                     <RowAction
                       row={row}
                       pushing={pushing === row.id}
+                      syncing={syncingRow === row.id}
+                      isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
                       onUpload={() => onSwitchToUpload?.()}
                       onPush={() => openPushPreview(row)}
+                      onSync={async () => {
+                        setSyncingRow(row.id);
+                        try {
+                          const result = await runMarketplaceSync(row.marketplace_code);
+                          if (result.success) {
+                            toast.success(`Sync triggered for ${MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code}`);
+                            // Refresh after a short delay to let the sync complete
+                            setTimeout(() => loadData(), 3000);
+                          } else {
+                            toast.error(result.error || 'Sync failed');
+                          }
+                        } catch (err: any) {
+                          toast.error(err.message || 'Sync failed');
+                        } finally {
+                          setSyncingRow(null);
+                        }
+                      }}
                     />
                   </td>
                 </tr>
@@ -727,13 +775,18 @@ export default function ValidationSweep({
       </Card>
 
       {/* Bottom action bar */}
-      {(readyToPushRows.length > 0 || uploadNeededRows.length > 0) && (
+      {(readyToPushRows.length > 0 || uploadNeededRows.length > 0 || syncNeededRows.length > 0) && (
         <Card className="border-border">
           <CardContent className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="space-y-1">
               {readyToPushRows.length > 0 && (
                 <p className="text-sm font-medium">
                   {readyToPushRows.length} settlement{readyToPushRows.length > 1 ? 's' : ''} validated and ready for Xero
+                </p>
+              )}
+              {syncNeededRows.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {syncNeededRows.length} API-connected settlement{syncNeededRows.length > 1 ? 's' : ''} can be synced
                 </p>
               )}
               {uploadNeededRows.length > 0 && (
@@ -746,6 +799,18 @@ export default function ValidationSweep({
               {readyToPushRows.length > 0 && (
                 <Button size="sm" className="gap-1.5" onClick={openPushAllPreview}>
                   <Send className="h-3.5 w-3.5" /> Push all to Xero
+                </Button>
+              )}
+              {syncNeededRows.length > 0 && (
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                  const codes = [...new Set(syncNeededRows.map(r => r.marketplace_code))];
+                  for (const code of codes) {
+                    await runMarketplaceSync(code);
+                  }
+                  toast.success('Sync triggered for API-connected marketplaces');
+                  setTimeout(() => loadData(), 3000);
+                }}>
+                  <RefreshCw className="h-3.5 w-3.5" /> Sync All
                 </Button>
               )}
               {uploadNeededRows.length > 0 && onSwitchToUpload && (
@@ -964,11 +1029,14 @@ function SummaryCard({
   );
 }
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({ status, isApiSynced }: { status: string; isApiSynced?: boolean }) {
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.missing;
+  const label = isApiSynced && (status === 'settlement_needed' || status === 'missing')
+    ? 'Sync Needed'
+    : config.label;
   return (
     <Badge className={cn('text-[10px] font-medium', config.bgClass, config.color, config.borderClass)}>
-      {config.label}
+      {label}
     </Badge>
   );
 }
@@ -1015,12 +1083,20 @@ function SettlementCell({ row }: { row: ValidationRow }) {
 }
 
 function RowAction({
-  row, pushing, onUpload, onPush,
+  row, pushing, syncing, isApiSynced, onUpload, onPush, onSync,
 }: {
-  row: ValidationRow; pushing: boolean;
-  onUpload: () => void; onPush: () => void;
+  row: ValidationRow; pushing: boolean; syncing?: boolean; isApiSynced?: boolean;
+  onUpload: () => void; onPush: () => void; onSync?: () => void;
 }) {
   if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
+    if (isApiSynced && onSync) {
+      return (
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onSync} disabled={syncing}>
+          {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          {syncing ? 'Syncing...' : 'Sync'}
+        </Button>
+      );
+    }
     return (
       <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onUpload}>
         <Upload className="h-3 w-3" /> Upload
