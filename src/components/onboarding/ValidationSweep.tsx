@@ -283,16 +283,40 @@ export default function ValidationSweep({
 
   const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
 
+  const pausedCount = useMemo(() => {
+    const pausedMarketplaceCodes = new Set(allConnections.filter(c => c.connection_status === 'paused').map(c => c.marketplace_code));
+    return rows.filter(r => pausedMarketplaceCodes.has(r.marketplace_code)).length;
+  }, [rows, allConnections]);
+
   const statusCounts = useMemo(() => {
-    const counts: Record<FilterStatus, number> = { all: rows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
-    rows.forEach((r) => {
+    const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
+    const counts: Record<FilterStatus, number> = { all: activeRows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
+    activeRows.forEach((r) => {
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') counts.complete++;
       else if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') counts.ready_to_push++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') counts.settlement_needed++;
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
     return counts;
-  }, [rows]);
+  }, [rows, pausedCodes]);
+
+  const handleTogglePause = async (marketplaceCode: string, currentStatus: string) => {
+    setTogglingPause(marketplaceCode);
+    try {
+      const newStatus = currentStatus === 'paused' ? 'active' : 'paused';
+      const { error } = await supabase
+        .from('marketplace_connections')
+        .update({ connection_status: newStatus })
+        .eq('marketplace_code', marketplaceCode);
+      if (error) throw error;
+      toast.success(newStatus === 'paused' ? `${marketplaceCode} paused — hidden from overview` : `${marketplaceCode} resumed`);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update');
+    } finally {
+      setTogglingPause(null);
+    }
+  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
