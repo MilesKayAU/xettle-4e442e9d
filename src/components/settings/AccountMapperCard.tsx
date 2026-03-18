@@ -134,8 +134,8 @@ export default function AccountMapperCard() {
 
     const coverage = getMarketplaceCoverage(activeMarketplaces, coaAccounts);
     return {
-      uncoveredMarketplaces: [...coverage.uncovered, ...coverage.partial],
-      coveredMarketplaces: coverage.covered,
+      uncoveredMarketplaces: coverage.uncovered,
+      coveredMarketplaces: [...coverage.covered, ...coverage.partial],
       coverageDetails: coverage.details,
     };
   }, [splitByMarketplace, coaAccounts, activeMarketplaces]);
