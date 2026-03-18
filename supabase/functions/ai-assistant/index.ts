@@ -304,6 +304,11 @@ serve(async (req) => {
       ? `${SYSTEM_PROMPT}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}`
       : SYSTEM_PROMPT;
 
+    // ─── Route-filtered tools ────────────────────────────────────────
+    const routeId = context?.routeId ?? null;
+    const routeTools = getToolsForRoute(routeId);
+    const toolDefs = toOpenAIToolDefs(routeTools);
+
     // ─── Tool-calling loop (max 3 rounds, non-streaming) ─────────────
     let gatewayMessages: any[] = messages.map((m: any) => ({
       role: m.role,
