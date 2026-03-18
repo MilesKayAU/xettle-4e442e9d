@@ -446,20 +446,27 @@ async function processSettlement(
 
   // ─── BLOCKER #2: Account mapping must exist — hard-fail, no fallback ──
   const marketplace = settlement.marketplace || 'amazon_au';
-  const { data: mktMappings } = await supabase
-    .from('marketplace_account_mapping')
-    .select('category, account_code')
-    .eq('user_id', userId)
-    .eq('marketplace_code', marketplace);
 
-  const mappingsByCategory: Record<string, string> = {};
-  if (mktMappings) {
-    for (const m of mktMappings) {
-      mappingsByCategory[m.category] = m.account_code;
-    }
-  }
+  // Canonical key label map (mirrors src/utils/marketplace-codes.ts)
+  const CANONICAL_KEY_LABELS: Record<string, string> = {
+    amazon_au: 'Amazon AU', amazon_us: 'Amazon USA', amazon_uk: 'Amazon UK',
+    amazon_ca: 'Amazon CA', amazon_jp: 'Amazon JP', amazon_sg: 'Amazon SG',
+    shopify_payments: 'Shopify', shopify_orders: 'Shopify',
+    ebay_au: 'eBay AU', bunnings: 'Bunnings', catch: 'Catch',
+    mydeal: 'MyDeal', kogan: 'Kogan', bigw: 'BigW',
+    woolworths: 'Woolworths', woolworths_marketplus: 'Everyday Market',
+    everyday_market: 'Everyday Market', theiconic: 'The Iconic', etsy: 'Etsy',
+  };
 
-  // Also check global account codes (user-configured, not hardcoded defaults)
+  const getKeyCandidates = (mp?: string): string[] => {
+    if (!mp) return [];
+    const trimmed = mp.trim();
+    if (!trimmed) return [];
+    const normalized = CANONICAL_KEY_LABELS[trimmed] || CANONICAL_KEY_LABELS[trimmed.toLowerCase()] || trimmed;
+    return [...new Set([normalized, trimmed].filter(Boolean))];
+  };
+
+  // Load account codes from canonical app_settings store
   const { data: accountSettings } = await supabase
     .from('app_settings')
     .select('value')
@@ -467,35 +474,34 @@ async function processSettlement(
     .eq('key', 'accounting_xero_account_codes')
     .limit(1);
 
-  let globalAccountCodes: Record<string, string> = {};
+  let userAccountCodes: Record<string, string> = {};
   if (accountSettings?.[0]?.value) {
-    try { globalAccountCodes = JSON.parse(accountSettings[0].value); } catch {}
+    try { userAccountCodes = JSON.parse(accountSettings[0].value); } catch {}
   }
 
-  // Merge: marketplace-specific overrides global
-  const resolvedMappings: Record<string, string> = { ...globalAccountCodes, ...mappingsByCategory };
+  const resolveCode = (category: string, mp?: string): string | null => {
+    for (const candidate of getKeyCandidates(mp)) {
+      const mpKey = `${category}:${candidate}`;
+      if (userAccountCodes[mpKey]) return userAccountCodes[mpKey];
+    }
+    if (userAccountCodes[category]) return userAccountCodes[category];
+    return null;
+  };
 
   // Determine which categories have non-zero amounts and thus require mappings
   const contactName = MARKETPLACE_CONTACTS[marketplace] || marketplace;
+
+  // Legacy category name mapping
+  const LEGACY_ACCOUNT_KEY_MAP: Record<string, string> = {
+    'Sales (Principal)': 'Sales', 'Shipping Revenue': 'Shipping',
+    'Promotional Discounts': 'Promotional Discounts', 'Refunds': 'Refunds',
+    'Reimbursements': 'Reimbursements', 'Seller Fees': 'Seller Fees',
+    'FBA Fees': 'FBA Fees', 'Storage Fees': 'Storage Fees',
+    'Advertising': 'Advertising Costs', 'Other Fees': 'Other Fees',
+  };
+
   // ══════════════════════════════════════════════════════════════
   // 10-CATEGORY BREAKDOWN — Canonical source: src/utils/xero-posting-line-items.ts
-  // If you change this list, bump CANONICAL_VERSION above.
-  //
-  // SIGN CONVENTION (Option A — "Use Stored Sign"):
-  // All DB fields are stored with their accounting sign.
-  // The builder passes values through WITHOUT sign manipulation.
-  // No abs(), no -abs(). DB value IS the posted value.
-  //
-  //   Sales (Principal)     sales_principal        OUTPUT        stored sign (+)
-  //   Shipping Revenue      sales_shipping         OUTPUT        stored sign (+)
-  //   Promotional Discounts promotional_discounts  OUTPUT        stored sign (-)
-  //   Refunds               refunds                OUTPUT        stored sign (-)
-  //   Reimbursements        reimbursements         BASEXCLUDED   stored sign (+)
-  //   Seller Fees           seller_fees            INPUT         stored sign (-)
-  //   FBA Fees              fba_fees               INPUT         stored sign (-)
-  //   Storage Fees          storage_fees           INPUT         stored sign (-)
-  //   Advertising           advertising_costs      INPUT         stored sign (-)
-  //   Other Fees            other_fees             INPUT         stored sign (-)
   // ══════════════════════════════════════════════════════════════
   const categoryAmounts: Record<string, number> = {
     'Sales (Principal)': round2(settlement.sales_principal || 0),
@@ -513,7 +519,8 @@ async function processSettlement(
   // Find categories with non-zero amounts that lack explicit mappings
   const missingMappings: string[] = [];
   for (const [cat, amount] of Object.entries(categoryAmounts)) {
-    if (Math.abs(amount) > 0.01 && !resolvedMappings[cat]) {
+    const legacyKey = LEGACY_ACCOUNT_KEY_MAP[cat] || cat;
+    if (Math.abs(amount) > 0.01 && !resolveCode(legacyKey, marketplace)) {
       missingMappings.push(cat);
     }
   }
