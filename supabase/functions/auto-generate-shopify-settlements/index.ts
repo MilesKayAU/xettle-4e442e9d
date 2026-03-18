@@ -224,6 +224,7 @@ interface DetectedOrder {
   processed_at: string;
   order_name: string;
   shopify_order_id: number;
+  isMcf: boolean;
 }
 
 // ─── Main handler ───────────────────────────────────────────────────────────
