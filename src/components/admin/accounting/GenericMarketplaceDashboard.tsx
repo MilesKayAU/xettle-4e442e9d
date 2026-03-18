@@ -573,7 +573,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const fees = s.seller_fees || 0;
                     const net = s.bank_deposit || 0;
                     const isSelected = selected.has(s.id);
-                    const isSyncable = s.status === 'ingested' || s.status === 'ready_to_push';
+                     const isReconOnly = (s as any).source === 'api_sync' && (s.marketplace || '').startsWith('shopify_orders_');
+                     const isSyncable = !isReconOnly && (s.status === 'ingested' || s.status === 'ready_to_push');
                     const isPushFailed = s.status === 'push_failed';
                     const isSynced = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
                     const isPreBoundary = !!(s as any).is_pre_boundary;
@@ -738,9 +739,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               )}
                             </div>
 
-                            {/* Status badge */}
-                            <div className="flex justify-center">
-                              <SettlementStatusBadge
+                             {/* Status badge */}
+                             <div className="flex justify-center gap-1">
+                               {isReconOnly && (
+                                 <Badge className="bg-amber-500/15 text-amber-700 border-amber-200 text-[10px]">Recon Only</Badge>
+                               )}
+                               <SettlementStatusBadge
                                 status={s.status}
                                 xeroInvoiceNumber={s.xero_invoice_number}
                                 xeroType={(s as any).xero_type}
