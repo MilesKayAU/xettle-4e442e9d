@@ -156,9 +156,10 @@ export function buildClonePreview(input: ClonePreviewInput & { matchPattern?: bo
 
   const pattern = usePattern ? detectCodePattern(patternAccounts) : null;
 
-  // If pattern detected and has decimals, use pattern-aware batch generation
+  // Always use pattern-aware batch generation when pattern detected
+  // This ensures new codes stay in the same numeric range as templates
   let codeMap: Map<string, string> | null = null;
-  if (pattern && pattern.usesDecimals) {
+  if (pattern) {
     codeMap = generatePatternBatchCodes(patternAccounts, input.existingCodes, pattern);
   }
 
