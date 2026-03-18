@@ -197,7 +197,8 @@ export default function InsightsDashboard() {
         const fulfilmentUnknown = fulfilmentMethod === 'not_sure';
 
         // Shipping cost estimation — only applied for self_ship / third_party_logistics
-        const shippingCostPerOrder = shippingCostByMp[mp] || 0;
+        // Use marketplace_shipping_costs table first, fall back to app_settings postage_cost
+        const shippingCostPerOrder = shippingCostByMp[mp] || postageCosts[mp] || 0;
         const estimatedOrderCount = rows.length > 0 ? rows.length : 1;
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;

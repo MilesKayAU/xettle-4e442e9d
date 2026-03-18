@@ -159,10 +159,18 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
   // 5. Fulfilment method — warn if any active marketplace has no explicit method set
   if (connections.length > 0) {
     const unconfiguredMarketplaces: string[] = [];
+    const missingPostageCost: string[] = [];
     for (const conn of connections) {
       const fulfilmentValue = settingsMap.get(`fulfilment_method:${conn.marketplace_code}`);
       if (!fulfilmentValue || fulfilmentValue === 'not_sure') {
         unconfiguredMarketplaces.push(conn.marketplace_name || conn.marketplace_code);
+      } else if (fulfilmentValue === 'self_ship' || fulfilmentValue === 'third_party_logistics') {
+        // Check if postage cost is set
+        const postageCost = settingsMap.get(`postage_cost:${conn.marketplace_code}`);
+        const costNum = parseFloat(postageCost || '');
+        if (!postageCost || isNaN(costNum) || costNum <= 0) {
+          missingPostageCost.push(conn.marketplace_name || conn.marketplace_code);
+        }
       }
     }
     if (unconfiguredMarketplaces.length > 0) {
@@ -171,6 +179,14 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         label: 'Fulfilment methods not configured',
         severity: 'warning',
         message: `Review and save fulfilment method for: ${unconfiguredMarketplaces.join(', ')}.`,
+      });
+    }
+    if (missingPostageCost.length > 0) {
+      setupWarnings.push({
+        key: 'postage_cost_missing',
+        label: 'Postage cost not set',
+        severity: 'warning',
+        message: `Set your average postage cost for: ${missingPostageCost.join(', ')} in Settings → Fulfilment Methods.`,
       });
     }
   }

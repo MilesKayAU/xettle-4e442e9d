@@ -87,3 +87,56 @@ export async function saveFulfilmentMethod(
       .insert({ user_id: userId, key, value: method });
   }
 }
+
+/**
+ * Load postage costs for the current user.
+ * Returns a map of marketplace_code → cost per order (number).
+ */
+export async function loadPostageCosts(
+  userId: string,
+): Promise<Record<string, number>> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .eq('user_id', userId)
+    .like('key', 'postage_cost:%');
+
+  const result: Record<string, number> = {};
+  for (const row of data || []) {
+    const code = row.key.replace('postage_cost:', '');
+    const num = parseFloat(row.value || '');
+    if (code && !isNaN(num) && num >= 0) {
+      result[code] = num;
+    }
+  }
+  return result;
+}
+
+/**
+ * Save or update a postage cost for one marketplace.
+ */
+export async function savePostageCost(
+  userId: string,
+  marketplaceCode: string,
+  amount: number,
+): Promise<void> {
+  const key = `postage_cost:${marketplaceCode}`;
+
+  const { data: existing } = await supabase
+    .from('app_settings')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('key', key)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from('app_settings')
+      .update({ value: String(amount) })
+      .eq('id', existing.id);
+  } else {
+    await supabase
+      .from('app_settings')
+      .insert({ user_id: userId, key, value: String(amount) });
+  }
+}
