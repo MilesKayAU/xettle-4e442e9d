@@ -1139,7 +1139,8 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
     (async () => {
       try {
         const { calculateMarketplaceProfit } = await import('./profit-engine');
-        const [linesRes, costsRes] = await Promise.all([
+        const { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } = await import('./fulfilment-settings');
+        const [linesRes, costsRes, fulfilmentMethods, postageCosts] = await Promise.all([
           supabase
             .from('settlement_lines')
             .select('settlement_id, sku, amount, order_id, transaction_type')
@@ -1149,6 +1150,8 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
             .from('product_costs')
             .select('sku, cost, currency, label')
             .eq('user_id', user.id),
+          loadFulfilmentMethods(user.id),
+          loadPostageCosts(user.id),
         ]);
 
         const profitInput = {
@@ -1160,6 +1163,10 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
           period_end: settlement.period_end,
         };
 
+        const mp = settlement.marketplace;
+        const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
+        const postageCostPerOrder = postageCosts[mp] || 0;
+
         const periodLabel = `${settlement.period_start} → ${settlement.period_end}`;
         const profit = calculateMarketplaceProfit(
           settlement.marketplace,
@@ -1167,6 +1174,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
           profitInput,
           (linesRes.data || []) as any,
           (costsRes.data || []) as any,
+          { fulfilmentMethod, postageCostPerOrder },
         );
 
         await supabase.from('settlement_profit').upsert({
@@ -1177,6 +1185,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
           gross_revenue: profit.gross_revenue,
           total_cogs: profit.total_cogs,
           marketplace_fees: profit.marketplace_fees,
+          postage_deduction: profit.postage_deduction,
           gross_profit: profit.gross_profit,
           margin_percent: profit.margin_percent,
           orders_count: profit.orders_count,
@@ -1184,7 +1193,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
           uncosted_sku_count: profit.uncosted_sku_count,
           uncosted_revenue: profit.uncosted_revenue,
           calculated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,marketplace_code,settlement_id' });
+        } as any, { onConflict: 'user_id,marketplace_code,settlement_id' });
       } catch (e) {
         console.error('[profit-engine] fire-and-forget failed:', e);
       }
