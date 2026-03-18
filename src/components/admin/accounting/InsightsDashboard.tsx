@@ -140,7 +140,15 @@ export default function InsightsDashboard() {
         }
       }
 
-      // Normalize composite marketplace codes to base codes for aggregation
+      // Aggregate order counts from settlement_profit by marketplace
+      const profitOrderCounts: Record<string, number> = {};
+      if (profitOrdersRes.data) {
+        for (const row of profitOrdersRes.data as any[]) {
+          const mp = row.marketplace_code;
+          profitOrderCounts[mp] = (profitOrderCounts[mp] || 0) + (Number(row.orders_count) || 0);
+        }
+      }
+
       // e.g. 'woolworths_marketplus_bigw' → 'bigw', 'shopify_orders_kogan' → 'kogan'
       function normalizeMarketplace(mp: string): string {
         if (mp.startsWith('woolworths_marketplus_')) return mp.replace('woolworths_marketplus_', '');
