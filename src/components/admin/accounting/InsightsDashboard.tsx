@@ -47,6 +47,11 @@ interface MarketplaceStats {
   returnAfterAdsAndShipping: number | null;
   fulfilmentMethod: FulfilmentMethod;
   fulfilmentUnknown: boolean;
+  // Data quality flags
+  hasEstimatedFees: boolean;
+  hasMissingFeeData: boolean;
+  hasFeeAnomaly: boolean;
+  hasNegativePayout: boolean;
   // Fee breakdown
   commissionTotal: number;
   fbaTotal: number;
