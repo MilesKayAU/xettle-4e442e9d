@@ -113,7 +113,7 @@ export default function CoaAuditPanel() {
   }, []);
 
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-lg border border-border bg-card">
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
@@ -141,7 +141,7 @@ export default function CoaAuditPanel() {
           )}
           {hasRun && (
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setOpen(!open)}>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                 {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </Button>
             </CollapsibleTrigger>
@@ -149,29 +149,27 @@ export default function CoaAuditPanel() {
         </div>
       </div>
 
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleContent>
-          <div className="border-t border-border px-4 py-3">
-            {loading && !result && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Analysing your Chart of Accounts against best practices…
-              </div>
-            )}
-            {result && (
-              <div className="prose prose-sm dark:prose-invert max-w-none text-sm [&_h3]:text-sm [&_h3]:mt-3 [&_h3]:mb-1 [&_h2]:text-base [&_h2]:mt-4 [&_h2]:mb-2 [&_ul]:my-1 [&_li]:my-0.5 [&_p]:my-1">
-                <ReactMarkdown>{result}</ReactMarkdown>
-              </div>
-            )}
-            {loading && result && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Still analysing…
-              </div>
-            )}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
+      <CollapsibleContent>
+        <div className="border-t border-border px-4 py-3">
+          {loading && !result && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Analysing your Chart of Accounts against best practices…
+            </div>
+          )}
+          {result && (
+            <div className="prose prose-sm dark:prose-invert max-w-none text-sm [&_h3]:text-sm [&_h3]:mt-3 [&_h3]:mb-1 [&_h2]:text-base [&_h2]:mt-4 [&_h2]:mb-2 [&_ul]:my-1 [&_li]:my-0.5 [&_p]:my-1">
+              <ReactMarkdown>{result}</ReactMarkdown>
+            </div>
+          )}
+          {loading && result && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Still analysing…
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
