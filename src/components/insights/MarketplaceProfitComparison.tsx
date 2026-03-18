@@ -81,7 +81,7 @@ export default function MarketplaceProfitComparison() {
           .eq('user_id', user.id),
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, sales_shipping, bank_deposit, source, seller_fees, raw_payload')
+          .select('marketplace, sales_principal, sales_shipping, gst_on_income, bank_deposit, source, seller_fees, raw_payload')
           .eq('user_id', user.id)
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
@@ -116,7 +116,8 @@ export default function MarketplaceProfitComparison() {
         if (!mp) continue;
         if (!settlementMap.has(mp)) settlementMap.set(mp, { revenue: 0, payout: 0, count: 0, hasEstimated: false });
         const entry = settlementMap.get(mp)!;
-        entry.revenue += (Number(row.sales_principal) || 0) + (Number(row.sales_shipping) || 0);
+        // Revenue MUST include GST to be comparable with bank_deposit (which is GST-inclusive)
+        entry.revenue += (Number(row.sales_principal) || 0) + (Number(row.sales_shipping) || 0) + (Number(row.gst_on_income) || 0);
         entry.payout += Number(row.bank_deposit) || 0;
         entry.count++;
         const payload = row.raw_payload as any;
@@ -146,13 +147,16 @@ export default function MarketplaceProfitComparison() {
       // Apply postage deduction in fallback path
       for (const [mp, agg] of settlementMap) {
         if (mpMap.has(mp)) continue; // already included
+        // Skip zero-revenue fee-only groups (e.g. MyDeal fee-only batches)
+        if (agg.revenue <= 0) continue;
         const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
         const postageCost = postageCosts[mp] || 0;
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         // In fallback path we only have settlement count, not order count — use it as approximation
         const estimatedPostageDeduction = shouldDeductShipping ? postageCost * agg.count : 0;
         const adjustedPayout = agg.payout - estimatedPostageDeduction;
-        const margin = agg.revenue > 0 ? (adjustedPayout / agg.revenue) * 100 : 0;
+        // Cap margin at 100% — payout cannot legitimately exceed gross revenue inc GST
+        const margin = agg.revenue > 0 ? Math.min((adjustedPayout / agg.revenue) * 100, 100) : 0;
         results.push({
           marketplace_code: mp,
           marketplace_name: MARKETPLACE_LABELS[mp] || mp,

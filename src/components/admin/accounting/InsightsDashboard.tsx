@@ -173,10 +173,11 @@ export default function InsightsDashboard() {
       const results: MarketplaceStats[] = [];
 
       for (const [mp, rows] of Object.entries(grouped)) {
-        // Use sales INCLUDING GST for consistent cross-marketplace comparison
+        // Skip fee-only groups with zero or negligible sales (e.g. MyDeal platform fee batches)
         const totalSalesExGst = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
         const totalGstOnSales = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
-        const totalSales = totalSalesExGst + totalGstOnSales; // Gross sales inc GST
+        const totalSales = totalSalesExGst + totalGstOnSales;
+        if (totalSales <= 0) continue;
         const totalFees = rows.reduce((sum, r) =>
           sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.max(r.other_fees || 0, 0), 0);
         const totalRefunds = rows.reduce((sum, r) => sum + Math.abs(r.refunds || 0), 0);
