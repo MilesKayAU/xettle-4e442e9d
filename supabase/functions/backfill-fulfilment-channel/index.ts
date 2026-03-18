@@ -81,15 +81,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build order_id → has FBA fee flag
+    // Build order_id → has FBA fee flag + track transaction types
     const orderHasFba = new Map<string, boolean>();
     const orderHasAnyLine = new Set<string>();
+    const orderIsRefundOnly = new Map<string, boolean>();
 
     for (const line of nullLines) {
       const orderId = line.order_id;
       if (!orderId) continue;
       orderHasAnyLine.add(orderId);
       if (!orderHasFba.has(orderId)) orderHasFba.set(orderId, false);
+      // Track if order has any non-refund lines
+      if (!orderIsRefundOnly.has(orderId)) orderIsRefundOnly.set(orderId, true);
+      if (line.transaction_type !== "Refund") {
+        orderIsRefundOnly.set(orderId, false);
+      }
       if (
         line.amount_description &&
         FBA_FEE_PATTERNS.some((p) => line.amount_description === p)
