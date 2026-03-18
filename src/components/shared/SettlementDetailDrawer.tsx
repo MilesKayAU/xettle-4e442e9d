@@ -489,7 +489,70 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               </>
             )}
 
-            {/* Audit trail */}
+            {/* Download Audit CSV */}
+            {lineItems.length > 0 && settlement && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => {
+                    const headers = ['description', 'account_code', 'tax_type', 'amount_ex_gst', 'gst_estimate', 'amount_inc_gst_estimate'];
+                    const rows = lineItems.map(li => {
+                      const exGst = li.amount;
+                      const gstRate = li.tax_type === 'BASEXCLUDED' ? 0 : 0.1;
+                      const gst = Math.round(exGst * gstRate * 100) / 100;
+                      const inc = Math.round((exGst + gst) * 100) / 100;
+                      return [li.description, li.account_code, li.tax_type, exGst, gst, inc]
+                        .map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+                    });
+                    const csv = [headers.join(','), ...rows].join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Xettle-${settlement.settlement_id}-audit.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download Audit CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => {
+                    const data = {
+                      settlement_id: settlement.settlement_id,
+                      marketplace: settlement.marketplace,
+                      period_start: settlement.period_start,
+                      period_end: settlement.period_end,
+                      bank_deposit: settlement.bank_deposit,
+                      sales_principal: settlement.sales_principal,
+                      sales_shipping: settlement.sales_shipping,
+                      seller_fees: settlement.seller_fees,
+                      refunds: settlement.refunds,
+                      gst_on_income: settlement.gst_on_income,
+                      gst_on_expenses: settlement.gst_on_expenses,
+                      status: settlement.status,
+                      xero_invoice_number: settlement.xero_invoice_number,
+                    };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Xettle-${settlement.settlement_id}-raw.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download Raw Data
+                </Button>
+              </div>
+            )}
             {events.length > 0 && (
               <>
                 <Separator />
