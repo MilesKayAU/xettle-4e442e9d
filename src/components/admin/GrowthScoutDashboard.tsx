@@ -7,8 +7,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { toast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import {
-  Crosshair, Copy, Check, X, ExternalLink, ChevronDown, Sparkles, Filter,
+  Crosshair, Copy, Check, X, ExternalLink, ChevronDown, Sparkles, Filter, Search, Clock,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 
 interface Opportunity {
   id: string;
@@ -40,6 +41,20 @@ const platformLabels: Record<string, string> = {
   forum: 'Forum',
 };
 
+const platformDomains: Record<string, string> = {
+  reddit: 'reddit.com',
+  xero_community: 'community.xero.com',
+  shopify_community: 'community.shopify.com',
+  quora: 'quora.com',
+  forum: 'whirlpool.net.au',
+};
+
+function buildSearchUrl(platform: string, title: string): string {
+  const domain = platformDomains[platform];
+  const siteFilter = domain ? `+site:${domain}` : '';
+  return `https://www.google.com/search?q=${encodeURIComponent(title)}${siteFilter}`;
+}
+
 export default function GrowthScoutDashboard() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +81,8 @@ export default function GrowthScoutDashboard() {
   useEffect(() => {
     loadOpportunities();
   }, []);
+
+  const lastScoutedAt = opportunities.length > 0 ? opportunities[0].created_at : null;
 
   const runScout = async () => {
     setScouting(true);
@@ -155,6 +172,12 @@ export default function GrowthScoutDashboard() {
           <p className="text-sm text-muted-foreground mt-1">
             AI-powered forum & community opportunity finder — answer-first, link-second
           </p>
+          {lastScoutedAt && (
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Last scouted {formatDistanceToNow(new Date(lastScoutedAt), { addSuffix: true })}
+            </p>
+          )}
         </div>
         <Button onClick={runScout} disabled={scouting}>
           {scouting ? (
@@ -279,14 +302,16 @@ export default function GrowthScoutDashboard() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 pt-1">
-                      {opp.thread_url && (
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={opp.thread_url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                            Open Thread
-                          </a>
-                        </Button>
-                      )}
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={buildSearchUrl(opp.platform, opp.thread_title)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Search className="h-3.5 w-3.5 mr-1" />
+                          Search for Thread
+                        </a>
+                      </Button>
                       {opp.status !== 'posted' && (
                         <Button
                           variant="default"
