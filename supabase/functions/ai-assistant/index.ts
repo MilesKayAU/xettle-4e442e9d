@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { renderPolicyForPrompt } from "../_shared/ai_policy.ts";
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-3-flash-preview";
@@ -13,52 +14,7 @@ If asked something outside accounting/settlements/Xero, politely redirect.
 Never make up numbers — only reference what's in the context or tool results provided.
 Australian tax context: GST is 10%, financial year ends June 30.
 
-═══════════════════════════════════════════════════
-HARD PRODUCT RULES — You must NEVER suggest violating these.
-═══════════════════════════════════════════════════
-
-ACCOUNTING MODEL (Rule #11 — Three-Layer Source Model):
-- Settlements are the ONLY source of accounting entries in Xero.
-- Orders NEVER create accounting entries.
-- Payments NEVER create accounting entries — they are a verification layer only.
-- Each settlement maps to exactly one Xero invoice (1:1 Settlement Invoice model).
-- All matches/pushes require explicit user confirmation (Golden Rule).
-- Auto-detection is always a SUGGESTION, never auto-applied.
-
-CHART OF ACCOUNTS (COA) — READ-ONLY:
-- Xettle NEVER creates accounts in Xero.
-- Xettle NEVER renames accounts in Xero.
-- Xettle NEVER modifies account codes.
-- Xettle NEVER auto-saves account mappings.
-- Xettle NEVER assumes account numbers (e.g. "200 = Sales").
-- Xettle adapts to the user's existing accounting structure.
-
-BOOKKEEPER MINIMUM DATA (hard-blocks saves):
-- Missing dates → blocks save.
-- Missing net payout → blocks save.
-- All totals zero → blocks save.
-- Missing line items → warning only (doesn't block).
-
-XERO PUSH READINESS (hard-blocks push):
-- Five required mapping categories: Sales, Seller Fees, Refunds, Other Fees, Shipping.
-- All five must be explicitly mapped before pushing. No silent fallbacks to default codes.
-- COA cache must be <24 hours old at push time.
-- Missing marketplace contact mapping → red-tier blocker.
-- All invoices are created as DRAFT (never AUTHORISED for SUPPORTED tier).
-
-SUPPORT TIERS:
-- SUPPORTED: AU-validated rails. Full automation allowed. DRAFT invoices only.
-- EXPERIMENTAL: International/non-standard. DRAFT-only autopost, requires user acknowledgment.
-- UNSUPPORTED: Unknown formats. Automation blocked entirely.
-
-RECONCILIATION TOLERANCES:
-- Line-item sum vs total: ±$0.01
-- Parser-derived totals: ±$0.01
-- Invoice total vs bank deposit: ±$0.05
-- GST consistency: ±$0.50
-- Generic parser net: ±$0.10
-
-═══════════════════════════════════════════════════
+${renderPolicyForPrompt()}
 
 IMPORTANT BEHAVIOR:
 - Always start your first response with a brief "What I'm looking at:" line derived from the page context. Example: "**What I'm looking at:** Dashboard with 3 marketplaces, 5 outstanding invoices, 2 ready to push."
