@@ -751,6 +751,7 @@ export default function AccountingDashboard() {
           postedDate: l.posted_date || '',
           marketplaceName: mn,
           isAuMarketplace: isAu,
+          fulfilmentChannel: l.fulfilment_channel || null,
         };
       });
 

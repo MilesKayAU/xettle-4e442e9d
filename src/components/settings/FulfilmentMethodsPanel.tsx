@@ -1,6 +1,6 @@
 /**
  * FulfilmentMethodsPanel — Settings panel to edit fulfilment method per marketplace.
- * Includes postage cost input and auto-triggers profit recalculation on changes.
+ * Includes postage cost input, MCF cost input, and auto-triggers profit recalculation on changes.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -9,7 +9,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Store, DollarSign, RefreshCw } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Store, DollarSign, RefreshCw, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   type FulfilmentMethod,
@@ -19,6 +20,8 @@ import {
   getEffectiveMethod,
   loadPostageCosts,
   savePostageCost,
+  loadMcfCosts,
+  saveMcfCost,
   isAmazonCode,
 } from '@/utils/fulfilment-settings';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -48,9 +51,11 @@ export default function FulfilmentMethodsPanel() {
   const [marketplaces, setMarketplaces] = useState<MarketplaceRow[]>([]);
   const [methods, setMethods] = useState<Record<string, FulfilmentMethod>>({});
   const [postageCosts, setPostageCosts] = useState<Record<string, string>>({});
+  const [mcfCosts, setMcfCosts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
+  const [mixedModePromptDismissed, setMixedModePromptDismissed] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -58,7 +63,7 @@ export default function FulfilmentMethodsPanel() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const [connRes, stored, costs] = await Promise.all([
+        const [connRes, stored, costs, mcfCostsData] = await Promise.all([
           supabase
             .from('marketplace_connections')
             .select('marketplace_code, marketplace_name')
@@ -66,6 +71,7 @@ export default function FulfilmentMethodsPanel() {
             .eq('connection_status', 'active'),
           loadFulfilmentMethods(user.id),
           loadPostageCosts(user.id),
+          loadMcfCosts(user.id),
         ]);
 
         setMarketplaces(connRes.data || []);
@@ -75,6 +81,21 @@ export default function FulfilmentMethodsPanel() {
           costStrings[code] = val > 0 ? String(val) : '';
         }
         setPostageCosts(costStrings);
+        const mcfStrings: Record<string, string> = {};
+        for (const [code, val] of Object.entries(mcfCostsData)) {
+          mcfStrings[code] = val > 0 ? String(val) : '';
+        }
+        setMcfCosts(mcfStrings);
+
+        // Check if mixed mode prompt was dismissed
+        const { data: dismissed } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('user_id', user.id)
+          .eq('key', 'mixed_mode_prompt_dismissed')
+          .maybeSingle();
+        setMixedModePromptDismissed(dismissed?.value === 'true');
+
       } catch {
         // silent
       } finally {
@@ -124,6 +145,21 @@ export default function FulfilmentMethodsPanel() {
     }
   };
 
+  const handleMcfSave = async (code: string, value: string) => {
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await saveMcfCost(user.id, code, num);
+      toast.success(`MCF cost saved for ${code}`);
+      recalcInBackground();
+    } catch {
+      toast.error('Failed to save MCF cost');
+    }
+  };
+
   const handleManualRecalc = async () => {
     setRecalculating(true);
     try {
@@ -138,6 +174,21 @@ export default function FulfilmentMethodsPanel() {
     }
   };
 
+  const handleDismissPrompt = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'mixed_mode_prompt_dismissed',
+        value: 'true',
+      }, { onConflict: 'user_id,key' });
+      setMixedModePromptDismissed(true);
+    } catch {
+      // silent
+    }
+  };
+
   if (loading) return <LoadingSpinner size="sm" text="Loading..." />;
 
   if (marketplaces.length === 0) {
@@ -147,6 +198,12 @@ export default function FulfilmentMethodsPanel() {
       </p>
     );
   }
+
+  // Check if any Amazon marketplace is still on marketplace_fulfilled (upgrade prompt candidate)
+  const amazonOnOldDefault = marketplaces.some(
+    mp => isAmazonCode(mp.marketplace_code) &&
+          getEffectiveMethod(mp.marketplace_code, methods[mp.marketplace_code]) === 'marketplace_fulfilled'
+  );
 
   return (
     <div className="space-y-5">
@@ -165,11 +222,27 @@ export default function FulfilmentMethodsPanel() {
           {recalculating ? 'Recalculating…' : 'Recalculate Profit'}
         </Button>
       </div>
+
+      {amazonOnOldDefault && !mixedModePromptDismissed && (
+        <Alert className="border-primary/30 bg-primary/5">
+          <ArrowUpCircle className="h-4 w-4 text-primary" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span className="text-sm">
+              We now support mixed FBA + FBM tracking for Amazon. Update your setting for more accurate margins.
+            </span>
+            <Button variant="ghost" size="sm" onClick={handleDismissPrompt} className="shrink-0 text-xs">
+              Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {marketplaces.map((mp) => {
         const effective = getEffectiveMethod(mp.marketplace_code, methods[mp.marketplace_code]);
         const isAmazon = isAmazonCode(mp.marketplace_code);
         const methodOptions = isAmazon ? AMAZON_METHOD_OPTIONS : BASE_METHOD_OPTIONS;
         const showPostageInput = effective === 'self_ship' || effective === 'third_party_logistics' || effective === 'mixed_fba_fbm';
+        const showMcfInput = isAmazon && effective === 'mixed_fba_fbm';
         return (
           <div key={mp.marketplace_code} className="rounded-lg border border-border p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -214,6 +287,30 @@ export default function FulfilmentMethodsPanel() {
                       setPostageCosts(prev => ({ ...prev, [mp.marketplace_code]: e.target.value }))
                     }
                     onBlur={(e) => handlePostageSave(mp.marketplace_code, e.target.value)}
+                    className="pl-7 h-8 text-sm"
+                  />
+                </div>
+              </div>
+            )}
+            {showMcfInput && (
+              <div className="pt-1 space-y-1">
+                <Label htmlFor={`mcf-${mp.marketplace_code}`} className="text-xs text-muted-foreground flex items-center gap-1">
+                  <DollarSign className="h-3 w-3" />
+                  MCF (Multi-Channel Fulfilment) cost per order
+                </Label>
+                <div className="relative w-40">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                  <Input
+                    id={`mcf-${mp.marketplace_code}`}
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    placeholder="8.00"
+                    value={mcfCosts[mp.marketplace_code] || ''}
+                    onChange={(e) =>
+                      setMcfCosts(prev => ({ ...prev, [mp.marketplace_code]: e.target.value }))
+                    }
+                    onBlur={(e) => handleMcfSave(mp.marketplace_code, e.target.value)}
                     className="pl-7 h-8 text-sm"
                   />
                 </div>
