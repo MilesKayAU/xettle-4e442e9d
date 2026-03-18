@@ -173,6 +173,7 @@ export interface MarketplaceProfit {
   uncosted_revenue: number;
   fulfilment_method: string;
   fulfilment_unknown: boolean;
+  fulfilment_data_incomplete: boolean;
 }
 
 function normalizeSku(sku: string): string {
