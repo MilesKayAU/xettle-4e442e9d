@@ -31,6 +31,7 @@ import {
 } from '@/actions';
 import { generateNextCode, getAccountTypeForCategory } from '@/policy/accountCodePolicy';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
+import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 import { Save, Upload, Copy } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
 
@@ -67,7 +68,7 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
 const KNOWN_MARKETPLACES = [
   'Amazon AU', 'Amazon USA', 'Amazon JP', 'Amazon SG', 'Amazon UK',
   'Shopify', 'Bunnings', 'eBay AU', 'Catch',
-  'MyDeal', 'Kogan', 'Everyday Market', 'The Iconic', 'Etsy',
+  'MyDeal', 'Kogan', 'Everyday Market', 'The Iconic', 'Etsy', 'BigW',
 ];
 
 const REVENUE_CATEGORIES_SET = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
@@ -167,13 +168,10 @@ export default function AccountMapperCard() {
 
     const signals = analyseCoA(coaInput, registryEntries, processorEntries);
 
-    // Build marketplace_code → display name lookup from active marketplaces
-    // The mapping_suggestions use marketplace_code (e.g. 'amazon_au'),
-    // but the Map key needs the display name (e.g. 'Amazon AU')
-    const codeToDisplayName = new Map<string, string>();
-    // Build from registry entries
+    // Build marketplace_code → canonical key label lookup
+    const codeToKeyLabel = new Map<string, string>();
     for (const entry of registryEntries) {
-      codeToDisplayName.set(entry.marketplace_code, entry.marketplace_name);
+      codeToKeyLabel.set(entry.marketplace_code, normalizeKeyLabel(entry.marketplace_code));
     }
 
     const suggestions = new Map<string, { code: string; name: string }>();
@@ -182,12 +180,12 @@ export default function AccountMapperCard() {
       const displayCategory = CATEGORY_DISPLAY_MAP[s.category];
       if (!displayCategory) continue;
 
-      // Find matching active marketplace display name
-      const displayName = codeToDisplayName.get(s.marketplace_code) || s.marketplace_code;
-      // Only suggest for active marketplaces
-      if (!activeMarketplaces.includes(displayName)) continue;
+      // Convert marketplace_code to canonical key label
+      const keyLabel = codeToKeyLabel.get(s.marketplace_code) || normalizeKeyLabel(s.marketplace_code);
+      // Only suggest for active marketplaces (which are also normalized)
+      if (!activeMarketplaces.includes(keyLabel)) continue;
 
-      const key = `${displayCategory}:${displayName}`;
+      const key = `${displayCategory}:${keyLabel}`;
       // Keep highest confidence match
       if (!suggestions.has(key)) {
         suggestions.set(key, { code: s.account_code, name: s.account_name });
@@ -411,16 +409,19 @@ export default function AccountMapperCard() {
       // Load active marketplace connections
       const { data: connections } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_name, settings')
+        .select('marketplace_name, marketplace_code, settings')
         .eq('user_id', user.id)
         .in('connection_status', ACTIVE_CONNECTION_STATUSES);
 
       if (connections && connections.length > 0) {
-        setActiveMarketplaces(connections.map(c => c.marketplace_name));
+        // Normalize marketplace names to canonical key labels for consistent override keys
+        const normalizedNames = [...new Set(connections.map(c => normalizeKeyLabel(c.marketplace_code || c.marketplace_name)))];
+        setActiveMarketplaces(normalizedNames);
         const flags: Record<string, boolean> = {};
         for (const c of connections) {
           const settings = (c.settings || {}) as Record<string, any>;
-          flags[c.marketplace_name] = settings.use_global_mappings !== false;
+          const keyLabel = normalizeKeyLabel(c.marketplace_code || c.marketplace_name);
+          flags[keyLabel] = settings.use_global_mappings !== false;
         }
         setGlobalMappingFlags(flags);
       } else {
@@ -431,13 +432,8 @@ export default function AccountMapperCard() {
           .not('status', 'in', '("duplicate_suppressed","already_recorded")');
         if (settlements) {
           const unique = [...new Set(settlements.map(s => s.marketplace).filter(Boolean))];
-          const labelMap: Record<string, string> = {
-            amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
-            shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
-            kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
-            etsy: 'Etsy', theiconic: 'The Iconic',
-          };
-          const labels = unique.map(code => labelMap[code || ''] || code || '').filter(Boolean);
+          // Use normalizeKeyLabel for consistent key generation
+          const labels = unique.map(code => normalizeKeyLabel(code || '')).filter(Boolean);
           setActiveMarketplaces([...new Set(labels)]);
         }
       }
@@ -476,16 +472,27 @@ export default function AccountMapperCard() {
               restored[cat] = { code: codes[cat], name: coaEntry?.account_name || `Account ${codes[cat]}` };
             }
           }
+          // Normalize override keys on load for backward compatibility
+          // e.g. "Sales:Shopify Payments" → "Sales:Shopify"
           for (const key of Object.keys(codes)) {
             if (key.includes(':')) {
+              const [cat, rawMp] = key.split(':');
+              const normalizedMp = normalizeKeyLabel(rawMp);
+              const normalizedKey = `${cat}:${normalizedMp}`;
               const coaEntry = accounts.find(a => a.account_code === codes[key]);
-              restored[key] = { code: codes[key], name: coaEntry?.account_name || `Account ${codes[key]}` };
+              restored[normalizedKey] = { code: codes[key], name: coaEntry?.account_name || `Account ${codes[key]}` };
             }
           }
           setMapping(restored);
           const editable: Record<string, string> = {};
           for (const [k, v] of Object.entries(codes)) {
-            editable[k] = v as string;
+            if (k.includes(':')) {
+              const [cat, rawMp] = k.split(':');
+              const normalizedKey = `${cat}:${normalizeKeyLabel(rawMp)}`;
+              editable[normalizedKey] = v as string;
+            } else {
+              editable[k] = v as string;
+            }
           }
           setEditableMapping(editable);
           // Always show editable fields so users can review/change mappings

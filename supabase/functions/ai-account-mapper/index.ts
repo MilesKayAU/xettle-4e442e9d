@@ -216,14 +216,51 @@ Deno.serve(async (req) => {
       .from('marketplace_connections')
       .select('marketplace_name, marketplace_code')
       .eq('user_id', userId)
-      .eq('connection_status', 'connected')
+      .in('connection_status', ['active', 'connected'])
+
+    // Canonical key label map — must stay in sync with client-side normalizeKeyLabel()
+    const CANONICAL_KEY_LABELS: Record<string, string> = {
+      amazon_au: 'Amazon AU', amazon_us: 'Amazon USA', amazon_uk: 'Amazon UK',
+      amazon_ca: 'Amazon CA', amazon_jp: 'Amazon JP', amazon_sg: 'Amazon SG',
+      shopify_payments: 'Shopify', shopify_orders: 'Shopify',
+      ebay_au: 'eBay AU', bunnings: 'Bunnings', catch: 'Catch',
+      mydeal: 'MyDeal', kogan: 'Kogan', bigw: 'BigW',
+      woolworths: 'Woolworths', woolworths_marketplus: 'Everyday Market',
+      everyday_market: 'Everyday Market', theiconic: 'The Iconic', etsy: 'Etsy',
+    }
+
+    function toKeyLabel(codeOrName: string): string {
+      if (CANONICAL_KEY_LABELS[codeOrName]) return CANONICAL_KEY_LABELS[codeOrName]
+      const lower = codeOrName.trim().toLowerCase()
+      const DISPLAY_ALIASES: Record<string, string> = {
+        'shopify payments': 'Shopify', 'shopify': 'Shopify',
+        'ebay australia': 'eBay AU', 'ebay au': 'eBay AU',
+        'bunnings marketplace': 'Bunnings', 'bunnings': 'Bunnings',
+        'big w marketplace': 'BigW', 'big w': 'BigW', 'bigw': 'BigW',
+        'woolworths marketplace': 'Woolworths',
+        'woolworths marketplus': 'Everyday Market', 'everyday market': 'Everyday Market',
+        'mydeal marketplace': 'MyDeal', 'mydeal': 'MyDeal', 'my deal': 'MyDeal',
+        'kogan marketplace': 'Kogan', 'kogan': 'Kogan',
+        'catch marketplace': 'Catch', 'catch': 'Catch',
+        'the iconic': 'The Iconic', 'theiconic': 'The Iconic',
+        'etsy': 'Etsy',
+        'amazon au': 'Amazon AU', 'amazon usa': 'Amazon USA',
+        'amazon uk': 'Amazon UK', 'amazon jp': 'Amazon JP', 'amazon sg': 'Amazon SG',
+      }
+      return DISPLAY_ALIASES[lower] || codeOrName
+    }
 
     let activeMarketplaces: { name: string; code: string }[] = []
     if (connections && connections.length > 0) {
-      activeMarketplaces = connections.map((c: any) => ({
-        name: c.marketplace_name,
-        code: c.marketplace_code,
-      }))
+      // Normalize to canonical key labels for consistent override keys
+      const seen = new Set<string>()
+      for (const c of connections) {
+        const keyLabel = toKeyLabel(c.marketplace_code || c.marketplace_name)
+        if (!seen.has(keyLabel)) {
+          seen.add(keyLabel)
+          activeMarketplaces.push({ name: keyLabel, code: c.marketplace_code })
+        }
+      }
     } else {
       // Fall back to settlements
       const { data: settlements } = await supabase
@@ -233,17 +270,8 @@ Deno.serve(async (req) => {
         .not('status', 'in', '("duplicate_suppressed","already_recorded")')
       if (settlements) {
         const unique = [...new Set(settlements.map((s: any) => s.marketplace).filter(Boolean))]
-        const labelMap: Record<string, string> = {
-          amazon_au: 'Amazon AU', amazon_us: 'Amazon USA', amazon_jp: 'Amazon JP',
-          amazon_sg: 'Amazon SG', amazon_uk: 'Amazon UK',
-          bunnings: 'Bunnings', shopify_payments: 'Shopify',
-          shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
-          kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
-          etsy: 'Etsy', theiconic: 'The Iconic', bigw: 'BigW',
-          everyday_market: 'Everyday Market',
-        }
         activeMarketplaces = unique.map(code => ({
-          name: labelMap[code || ''] || code || '',
+          name: toKeyLabel(code || ''),
           code: code || '',
         })).filter(m => m.name)
       }
