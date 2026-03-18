@@ -179,6 +179,69 @@ export default function InsightsDashboard() {
         grouped[mp].push(row);
       }
 
+      // ─── Platform Family Fee Redistribution ───────────────────────────
+      // MyDeal, BigW, and Everyday Market all share the Woolworths MarketPlus platform.
+      // The Woolworths CSV allocates platform-level fees (subscriptions, etc.) to MyDeal
+      // even when sales occur on BigW or Everyday Market. This creates an anomaly where
+      // MyDeal shows fees >> sales, while BigW/Everyday Market appear artificially cheap.
+      // Fix: detect fee-heavy marketplaces and redistribute excess fees to siblings.
+      const PLATFORM_FAMILIES: Record<string, string[]> = {
+        woolworths_marketplus: ['mydeal', 'bigw', 'everyday_market', 'woolworths_market'],
+      };
+
+      // For each family, detect excess fees and redistribute
+      for (const siblings of Object.values(PLATFORM_FAMILIES)) {
+        const presentSiblings = siblings.filter(s => grouped[s]);
+        if (presentSiblings.length < 2) continue;
+
+        // Find fee-heavy members (fees > sales * 1.5, indicating platform overhead)
+        const feeHeavy: string[] = [];
+        const salesSiblings: string[] = [];
+        for (const s of presentSiblings) {
+          const rows = grouped[s];
+          const sales = rows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0);
+          const fees = rows.reduce((sum, r) => sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
+          if (fees > Math.max(sales * 1.5, 50)) {
+            feeHeavy.push(s);
+          } else if (sales > 0) {
+            salesSiblings.push(s);
+          }
+        }
+
+        if (feeHeavy.length === 0 || salesSiblings.length === 0) continue;
+
+        // Calculate total excess fees from fee-heavy members
+        let totalExcessFees = 0;
+        for (const fh of feeHeavy) {
+          const rows = grouped[fh];
+          const sales = rows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0);
+          const fees = rows.reduce((sum, r) => sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
+          // Excess = fees beyond what's attributable to own sales (using 15% as normal commission)
+          const ownFees = sales * 0.15;
+          totalExcessFees += Math.max(fees - ownFees, 0);
+        }
+
+        // Distribute proportionally to sales-producing siblings by their sales volume
+        const siblingSales: Record<string, number> = {};
+        let totalSiblingSales = 0;
+        for (const s of salesSiblings) {
+          const sales = grouped[s].reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0);
+          siblingSales[s] = sales;
+          totalSiblingSales += sales;
+        }
+
+        // Store redistributed fees per marketplace for use in stats calculation
+        if (totalSiblingSales > 0 && totalExcessFees > 0) {
+          for (const s of salesSiblings) {
+            const share = siblingSales[s] / totalSiblingSales;
+            const feeShare = totalExcessFees * share;
+            // Add synthetic fee rows to represent redistributed platform fees
+            // We modify by adjusting the seller_fees on a virtual basis — tracked via _redistributedPlatformFees
+            (grouped[s] as any)._redistributedPlatformFees = feeShare;
+          }
+        }
+      }
+
       const results: MarketplaceStats[] = [];
 
       for (const [mp, rows] of Object.entries(grouped)) {
@@ -250,8 +313,6 @@ export default function InsightsDashboard() {
         feeBreakdown.sort((a, b) => b.amount - a.amount);
 
         // ─── Universal Data Quality Guards ──────────────────────────────
-        // These guards apply to ALL marketplaces (present and future) based on
-        // universal patterns rather than per-marketplace patches.
         const hasEstimatedFees = rows.some(r => {
           const payload = r.raw_payload as any;
           return payload?.fees_estimated === true;
@@ -263,15 +324,14 @@ export default function InsightsDashboard() {
         const hasFeeAnomaly = totalFees > totalSales;
         const hasNegativePayout = netPayout < 0 && totalSales > 0;
 
-        // ─── Apply Estimated Commission When Fee Data Missing ───────────
-        // Handles two scenarios:
-        // 1. ALL rows are api_sync with $0 fees → apply estimated commission rate
-        // 2. MIXED CSV + api_sync → extrapolate the real CSV fee rate onto api_sync rows
+        // Include redistributed platform fees from sibling marketplaces
+        const redistributedPlatformFees = (grouped[mp] as any)?._redistributedPlatformFees || 0;
+
         let effectiveReturnRatio = returnRatio;
         let effectiveFeeLoad = feeLoad;
         let effectiveNetPayout = netPayout;
-        let effectiveTotalFees = totalFees;
-        let effectiveHasEstimatedFees = hasEstimatedFees;
+        let effectiveTotalFees = totalFees + redistributedPlatformFees;
+        let effectiveHasEstimatedFees = hasEstimatedFees || redistributedPlatformFees > 0;
 
         // For fee/commission calculations, identify rows with real fee data
         const feeRelevantRows = rows.filter(r => {
@@ -310,7 +370,15 @@ export default function InsightsDashboard() {
           hasMissingFeeData = false;
         }
 
-        // Recalculate commission metrics excluding zero-fee api_sync rows if mixed
+        // After api_sync estimation, add redistributed platform fees from siblings
+        if (redistributedPlatformFees > 0) {
+          effectiveTotalFees += redistributedPlatformFees;
+          effectiveNetPayout -= redistributedPlatformFees;
+          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
+          effectiveFeeLoad = totalSales > 0 ? Math.min(effectiveTotalFees / totalSales, 1) : 0;
+          effectiveHasEstimatedFees = true;
+        }
+
         const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
           ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
           : commissionTotal;
