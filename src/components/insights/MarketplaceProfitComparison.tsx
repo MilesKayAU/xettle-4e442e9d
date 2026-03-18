@@ -15,6 +15,14 @@ import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } from '@/utils/fulfilment-settings';
 import type { FulfilmentMethod } from '@/utils/fulfilment-settings';
 
+// Estimated commission rates (mirrors edge function + InsightsDashboard)
+const COMMISSION_ESTIMATES: Record<string, number> = {
+  kogan: 0.12, bigw: 0.08, everyday_market: 0.10, mydeal: 0.10,
+  bunnings: 0.10, catch: 0.12, ebay_au: 0.13, iconic: 0.15,
+  tradesquare: 0.10, tiktok: 0.05,
+};
+const DEFAULT_COMMISSION_RATE = 0.10;
+
 interface AggregatedMarketplace {
   marketplace_code: string;
   marketplace_name: string;
@@ -110,18 +118,43 @@ export default function MarketplaceProfitComparison() {
       }
 
       // Also aggregate settlement-level data for marketplaces without profit rows
-      const settlementMap = new Map<string, { revenue: number; payout: number; count: number; hasEstimated: boolean }>();
+      // Track per-marketplace with source breakdown for mixed CSV/api_sync handling
+      interface SettlementAgg {
+        revenue: number; payout: number; count: number; hasEstimated: boolean;
+        csvSalesExGst: number; csvFees: number; csvPayout: number; csvGst: number; csvCount: number;
+        apiSyncSalesExGst: number; apiSyncGst: number; apiSyncCount: number;
+      }
+      const settlementMap = new Map<string, SettlementAgg>();
       for (const row of settlements) {
         const mp = row.marketplace;
         if (!mp) continue;
-        if (!settlementMap.has(mp)) settlementMap.set(mp, { revenue: 0, payout: 0, count: 0, hasEstimated: false });
+        if (!settlementMap.has(mp)) settlementMap.set(mp, {
+          revenue: 0, payout: 0, count: 0, hasEstimated: false,
+          csvSalesExGst: 0, csvFees: 0, csvPayout: 0, csvGst: 0, csvCount: 0,
+          apiSyncSalesExGst: 0, apiSyncGst: 0, apiSyncCount: 0,
+        });
         const entry = settlementMap.get(mp)!;
-        // Revenue MUST include GST to be comparable with bank_deposit (which is GST-inclusive)
-        entry.revenue += (Number(row.sales_principal) || 0) + (Number(row.sales_shipping) || 0) + (Number(row.gst_on_income) || 0);
+        const salesExGst = Number(row.sales_principal) || 0;
+        const gst = Number(row.gst_on_income) || 0;
+        const shipping = Number(row.sales_shipping) || 0;
+        entry.revenue += salesExGst + shipping + gst;
         entry.payout += Number(row.bank_deposit) || 0;
         entry.count++;
         const payload = row.raw_payload as any;
         if (payload?.fees_estimated === true) entry.hasEstimated = true;
+
+        const isApiSyncZeroFee = (row as any).source === 'api_sync' && Math.abs(Number(row.seller_fees) || 0) < 0.01;
+        if (isApiSyncZeroFee) {
+          entry.apiSyncSalesExGst += salesExGst;
+          entry.apiSyncGst += gst;
+          entry.apiSyncCount++;
+        } else {
+          entry.csvSalesExGst += salesExGst;
+          entry.csvFees += Math.abs(Number(row.seller_fees) || 0);
+          entry.csvPayout += Number(row.bank_deposit) || 0;
+          entry.csvGst += gst;
+          entry.csvCount++;
+        }
       }
 
       const results: AggregatedMarketplace[] = [];
@@ -144,18 +177,32 @@ export default function MarketplaceProfitComparison() {
       }
 
       // Add marketplaces that only have settlement data (no profit rows)
-      // Apply postage deduction in fallback path
       for (const [mp, agg] of settlementMap) {
-        if (mpMap.has(mp)) continue; // already included
-        // Skip zero-revenue fee-only groups (e.g. MyDeal fee-only batches)
+        if (mpMap.has(mp)) continue;
         if (agg.revenue <= 0) continue;
         const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
         const postageCost = postageCosts[mp] || 0;
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
-        // In fallback path we only have settlement count, not order count — use it as approximation
         const estimatedPostageDeduction = shouldDeductShipping ? postageCost * agg.count : 0;
-        const adjustedPayout = agg.payout - estimatedPostageDeduction;
-        // Cap margin at 100% — payout cannot legitimately exceed gross revenue inc GST
+
+        let adjustedPayout = agg.payout - estimatedPostageDeduction;
+        let hasEstimated = agg.hasEstimated;
+
+        // Handle mixed CSV + api_sync: extrapolate real CSV fee rate onto api_sync rows
+        if (agg.apiSyncCount > 0 && agg.csvCount > 0) {
+          // Use real CSV fee rate
+          const realFeeRate = agg.csvSalesExGst > 0 ? agg.csvFees / agg.csvSalesExGst : (COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE);
+          const estimatedApiSyncFees = agg.apiSyncSalesExGst * realFeeRate;
+          adjustedPayout = agg.csvPayout + (agg.apiSyncSalesExGst + agg.apiSyncGst - estimatedApiSyncFees) - estimatedPostageDeduction;
+          hasEstimated = true;
+        } else if (agg.apiSyncCount > 0 && agg.csvCount === 0) {
+          // All api_sync — apply estimated commission
+          const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+          const estimatedFees = agg.apiSyncSalesExGst * estimatedRate;
+          adjustedPayout = agg.revenue - estimatedFees - estimatedPostageDeduction;
+          hasEstimated = true;
+        }
+
         const margin = agg.revenue > 0 ? Math.min((adjustedPayout / agg.revenue) * 100, 100) : 0;
         results.push({
           marketplace_code: mp,
@@ -165,7 +212,7 @@ export default function MarketplaceProfitComparison() {
           total_profit: Math.round(adjustedPayout),
           periods: agg.count,
           has_cost_data: false,
-          has_estimated_fees: agg.hasEstimated,
+          has_estimated_fees: hasEstimated,
         });
       }
 

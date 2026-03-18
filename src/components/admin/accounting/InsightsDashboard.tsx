@@ -264,32 +264,52 @@ export default function InsightsDashboard() {
         const hasNegativePayout = netPayout < 0 && totalSales > 0;
 
         // ─── Apply Estimated Commission When Fee Data Missing ───────────
-        // When ALL settlements are api_sync with $0 fees, apply estimated
-        // commission rates so the $1 breakdown isn't misleadingly optimistic.
+        // Handles two scenarios:
+        // 1. ALL rows are api_sync with $0 fees → apply estimated commission rate
+        // 2. MIXED CSV + api_sync → extrapolate the real CSV fee rate onto api_sync rows
         let effectiveReturnRatio = returnRatio;
         let effectiveFeeLoad = feeLoad;
         let effectiveNetPayout = netPayout;
         let effectiveTotalFees = totalFees;
         let effectiveHasEstimatedFees = hasEstimatedFees;
 
-        if (hasMissingFeeData && apiSyncZeroFeeRows.length === rows.length) {
-          // All rows are api_sync with zero fees — apply estimated commission
+        // For fee/commission calculations, identify rows with real fee data
+        const feeRelevantRows = rows.filter(r => {
+          const isApiSyncZeroFee = (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01;
+          return !isApiSyncZeroFee;
+        });
+
+        if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
+          // Case 1: ALL rows are api_sync with zero fees — apply estimated commission
           const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
-          const estimatedFees = totalSalesExGst * estimatedRate; // commission on ex-GST sales
+          const estimatedFees = totalSalesExGst * estimatedRate;
           effectiveTotalFees = estimatedFees;
           effectiveNetPayout = totalSales - estimatedFees;
           effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
           effectiveFeeLoad = totalSales > 0 ? Math.min(estimatedFees / totalSales, 1) : 0;
           effectiveHasEstimatedFees = true;
-          hasMissingFeeData = false; // We've filled with estimates, no longer "missing"
+          hasMissingFeeData = false;
+        } else if (apiSyncZeroFeeRows.length > 0 && feeRelevantRows.length > 0) {
+          // Case 2: MIXED — some CSV (with real fees) + some api_sync (zero fees)
+          // Extrapolate the REAL fee rate from CSV rows onto the api_sync sales
+          const csvSales = feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
+          const csvFees = Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
+          const realFeeRate = csvSales > 0 ? csvFees / csvSales : (COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE);
+          
+          const apiSyncSales = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
+          const estimatedApiSyncFees = apiSyncSales * realFeeRate;
+          
+          effectiveTotalFees = csvFees + estimatedApiSyncFees;
+          // Recalculate net payout: real CSV payouts + (api_sync sales - estimated fees)
+          const csvPayout = feeRelevantRows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
+          const apiSyncGst = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
+          effectiveNetPayout = csvPayout + (apiSyncSales + apiSyncGst - estimatedApiSyncFees);
+          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
+          effectiveFeeLoad = totalSales > 0 ? Math.min(effectiveTotalFees / totalSales, 1) : 0;
+          effectiveHasEstimatedFees = true;
+          hasMissingFeeData = false;
         }
 
-        // For fee/commission calculations, exclude zero-fee api_sync rows
-        // so they don't dilute the averages
-        const feeRelevantRows = rows.filter(r => {
-          const isApiSyncZeroFee = (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01;
-          return !isApiSyncZeroFee;
-        });
         // Recalculate commission metrics excluding zero-fee api_sync rows if mixed
         const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
           ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
