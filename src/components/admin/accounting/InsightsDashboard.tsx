@@ -410,7 +410,7 @@ export default function InsightsDashboard() {
           settlementCount: rows.length,
           latestPeriodEnd,
           earliestPeriodStart,
-          avgCommission: adjustedAvgCommission,
+          avgCommission: effectiveAvgCommission,
           adSpend,
           returnAfterAds,
           shippingCostPerOrder,
