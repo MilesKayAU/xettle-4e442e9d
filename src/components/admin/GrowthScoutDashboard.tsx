@@ -26,26 +26,32 @@ interface Opportunity {
 }
 
 const platformColors: Record<string, string> = {
-  reddit: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
-  xero_community: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
-  shopify_community: 'bg-green-500/10 text-green-600 border-green-500/20',
-  quora: 'bg-red-500/10 text-red-600 border-red-500/20',
+  linkedin: 'bg-blue-600/10 text-blue-700 border-blue-600/20',
+  facebook_group: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+  hubspot_community: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
+  xero_community: 'bg-sky-500/10 text-sky-600 border-sky-500/20',
+  reddit: 'bg-red-500/10 text-red-600 border-red-500/20',
+  twitter: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
   forum: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
 };
 
 const platformLabels: Record<string, string> = {
-  reddit: 'Reddit',
+  linkedin: 'LinkedIn',
+  facebook_group: 'Facebook Group',
+  hubspot_community: 'HubSpot Community',
   xero_community: 'Xero Community',
-  shopify_community: 'Shopify Community',
-  quora: 'Quora',
+  reddit: 'Reddit',
+  twitter: 'Twitter / X',
   forum: 'Forum',
 };
 
 const platformDomains: Record<string, string> = {
-  reddit: 'reddit.com',
+  linkedin: 'linkedin.com',
+  facebook_group: 'facebook.com/groups',
+  hubspot_community: 'community.hubspot.com',
   xero_community: 'community.xero.com',
-  shopify_community: 'community.shopify.com',
-  quora: 'quora.com',
+  reddit: 'reddit.com',
+  twitter: 'twitter.com',
   forum: 'whirlpool.net.au',
 };
 
