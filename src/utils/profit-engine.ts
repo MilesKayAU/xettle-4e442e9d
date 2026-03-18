@@ -267,8 +267,8 @@ export function calculateMarketplaceProfit(
     }
     // else: no line data (legacy) → fall back to zero deduction (treat all as FBA)
   } else {
-    // Non-mixed: use canonical function with null channel (marketplace-level decision)
-    postage_deduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder) * orders_count;
+    // Non-mixed: canonical function owns the multiplication via orderCount
+    postage_deduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, orders_count);
   }
 
   const gross_profit = gross_revenue - total_cogs - marketplace_fees - postage_deduction;
