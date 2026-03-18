@@ -22,12 +22,12 @@ export const XETTLE_AI_POLICY = {
 
   // ─── Chart of Accounts ────────────────────────────────────────────────────
   COA: {
-    COA_IS_READ_ONLY: true,
-    NEVER_CREATE_XERO_ACCOUNTS: true,
-    NEVER_RENAME_XERO_ACCOUNTS: true,
-    NEVER_MODIFY_ACCOUNT_CODES: true,
-    NEVER_AUTO_SAVE_MAPPINGS: true,
-    NEVER_ASSUME_ACCOUNT_NUMBERS: true,
+    AI_NEVER_CREATES_ACCOUNTS: true,
+    AI_NEVER_RENAMES_ACCOUNTS: true,
+    AI_NEVER_MODIFIES_ACCOUNT_CODES: true,
+    AI_NEVER_AUTO_SAVES_MAPPINGS: true,
+    AI_NEVER_ASSUMES_ACCOUNT_NUMBERS: true,
+    APP_CAN_CLONE_COA_WITH_APPROVAL: true,
   },
 
   // ─── Bookkeeper Minimum Data (hard-blocks saves) ─────────────────────────
