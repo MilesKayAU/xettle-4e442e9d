@@ -155,6 +155,71 @@ export async function markBankVerified(
   return { success: true };
 }
 
+// ─── Canonical Settlement Insert ─────────────────────────────────────────────
+
+export interface SaveSettlementCanonicalInput {
+  /** The full row to insert (must include user_id) */
+  row: Record<string, any>;
+  /** Used for source priority overlap detection */
+  marketplace: string;
+  periodStart: string;
+  periodEnd: string;
+  settlementId: string;
+  source: string;
+}
+
+export interface SaveSettlementCanonicalResult {
+  success: boolean;
+  error?: string;
+  sourcePriority?: SourcePriorityResult;
+}
+
+/**
+ * Canonical settlement insert — the ONLY approved client-side insert path.
+ * 
+ * Wraps:
+ * 1. from('settlements').insert(row)
+ * 2. applySourcePriority() — synchronously, NOT fire-and-forget
+ * 
+ * All client-side code that creates settlements MUST call this function.
+ * Edge functions handle their own inserts server-side with equivalent logic.
+ */
+export async function saveSettlementCanonical(
+  input: SaveSettlementCanonicalInput
+): Promise<SaveSettlementCanonicalResult> {
+  const { row, marketplace, periodStart, periodEnd, settlementId, source } = input;
+
+  // Step 1: Insert
+  const { error } = await supabase.from('settlements').insert(row as any);
+  if (error) return { success: false, error: error.message };
+
+  // Step 2: Apply source priority synchronously
+  let sourcePriority: SourcePriorityResult | undefined;
+  try {
+    sourcePriority = await applySourcePriority(
+      row.user_id,
+      marketplace,
+      periodStart,
+      periodEnd,
+      settlementId,
+      source,
+    );
+  } catch (err: any) {
+    // Log failure but don't fail the insert — settlement is already saved
+    console.error('[saveSettlementCanonical] source priority failed:', err);
+    await supabase.from('system_events' as any).insert({
+      user_id: row.user_id,
+      event_type: 'source_priority_failed',
+      severity: 'warning',
+      marketplace_code: marketplace,
+      settlement_id: settlementId,
+      details: { error: err.message || 'Unknown error' },
+    } as any);
+  }
+
+  return { success: true, sourcePriority };
+}
+
 // ─── Source Priority Guard ───────────────────────────────────────────────────
 
 export interface SourcePriorityResult {
