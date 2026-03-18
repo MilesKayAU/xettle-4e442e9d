@@ -313,6 +313,19 @@ export default function SetupStepConnectStores({
 
     if (connectionErr) throw connectionErr;
 
+    // Persist fulfilment methods — only for keys that don't already exist
+    try {
+      const existingMethods = await loadFulfilmentMethods(user.id);
+      for (const code of uniqueCodes) {
+        if (!existingMethods[code]) {
+          const method = fulfilmentChoices[code] || getEffectiveMethod(code);
+          await saveFulfilmentMethod(user.id, code, method);
+        }
+      }
+    } catch {
+      // Non-fatal — don't block onboarding
+    }
+
     const codesToResolve = expandMarketplaceCodes(uniqueCodes);
     await supabase
       .from('channel_alerts' as any)
