@@ -19,14 +19,12 @@ import SkuComparisonView from '@/components/insights/SkuComparisonView';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
-// ─── Estimated Commission Rates (mirrors edge function) ─────────────────────
-// Used to show realistic fee data when actual fee data is missing (api_sync with $0 fees)
-const COMMISSION_ESTIMATES: Record<string, number> = {
-  kogan: 0.12, bigw: 0.08, everyday_market: 0.10, mydeal: 0.10,
-  bunnings: 0.10, catch: 0.12, ebay_au: 0.13, iconic: 0.15,
-  tradesquare: 0.10, tiktok: 0.05,
-};
-const DEFAULT_COMMISSION_RATE = 0.10;
+import {
+  COMMISSION_ESTIMATES,
+  DEFAULT_COMMISSION_RATE,
+  normalizeMarketplace as canonicalNormalizeMarketplace,
+  PLATFORM_FAMILIES,
+} from '@/utils/insights-fee-attribution';
 
 interface FeeBreakdown {
   label: string;
