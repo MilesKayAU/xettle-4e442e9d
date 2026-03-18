@@ -107,6 +107,7 @@ export default function InsightsDashboard() {
           .from('marketplace_shipping_costs')
           .select('marketplace_code, cost_per_order'),
         currentUser ? loadFulfilmentMethods(currentUser.id) : Promise.resolve({} as Record<string, FulfilmentMethod>),
+        currentUser ? loadPostageCosts(currentUser.id) : Promise.resolve({} as Record<string, number>),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
