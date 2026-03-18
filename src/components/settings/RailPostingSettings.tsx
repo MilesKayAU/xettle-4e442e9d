@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/collapsible';
 import { Zap, Shield, AlertTriangle, RefreshCw, ChevronDown, FileCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { PHASE_1_RAILS, isBankMatchRequired } from '@/constants/settlement-rails';
+import { PHASE_1_RAILS, isBankMatchRequired, getRailDescription } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useSettingsPin } from '@/hooks/use-settings-pin';
@@ -323,7 +323,10 @@ export default function RailPostingSettings() {
             Organisation Posting Mode
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Configure how settlements are posted to Xero per marketplace rail.
+            Xettle generates journals per payout source. Xero bank and PayPal feeds should be connected to allow automatic reconciliation.
+            Rails represent payout sources, not order platforms — Shopify orders paid via PayPal use the PayPal rail.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
             Auto-post sends validated settlements automatically — it never bypasses validation.
             These settings apply to all users in your organisation.
           </p>
@@ -357,7 +360,7 @@ export default function RailPostingSettings() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium">{getRailLabel(rail)}</span>
                           <SupportTierBadge tier={tier} />
                           {isAuto && (
@@ -370,7 +373,8 @@ export default function RailPostingSettings() {
                               <FileCheck className="h-2.5 w-2.5 mr-0.5" /> Authorised
                             </Badge>
                           )}
-                        </div>
+                      </div>
+                        <p className="text-[10px] text-muted-foreground w-full">{getRailDescription(rail)}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">

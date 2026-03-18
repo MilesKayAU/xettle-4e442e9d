@@ -28,6 +28,7 @@ import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
 import SyncStatusCard from '@/components/dashboard/SyncStatusCard';
+import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
 
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown } from 'lucide-react';
@@ -764,6 +765,9 @@ export default function Dashboard() {
               {showBankMapper && (
                 <DestinationAccountMapper />
               )}
+
+              {/* Reconciliation readiness — setup health checks */}
+              <ReconciliationHealthPanel />
 
               {/* Sync activity — per-rail last sync + manual trigger */}
               <SyncStatusCard />

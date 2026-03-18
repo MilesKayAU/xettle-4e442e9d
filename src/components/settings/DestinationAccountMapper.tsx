@@ -25,6 +25,8 @@ import {
   LEGACY_KEY_PREFIX,
   LEGACY_DEFAULT_KEY,
   toRailCode,
+  getRailDescription,
+  getValidDestTypes,
 } from '@/constants/settlement-rails';
 
 interface XeroBankAccount {
@@ -365,6 +367,7 @@ export default function DestinationAccountMapper() {
             </CardTitle>
             <CardDescription>
               Select which bank or clearing account each settlement rail pays into.
+              Rails represent payout sources — Shopify orders paid via PayPal use the PayPal rail.
             </CardDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={refreshAccounts} disabled={fetchingAccounts}>
@@ -413,7 +416,10 @@ export default function DestinationAccountMapper() {
               return (
                 <div key={rail.code} className="rounded-md border p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{rail.label}</span>
+                    <div>
+                      <span className="text-sm font-medium">{rail.label}</span>
+                      <p className="text-[10px] text-muted-foreground">{getRailDescription(rail.code)}</p>
+                    </div>
                     <div className="flex items-center gap-2">
                       <Label htmlFor={`default-${rail.code}`} className="text-xs text-muted-foreground">
                         Use default
@@ -461,6 +467,24 @@ export default function DestinationAccountMapper() {
                           Selected account no longer exists in Xero
                         </div>
                       )}
+                      {/* Destination type mismatch warning */}
+                      {currentOverride && (() => {
+                        const acc = accounts.find(a => a.account_id === currentOverride);
+                        if (!acc) return null;
+                        const accName = acc.name.toLowerCase();
+                        const validTypes = getValidDestTypes(rail.code);
+                        const isPayPalRail = validTypes.includes('paypal');
+                        const isPayPalAccount = accName.includes('paypal');
+                        if (isPayPalRail && !isPayPalAccount) {
+                          return (
+                            <div className="flex items-center gap-1 text-xs text-amber-700">
+                              <AlertTriangle className="h-3 w-3" />
+                              PayPal rail mapped to non-PayPal account — payouts may not reconcile
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </>
                   )}
                 </div>
