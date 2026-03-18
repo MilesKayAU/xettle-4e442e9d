@@ -12,6 +12,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
+import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } from '@/utils/fulfilment-settings';
+import type { FulfilmentMethod } from '@/utils/fulfilment-settings';
 
 interface AggregatedMarketplace {
   marketplace_code: string;
@@ -70,8 +72,8 @@ export default function MarketplaceProfitComparison() {
         return;
       }
 
-      // Load profit data + all marketplaces from settlements
-      const [profitRes, settlementsRes] = await Promise.all([
+      // Load profit data + all marketplaces from settlements + fulfilment/postage settings
+      const [profitRes, settlementsRes, fulfilmentMethods, postageCosts] = await Promise.all([
         supabase
           .from('settlement_profit')
           .select('marketplace_code, gross_revenue, gross_profit, margin_percent')
@@ -83,6 +85,8 @@ export default function MarketplaceProfitComparison() {
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
           .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")'),
+        loadFulfilmentMethods(user.id),
+        loadPostageCosts(user.id),
       ]);
 
       if (profitRes.error) throw profitRes.error;
@@ -118,7 +122,7 @@ export default function MarketplaceProfitComparison() {
 
       const results: AggregatedMarketplace[] = [];
 
-      // Add marketplaces with profit data
+      // Add marketplaces with profit data (postage already included in gross_profit)
       for (const [mp, agg] of mpMap) {
         const avg_margin = agg.margins.length > 0
           ? agg.margins.reduce((a, b) => a + b, 0) / agg.margins.length
@@ -135,15 +139,22 @@ export default function MarketplaceProfitComparison() {
       }
 
       // Add marketplaces that only have settlement data (no profit rows)
+      // Apply postage deduction in fallback path
       for (const [mp, agg] of settlementMap) {
         if (mpMap.has(mp)) continue; // already included
-        const margin = agg.revenue > 0 ? (agg.payout / agg.revenue) * 100 : 0;
+        const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
+        const postageCost = postageCosts[mp] || 0;
+        const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
+        // In fallback path we only have settlement count, not order count — use it as approximation
+        const estimatedPostageDeduction = shouldDeductShipping ? postageCost * agg.count : 0;
+        const adjustedPayout = agg.payout - estimatedPostageDeduction;
+        const margin = agg.revenue > 0 ? (adjustedPayout / agg.revenue) * 100 : 0;
         results.push({
           marketplace_code: mp,
           marketplace_name: MARKETPLACE_LABELS[mp] || mp,
           avg_margin: Math.round(margin * 10) / 10,
           total_revenue: Math.round(agg.revenue),
-          total_profit: Math.round(agg.payout),
+          total_profit: Math.round(adjustedPayout),
           periods: agg.count,
           has_cost_data: false,
         });

@@ -92,7 +92,7 @@ export default function InsightsDashboard() {
       // Insights is an analytics view — include pre-boundary (historical) settlements
       // so that all marketplace sales data contributes to trends and totals.
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes] = await Promise.all([
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary')
@@ -108,6 +108,9 @@ export default function InsightsDashboard() {
           .select('marketplace_code, cost_per_order'),
         currentUser ? loadFulfilmentMethods(currentUser.id) : Promise.resolve({} as Record<string, FulfilmentMethod>),
         currentUser ? loadPostageCosts(currentUser.id) : Promise.resolve({} as Record<string, number>),
+        supabase
+          .from('settlement_profit')
+          .select('marketplace_code, orders_count'),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
@@ -137,7 +140,15 @@ export default function InsightsDashboard() {
         }
       }
 
-      // Normalize composite marketplace codes to base codes for aggregation
+      // Aggregate order counts from settlement_profit by marketplace
+      const profitOrderCounts: Record<string, number> = {};
+      if (profitOrdersRes.data) {
+        for (const row of profitOrdersRes.data as any[]) {
+          const mp = row.marketplace_code;
+          profitOrderCounts[mp] = (profitOrderCounts[mp] || 0) + (Number(row.orders_count) || 0);
+        }
+      }
+
       // e.g. 'woolworths_marketplus_bigw' → 'bigw', 'shopify_orders_kogan' → 'kogan'
       function normalizeMarketplace(mp: string): string {
         if (mp.startsWith('woolworths_marketplus_')) return mp.replace('woolworths_marketplus_', '');
@@ -199,7 +210,12 @@ export default function InsightsDashboard() {
         // Shipping cost estimation — only applied for self_ship / third_party_logistics
         // Use marketplace_shipping_costs table first, fall back to app_settings postage_cost
         const shippingCostPerOrder = shippingCostByMp[mp] || postageCosts[mp] || 0;
-        const estimatedOrderCount = rows.length > 0 ? rows.length : 1;
+        // Use real order counts from settlement_profit when available
+        const estimatedOrderCount = (() => {
+          const profitOrderCount = profitOrderCounts[mp];
+          if (profitOrderCount && profitOrderCount > 0) return profitOrderCount;
+          return rows.length > 0 ? rows.length : 1;
+        })();
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;
         const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 
