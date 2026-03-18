@@ -641,6 +641,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                   {s.marketplace.startsWith('shopify_orders_') && (
                                     <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
                                   )}
+                                  {s.source === 'api_sync' && (
+                                    <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-700 border-amber-200 dark:text-amber-400 dark:border-amber-800">Shopify Orders</Badge>
+                                  )}
+                                  {(s.source === 'manual' || s.source === 'csv_upload') && (
+                                    <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-700 border-blue-200 dark:text-blue-400 dark:border-blue-800">CSV Upload</Badge>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
                                   <span>{formatSettlementDate(s.period_start)} → {formatSettlementDate(s.period_end)}</span>
