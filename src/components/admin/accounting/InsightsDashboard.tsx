@@ -180,6 +180,7 @@ export default function InsightsDashboard() {
       // MyDeal shows fees >> sales, while BigW/Everyday Market appear artificially cheap.
       // Fix: detect fee-heavy marketplaces and redistribute excess fees to siblings.
       // Platform family fee redistribution using canonical PLATFORM_FAMILIES
+      for (const siblings of Object.values(PLATFORM_FAMILIES)) {
         const presentSiblings = siblings.filter(s => grouped[s]);
         if (presentSiblings.length < 2) continue;
 
