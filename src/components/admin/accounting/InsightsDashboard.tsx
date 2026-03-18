@@ -45,6 +45,8 @@ interface MarketplaceStats {
   estimatedShippingCost: number;
   returnAfterShipping: number | null;
   returnAfterAdsAndShipping: number | null;
+  fulfilmentMethod: FulfilmentMethod;
+  fulfilmentUnknown: boolean;
   // Fee breakdown
   commissionTotal: number;
   fbaTotal: number;
