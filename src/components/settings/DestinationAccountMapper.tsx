@@ -467,6 +467,24 @@ export default function DestinationAccountMapper() {
                           Selected account no longer exists in Xero
                         </div>
                       )}
+                      {/* Destination type mismatch warning */}
+                      {currentOverride && (() => {
+                        const acc = accounts.find(a => a.account_id === currentOverride);
+                        if (!acc) return null;
+                        const accName = acc.name.toLowerCase();
+                        const validTypes = getValidDestTypes(rail.code);
+                        const isPayPalRail = validTypes.includes('paypal');
+                        const isPayPalAccount = accName.includes('paypal');
+                        if (isPayPalRail && !isPayPalAccount) {
+                          return (
+                            <div className="flex items-center gap-1 text-xs text-amber-700">
+                              <AlertTriangle className="h-3 w-3" />
+                              PayPal rail mapped to non-PayPal account — payouts may not reconcile
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </>
                   )}
                 </div>

@@ -766,6 +766,9 @@ export default function Dashboard() {
                 <DestinationAccountMapper />
               )}
 
+              {/* Reconciliation readiness — setup health checks */}
+              <ReconciliationHealthPanel />
+
               {/* Sync activity — per-rail last sync + manual trigger */}
               <SyncStatusCard />
 

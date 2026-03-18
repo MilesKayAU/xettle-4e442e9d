@@ -373,7 +373,8 @@ export default function RailPostingSettings() {
                               <FileCheck className="h-2.5 w-2.5 mr-0.5" /> Authorised
                             </Badge>
                           )}
-                        </div>
+                      </div>
+                        <p className="text-[10px] text-muted-foreground w-full">{getRailDescription(rail)}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">

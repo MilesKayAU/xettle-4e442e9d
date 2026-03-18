@@ -10,18 +10,30 @@
  */
 
 export const PHASE_1_RAILS = [
-  { code: 'amazon_au', label: 'Amazon AU' },
-  { code: 'shopify_payments', label: 'Shopify Payments' },
-  { code: 'ebay', label: 'eBay' },
-  { code: 'bunnings', label: 'Bunnings' },
-  { code: 'catch', label: 'Catch' },
-  { code: 'kogan', label: 'Kogan' },
-  { code: 'mydeal', label: 'MyDeal' },
-  { code: 'everyday_market', label: 'Everyday Market' },
-  { code: 'paypal', label: 'PayPal' },
+  { code: 'amazon_au', label: 'Amazon AU Payouts', description: 'Settlement payouts from Amazon Australia', validDestTypes: ['bank', 'clearing'] },
+  { code: 'shopify_payments', label: 'Shopify Payments', description: 'Bank payouts from Shopify Payments gateway only', validDestTypes: ['bank', 'clearing'] },
+  { code: 'ebay', label: 'eBay Payouts', description: 'Settlement payouts from eBay', validDestTypes: ['bank', 'clearing'] },
+  { code: 'bunnings', label: 'Bunnings Payouts', description: 'Settlement payouts from Bunnings MarketLink', validDestTypes: ['bank', 'clearing'] },
+  { code: 'catch', label: 'Catch Payouts', description: 'Settlement payouts from Catch', validDestTypes: ['bank', 'clearing'] },
+  { code: 'kogan', label: 'Kogan Payouts', description: 'Settlement payouts from Kogan', validDestTypes: ['bank', 'clearing'] },
+  { code: 'mydeal', label: 'MyDeal Payouts', description: 'Settlement payouts from MyDeal', validDestTypes: ['bank', 'clearing'] },
+  { code: 'everyday_market', label: 'Everyday Market Payouts', description: 'Settlement payouts from Everyday Market', validDestTypes: ['bank', 'clearing'] },
+  { code: 'paypal', label: 'PayPal Payouts', description: 'PayPal deposits (Shopify, eBay, or direct sales)', validDestTypes: ['paypal', 'bank'] },
 ] as const;
 
 export type RailCode = typeof PHASE_1_RAILS[number]['code'];
+
+/** Get the description for a rail code */
+export function getRailDescription(railCode: string): string {
+  const found = PHASE_1_RAILS.find(r => r.code === railCode);
+  return found?.description || `Settlement payouts from ${railCode.replace(/_/g, ' ')}`;
+}
+
+/** Get valid destination account types for a rail */
+export function getValidDestTypes(railCode: string): readonly string[] {
+  const found = PHASE_1_RAILS.find(r => r.code === railCode);
+  return found?.validDestTypes || ['bank', 'clearing'];
+}
 
 /** Maps legacy/variant marketplace codes to canonical rail codes */
 export const RAIL_ALIASES: Record<string, string> = {
