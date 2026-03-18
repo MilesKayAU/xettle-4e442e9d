@@ -181,6 +181,13 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
     const fields = parseCSVRow(lines[i], delimiter);
     if (fields.length < 2) continue;
 
+    // ─── Junk row filter: skip separator lines and header-like rows ───
+    const rawLine = lines[i].trim();
+    if (/^[-=~*#]{3,}/.test(rawLine)) continue; // Separator lines
+    if (/^(claim|credit\s*note|debit\s*note|total|subtotal|summary|header|footer|note|page|report)/i.test(rawLine)) continue;
+    // Skip rows where all numeric fields are empty/zero and there's instructional text
+    if (/\b(details?\s+below|see\s+above|attached|following)\b/i.test(rawLine)) continue;
+
     rows.push({
       sales: salesIdx >= 0 ? parseAmount(fields[salesIdx]) : 0,
       fees: feesIdx >= 0 ? parseAmount(fields[feesIdx]) : 0,
