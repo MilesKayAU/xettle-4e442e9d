@@ -264,6 +264,8 @@ export interface SourcePriorityResult {
   suppressedCount: number;
   suppressedIds: string[];
   selfSuppressed: boolean;
+  voidFailed?: boolean;
+  failedVoidInvoiceId?: string;
 }
 
 /**
