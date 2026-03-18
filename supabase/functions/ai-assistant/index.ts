@@ -27,52 +27,8 @@ IMPORTANT BEHAVIOR:
 
 const MONTHLY_LIMIT = 50;
 
-// ─── Tool definitions (OpenAI function-calling format) ───────────────────────
-
-const TOOL_DEFINITIONS = [
-  {
-    type: "function" as const,
-    function: {
-      name: "getPageReadinessSummary",
-      description: "Get summary counts: outstanding invoices by state, settlements by status, ready-to-push counts, gap warnings. Use when user asks about overall status or what needs attention.",
-      parameters: {
-        type: "object",
-        properties: {
-          routeId: { type: "string", description: "The current page route ID" },
-        },
-        required: ["routeId"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "getInvoiceStatusByXeroInvoiceId",
-      description: "Get match state, payment status, and readiness of a specific Xero invoice. Use when user asks about a specific invoice.",
-      parameters: {
-        type: "object",
-        properties: {
-          xeroInvoiceId: { type: "string", description: "The Xero invoice ID" },
-        },
-        required: ["xeroInvoiceId"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "getSettlementStatus",
-      description: "Get posting state, readiness blockers, and Xero sync status for a specific settlement. Use when user asks about a settlement's status or readiness.",
-      parameters: {
-        type: "object",
-        properties: {
-          settlementId: { type: "string", description: "The settlement ID" },
-        },
-        required: ["settlementId"],
-      },
-    },
-  },
-];
+// Tool definitions are imported from _shared/ai_tool_registry.ts
+// Route-filtered at request time based on context.routeId
 
 // ─── Tool execution ──────────────────────────────────────────────────────────
 
