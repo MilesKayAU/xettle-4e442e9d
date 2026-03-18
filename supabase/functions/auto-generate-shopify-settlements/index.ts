@@ -348,6 +348,12 @@ Deno.serve(async (req) => {
     const groupKey = `${detected.code}__${monthKey}`;
 
     if (!groups.has(groupKey)) groups.set(groupKey, []);
+    
+    // Only detect MCF for marketplace sub-channel orders, never for own store
+    const isSubChannel = detected.code !== 'shopify_web' && 
+                         detected.code !== 'shopify_pos';
+    const isMcf = isSubChannel && (detected.isMcf || detectMcfOrder(order));
+    
     groups.get(groupKey)!.push({
       marketplace_code: detected.code,
       marketplace_name: detected.name,
@@ -357,7 +363,7 @@ Deno.serve(async (req) => {
       processed_at: order.processed_at || new Date().toISOString(),
       order_name: order.order_name || String(order.shopify_order_id),
       shopify_order_id: order.shopify_order_id,
-      isMcf: detected.isMcf || detectMcfOrder(order),
+      isMcf,
     });
   }
 
