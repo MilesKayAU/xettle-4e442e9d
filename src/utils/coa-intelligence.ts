@@ -239,25 +239,32 @@ export function analyseCoA(
       // Determine confidence: full name match = HIGH, keyword match = MEDIUM
       const baseConfidence: Confidence = matchesFull ? 'HIGH' : 'MEDIUM';
 
-      for (const [category, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
+      // Find the BEST (most specific) category match — first match wins
+      let matchedCategory: string | null = null;
+      for (const [category, catKeywords] of CATEGORY_KEYWORDS_ORDERED) {
         for (const kw of catKeywords) {
           if (normalizedName.includes(kw)) {
-            // Avoid duplicate suggestions
-            const exists = mapping_suggestions.some(
-              ms => ms.marketplace_code === detected.marketplace_code
-                && ms.category === category
-            );
-            if (!exists) {
-              mapping_suggestions.push({
-                category,
-                account_code: account.account_code || '',
-                account_name: account.account_name,
-                marketplace_code: detected.marketplace_code,
-                confidence: baseConfidence,
-              });
-            }
+            matchedCategory = category;
             break;
           }
+        }
+        if (matchedCategory) break;
+      }
+
+      if (matchedCategory) {
+        // Avoid duplicate suggestions for same marketplace+category
+        const exists = mapping_suggestions.some(
+          ms => ms.marketplace_code === detected.marketplace_code
+            && ms.category === matchedCategory
+        );
+        if (!exists) {
+          mapping_suggestions.push({
+            category: matchedCategory,
+            account_code: account.account_code || '',
+            account_name: account.account_name,
+            marketplace_code: detected.marketplace_code,
+            confidence: baseConfidence,
+          });
         }
       }
     }
