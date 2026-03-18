@@ -114,6 +114,7 @@ const ACCOUNT_NAMES: Record<string, string> = {
 export default function PushSafetyPreview({
   open, onClose, onConfirm, settlements,
 }: PushSafetyPreviewProps) {
+  const trackAction = useAiActionTracker();
   const [loading, setLoading] = useState(true);
   const [pushing, setPushing] = useState(false);
   const [mappingInvalidError, setMappingInvalidError] = useState<string[] | null>(null);
