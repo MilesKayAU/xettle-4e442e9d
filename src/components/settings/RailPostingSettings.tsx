@@ -323,7 +323,10 @@ export default function RailPostingSettings() {
             Organisation Posting Mode
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Configure how settlements are posted to Xero per marketplace rail.
+            Xettle generates journals per payout source. Xero bank and PayPal feeds should be connected to allow automatic reconciliation.
+            Rails represent payout sources, not order platforms — Shopify orders paid via PayPal use the PayPal rail.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
             Auto-post sends validated settlements automatically — it never bypasses validation.
             These settings apply to all users in your organisation.
           </p>
