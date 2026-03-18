@@ -536,6 +536,32 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // ─── SOURCE PUSH GATE ────────────────────────────────────────────
+    // Reconciliation-only settlements (Shopify-derived) must never be pushed
+    if (action === 'create' && body.settlementId) {
+      const { data: gateCheck } = await supabase
+        .from('settlements')
+        .select('source, marketplace')
+        .eq('settlement_id', body.settlementId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (gateCheck && gateCheck.source === 'api_sync' && (gateCheck.marketplace || '').startsWith('shopify_orders_')) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Reconciliation-only settlement cannot be pushed to Xero. Upload the marketplace CSV settlement instead.',
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // ─── ROLLBACK ACTION ─────────────────────────────────────────────
+    const userId = authenticatedUserId;
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
     // ─── ROLLBACK ACTION ─────────────────────────────────────────────
     if (action === 'rollback') {
       const idsToVoid = body.invoiceIds || body.journalIds;
