@@ -35,11 +35,17 @@ export function getPostageDeductionForOrder(
   lineChannel: FulfilmentChannel | string | null | undefined,
   postageCostPerOrder: number,
   orderCount: number = 1,
+  mcfCostPerOrder: number = 0,
 ): number {
-  // Zero-cost guard
-  if (!postageCostPerOrder || postageCostPerOrder <= 0) return 0;
+  // Normalise channel: strip _inferred suffix for logic purposes
+  const raw = (lineChannel || '').toUpperCase().trim();
+  const ch = raw.replace('_INFERRED', '');
 
-  const ch = (lineChannel || '').toUpperCase().trim();
+  // MCF handling — uses its own cost parameter
+  if (ch === 'MCF') return (mcfCostPerOrder || 0) * orderCount;
+
+  // Zero-cost guard (after MCF, which has its own cost)
+  if (!postageCostPerOrder || postageCostPerOrder <= 0) return 0;
 
   // Line-level channel takes priority when in mixed mode
   if (fulfilmentMethod === 'mixed_fba_fbm') {
@@ -50,7 +56,7 @@ export function getPostageDeductionForOrder(
   }
 
   // For explicit line channels regardless of marketplace setting
-  if (ch === 'AFN' || ch === 'MCF') return 0;
+  if (ch === 'AFN') return 0;
   if (ch === 'MFN') return postageCostPerOrder * orderCount;
 
   // Fall back to marketplace-level method
