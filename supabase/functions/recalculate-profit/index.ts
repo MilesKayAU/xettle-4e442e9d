@@ -172,6 +172,7 @@ Deno.serve(async (req) => {
       const ordersCount = orderIds.size || revenueLines.length || 1;
       const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
       const postageCostPerOrder = postageCosts[mp] || 0;
+      const mcfCostPerOrder = mcfCosts[mp] || 0;
 
       // Calculate postage deduction using canonical shared function
       let postageDeduction = 0;
