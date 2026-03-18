@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
+import { useAiActionTracker } from '@/ai/context/useAiActionTracker';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import SetupWizard from '@/components/onboarding/SetupWizard';
@@ -482,8 +483,11 @@ export default function Dashboard() {
     claimDemo();
   }, [user]);
 
+  const trackAction = useAiActionTracker();
+
   function switchView(view: DashboardView) {
     setActiveView(view);
+    trackAction('switched_tab', view);
     localStorage.setItem('xettle_dashboard_view', view);
   }
 

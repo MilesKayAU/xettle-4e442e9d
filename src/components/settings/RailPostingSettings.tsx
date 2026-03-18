@@ -86,6 +86,11 @@ export default function RailPostingSettings() {
       tax_profile: taxProfile,
     },
     capabilities: ['toggle_auto_post', 'retry_failed'],
+    suggestedPrompts: [
+      'Which rails are on auto-post?',
+      'Why did a settlement fail to post?',
+      'Is it safe to enable auto-post?',
+    ],
   }));
 
   const loadData = useCallback(async () => {

@@ -15,6 +15,7 @@
 import React, { useState, useEffect } from 'react';
 import { logger } from '@/utils/logger';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
+import { useAiActionTracker } from '@/ai/context/useAiActionTracker';
 // Rule #11 enforcement is server-side: sync-settlement-to-xero requires
 // settlementId + settlementData. No order/payment path exists.
 // See: src/constants/accounting-rules.ts for canonical documentation.
@@ -113,6 +114,7 @@ const ACCOUNT_NAMES: Record<string, string> = {
 export default function PushSafetyPreview({
   open, onClose, onConfirm, settlements,
 }: PushSafetyPreviewProps) {
+  const trackAction = useAiActionTracker();
   const [loading, setLoading] = useState(true);
   const [pushing, setPushing] = useState(false);
   const [mappingInvalidError, setMappingInvalidError] = useState<string[] | null>(null);
@@ -141,10 +143,16 @@ export default function PushSafetyPreview({
       has_mapping_error: !!mappingInvalidError,
     },
     capabilities: ['push_to_xero'],
+    suggestedPrompts: [
+      'What checks need to pass before I push?',
+      'Why is there a red validation error?',
+      'Explain the line items on this invoice',
+    ],
   }));
 
   useEffect(() => {
     if (open && settlements.length > 0) {
+      trackAction('opened_push_preview', `${settlements.length} settlement(s)`);
       loadPreviews();
     }
   }, [open, settlements]);
@@ -351,6 +359,7 @@ export default function PushSafetyPreview({
 
   const handleConfirm = async () => {
     setPushing(true);
+    trackAction('confirmed_push_to_xero', `${settlements.length} settlement(s)`);
     try {
       await onConfirm();
     } finally {
