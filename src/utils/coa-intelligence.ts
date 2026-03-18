@@ -95,17 +95,20 @@ function normalize(text: string): string {
 }
 
 // ─── Category detection keywords ────────────────────────────────
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  sales: ['sales', 'revenue', 'income'],
-  seller_fees: ['seller fee', 'referral fee', 'selling fee', 'commission'],
-  fba_fees: ['fba', 'fulfilment', 'fulfillment', 'pick pack', 'delivery fee'],
-  storage_fees: ['storage', 'warehouse', 'inventory storage'],
-  advertising: ['advertising', 'sponsored', 'ppc', 'ad spend', 'ads'],
-  refunds: ['refund', 'return'],
-  shipping: ['shipping', 'freight', 'postage', 'delivery'],
-  other_fees: ['fee', 'charge', 'adjustment'],
-};
+// IMPORTANT: Order matters! Most specific categories first.
+// Matching is exclusive: first category match wins per account+marketplace.
+const CATEGORY_KEYWORDS_ORDERED: [string, string[]][] = [
+  ['reimbursements', ['reimbursement', 'reimbursment']], // includes common typo
+  ['fba_fees', ['fba', 'fulfilment', 'fulfillment', 'pick pack']],
+  ['storage_fees', ['storage', 'warehouse', 'inventory storage']],
+  ['advertising', ['advertising', 'sponsored', 'ppc', 'ad spend', 'campaign']],
+  ['refunds', ['refund', 'return']],
+  ['shipping', ['shipping', 'freight', 'postage', 'delivery']],
+  ['promotional_discounts', ['discount', 'promotion', 'voucher', 'coupon']],
+  ['sales', ['sales', 'revenue', 'income']],
+  ['seller_fees', ['seller fee', 'referral fee', 'selling fee', 'commission', 'fees']],
+  ['other_fees', ['adjustment', 'charge', 'miscellaneous', 'other fee', 'reserved']],
+];
 
 // ─── Core Analysis ──────────────────────────────────────────────
 
@@ -236,25 +239,32 @@ export function analyseCoA(
       // Determine confidence: full name match = HIGH, keyword match = MEDIUM
       const baseConfidence: Confidence = matchesFull ? 'HIGH' : 'MEDIUM';
 
-      for (const [category, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
+      // Find the BEST (most specific) category match — first match wins
+      let matchedCategory: string | null = null;
+      for (const [category, catKeywords] of CATEGORY_KEYWORDS_ORDERED) {
         for (const kw of catKeywords) {
           if (normalizedName.includes(kw)) {
-            // Avoid duplicate suggestions
-            const exists = mapping_suggestions.some(
-              ms => ms.marketplace_code === detected.marketplace_code
-                && ms.category === category
-            );
-            if (!exists) {
-              mapping_suggestions.push({
-                category,
-                account_code: account.account_code || '',
-                account_name: account.account_name,
-                marketplace_code: detected.marketplace_code,
-                confidence: baseConfidence,
-              });
-            }
+            matchedCategory = category;
             break;
           }
+        }
+        if (matchedCategory) break;
+      }
+
+      if (matchedCategory) {
+        // Avoid duplicate suggestions for same marketplace+category
+        const exists = mapping_suggestions.some(
+          ms => ms.marketplace_code === detected.marketplace_code
+            && ms.category === matchedCategory
+        );
+        if (!exists) {
+          mapping_suggestions.push({
+            category: matchedCategory,
+            account_code: account.account_code || '',
+            account_name: account.account_name,
+            marketplace_code: detected.marketplace_code,
+            confidence: baseConfidence,
+          });
         }
       }
     }
