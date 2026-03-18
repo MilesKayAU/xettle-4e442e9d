@@ -106,6 +106,7 @@ export default function InsightsDashboard() {
         supabase
           .from('marketplace_shipping_costs')
           .select('marketplace_code, cost_per_order'),
+        currentUser ? loadFulfilmentMethods(currentUser.id) : Promise.resolve({} as Record<string, FulfilmentMethod>),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
