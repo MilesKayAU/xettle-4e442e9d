@@ -370,7 +370,15 @@ export default function InsightsDashboard() {
           hasMissingFeeData = false;
         }
 
-        // Recalculate commission metrics excluding zero-fee api_sync rows if mixed
+        // After api_sync estimation, add redistributed platform fees from siblings
+        if (redistributedPlatformFees > 0) {
+          effectiveTotalFees += redistributedPlatformFees;
+          effectiveNetPayout -= redistributedPlatformFees;
+          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
+          effectiveFeeLoad = totalSales > 0 ? Math.min(effectiveTotalFees / totalSales, 1) : 0;
+          effectiveHasEstimatedFees = true;
+        }
+
         const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
           ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
           : commissionTotal;
