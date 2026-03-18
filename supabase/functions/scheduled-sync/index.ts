@@ -451,6 +451,71 @@ Deno.serve(async (req) => {
         details,
       } as any);
     }
+
+    // ─── Write per-integration system_events so dashboard "last synced" is fresh ─────
+    const perIntegrationEvents: Array<{ event_type: string; marketplace_code: string | null; severity: string }> = [];
+
+    // Xero sync event (if user has Xero tokens)
+    if ((xeroTokens || []).some(t => t.user_id === userId)) {
+      const xeroFailed = stepErrors.includes('xero_audit') || stepErrors.includes('bank_txn_fetch');
+      perIntegrationEvents.push({
+        event_type: 'xero_sync_complete',
+        marketplace_code: null,
+        severity: xeroFailed ? 'error' : 'info',
+      });
+    }
+
+    // Amazon sync event
+    if ((amazonTokens || []).some(t => t.user_id === userId)) {
+      const amazonSkipped = results.amazon?.skipped;
+      const amazonFailed = stepErrors.includes('amazon');
+      if (!amazonSkipped) {
+        perIntegrationEvents.push({
+          event_type: 'amazon_fetch_complete',
+          marketplace_code: 'amazon_au',
+          severity: amazonFailed ? 'error' : 'info',
+        });
+      }
+    }
+
+    // Shopify sync event
+    if ((shopifyTokens || []).some(t => t.user_id === userId)) {
+      const shopifySkipped = results.shopify?.skipped;
+      const shopifyFailed = stepErrors.includes('shopify');
+      if (!shopifySkipped) {
+        perIntegrationEvents.push({
+          event_type: 'shopify_fetch_complete',
+          marketplace_code: 'shopify',
+          severity: shopifyFailed ? 'error' : 'info',
+        });
+      }
+    }
+
+    // eBay sync event
+    if ((ebayTokens || []).some(t => t.user_id === userId)) {
+      const ebaySkipped = results.ebay?.skipped;
+      const ebayFailed = stepErrors.includes('ebay');
+      if (!ebaySkipped) {
+        perIntegrationEvents.push({
+          event_type: 'ebay_fetch_complete',
+          marketplace_code: 'ebay_au',
+          severity: ebayFailed ? 'error' : 'info',
+        });
+      }
+    }
+
+    // Batch insert all per-integration events for this user
+    if (perIntegrationEvents.length > 0) {
+      await adminClient.from('system_events').insert(
+        perIntegrationEvents.map(evt => ({
+          user_id: userId,
+          event_type: evt.event_type,
+          marketplace_code: evt.marketplace_code,
+          severity: evt.severity,
+          details: { source: 'scheduled_sync', duration_ms: durationMs },
+        }))
+      );
+    }
   }
 
   if (allUserIds.size === 0) {
