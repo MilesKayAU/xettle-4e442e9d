@@ -842,7 +842,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
         reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
         other_fees: -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0)),
         gst_on_income: settlement.gst_on_sales,
-        gst_on_expenses: settlement.gst_on_fees,
+        gst_on_expenses: -Math.abs(settlement.gst_on_fees),
         bank_deposit: settlement.net_payout,
         source: settlement.source,
         source_reference: meta.sourceReference || null,
