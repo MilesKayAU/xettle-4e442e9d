@@ -153,6 +153,8 @@ export default function AccountMapperCard() {
       refunds: 'Refunds',
       shipping: 'Shipping',
       other_fees: 'Other Fees',
+      reimbursements: 'Reimbursements',
+      promotional_discounts: 'Promotional Discounts',
     };
 
     // Build CoaAccount[] compatible with coa-intelligence
