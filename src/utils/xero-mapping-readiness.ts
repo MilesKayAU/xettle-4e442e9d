@@ -129,10 +129,21 @@ export async function checkXeroReadinessForMarketplace(params: {
     let allMapped = true;
     let hasMarketplaceSpecific = false;
 
+    // Build candidate keys using canonical normalization
+    const normalizedLabel = normalizeKeyLabel(marketplaceCode);
+    const keyCandidates = [...new Set([normalizedLabel, marketplaceCode].filter(Boolean))];
+
     for (const cat of REQUIRED_CATEGORIES) {
-      const mpKey = `${cat}:${marketplaceCode}`;
-      const code = userCodes[mpKey] || userCodes[cat] || DEFAULT_FALLBACK;
-      if (userCodes[mpKey]) hasMarketplaceSpecific = true;
+      let code: string | null = null;
+      for (const candidate of keyCandidates) {
+        const mpKey = `${cat}:${candidate}`;
+        if (userCodes[mpKey]) {
+          code = userCodes[mpKey];
+          hasMarketplaceSpecific = true;
+          break;
+        }
+      }
+      if (!code) code = userCodes[cat] || DEFAULT_FALLBACK;
       if (code === DEFAULT_FALLBACK || !code) {
         missingCategories.push(cat);
         allMapped = false;

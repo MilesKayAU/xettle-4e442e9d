@@ -223,7 +223,8 @@ serve(async (req) => {
       if (Math.abs(amount) < 0.01) continue;
 
       const legacyKey = LEGACY_ACCOUNT_KEY_MAP[cat.name] || cat.name;
-      const resolvedCode = getCode(legacyKey, contactName || undefined);
+      const mappingMarketplace = marketplace || contactName || undefined;
+      const resolvedCode = getCode(legacyKey, mappingMarketplace);
 
       lineItems.push({
         Description: cat.name,
