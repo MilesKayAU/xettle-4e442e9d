@@ -255,6 +255,15 @@ export async function saveSettlementCanonical(
     } as any);
   }
 
+  // Step 3: If void-on-suppression failed, set manual_hold on the NEW CSV settlement
+  if (sourcePriority?.voidFailed) {
+    await supabase
+      .from('settlements')
+      .update({ posting_state: 'manual_hold' } as any)
+      .eq('settlement_id', settlementId)
+      .eq('user_id', row.user_id);
+  }
+
   return { success: true, sourcePriority };
 }
 
