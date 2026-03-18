@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 
 export interface XeroReadinessCheck {
   key: string;
