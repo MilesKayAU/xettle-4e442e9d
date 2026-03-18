@@ -162,12 +162,15 @@ export interface MarketplaceProfit {
   gross_revenue: number;
   total_cogs: number;
   marketplace_fees: number;
+  postage_deduction: number;
   gross_profit: number;
   margin_percent: number;
   orders_count: number;
   units_sold: number;
   uncosted_sku_count: number;
   uncosted_revenue: number;
+  fulfilment_method: string;
+  fulfilment_unknown: boolean;
 }
 
 function normalizeSku(sku: string): string {
