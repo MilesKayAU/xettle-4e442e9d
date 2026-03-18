@@ -274,6 +274,10 @@ export function calculateMarketplaceProfit(
   const gross_profit = gross_revenue - total_cogs - marketplace_fees - postage_deduction;
   const margin_percent = gross_revenue > 0 ? (gross_profit / gross_revenue) * 100 : 0;
 
+  // Determine if mixed mode is missing line-level data
+  const fulfilmentDataIncomplete = fulfilmentMethod === 'mixed_fba_fbm' &&
+    !revenueLines.some(l => l.fulfilment_channel);
+
   return {
     marketplace_code: marketplaceCode,
     marketplace_name: marketplaceName,
@@ -290,6 +294,7 @@ export function calculateMarketplaceProfit(
     uncosted_revenue: round(uncosted_revenue),
     fulfilment_method: fulfilmentMethod,
     fulfilment_unknown: fulfilmentMethod === 'not_sure',
+    fulfilment_data_incomplete: fulfilmentDataIncomplete,
   };
 }
 
