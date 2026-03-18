@@ -168,13 +168,10 @@ export default function AccountMapperCard() {
 
     const signals = analyseCoA(coaInput, registryEntries, processorEntries);
 
-    // Build marketplace_code → display name lookup from active marketplaces
-    // The mapping_suggestions use marketplace_code (e.g. 'amazon_au'),
-    // but the Map key needs the display name (e.g. 'Amazon AU')
-    const codeToDisplayName = new Map<string, string>();
-    // Build from registry entries
+    // Build marketplace_code → canonical key label lookup
+    const codeToKeyLabel = new Map<string, string>();
     for (const entry of registryEntries) {
-      codeToDisplayName.set(entry.marketplace_code, entry.marketplace_name);
+      codeToKeyLabel.set(entry.marketplace_code, normalizeKeyLabel(entry.marketplace_code));
     }
 
     const suggestions = new Map<string, { code: string; name: string }>();
@@ -183,12 +180,12 @@ export default function AccountMapperCard() {
       const displayCategory = CATEGORY_DISPLAY_MAP[s.category];
       if (!displayCategory) continue;
 
-      // Find matching active marketplace display name
-      const displayName = codeToDisplayName.get(s.marketplace_code) || s.marketplace_code;
-      // Only suggest for active marketplaces
-      if (!activeMarketplaces.includes(displayName)) continue;
+      // Convert marketplace_code to canonical key label
+      const keyLabel = codeToKeyLabel.get(s.marketplace_code) || normalizeKeyLabel(s.marketplace_code);
+      // Only suggest for active marketplaces (which are also normalized)
+      if (!activeMarketplaces.includes(keyLabel)) continue;
 
-      const key = `${displayCategory}:${displayName}`;
+      const key = `${displayCategory}:${keyLabel}`;
       // Keep highest confidence match
       if (!suggestions.has(key)) {
         suggestions.set(key, { code: s.account_code, name: s.account_name });
