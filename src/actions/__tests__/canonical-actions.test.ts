@@ -232,6 +232,19 @@ describe('Canonical action guardrails', () => {
     const violations = scanForPattern(/functions\.invoke\(['"]create-xero-accounts['"]/);
     expect(violations, `Direct create-xero-accounts invocations found:\n${formatViolations(violations)}`).toEqual([]);
   });
+
+  it('no direct settlements.insert() outside canonical actions and settlement-engine', () => {
+    // settlement-engine.ts is allowed because it calls applySourcePriority post-insert
+    const violations = scanForPattern(
+      /from\(['"]settlements['"]\)\.insert\(/,
+      ['actions'],
+    ).filter(v =>
+      !v.file.includes('settlement-engine.ts') &&
+      !v.file.includes('settlement-components.ts') &&
+      !v.file.includes('AccountingDashboard.tsx')
+    );
+    expect(violations, `Direct settlements.insert() found outside canonical paths:\n${formatViolations(violations)}`).toEqual([]);
+  });
 });
 
 describe('Support tier computation', () => {

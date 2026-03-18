@@ -385,6 +385,20 @@ Deno.serve(async (req) => {
       },
     };
 
+    // ─── Source Preference Check ────────────────────────────────────
+    // If user prefers CSV for this marketplace, skip auto-generation
+    const { data: prefSetting } = await adminClient
+      .from("app_settings")
+      .select("value")
+      .eq("user_id", userId)
+      .eq("key", `source_preference:${mpCode}`)
+      .maybeSingle();
+
+    if (prefSetting?.value === 'csv') {
+      logger.info(`[auto-gen-settlements] Skipping ${settlementId}: user prefers CSV for ${mpCode}`);
+      continue;
+    }
+
     // Check if a manual settlement exists for this ID
     const { data: existing } = await adminClient
       .from("settlements")
@@ -393,8 +407,25 @@ Deno.serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (existing && existing.source === 'manual') {
-      continue; // Never overwrite manual uploads
+    if (existing && (existing.source === 'manual' || existing.source === 'csv_upload')) {
+      continue; // Never overwrite manual/CSV uploads
+    }
+
+    // Check if a manual settlement exists for overlapping period (source priority)
+    const { data: manualOverlap } = await adminClient
+      .from("settlements")
+      .select("id, settlement_id")
+      .eq("user_id", userId)
+      .in("source", ["manual", "csv_upload"])
+      .eq("marketplace", mpCode)
+      .neq("status", "duplicate_suppressed")
+      .lte("period_start", settlementRecord.period_end)
+      .gte("period_end", settlementRecord.period_start)
+      .limit(1);
+
+    if (manualOverlap && manualOverlap.length > 0) {
+      logger.info(`[auto-gen-settlements] Skipping ${settlementId}: manual CSV exists for overlapping period`);
+      continue;
     }
 
     if (existing) {

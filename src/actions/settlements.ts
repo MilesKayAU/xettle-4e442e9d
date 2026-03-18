@@ -154,3 +154,197 @@ export async function markBankVerified(
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
+
+// ─── Source Priority Guard ───────────────────────────────────────────────────
+
+export interface SourcePriorityResult {
+  suppressedCount: number;
+  suppressedIds: string[];
+  selfSuppressed: boolean;
+}
+
+/**
+ * Canonical source priority invariant.
+ * 
+ * Rules:
+ * - If newSource === 'manual' (CSV upload): suppress overlapping api_sync settlements
+ * - If newSource === 'api_sync': self-suppress if manual settlement exists for same period
+ * 
+ * Called after every settlement insert — from saveSettlement (settlement-engine),
+ * saveAmazonSettlement (AccountingDashboard), and edge functions (server-side equivalent).
+ */
+export async function applySourcePriority(
+  userId: string,
+  marketplace: string,
+  periodStart: string,
+  periodEnd: string,
+  newSettlementId: string,
+  newSource: string,
+): Promise<SourcePriorityResult> {
+  const result: SourcePriorityResult = { suppressedCount: 0, suppressedIds: [], selfSuppressed: false };
+
+  try {
+    if (newSource === 'manual' || newSource === 'csv_upload') {
+      // CSV upload → suppress overlapping api_sync records
+      const { data: overlapping } = await supabase
+        .from('settlements')
+        .select('id, settlement_id')
+        .eq('user_id', userId)
+        .eq('source', 'api_sync')
+        .eq('marketplace', marketplace)
+        .neq('settlement_id', newSettlementId)
+        .neq('status', 'duplicate_suppressed')
+        .lte('period_start', periodEnd)
+        .gte('period_end', periodStart);
+
+      if (overlapping && overlapping.length > 0) {
+        for (const rec of overlapping) {
+          await supabase
+            .from('settlements')
+            .update({
+              status: 'duplicate_suppressed',
+              duplicate_of_settlement_id: newSettlementId,
+              duplicate_reason: 'CSV upload takes priority over Shopify-derived data',
+            } as any)
+            .eq('id', rec.id);
+
+          result.suppressedIds.push(rec.settlement_id);
+        }
+        result.suppressedCount = overlapping.length;
+
+        // Log system event
+        await supabase.from('system_events' as any).insert({
+          user_id: userId,
+          event_type: 'settlement_suppressed_by_source_priority',
+          severity: 'info',
+          marketplace_code: marketplace,
+          settlement_id: newSettlementId,
+          details: {
+            suppressed_settlement_ids: result.suppressedIds,
+            reason: 'CSV upload supersedes Shopify-derived records',
+            period: `${periodStart} → ${periodEnd}`,
+          },
+        } as any);
+      }
+    } else if (newSource === 'api_sync') {
+      // API sync → self-suppress if manual settlement already covers this period
+      const { data: manualExists } = await supabase
+        .from('settlements')
+        .select('id, settlement_id')
+        .eq('user_id', userId)
+        .in('source', ['manual', 'csv_upload'])
+        .eq('marketplace', marketplace)
+        .neq('status', 'duplicate_suppressed')
+        .lte('period_start', periodEnd)
+        .gte('period_end', periodStart)
+        .limit(1);
+
+      if (manualExists && manualExists.length > 0) {
+        await supabase
+          .from('settlements')
+          .update({
+            status: 'duplicate_suppressed',
+            duplicate_of_settlement_id: manualExists[0].settlement_id,
+            duplicate_reason: 'Manual CSV upload already exists for this period',
+          } as any)
+          .eq('settlement_id', newSettlementId)
+          .eq('user_id', userId);
+
+        result.selfSuppressed = true;
+
+        await supabase.from('system_events' as any).insert({
+          user_id: userId,
+          event_type: 'settlement_self_suppressed_by_source_priority',
+          severity: 'info',
+          marketplace_code: marketplace,
+          settlement_id: newSettlementId,
+          details: {
+            existing_manual_id: manualExists[0].settlement_id,
+            reason: 'API-derived record auto-suppressed because manual CSV already exists',
+            period: `${periodStart} → ${periodEnd}`,
+          },
+        } as any);
+      }
+    }
+  } catch (err) {
+    console.error('[applySourcePriority] error:', err);
+  }
+
+  return result;
+}
+
+/**
+ * Check for overlapping api_sync settlements before save (read-only query for UI warning).
+ */
+export async function checkSourceOverlap(
+  userId: string,
+  marketplace: string,
+  periodStart: string,
+  periodEnd: string,
+): Promise<{ hasOverlap: boolean; overlappingIds: string[]; totalAmount: number }> {
+  try {
+    const { data } = await supabase
+      .from('settlements')
+      .select('settlement_id, bank_deposit')
+      .eq('user_id', userId)
+      .eq('source', 'api_sync')
+      .eq('marketplace', marketplace)
+      .neq('status', 'duplicate_suppressed')
+      .lte('period_start', periodEnd)
+      .gte('period_end', periodStart);
+
+    if (data && data.length > 0) {
+      return {
+        hasOverlap: true,
+        overlappingIds: data.map(d => d.settlement_id),
+        totalAmount: data.reduce((sum, d) => sum + (d.bank_deposit || 0), 0),
+      };
+    }
+  } catch (err) {
+    console.error('[checkSourceOverlap] error:', err);
+  }
+  return { hasOverlap: false, overlappingIds: [], totalAmount: 0 };
+}
+
+/**
+ * Get user's source preference for a marketplace.
+ * Returns 'csv' | 'api' | null (null = default, which means CSV preferred).
+ */
+export async function getSourcePreference(
+  userId: string,
+  marketplaceCode: string,
+): Promise<'csv' | 'api' | null> {
+  try {
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', userId)
+      .eq('key', `source_preference:${marketplaceCode}`)
+      .maybeSingle();
+
+    if (data?.value === 'api' || data?.value === 'csv') return data.value;
+  } catch (err) {
+    console.error('[getSourcePreference] error:', err);
+  }
+  return null;
+}
+
+/**
+ * Set user's source preference for a marketplace.
+ */
+export async function setSourcePreference(
+  userId: string,
+  marketplaceCode: string,
+  preference: 'csv' | 'api',
+): Promise<ActionResult> {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({
+      user_id: userId,
+      key: `source_preference:${marketplaceCode}`,
+      value: preference,
+    } as any, { onConflict: 'user_id,key' });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
