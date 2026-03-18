@@ -67,16 +67,11 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .select('marketplace_code, marketplace_name, connection_status')
       .in('connection_status', [...ACTIVE_CONNECTION_STATUSES]),
 
-    // App settings for setup checks
+    // App settings for setup checks (include fulfilment_method:* via ilike)
     supabase
       .from('app_settings')
       .select('key, value')
-      .in('key', [
-        'accounting_xero_account_codes',
-        'scope_acknowledged_at',
-        'scope_version',
-        'tax_profile',
-      ]),
+      .or('key.in.(accounting_xero_account_codes,scope_acknowledged_at,scope_version,tax_profile),key.like.fulfilment_method:%'),
 
     // Reconciliation alerts (missing/partial from marketplace_validation)
     supabase
@@ -157,6 +152,25 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         label: 'Account mapping incomplete',
         severity: 'blocking',
         message: 'Some marketplaces are missing required Xero account mappings.',
+      });
+    }
+  }
+
+  // 5. Fulfilment method — warn if any active marketplace has no explicit method set
+  if (connections.length > 0) {
+    const unconfiguredMarketplaces: string[] = [];
+    for (const conn of connections) {
+      const fulfilmentValue = settingsMap.get(`fulfilment_method:${conn.marketplace_code}`);
+      if (!fulfilmentValue || fulfilmentValue === 'not_sure') {
+        unconfiguredMarketplaces.push(conn.marketplace_name || conn.marketplace_code);
+      }
+    }
+    if (unconfiguredMarketplaces.length > 0) {
+      setupWarnings.push({
+        key: 'fulfilment_methods_incomplete',
+        label: 'Fulfilment methods not configured',
+        severity: 'warning',
+        message: `Review and save fulfilment method for: ${unconfiguredMarketplaces.join(', ')}.`,
       });
     }
   }
