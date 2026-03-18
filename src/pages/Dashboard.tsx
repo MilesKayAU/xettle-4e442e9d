@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { useAiActionTracker } from '@/ai/context/useAiActionTracker';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
@@ -95,10 +95,25 @@ function SetupInProgressBanner({ show: showProp }: { show?: boolean }) {
   );
 }
 
-function SettingsAccordion({ title, description, defaultOpen = false, children }: { title: string; description: string; defaultOpen?: boolean; children: React.ReactNode }) {
+function SettingsAccordion({ id, title, description, defaultOpen = false, children }: { id?: string; title: string; description: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.section === id) {
+        setOpen(true);
+        setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+      }
+    };
+    window.addEventListener('open-settings-section', handler);
+    return () => window.removeEventListener('open-settings-section', handler);
+  }, [id]);
+
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div ref={ref} className="rounded-xl border border-border bg-card overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-muted/30 transition-colors"
@@ -1012,11 +1027,11 @@ export default function Dashboard() {
                 </Suspense>
               </SettingsAccordion>
 
-              <SettingsAccordion title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts">
+              <SettingsAccordion id="destination-accounts" title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts">
                 <DestinationAccountMapper />
               </SettingsAccordion>
 
-              <SettingsAccordion title="Account Mapper" description="AI-assisted account code suggestions and overrides">
+              <SettingsAccordion id="account-mapper" title="Account Mapper" description="AI-assisted account code suggestions and overrides">
                 <AccountMapperCard />
               </SettingsAccordion>
 
