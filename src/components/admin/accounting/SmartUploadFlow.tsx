@@ -1022,6 +1022,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         } else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
       }
 
+      // ── Cross-reference Woolworths order lines against Shopify-derived settlements ──
+      if (marketplace === 'woolworths_marketplus' && savedCount > 0 && user) {
+        try {
+          const text = await df.file.text();
+          const { parseWoolworthsMarketPlusCSV: parse } = await import('@/utils/woolworths-marketplus-parser');
+          const parsed = parse(text);
+          if (parsed.success && parsed.groups.length > 0) {
+            const { crossReferenceWoolworthsOrders } = await import('@/actions/settlements');
+            await crossReferenceWoolworthsOrders(user.id, parsed.groups);
+          }
+        } catch { /* non-blocking */ }
+      }
+
       const label = MARKETPLACE_LABELS[marketplace] || marketplace;
       if (savedCount > 0) {
         toast.success(`${label}: ${savedCount} settlement${savedCount > 1 ? 's' : ''} created ✓${dupCount > 0 ? ` (${dupCount} duplicates skipped)` : ''}`);

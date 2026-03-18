@@ -31,6 +31,7 @@ export {
   checkSourceOverlap,
   getSourcePreference,
   setSourcePreference,
+  crossReferenceWoolworthsOrders,
   type ActionResult,
   type SourcePriorityResult,
   type SaveSettlementCanonicalInput,
