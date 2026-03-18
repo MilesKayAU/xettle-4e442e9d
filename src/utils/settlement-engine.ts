@@ -618,7 +618,7 @@ async function saveWithAtomicPromote(settlement: StandardSettlement, fingerprint
         advertisingCosts: 0,
         otherFees: (meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0),
         gstOnIncome: settlement.gst_on_sales,
-        gstOnExpenses: settlement.gst_on_fees,
+         gstOnExpenses: -Math.abs(settlement.gst_on_fees),
         bankDeposit: settlement.net_payout,
         source: settlement.source,
       }).catch(console.error);
