@@ -70,6 +70,15 @@ serve(async (req) => {
       });
     }
 
+    // Fetch existing titles from last 30 days for deduplication
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: existingOpps } = await supabase
+      .from("growth_opportunities")
+      .select("thread_title")
+      .gte("created_at", thirtyDaysAgo);
+
+    const existingTitles = (existingOpps || []).map((o: any) => o.thread_title);
+
     // Pick 5 random queries for this run
     const shuffled = [...SEARCH_QUERIES].sort(() => Math.random() - 0.5);
     const selectedQueries = shuffled.slice(0, 5);
@@ -79,25 +88,32 @@ serve(async (req) => {
 Your job: For each search query provided, identify 2-3 realistic forum threads/posts where someone is asking about the exact problem Xettle solves. Then draft a genuinely helpful reply.
 
 CRITICAL RULES:
-- Return REAL-LOOKING thread examples from Reddit, Xero Community, Shopify Community, Quora, or Australian business forums
-- Each opportunity must have: platform, thread_title, thread_url (realistic URL pattern), thread_snippet (what the person asked), relevance_score (1-10), and draft_response
+- Suggest thread TOPICS that are likely to exist on these platforms — do NOT invent specific URLs
+- Each opportunity must have: platform, thread_title, thread_snippet (what the person asked), relevance_score (1-10), and draft_response
 - Draft responses MUST be genuinely helpful — answer the question first, share knowledge, THEN softly mention Xettle as one option
 - NEVER be spammy. The response should read like a knowledgeable accountant/seller helping out
 - Focus on Australian marketplace sellers using Xero
 - Include specific pain points: settlement reconciliation, GST handling, multi-marketplace fee tracking, FBA fee accounting
+- thread_url should be empty string — the dashboard will construct search links
 
 Return a JSON array of opportunities. Each object:
 {
   "platform": "reddit" | "xero_community" | "shopify_community" | "quora" | "forum",
   "thread_title": "string",
-  "thread_url": "string (realistic URL)",
+  "thread_url": "",
   "thread_snippet": "string (what the person asked, 1-2 sentences)",
   "relevance_score": number (1-10),
   "draft_response": "string (the helpful reply, 2-4 paragraphs)",
   "search_query": "string (which query found this)"
 }`;
 
-    const userMessage = `Find organic marketing opportunities for these search queries. For each query, suggest 2-3 forum threads where we could provide genuine value:\n\n${selectedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
+    let userMessage = `Find organic marketing opportunities for these search queries. For each query, suggest 2-3 forum threads where we could provide genuine value:\n\n${selectedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
+
+    // Add dedup context
+    if (existingTitles.length > 0) {
+      const titlesList = existingTitles.slice(0, 50).map((t: string) => `- ${t}`).join("\n");
+      userMessage += `\n\nALREADY COVERED — do NOT suggest similar topics:\n${titlesList}`;
+    }
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -133,7 +149,7 @@ Return a JSON array of opportunities. Each object:
                         draft_response: { type: "string" },
                         search_query: { type: "string" },
                       },
-                      required: ["platform", "thread_title", "thread_url", "thread_snippet", "relevance_score", "draft_response", "search_query"],
+                      required: ["platform", "thread_title", "thread_snippet", "relevance_score", "draft_response", "search_query"],
                       additionalProperties: false,
                     },
                   },
@@ -188,7 +204,7 @@ Return a JSON array of opportunities. Each object:
       const rows = opportunities.map((opp: any) => ({
         user_id: user.id,
         platform: opp.platform,
-        thread_url: opp.thread_url,
+        thread_url: opp.thread_url || null,
         thread_title: opp.thread_title,
         thread_snippet: opp.thread_snippet,
         relevance_score: opp.relevance_score,
