@@ -7,21 +7,26 @@ const corsHeaders = {
 };
 
 const SEARCH_QUERIES = [
-  '"connect xero to amazon" site:reddit.com',
-  '"shopify xero integration" site:reddit.com',
-  '"marketplace accounting software australia"',
-  '"amazon seller fees xero reconciliation"',
-  '"best xero add on for ecommerce"',
-  '"shopify settlement accounting"',
-  '"xero amazon australia" site:reddit.com',
-  '"reconcile marketplace settlements" xero',
-  '"xero multichannel ecommerce"',
-  '"best way to sync shopify to xero"',
-  '"amazon fba accounting xero australia"',
-  '"marketplace seller bookkeeping" xero',
-  '"xero integration marketplace" site:community.xero.com',
-  '"shopify payments reconciliation" xero',
-  '"ebay xero integration australia"',
+  // LinkedIn / Social
+  '"ecommerce accounting" "xero" australian marketplace',
+  '"marketplace seller" "reconciliation" australia linkedin',
+  '"shopify seller" "xero integration" australia',
+  '"amazon seller" "accounting automation" australia',
+  // Facebook Groups
+  '"australian ecommerce" group "xero" marketplace fees',
+  '"amazon australia sellers" group accounting settlement',
+  '"shopify australia" group "bookkeeper" marketplace',
+  // HubSpot Community
+  '"marketplace accounting" "automation" ecommerce hubspot',
+  '"ecommerce integration" "xero" reconciliation hubspot',
+  // Xero Community & Groups
+  '"marketplace settlement" "xero" community reconciliation',
+  '"amazon xero" "GST" community australia',
+  '"multi-channel" "xero add-on" ecommerce australia',
+  // General social / forums
+  '"ebay seller" "xero" accounting australia',
+  '"bunnings marketplace" accounting integration',
+  '"ecommerce bookkeeper" australia marketplace fees',
 ];
 
 serve(async (req) => {
@@ -30,7 +35,6 @@ serve(async (req) => {
   }
 
   try {
-    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -53,7 +57,6 @@ serve(async (req) => {
       });
     }
 
-    // Admin check
     const { data: isAdmin } = await supabase.rpc("has_role", { _role: "admin" });
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: "Admin access required" }), {
@@ -83,33 +86,45 @@ serve(async (req) => {
     const shuffled = [...SEARCH_QUERIES].sort(() => Math.random() - 0.5);
     const selectedQueries = shuffled.slice(0, 5);
 
-    const systemPrompt = `You are an SEO opportunity scout for Xettle — a SaaS tool that automates Xero accounting for Australian marketplace sellers (Amazon, Shopify, eBay, Bunnings, etc).
+    const systemPrompt = `You are an outreach opportunity scout for Xettle — a new Australian SaaS tool that automates Xero accounting for marketplace sellers (Amazon, Shopify, eBay, Bunnings, etc).
 
-Your job: For each search query provided, identify 2-3 realistic forum threads/posts where someone is asking about the exact problem Xettle solves. Then draft a genuinely helpful reply.
+Your job: Find places where Australian ecommerce businesses, bookkeepers, or marketplace sellers are discussing accounting pain points — and suggest outreach opportunities where we can invite them to try Xettle for free.
+
+TARGET PLATFORMS (in priority order):
+1. LinkedIn — posts, comments, and groups where Australian ecommerce sellers or bookkeepers discuss marketplace accounting
+2. Facebook Groups — Australian ecommerce seller groups, Xero user groups, Amazon AU seller groups
+3. HubSpot Community — ecommerce integration discussions
+4. Xero Community — threads about marketplace integrations, settlement reconciliation
+5. Reddit — r/AusFinance, r/ecommerce, r/FulfillmentByAmazon
+6. Twitter/X — Australian ecommerce and Xero conversations
+
+MESSAGING APPROACH — the draft response should:
+- Lead with genuine help and empathy for their pain point
+- Share practical knowledge about the problem (settlement reconciliation, GST, multi-marketplace fees)
+- Then naturally mention: "We've just built a tool called Xettle that handles exactly this — automating Xero entries for marketplace settlements. We're inviting Australian sellers to try it free for a few months while we refine it. Happy to set you up with a no-cost account if you're interested."
+- Keep it warm, personal, and non-salesy — like a peer offering to help
+- Adapt tone to the platform (more professional on LinkedIn, more casual on Reddit/Facebook)
 
 CRITICAL RULES:
-- Suggest thread TOPICS that are likely to exist on these platforms — do NOT invent specific URLs
-- Each opportunity must have: platform, thread_title, thread_snippet (what the person asked), relevance_score (1-10), and draft_response
-- Draft responses MUST be genuinely helpful — answer the question first, share knowledge, THEN softly mention Xettle as one option
-- NEVER be spammy. The response should read like a knowledgeable accountant/seller helping out
-- Focus on Australian marketplace sellers using Xero
-- Include specific pain points: settlement reconciliation, GST handling, multi-marketplace fee tracking, FBA fee accounting
+- Suggest thread/post TOPICS that are likely to exist — do NOT invent specific URLs
+- Each opportunity must have: platform, thread_title, thread_snippet, relevance_score (1-10), and draft_response
+- Focus on AUSTRALIAN companies and sellers — this is the target market
 - thread_url should be empty string — the dashboard will construct search links
+- Vary the platforms — don't put everything on one platform
 
 Return a JSON array of opportunities. Each object:
 {
-  "platform": "reddit" | "xero_community" | "shopify_community" | "quora" | "forum",
+  "platform": "linkedin" | "facebook_group" | "hubspot_community" | "xero_community" | "reddit" | "twitter" | "forum",
   "thread_title": "string",
   "thread_url": "",
-  "thread_snippet": "string (what the person asked, 1-2 sentences)",
+  "thread_snippet": "string (what the person asked/posted, 1-2 sentences)",
   "relevance_score": number (1-10),
-  "draft_response": "string (the helpful reply, 2-4 paragraphs)",
+  "draft_response": "string (the helpful reply with free trial invitation, 2-4 paragraphs)",
   "search_query": "string (which query found this)"
 }`;
 
-    let userMessage = `Find organic marketing opportunities for these search queries. For each query, suggest 2-3 forum threads where we could provide genuine value:\n\n${selectedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
+    let userMessage = `Find outreach opportunities for these search queries. For each query, suggest 2-3 posts/threads where we could provide genuine value and invite them to try Xettle free:\n\n${selectedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
 
-    // Add dedup context
     if (existingTitles.length > 0) {
       const titlesList = existingTitles.slice(0, 50).map((t: string) => `- ${t}`).join("\n");
       userMessage += `\n\nALREADY COVERED — do NOT suggest similar topics:\n${titlesList}`;
@@ -132,7 +147,7 @@ Return a JSON array of opportunities. Each object:
             type: "function",
             function: {
               name: "return_opportunities",
-              description: "Return found SEO opportunities",
+              description: "Return found outreach opportunities",
               parameters: {
                 type: "object",
                 properties: {
@@ -141,7 +156,7 @@ Return a JSON array of opportunities. Each object:
                     items: {
                       type: "object",
                       properties: {
-                        platform: { type: "string", enum: ["reddit", "xero_community", "shopify_community", "quora", "forum"] },
+                        platform: { type: "string", enum: ["linkedin", "facebook_group", "hubspot_community", "xero_community", "reddit", "twitter", "forum"] },
                         thread_title: { type: "string" },
                         thread_url: { type: "string" },
                         thread_snippet: { type: "string" },
@@ -199,7 +214,6 @@ Return a JSON array of opportunities. Each object:
       }
     }
 
-    // Save to DB
     if (opportunities.length > 0) {
       const rows = opportunities.map((opp: any) => ({
         user_id: user.id,
