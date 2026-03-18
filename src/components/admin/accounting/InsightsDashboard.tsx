@@ -179,12 +179,7 @@ export default function InsightsDashboard() {
       // even when sales occur on BigW or Everyday Market. This creates an anomaly where
       // MyDeal shows fees >> sales, while BigW/Everyday Market appear artificially cheap.
       // Fix: detect fee-heavy marketplaces and redistribute excess fees to siblings.
-      const PLATFORM_FAMILIES: Record<string, string[]> = {
-        woolworths_marketplus: ['mydeal', 'bigw', 'everyday_market', 'woolworths_market'],
-      };
-
-      // For each family, detect excess fees and redistribute
-      for (const siblings of Object.values(PLATFORM_FAMILIES)) {
+      // Platform family fee redistribution using canonical PLATFORM_FAMILIES
         const presentSiblings = siblings.filter(s => grouped[s]);
         if (presentSiblings.length < 2) continue;
 
