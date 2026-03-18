@@ -30,15 +30,26 @@
 
 | Entry Point | File | Tables Written | Idempotency | Canonical Path |
 |---|---|---|---|---|
-| SmartUploadFlow CSV parse | `SmartUploadFlow.tsx:854` | `settlements`, `settlement_lines` | `dedup-check` (UI flow only) | ❌ → future `saveIngestedSettlement()` |
-| AccountingDashboard save | `AccountingDashboard.tsx:142,235` | `settlements`, `settlement_lines` | `dedup-check` (UI flow only) | ❌ → future `saveIngestedSettlement()` |
-| ShopifyOrdersDashboard save | `ShopifyOrdersDashboard.tsx:387` | `settlements`, `settlement_lines` | `dedup-check` | ❌ → future `saveIngestedSettlement()` |
-| settlement-engine.saveSettlement | `settlement-engine.ts:847,913` | `settlements` | `dedup-check` (2 code paths) | ❌ → consolidate |
+| SmartUploadFlow CSV parse | `SmartUploadFlow.tsx:854` | `settlements`, `settlement_lines` | `dedup-check` + `applySourcePriority()` post-insert | ✅ via `saveSettlement()` → `applySourcePriority()` |
+| AccountingDashboard save | `AccountingDashboard.tsx:142,235` | `settlements`, `settlement_lines` | `dedup-check` + `applySourcePriority()` post-insert | ✅ `applySourcePriority()` called post-insert |
+| ShopifyOrdersDashboard save | `ShopifyOrdersDashboard.tsx:387` | `settlements`, `settlement_lines` | `dedup-check` | ✅ via `saveSettlement()` → `applySourcePriority()` |
+| settlement-engine.saveSettlement | `settlement-engine.ts:847,913` | `settlements` | `dedup-check` + `applySourcePriority()` post-insert | ✅ `applySourcePriority()` canonical action |
 | promote_and_save_settlement (RPC) | DB function | `settlements`, `marketplace_file_fingerprints`, `system_events` | atomic RPC | ✅ (server-side atomic) |
 | fetch-amazon-settlements | `supabase/functions/fetch-amazon-settlements/` | `settlements`, `settlement_lines`, `settlement_components`, `marketplace_validation`, `system_events` | `upsert` (settlement_id) | ✅ (server-side) |
 | fetch-shopify-payouts | `supabase/functions/fetch-shopify-payouts/` | `settlements`, `settlement_lines` | `upsert` | ✅ (server-side) |
 | fetch-ebay-settlements | `supabase/functions/fetch-ebay-settlements/` | `settlements`, `settlement_lines` | `upsert` | ✅ (server-side) |
-| auto-generate-shopify-settlements | `supabase/functions/auto-generate-shopify-settlements/` | `settlements` | `upsert` | ✅ (server-side) |
+| auto-generate-shopify-settlements | `supabase/functions/auto-generate-shopify-settlements/` | `settlements` | `upsert` + source preference check + manual overlap guard | ✅ (server-side, source priority enforced) |
+
+### Source Priority Guard
+
+| Action | Location | Enforcement |
+|---|---|---|
+| `applySourcePriority()` | `src/actions/settlements.ts` | Canonical action — suppresses api_sync when CSV uploaded, self-suppresses api_sync when manual exists |
+| `checkSourceOverlap()` | `src/actions/settlements.ts` | Read-only query for UI overlap warning (SmartUploadFlow) |
+| `getSourcePreference()` | `src/actions/settlements.ts` | Reads `app_settings` source_preference:{code} |
+| `setSourcePreference()` | `src/actions/settlements.ts` | Writes preference (Settings UI only) |
+| Source preference check | `auto-generate-shopify-settlements` edge fn | Skips generation if user prefers CSV |
+| Guardrail test | `canonical-actions.test.ts` | Blocks direct `settlements.insert()` outside canonical paths |
 
 ### Settlement Delete Paths
 
