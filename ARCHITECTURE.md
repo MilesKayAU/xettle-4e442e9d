@@ -705,4 +705,189 @@ Xero bank feeds, PayPal API, Stripe API, Shopify payouts, Wise feeds, and all fu
 
 ---
 
+## 17. Canonical Actions & Guardrails — Complete Status
+
+**Last updated: 2026-03-18**
+
+The canonical actions layer (`src/actions/`) is the exclusive client-side entry point for all accounting-critical operations. Grep-based guardrail tests (`src/actions/__tests__/canonical-actions.test.ts`) block direct database writes and unauthorized edge function calls outside these modules.
+
+### 17.1 Canonical Action Modules
+
+| Module | File | Key Exports | Status |
+|--------|------|-------------|--------|
+| **Settlement CRUD** | `actions/settlements.ts` | `deleteSettlement`, `deleteSettlements`, `updateSettlementVisibility`, `revertSettlementToSaved`, `resetFailedSettlement`, `resetFailedSettlements`, `markBankVerified`, `applySourcePriority`, `checkSourceOverlap`, `getSourcePreference`, `setSourcePreference` | ✅ Complete |
+| **Marketplace Provisioning** | `actions/marketplaces.ts` | `provisionMarketplace`, `provisionMarketplaces`, `removeMarketplace` | ✅ Complete |
+| **Xero Push / Rollback** | `actions/xeroPush.ts` | `pushSettlementToXero`, `rollbackFromXero`, `triggerAutoPost`, `checkPushCategoryCoverage` | ✅ Complete |
+| **Safe Repost** | `actions/repost.ts` | `rollbackSettlement` | ✅ Complete |
+| **Xero Readiness** | `actions/xeroReadiness.ts` | `checkXeroReadinessForMarketplace`, `REQUIRED_CATEGORIES`, `getRailPostingEligibility` | ✅ Complete |
+| **Scope Consent** | `actions/scopeConsent.ts` | `getScopeConsent`, `acknowledgeScopeConsent`, `getOrgTaxProfile`, `setOrgTaxProfile`, `acknowledgeRailSupport` | ✅ Complete |
+| **Xero Invoice** | `actions/xeroInvoice.ts` | `refreshXeroInvoiceDetails`, `rescanMatchForInvoice`, `getXeroVsXettlePayloadDiff`, `compareXeroInvoiceToSettlement` | ✅ Complete |
+| **Xero Accounts (COA)** | `actions/xeroAccounts.ts` | `refreshXeroCOA`, `getCachedXeroAccounts`, `getCachedXeroTaxRates`, `getCoaLastSyncedAt`, `createXeroAccounts` | ✅ Complete |
+| **COA Coverage** | `actions/coaCoverage.ts` | `getMarketplaceCoverage`, `findTemplateAccounts`, `generateNewAccountName`, `detectCategoryFromName` | ✅ Complete |
+| **COA Clone** | `actions/coaClone.ts` | `buildClonePreview`, `executeCoaClone`, `validateTemplateEligibility`, `logCloneEvent` | ✅ Complete |
+| **Account Mappings** | `actions/accountMappings.ts` | `getMappings`, `getMappingsRaw`, `getEffectiveMapping`, `saveDraftMappings`, `confirmMappings`, `mergeIntoConfirmedMappings` | ✅ Complete |
+| **Sync Actions** | `actions/sync.ts` | `runXeroSync`, `runMarketplaceSync` | ✅ Complete |
+| **Audit Export** | `actions/auditExport.ts` | `exportAuditCsv` | ✅ Complete |
+
+### 17.2 Sitewide Policy Modules
+
+| Policy | File | Purpose | Enforced Where |
+|--------|------|---------|----------------|
+| **Accounting Rules (Rule #11)** | `constants/accounting-rules.ts` | Settlements-only accounting source, orders/payments never create entries | All push paths, edge functions (comment block) |
+| **Settlement Status Machine** | `constants/settlement-status.ts` | Canonical status values, valid transitions, legacy normalisation | All status writes, UI rendering |
+| **Settlement Rails** | `constants/settlement-rails.ts` | Rail codes, payout modes, destination mapping | Push paths, bank matching |
+| **Financial Categories** | `constants/financial-categories.ts` | Internal classification keys for settlement_lines | All parsers, edge functions (comment block) |
+| **Reconciliation Tolerances** | `constants/reconciliation-tolerance.ts` | Named tolerance thresholds (line sum, payout match, GST) | All reconciliation engines |
+| **Connection Statuses** | `constants/connection-status.ts` | `ACTIVE_CONNECTION_STATUSES = ['active', 'connected']` | All marketplace_connections queries |
+| **Support Policy** | `policy/supportPolicy.ts` | AU-validated scope, tier computation (SUPPORTED/EXPERIMENTAL/UNSUPPORTED) | Push preview, auto-post, edge functions |
+| **AI Policy** | `ai/policy/xettleAiPolicy.ts` | AI capabilities/limits, what assistant can/cannot do | AI context, edge function |
+| **Marketplace Contacts** | `constants/marketplace-contacts.ts` | Canonical Xero contact names per marketplace | Invoice builders |
+
+### 17.3 Guardrail Tests (25 tests)
+
+All tests in `src/actions/__tests__/canonical-actions.test.ts`:
+
+| Test | Pattern Blocked | Protection |
+|------|----------------|------------|
+| **REQUIRED_CATEGORIES sync** | Client vs server drift | Ensures push safety preview and edge function agree on required mapping categories |
+| **No direct settlement delete cascades** | `from('settlement_lines').delete()` + `from('settlements').delete()` | Forces use of `deleteSettlement()` canonical action |
+| **No direct settlement status updates** | `from('settlements').update({...status:` | Forces use of canonical status actions |
+| **No direct settlement visibility updates** | `from('settlements').update({...is_hidden:` | Forces use of `updateSettlementVisibility()` |
+| **No direct bank_verified updates** | `from('settlements').update({...bank_verified:` | Forces use of `markBankVerified()` |
+| **No direct sync-settlement-to-xero invoke** | `functions.invoke('sync-settlement-to-xero'` | Forces use of `pushSettlementToXero()` |
+| **No direct auto-post-settlement invoke** | `functions.invoke('auto-post-settlement'` | Forces use of `triggerAutoPost()` |
+| **No direct fetch-xero-invoice invoke** | `functions.invoke('fetch-xero-invoice'` | Forces use of `refreshXeroInvoiceDetails()` |
+| **No direct rescan-xero-invoice-match invoke** | `functions.invoke('rescan-xero-invoice-match'` | Forces use of `rescanMatchForInvoice()` |
+| **No direct preview-xettle-invoice-payload invoke** | `functions.invoke('preview-xettle-invoice-payload'` | Forces use of `compareXeroInvoiceToSettlement()` |
+| **No direct xero_invoice_cache writes** | `from('xero_invoice_cache').insert/upsert/update/delete` | Cache managed only by canonical actions |
+| **No local preview builder** | `buildXettlePreviewPayload` outside actions | Prevents duplicate invoice payload builders |
+| **No local tier computation** | `AU_VALIDATED_RAILS` outside policy | Forces use of `computeSupportTier()` |
+| **No raw DOM in AI context** | `innerHTML/outerHTML/document.body` in AI files | Prevents PII/DOM leakage to AI |
+| **No direct AI tool calls** | `getPageReadinessSummary` etc. outside registry | AI tools are server-side only |
+| **No direct refresh-xero-coa invoke** | `functions.invoke('refresh-xero-coa'` | Forces use of `refreshXeroCOA()` |
+| **No direct xero_chart_of_accounts writes** | `from('xero_chart_of_accounts').insert/upsert/update/delete` | COA cache managed only by canonical actions |
+| **No direct xero_tax_rates writes** | `from('xero_tax_rates').insert/upsert/update/delete` | Tax rates managed only by canonical actions |
+| **No direct create-xero-accounts invoke** | `functions.invoke('create-xero-accounts'` | Forces use of `createXeroAccounts()` |
+| **No direct settlements.insert()** | `from('settlements').insert(` outside allowed paths | Forces use of `saveSettlement()` → `applySourcePriority()` |
+| **Support tier: AU + AU_GST → SUPPORTED** | Unit test | Tier computation correctness |
+| **Support tier: AU + non-AU → EXPERIMENTAL** | Unit test | Tier computation correctness |
+| **Support tier: unknown rail → UNSUPPORTED** | Unit test | Tier computation correctness |
+| **AUTHORISED blocked outside SUPPORTED** | Unit test | Automation gating correctness |
+| **AUTHORISED allowed for SUPPORTED** | Unit test | Automation gating correctness |
+
+### 17.4 Source Priority Guard (New)
+
+Ensures CSV settlements override Shopify-derived API settlements consistently:
+
+| Rule | Trigger | Action |
+|------|---------|--------|
+| CSV supersedes API | `source='manual'` inserted, overlapping `source='api_sync'` exists | API record → `status='duplicate_suppressed'` |
+| API self-suppresses | `source='api_sync'` inserted, overlapping `source='manual'` exists | New API record → self-suppressed |
+| Source preference | User sets `source_preference:{marketplace}` = `'csv'` or `'api'` | `auto-generate-shopify-settlements` skips generation if CSV preferred |
+
+Enforcement: `applySourcePriority()` called post-insert in `settlement-engine.ts` and `AccountingDashboard.tsx`. Edge function checks preference + manual overlap before insert.
+
+### 17.5 Remaining Canonicalization Gaps
+
+| Area | Current State | Risk | Priority |
+|------|--------------|------|----------|
+| **Settlement ingestion (saveSettlement)** | Lives in `utils/settlement-engine.ts`, not `actions/`. `applySourcePriority()` bolted on post-insert. | Conceptually should be in actions/ but works — all paths call it consistently | Low — functional, not yet architecturally clean |
+| **Period locks** | `PeriodLockManager.tsx` writes directly to `period_locks` | Low — single UI path, non-financial | Low |
+| **Product costs** | `SkuCostManager.tsx` writes directly to `product_costs` | Low — single UI path, user's own data | Low |
+| **Bug reports** | `BugReportModal.tsx` writes directly to `bug_reports` | None — non-financial table | None |
+| **AI usage** | `use-ai-assistant.ts` writes directly to `ai_usage` | None — usage tracking only | None |
+| **Marketplace validation** | Written by `run-validation-sweep` edge fn + some client reads | Server-side controlled, client is read-only | None |
+| **Payment verifications** | Written by `match-bank-deposits` + `verify-payment-matches` edge fns | Server-side only, suggestion layer | None |
+| **Dashboard migration** | `AccountingDashboard` (4200+ lines), `ShopifyPaymentsDashboard`, `BunningsDashboard`, `ShopifyOrdersDashboard` NOT on shared hooks | Feature drift, inconsistent UX | Medium — product quality |
+| **Deprecated `marketplace_account_mapping` table** | Still read by edge functions (`auto-post-settlement`, `ai-assistant`) | Legacy reads; no new writes | Low — migration in progress |
+
+### 17.6 Canonical Constants (Single Source of Truth)
+
+| Constant | File | Used By |
+|----------|------|---------|
+| `ACCOUNTING_RULES` | `constants/accounting-rules.ts` | All push/sync paths, edge fn comment blocks |
+| `SETTLEMENT_STATUS` | `constants/settlement-status.ts` | All status reads/writes, UI badges |
+| `VALID_TRANSITIONS` | `constants/settlement-status.ts` | Status mutation validation |
+| `PHASE_1_RAILS` | `constants/settlement-rails.ts` | Support tier, rail posting settings |
+| `RAIL_PAYOUT_MODE` | `constants/settlement-rails.ts` | Bank match requirement checks |
+| `FINANCIAL_CATEGORIES` | `constants/financial-categories.ts` | All parsers, settlement_lines writes |
+| `ACTIVE_CONNECTION_STATUSES` | `constants/connection-status.ts` | All marketplace_connections queries |
+| `REQUIRED_CATEGORIES` | `actions/xeroReadiness.ts` | Push safety preview, edge functions (sync-tested) |
+| `MARKETPLACE_CONTACTS` | `constants/marketplace-contacts.ts` | Invoice builders, push safety |
+| `TOL_*` tolerances | `constants/reconciliation-tolerance.ts` | All reconciliation engines |
+| `XETTLE_AI_CAPABILITIES` | `ai/policy/xettleAiPolicy.ts` | AI context, edge function |
+| `SCOPE_VERSION` | `policy/supportPolicy.ts` | Scope consent tracking |
+
+### 17.7 Edge Function → Client Guardrail Summary
+
+Edge functions that MUST be invoked through canonical actions (never directly from components):
+
+| Edge Function | Canonical Wrapper | Guardrail Test |
+|--------------|-------------------|----------------|
+| `sync-settlement-to-xero` | `pushSettlementToXero()`, `rollbackFromXero()` | ✅ |
+| `auto-post-settlement` | `triggerAutoPost()` | ✅ |
+| `fetch-xero-invoice` | `refreshXeroInvoiceDetails()` | ✅ |
+| `rescan-xero-invoice-match` | `rescanMatchForInvoice()` | ✅ |
+| `preview-xettle-invoice-payload` | `compareXeroInvoiceToSettlement()` | ✅ |
+| `refresh-xero-coa` | `refreshXeroCOA()` | ✅ |
+| `create-xero-accounts` | `createXeroAccounts()` | ✅ |
+
+Edge functions that are called directly (no guardrail needed — server-initiated or auth-flow):
+
+| Edge Function | Reason |
+|--------------|--------|
+| `xero-auth`, `amazon-auth`, `shopify-auth`, `ebay-auth` | OAuth flows — browser redirect callbacks |
+| `fetch-amazon-settlements`, `fetch-shopify-payouts`, `fetch-ebay-settlements` | Triggered via `runMarketplaceSync()` canonical action |
+| `fetch-shopify-orders`, `scan-shopify-channels` | Triggered via sync flows |
+| `ai-assistant`, `ai-file-interpreter`, `ai-account-mapper`, `ai-bug-triage` | AI features — no accounting writes |
+| `scheduled-sync` | Cron-triggered, no client invoke |
+| `run-validation-sweep` | Server-side sweep, read-heavy |
+| `auto-generate-shopify-settlements` | Server-side, source priority enforced internally |
+| `match-bank-deposits`, `verify-payment-matches` | Server-side, suggestion-only |
+| `admin-list-users`, `admin-manage-users`, `account-reset` | Admin-only, service-role |
+| `historical-audit`, `growth-scout` | Analytics/admin features |
+| `export-system-events-csv` | Export utility |
+| `generate-gst-summary`, `generate-gst-variance`, `generate-gst-audit-pack`, `fetch-gst-variance-evidence` | GST reporting — read-heavy |
+| `fetch-xero-bank-accounts`, `fetch-xero-bank-transactions` | Bank sync — single-caller architecture |
+| `fetch-outstanding` | Outstanding tab data — read-heavy |
+| `scan-xero-history` | Xero audit — read-heavy |
+| `apply-xero-payment` | Server-side payment application |
+
+### 17.8 Database Tables — Write Protection Matrix
+
+Tables with canonical write protection (client-side writes blocked by guardrails):
+
+| Table | Protected Writes | Canonical Path |
+|-------|-----------------|----------------|
+| `settlements` | insert, update (status, is_hidden, bank_verified), delete | `actions/settlements.ts` |
+| `xero_invoice_cache` | insert, upsert, update, delete | `actions/xeroInvoice.ts` |
+| `xero_chart_of_accounts` | insert, upsert, update, delete | `actions/xeroAccounts.ts` |
+| `xero_tax_rates` | insert, upsert, update, delete | `actions/xeroAccounts.ts` |
+| `marketplace_connections` | insert (provisioning) | `actions/marketplaces.ts` |
+
+Tables with server-side-only protection (RLS + service role):
+
+| Table | Protected By |
+|-------|-------------|
+| `xero_accounting_matches` | `safeUpsertXam()` helper in edge functions |
+| `sync_locks` | `acquire_sync_lock()` / `release_sync_lock()` DB functions |
+| `user_roles` | RLS: read-only for users, write by triggers/admin only |
+| `xero_tokens`, `amazon_tokens`, `ebay_tokens` | RLS: user-scoped, written by OAuth edge functions |
+
+Tables with no write protection needed (non-financial, user-scoped):
+
+| Table | Reason |
+|-------|--------|
+| `app_settings` | Key-value config, user's own data |
+| `bug_reports` | Bug tracking |
+| `ai_usage` | Usage counters |
+| `product_costs` | User's COGS data |
+| `period_locks` | Single UI path |
+| `settlement_lines` | Always written alongside settlement (cascaded) |
+| `settlement_unmapped` | Always written alongside settlement (cascaded) |
+| `reconciliation_notes` | User annotations |
+| `community_contact_classifications` | Community voting |
+
+---
+
 *This document is the single source of truth for Xettle's architecture. Update it when systems change.*
