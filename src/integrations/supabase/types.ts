@@ -1659,6 +1659,7 @@ export type Database = {
         Row: {
           calculated_at: string
           created_at: string
+          fulfilment_data_incomplete: boolean
           gross_profit: number
           gross_revenue: number
           id: string
@@ -1678,6 +1679,7 @@ export type Database = {
         Insert: {
           calculated_at?: string
           created_at?: string
+          fulfilment_data_incomplete?: boolean
           gross_profit?: number
           gross_revenue?: number
           id?: string
@@ -1697,6 +1699,7 @@ export type Database = {
         Update: {
           calculated_at?: string
           created_at?: string
+          fulfilment_data_incomplete?: boolean
           gross_profit?: number
           gross_revenue?: number
           id?: string

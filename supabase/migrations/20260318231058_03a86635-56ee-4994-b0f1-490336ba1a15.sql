@@ -1,0 +1,2 @@
+ALTER TABLE settlement_profit ADD COLUMN IF NOT EXISTS fulfilment_data_incomplete boolean NOT NULL DEFAULT false;
+COMMENT ON COLUMN settlement_profit.fulfilment_data_incomplete IS 'True when mixed_fba_fbm mode lacks line-level fulfilment_channel data';
