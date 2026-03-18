@@ -118,8 +118,15 @@ Deno.serve(async (req) => {
       const batch = orderIds.slice(i, i + 200);
 
       const fbaOrderIds = batch.filter((id) => orderHasFba.get(id) === true);
-      const fbmOrderIds = batch.filter((id) => orderHasFba.get(id) === false);
+      // Orders without FBA fees but ALL lines are refunds → AFN_inferred (conservative)
+      const refundOnlyOrderIds = batch.filter(
+        (id) => orderHasFba.get(id) === false && orderIsRefundOnly.get(id) === true
+      );
+      const fbmOrderIds = batch.filter(
+        (id) => orderHasFba.get(id) === false && orderIsRefundOnly.get(id) !== true
+      );
 
+      // AFN_inferred: orders with FBA fee lines
       if (fbaOrderIds.length > 0) {
         const { error: fbaErr } = await admin
           .from("settlement_lines")
@@ -133,10 +140,22 @@ Deno.serve(async (req) => {
         classifiedFba += fbaOrderIds.length;
       }
 
+      // AFN_inferred: refund-only orders (conservative default — original order was likely FBA)
+      if (refundOnlyOrderIds.length > 0) {
+        const { error: refundErr } = await admin
+          .from("settlement_lines")
+          .update({ fulfilment_channel: "AFN_inferred" })
+          .eq("user_id", userId)
+          .is("fulfilment_channel", null)
+          .ilike("marketplace_name", "%amazon%")
+          .in("order_id", refundOnlyOrderIds);
+
+        if (refundErr) console.error("Refund-only batch error:", refundErr);
+        classifiedFba += refundOnlyOrderIds.length;
+      }
+
+      // MFN_inferred: orders without FBA fees and with non-refund lines
       if (fbmOrderIds.length > 0) {
-        // Check if these are refund-only orders (conservative → AFN_inferred)
-        // For simplicity, orders without FBA fees default to MFN_inferred
-        // UNLESS they have zero non-refund lines, then AFN_inferred
         const { error: fbmErr } = await admin
           .from("settlement_lines")
           .update({ fulfilment_channel: "MFN_inferred" })
