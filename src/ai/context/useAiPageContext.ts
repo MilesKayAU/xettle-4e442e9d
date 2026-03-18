@@ -22,19 +22,28 @@ export function useAiPageContext(builder: () => AiPageContext) {
   const { setPageContext, clearPageContext } = useAiContext();
   const builderRef = useRef(builder);
   builderRef.current = builder;
+  const prevJsonRef = useRef<string>('');
 
   useEffect(() => {
     const ctx = builderRef.current();
-    setPageContext(ctx);
+    const json = JSON.stringify(ctx);
+    if (json !== prevJsonRef.current) {
+      prevJsonRef.current = json;
+      setPageContext(ctx);
+    }
 
     return () => {
       clearPageContext();
     };
   }, [setPageContext, clearPageContext]);
 
-  // Re-run when builder changes (deps change in calling component)
+  // Re-run when builder output changes
   useEffect(() => {
     const ctx = builder();
-    setPageContext(ctx);
+    const json = JSON.stringify(ctx);
+    if (json !== prevJsonRef.current) {
+      prevJsonRef.current = json;
+      setPageContext(ctx);
+    }
   });
 }
