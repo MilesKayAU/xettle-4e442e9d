@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
             }
           }
           for (const [, ch] of orderChannels) {
-            postageDeduction += getPostageDeductionForOrder(fulfilmentMethod, ch, postageCostPerOrder);
+            postageDeduction += getPostageDeductionForOrder(fulfilmentMethod, ch, postageCostPerOrder, 1, mcfCostPerOrder);
           }
         } else {
           // No line data (legacy) → zero deduction (treat all as FBA)
