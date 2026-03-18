@@ -395,6 +395,51 @@ export type Database = {
         }
         Relationships: []
       }
+      growth_opportunities: {
+        Row: {
+          created_at: string
+          draft_response: string | null
+          id: string
+          platform: string
+          posted_at: string | null
+          relevance_score: number | null
+          search_query: string | null
+          status: string
+          thread_snippet: string | null
+          thread_title: string
+          thread_url: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          draft_response?: string | null
+          id?: string
+          platform: string
+          posted_at?: string | null
+          relevance_score?: number | null
+          search_query?: string | null
+          status?: string
+          thread_snippet?: string | null
+          thread_title: string
+          thread_url?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          draft_response?: string | null
+          id?: string
+          platform?: string
+          posted_at?: string | null
+          relevance_score?: number | null
+          search_query?: string | null
+          status?: string
+          thread_snippet?: string | null
+          thread_title?: string
+          thread_url?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       gst_audit_summary: {
         Row: {
           breakdown: Json | null
