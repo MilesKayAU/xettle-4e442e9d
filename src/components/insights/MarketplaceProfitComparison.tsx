@@ -116,7 +116,8 @@ export default function MarketplaceProfitComparison() {
         if (!mp) continue;
         if (!settlementMap.has(mp)) settlementMap.set(mp, { revenue: 0, payout: 0, count: 0, hasEstimated: false });
         const entry = settlementMap.get(mp)!;
-        entry.revenue += (Number(row.sales_principal) || 0) + (Number(row.sales_shipping) || 0);
+        // Revenue MUST include GST to be comparable with bank_deposit (which is GST-inclusive)
+        entry.revenue += (Number(row.sales_principal) || 0) + (Number(row.sales_shipping) || 0) + (Number(row.gst_on_income) || 0);
         entry.payout += Number(row.bank_deposit) || 0;
         entry.count++;
         const payload = row.raw_payload as any;
