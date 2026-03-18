@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.export-system-events-csv]
 verify_jwt = false
+
+[functions.backfill-fulfilment-channel]
+verify_jwt = true
