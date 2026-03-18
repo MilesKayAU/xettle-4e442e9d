@@ -108,6 +108,7 @@ export interface SettlementLine {
   postedDate: string;
   marketplaceName: string;
   isAuMarketplace: boolean;
+  fulfilmentChannel: string | null;
 }
 
 export interface UnmappedLine {
