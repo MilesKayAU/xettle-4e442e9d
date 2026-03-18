@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
         }
       } else {
         // Non-mixed: canonical function owns the multiplication via orderCount
-        postageDeduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, ordersCount);
+        postageDeduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, ordersCount, mcfCostPerOrder);
       }
 
       const grossProfit = salesExGst - totalCogs - feesAmount - postageDeduction;
