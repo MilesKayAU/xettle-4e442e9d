@@ -70,19 +70,21 @@ export function findTemplateAccounts(
   const results: TemplateAccount[] = [];
 
   // Build keyword variants for the marketplace
-  const keywords = [mpLower];
-  // For multi-word marketplaces, also try individual significant words
-  const words = mpLower.split(/\s+/).filter(w => w.length > 2);
-  if (words.length > 1) {
-    keywords.push(...words);
-  }
+  // Always include the full label AND individual significant words (≥3 chars)
+  // This ensures "Amazon AU" matches "Amazon Sales AU" via the word "amazon"
+  const words = mpLower.split(/\s+/).filter(w => w.length >= 3);
+  // Use individual words as primary keywords (more flexible), plus the full label
+  const keywords = [...new Set([...words, mpLower])];
 
   for (const acc of coaAccounts) {
     if (!acc.account_code || !acc.is_active) continue;
     const nameLower = acc.account_name.toLowerCase();
 
     // Check if this account matches the marketplace
-    const matchesMarketplace = keywords.some(kw => nameLower.includes(kw));
+    // For multi-word marketplaces, ALL significant words must appear (prevents false positives)
+    const matchesMarketplace = words.length > 0
+      ? words.every(w => nameLower.includes(w))
+      : nameLower.includes(mpLower);
     if (!matchesMarketplace) continue;
 
     // Determine category from account name
