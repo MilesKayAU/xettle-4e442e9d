@@ -146,6 +146,7 @@ interface SettlementRow {
   bank_verified_amount: number | null;
   bank_verified_at: string | null;
   bank_verified_by: string | null;
+  source: string | null;
 }
 
 /** Hardcoded fallback for marketplaces not yet in fingerprints table */
