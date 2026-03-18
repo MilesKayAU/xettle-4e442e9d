@@ -902,3 +902,65 @@ Additionally, `settlement-parser.ts` has ~10 `console.info` calls for debugging 
 ### Profiles table
 - **Missing:** No `profiles` table for storing user display names, avatars, or preferences beyond `app_settings`
 - **Status:** User metadata stored only in `auth.users` (inaccessible via client)
+
+---
+
+## 11. PHASE B — FULFILMENT CHANNEL ENRICHMENT (18 March 2026)
+
+### Summary
+Added fulfilment channel tracking (FBA/FBM/MCF) across Amazon settlement ingestion, historical backfill via fee-pattern inference, and MCF cost support for Shopify orders fulfilled by Amazon.
+
+### Changed Files
+
+| # | File | Action | Description |
+|---|------|--------|-------------|
+| 1 | `supabase/functions/backfill-fulfilment-channel/index.ts` | **NEW** | Fee-pattern inference backfill edge function. Scans `settlement_lines` for FBA fee descriptions, classifies as `AFN_inferred` or `MFN_inferred`. Auth: `verify_jwt = true`. |
+| 2 | `supabase/functions/fetch-amazon-settlements/index.ts` | Modified | Reads `fulfillment-channel` column from Amazon TSV. Maps `Amazon` → `AFN`, `Merchant` → `MFN`. Passes to all 3 `settlement_lines` insert sites. |
+| 3 | `src/utils/settlement-parser.ts` | Modified | Same `fulfillment-channel` mapping for CSV-based Amazon uploads. Added `fulfilmentChannel` to `SettlementLine` interface. |
+| 4 | `src/utils/fulfilment-settings.ts` | Modified | `getPostageDeductionForOrder()` now strips `_INFERRED` suffix before logic. Added `mcfCostPerOrder` parameter. MCF channel returns MCF cost instead of postage. Changed default for new Amazon connections to `mixed_fba_fbm`. |
+| 5 | `supabase/functions/_shared/fulfilment-policy.ts` | Modified | Deno mirror of Fix 4 — identical `_INFERRED` stripping + MCF handling. |
+| 6 | `src/utils/profit-engine.ts` | Modified | Loads `mcf_cost` from `app_settings`, passes as `mcfCostPerOrder` to canonical function. |
+| 7 | `supabase/functions/recalculate-profit/index.ts` | Modified | Server-side mirror — loads MCF cost setting, passes to `getPostageDeductionForOrder()`. |
+| 8 | `supabase/functions/auto-generate-shopify-settlements/index.ts` | Modified | Detects CedCommerce MCF indicators in Shopify `note_attributes` (e.g. `cedcommerce_channel`, `mcf_order`, `fulfillment_by_amazon`). Sets `fulfilment_channel = 'MCF'`. |
+| 9 | `src/components/settings/DataQualityPanel.tsx` | Modified | Added "Classify Amazon fulfilment data" button. Calls `backfill-fulfilment-channel` edge function, shows summary toast. |
+| 10 | `src/components/settings/FulfilmentMethodsPanel.tsx` | Modified | Added MCF cost input (default $8.00) under Amazon section when method is `mixed_fba_fbm`. Added one-time dismissible upgrade prompt for existing users on `marketplace_fulfilled`. |
+| 11 | `src/components/admin/accounting/AccountingDashboard.tsx` | Modified | Passes `fulfilment_channel` at Amazon settlement_lines insert site. |
+| 12 | `supabase/config.toml` | Modified | Registered `backfill-fulfilment-channel` with `verify_jwt = true`. |
+
+### Key Logic Change
+```typescript
+// getPostageDeductionForOrder() — both client + Deno
+const raw = (lineChannel || "").toUpperCase().trim();
+const ch = raw.replace("_INFERRED", ""); // AFN_inferred → AFN
+if (ch === "MCF") return (mcfCostPerOrder || 0) * orderCount;
+// ... existing AFN/MFN/mixed logic unchanged
+```
+
+### Inference Backfill Logic
+```
+For each order_id where fulfilment_channel IS NULL and marketplace ILIKE '%amazon%':
+  IF any row has amount_description IN ('FBAPerUnitFulfillmentFee', 'FBAWeightBasedFee', 'FBAPerOrderFulfillmentFee')
+    → all rows for that order_id = 'AFN_inferred'
+  ELSE
+    → 'MFN_inferred'
+  Special: refund-only orders default to 'AFN_inferred'
+```
+
+### Pre-Build Validation
+| Metric | Count |
+|--------|-------|
+| Total Amazon AU settlement_lines rows | 14,664 |
+| Distinct order_ids with FBA fee lines | 3,873 |
+| Amazon orders without FBA fees (refund-only) | 3 |
+| Non-Amazon orders (correctly excluded) | 955 |
+
+### Security
+- Backfill function uses `verify_jwt = true` — requires authenticated user
+- All queries scoped to `user_id` from JWT
+- `_inferred` values can be overwritten by confirmed parser values on re-import
+
+### Not Changed
+- Non-Amazon marketplace parsers (Woolworths, Kogan, Bunnings, eBay)
+- Xero push / accounting / invoice logic
+- RLS policies
+- Database schema (no migrations required — `fulfilment_channel` column already existed)
