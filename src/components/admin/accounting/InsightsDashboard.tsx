@@ -313,8 +313,6 @@ export default function InsightsDashboard() {
         feeBreakdown.sort((a, b) => b.amount - a.amount);
 
         // ─── Universal Data Quality Guards ──────────────────────────────
-        // These guards apply to ALL marketplaces (present and future) based on
-        // universal patterns rather than per-marketplace patches.
         const hasEstimatedFees = rows.some(r => {
           const payload = r.raw_payload as any;
           return payload?.fees_estimated === true;
@@ -326,15 +324,14 @@ export default function InsightsDashboard() {
         const hasFeeAnomaly = totalFees > totalSales;
         const hasNegativePayout = netPayout < 0 && totalSales > 0;
 
-        // ─── Apply Estimated Commission When Fee Data Missing ───────────
-        // Handles two scenarios:
-        // 1. ALL rows are api_sync with $0 fees → apply estimated commission rate
-        // 2. MIXED CSV + api_sync → extrapolate the real CSV fee rate onto api_sync rows
+        // Include redistributed platform fees from sibling marketplaces
+        const redistributedPlatformFees = (grouped[mp] as any)?._redistributedPlatformFees || 0;
+
         let effectiveReturnRatio = returnRatio;
         let effectiveFeeLoad = feeLoad;
         let effectiveNetPayout = netPayout;
-        let effectiveTotalFees = totalFees;
-        let effectiveHasEstimatedFees = hasEstimatedFees;
+        let effectiveTotalFees = totalFees + redistributedPlatformFees;
+        let effectiveHasEstimatedFees = hasEstimatedFees || redistributedPlatformFees > 0;
 
         // For fee/commission calculations, identify rows with real fee data
         const feeRelevantRows = rows.filter(r => {
