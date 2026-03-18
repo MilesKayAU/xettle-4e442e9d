@@ -18,6 +18,28 @@ const getLabel = (code: string) => MARKETPLACE_LABELS[code] || code;
 export default function InsightsTab() {
   const { feeAnalysis, gstLiability, trend12Month, channelComparison, loading, error } = useInsightsData();
 
+  useAiPageContext(() => ({
+    routeId: 'insights',
+    pageTitle: 'Insights & Analytics',
+    primaryEntities: {
+      marketplace_codes: [...new Set(channelComparison.map((c: any) => c.marketplace))],
+    },
+    pageStateSummary: {
+      marketplace_count: channelComparison.length,
+      months_of_data: trend12Month.length,
+      has_fee_data: feeAnalysis.length > 0,
+      has_gst_data: (gstLiability?.length ?? 0) > 0,
+      loading,
+    },
+    capabilities: ['view_fee_analysis', 'view_gst_summary', 'view_trend', 'compare_channels'],
+    suggestedPrompts: [
+      'Which marketplace is most profitable?',
+      'How have my fees trended over the last 6 months?',
+      'What is my GST liability this quarter?',
+      'Compare my marketplace channels',
+    ],
+  }));
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
