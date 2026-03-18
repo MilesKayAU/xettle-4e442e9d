@@ -152,6 +152,7 @@ export default function PushSafetyPreview({
 
   useEffect(() => {
     if (open && settlements.length > 0) {
+      trackAction('opened_push_preview', `${settlements.length} settlement(s)`);
       loadPreviews();
     }
   }, [open, settlements]);
