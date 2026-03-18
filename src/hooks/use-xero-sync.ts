@@ -14,6 +14,7 @@ import {
 } from '@/utils/settlement-engine';
 import { runUniversalReconciliation } from '@/utils/universal-reconciliation';
 import { toast } from 'sonner';
+import { isReconciliationOnly } from '@/utils/settlement-policy';
 import type { BaseSettlementRow } from './use-settlement-manager';
 
 interface UseXeroSyncOptions {
