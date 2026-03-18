@@ -15,6 +15,7 @@
 import React, { useState, useEffect } from 'react';
 import { logger } from '@/utils/logger';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
+import { useAiActionTracker } from '@/ai/context/useAiActionTracker';
 // Rule #11 enforcement is server-side: sync-settlement-to-xero requires
 // settlementId + settlementData. No order/payment path exists.
 // See: src/constants/accounting-rules.ts for canonical documentation.
