@@ -462,7 +462,9 @@ export default function InsightsDashboard() {
     );
   }
 
-  const bestRatio = Math.max(...stats.map(s => s.returnRatio));
+  // For "Best" badge, only consider marketplaces with real (non-estimated) fee data
+  const realFeeStatsForBest = stats.filter(s => !s.hasEstimatedFees);
+  const bestRatio = Math.max(...(realFeeStatsForBest.length > 0 ? realFeeStatsForBest : stats).map(s => s.returnRatio));
   const totalAllSales = stats.reduce((sum, s) => sum + s.totalSales, 0);
   const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout, 0);
   const totalAllFees = stats.reduce((sum, s) => sum + s.totalFees, 0);
