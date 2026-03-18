@@ -1,0 +1,1 @@
+ALTER TABLE public.settlement_profit ADD COLUMN IF NOT EXISTS postage_deduction numeric DEFAULT 0;

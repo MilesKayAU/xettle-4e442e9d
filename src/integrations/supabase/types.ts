@@ -1664,6 +1664,7 @@ export type Database = {
           marketplace_fees: number
           orders_count: number
           period_label: string
+          postage_deduction: number | null
           settlement_id: string
           total_cogs: number
           uncosted_revenue: number
@@ -1682,6 +1683,7 @@ export type Database = {
           marketplace_fees?: number
           orders_count?: number
           period_label: string
+          postage_deduction?: number | null
           settlement_id: string
           total_cogs?: number
           uncosted_revenue?: number
@@ -1700,6 +1702,7 @@ export type Database = {
           marketplace_fees?: number
           orders_count?: number
           period_label?: string
+          postage_deduction?: number | null
           settlement_id?: string
           total_cogs?: number
           uncosted_revenue?: number
