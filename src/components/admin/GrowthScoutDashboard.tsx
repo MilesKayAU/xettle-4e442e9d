@@ -3,11 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import {
-  Crosshair, Copy, Check, X, ExternalLink, ChevronDown, Sparkles, Filter, Search, Clock,
+  Crosshair, Copy, Check, X, ExternalLink, ChevronDown, Sparkles, Filter, Search, Clock, Trash2,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -67,6 +68,8 @@ export default function GrowthScoutDashboard() {
   const [scouting, setScouting] = useState(false);
   const [filter, setFilter] = useState<string>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const loadOpportunities = async () => {
     setLoading(true);
@@ -81,6 +84,7 @@ export default function GrowthScoutDashboard() {
     } else {
       setOpportunities((data as unknown as Opportunity[]) || []);
     }
+    setSelected(new Set());
     setLoading(false);
   };
 
@@ -155,6 +159,62 @@ export default function GrowthScoutDashboard() {
     toast({ title: 'Copied', description: 'Draft response copied to clipboard' });
   };
 
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(o => o.id)));
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (selected.size === 0) return;
+    const confirmed = window.confirm(`Delete ${selected.size} opportunity${selected.size > 1 ? 'ies' : 'y'}?`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    const ids = Array.from(selected);
+    const { error } = await supabase
+      .from('growth_opportunities')
+      .delete()
+      .in('id', ids);
+
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to delete', variant: 'destructive' });
+    } else {
+      setOpportunities(prev => prev.filter(o => !selected.has(o.id)));
+      setSelected(new Set());
+      toast({ title: 'Deleted', description: `Removed ${ids.length} opportunities` });
+    }
+    setDeleting(false);
+  };
+
+  const deleteAll = async () => {
+    if (opportunities.length === 0) return;
+    const confirmed = window.confirm(`Delete ALL ${opportunities.length} opportunities? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    const ids = opportunities.map(o => o.id);
+    // Delete in batches of 50
+    for (let i = 0; i < ids.length; i += 50) {
+      const batch = ids.slice(i, i + 50);
+      await supabase.from('growth_opportunities').delete().in('id', batch);
+    }
+    setOpportunities([]);
+    setSelected(new Set());
+    toast({ title: 'Cleared', description: 'All opportunities deleted' });
+    setDeleting(false);
+  };
+
   const filtered = filter === 'all'
     ? opportunities
     : opportunities.filter(o => o.status === filter);
@@ -176,7 +236,7 @@ export default function GrowthScoutDashboard() {
             Growth Scout
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            AI-powered forum & community opportunity finder — answer-first, link-second
+            Find communities & groups to join — Facebook, Reddit, Xero, LinkedIn — where prospects live
           </p>
           {lastScoutedAt && (
             <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
@@ -185,14 +245,22 @@ export default function GrowthScoutDashboard() {
             </p>
           )}
         </div>
-        <Button onClick={runScout} disabled={scouting}>
-          {scouting ? (
-            <LoadingSpinner size="sm" className="mr-2" />
-          ) : (
-            <Sparkles className="h-4 w-4 mr-2" />
+        <div className="flex items-center gap-2">
+          {opportunities.length > 0 && (
+            <Button variant="outline" size="sm" onClick={deleteAll} disabled={deleting}>
+              <Trash2 className="h-4 w-4 mr-1" />
+              Clear All
+            </Button>
           )}
-          {scouting ? 'Scouting...' : 'Run Scout'}
-        </Button>
+          <Button onClick={runScout} disabled={scouting}>
+            {scouting ? (
+              <LoadingSpinner size="sm" className="mr-2" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-2" />
+            )}
+            {scouting ? 'Scouting...' : 'Run Scout'}
+          </Button>
+        </div>
       </div>
 
       {/* Stats strip */}
@@ -212,6 +280,25 @@ export default function GrowthScoutDashboard() {
           </button>
         ))}
       </div>
+
+      {/* Bulk action bar */}
+      {filtered.length > 0 && (
+        <div className="flex items-center gap-3 px-1">
+          <Checkbox
+            checked={selected.size === filtered.length && filtered.length > 0}
+            onCheckedChange={toggleSelectAll}
+          />
+          <span className="text-sm text-muted-foreground">
+            {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
+          </span>
+          {selected.size > 0 && (
+            <Button variant="destructive" size="sm" onClick={deleteSelected} disabled={deleting}>
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Delete {selected.size}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Opportunities */}
       {loading ? (
@@ -236,31 +323,38 @@ export default function GrowthScoutDashboard() {
               <Card className={opp.status === 'dismissed' ? 'opacity-50' : ''}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <Badge
-                          variant="outline"
-                          className={platformColors[opp.platform] || 'bg-muted'}
-                        >
-                          {platformLabels[opp.platform] || opp.platform}
-                        </Badge>
-                        <Badge variant="outline" className="font-mono text-xs">
-                          Score: {opp.relevance_score}/10
-                        </Badge>
-                        {opp.status === 'posted' && (
-                          <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
-                            Posted
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <Checkbox
+                        checked={selected.has(opp.id)}
+                        onCheckedChange={() => toggleSelect(opp.id)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <Badge
+                            variant="outline"
+                            className={platformColors[opp.platform] || 'bg-muted'}
+                          >
+                            {platformLabels[opp.platform] || opp.platform}
                           </Badge>
+                          <Badge variant="outline" className="font-mono text-xs">
+                            Score: {opp.relevance_score}/10
+                          </Badge>
+                          {opp.status === 'posted' && (
+                            <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                              Posted
+                            </Badge>
+                          )}
+                        </div>
+                        <CardTitle className="text-base leading-snug">
+                          {opp.thread_title}
+                        </CardTitle>
+                        {opp.thread_snippet && (
+                          <CardDescription className="mt-1 line-clamp-2">
+                            "{opp.thread_snippet}"
+                          </CardDescription>
                         )}
                       </div>
-                      <CardTitle className="text-base leading-snug">
-                        {opp.thread_title}
-                      </CardTitle>
-                      {opp.thread_snippet && (
-                        <CardDescription className="mt-1 line-clamp-2">
-                          "{opp.thread_snippet}"
-                        </CardDescription>
-                      )}
                     </div>
                     <CollapsibleTrigger asChild>
                       <Button variant="ghost" size="icon" className="shrink-0">
@@ -315,7 +409,7 @@ export default function GrowthScoutDashboard() {
                           rel="noopener noreferrer"
                         >
                           <Search className="h-3.5 w-3.5 mr-1" />
-                          Search for Thread
+                          Find on Google
                         </a>
                       </Button>
                       {opp.status !== 'posted' && (
