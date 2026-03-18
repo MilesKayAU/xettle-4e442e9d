@@ -12,7 +12,7 @@
 export const PHASE_1_RAILS = [
   { code: 'amazon_au', label: 'Amazon AU Payouts', description: 'Settlement payouts from Amazon Australia', validDestTypes: ['bank', 'clearing'] },
   { code: 'shopify_payments', label: 'Shopify Payments', description: 'Bank payouts from Shopify Payments gateway only', validDestTypes: ['bank', 'clearing'] },
-  { code: 'ebay', label: 'eBay Payouts', description: 'Settlement payouts from eBay', validDestTypes: ['bank', 'clearing'] },
+  { code: 'ebay_au', label: 'eBay AU Payouts', description: 'Settlement payouts from eBay Australia', validDestTypes: ['bank', 'clearing'] },
   { code: 'bunnings', label: 'Bunnings Payouts', description: 'Settlement payouts from Bunnings MarketLink', validDestTypes: ['bank', 'clearing'] },
   { code: 'catch', label: 'Catch Payouts', description: 'Settlement payouts from Catch', validDestTypes: ['bank', 'clearing'] },
   { code: 'kogan', label: 'Kogan Payouts', description: 'Settlement payouts from Kogan', validDestTypes: ['bank', 'clearing'] },
@@ -37,7 +37,7 @@ export function getValidDestTypes(railCode: string): readonly string[] {
 
 /** Maps legacy/variant marketplace codes to canonical rail codes */
 export const RAIL_ALIASES: Record<string, string> = {
-  ebay_au: 'ebay',
+  ebay: 'ebay_au',
 };
 
 /** Normalise a marketplace code to its canonical rail code */

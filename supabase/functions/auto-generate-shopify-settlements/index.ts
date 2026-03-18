@@ -24,7 +24,7 @@ const FALLBACK_MARKETPLACE_REGISTRY: Record<string, { code: string; name: string
   'everyday market':  { code: 'everyday_market', name: 'Everyday Market' },
   'mydeal':           { code: 'mydeal', name: 'MyDeal' },
   'bunnings':         { code: 'bunnings', name: 'Bunnings' },
-  'ebay':             { code: 'ebay', name: 'eBay' },
+  'ebay':             { code: 'ebay_au', name: 'eBay Australia' },
   'catch':            { code: 'catch', name: 'Catch' },
   'amazon':           { code: 'amazon', name: 'Amazon' },
   'tradesquare':      { code: 'tradesquare', name: 'TradeSquare' },
