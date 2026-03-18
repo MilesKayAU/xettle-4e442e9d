@@ -91,6 +91,9 @@ export default function ReconciliationHub() {
   const [resolvedDays] = useState(14);
   const [noteInput, setNoteInput] = useState<Record<string, string>>({});
   const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
+  const [expandedPayload, setExpandedPayload] = useState<string | null>(null);
+  const [payloadCache, setPayloadCache] = useState<Record<string, { lines: LineItemPreview[]; contact: string; reference: string; bankDeposit: number; gstIncome: number; gstExpenses: number }>>({});
+  const [payloadLoading, setPayloadLoading] = useState<string | null>(null);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
