@@ -154,6 +154,19 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre, mis
           })}
         </div>
         {setupWarnings.length > 0 && <SetupWarningList warnings={setupWarnings} />}
+        {missingSettlementCount > 0 && (
+          <button
+            onClick={onUploadClick}
+            className="flex items-center gap-2 w-full rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-left transition-all hover:shadow-sm group"
+          >
+            <Upload className="h-4 w-4 text-amber-500 shrink-0" />
+            <span className="text-xs text-foreground flex-1">
+              <strong>{missingSettlementCount} marketplace{missingSettlementCount > 1 ? 's have' : ' has'} no recent settlement</strong>
+              <span className="text-muted-foreground"> — upload now for faster Xero visibility</span>
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          </button>
+        )}
       </div>
     </TooltipProvider>
   );
