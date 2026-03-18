@@ -67,16 +67,11 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .select('marketplace_code, marketplace_name, connection_status')
       .in('connection_status', [...ACTIVE_CONNECTION_STATUSES]),
 
-    // App settings for setup checks
+    // App settings for setup checks (include fulfilment_method:* via ilike)
     supabase
       .from('app_settings')
       .select('key, value')
-      .in('key', [
-        'accounting_xero_account_codes',
-        'scope_acknowledged_at',
-        'scope_version',
-        'tax_profile',
-      ]),
+      .or('key.in.(accounting_xero_account_codes,scope_acknowledged_at,scope_version,tax_profile),key.like.fulfilment_method:%'),
 
     // Reconciliation alerts (missing/partial from marketplace_validation)
     supabase
