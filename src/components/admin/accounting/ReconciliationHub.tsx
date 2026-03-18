@@ -612,6 +612,78 @@ export default function ReconciliationHub() {
                   </Button>
                 </div>
               </div>
+
+              {/* ─── Xero Payload Preview (expanded) ─── */}
+              {expandedPayload === item.sourceId && payloadCache[item.sourceId] && (() => {
+                const pl = payloadCache[item.sourceId];
+                const lineSum = pl.lines.reduce((s, l) => s + l.amount, 0);
+                const roundedSum = Math.round(lineSum * 100) / 100;
+                const diff = Math.round((roundedSum - pl.bankDeposit) * 100) / 100;
+                return (
+                  <div className="mt-3 border-t border-border pt-3 space-y-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Eye className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-semibold text-foreground">Proposed Xero Invoice</span>
+                    </div>
+
+                    {/* Meta */}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div><span className="text-muted-foreground">Contact:</span> <span className="font-medium text-foreground">{pl.contact}</span></div>
+                      <div><span className="text-muted-foreground">Reference:</span> <span className="font-mono text-foreground">{pl.reference}</span></div>
+                    </div>
+
+                    {/* Line items table */}
+                    <div className="rounded border border-border overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/30">
+                            <TableHead className="text-[11px] h-8 py-1">Description</TableHead>
+                            <TableHead className="text-[11px] h-8 py-1">Account</TableHead>
+                            <TableHead className="text-[11px] h-8 py-1">Tax Type</TableHead>
+                            <TableHead className="text-[11px] h-8 py-1 text-right">Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pl.lines.map((line, idx) => (
+                            <TableRow key={idx} className="text-xs">
+                              <TableCell className="py-1.5">{line.description}</TableCell>
+                              <TableCell className="py-1.5 font-mono">{line.accountCode === 'UNMAPPED' ? <span className="text-destructive font-bold">UNMAPPED</span> : line.accountCode}</TableCell>
+                              <TableCell className="py-1.5">{line.taxType}</TableCell>
+                              <TableCell className="py-1.5 text-right font-mono">{formatAUD(line.amount)}</TableCell>
+                            </TableRow>
+                          ))}
+                          {/* Totals row */}
+                          <TableRow className="bg-muted/20 font-medium text-xs border-t-2 border-border">
+                            <TableCell className="py-1.5" colSpan={3}>
+                              Line item total
+                              {Math.abs(diff) > 0.02 && (
+                                <span className="ml-2 text-destructive text-[10px]">
+                                  (Δ {formatAUD(diff)} vs bank deposit)
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-mono">{formatAUD(roundedSum)}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* GST + Attachments */}
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                      {pl.gstIncome !== 0 && (
+                        <span>GST on income: <span className="text-foreground font-mono">{formatAUD(pl.gstIncome)}</span></span>
+                      )}
+                      {pl.gstExpenses !== 0 && (
+                        <span>GST on expenses: <span className="text-foreground font-mono">{formatAUD(pl.gstExpenses)}</span></span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Paperclip className="h-3 w-3" />
+                        2 attachments: Line-item CSV + Raw source data
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         ))}
