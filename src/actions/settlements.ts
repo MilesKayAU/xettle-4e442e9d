@@ -209,14 +209,16 @@ export async function saveSettlementCanonical(
   const sanity = validateSettlementSanity(stubSettlement);
   if (!sanity.passed) {
     console.error(`[saveSettlementCanonical] BLOCKED by sanity check: ${settlementId} — ${sanity.error}`);
-    await supabase.from('system_events' as any).insert({
-      user_id: row.user_id,
-      event_type: 'settlement_save_blocked_sanity',
-      severity: 'warning',
-      marketplace_code: marketplace,
-      settlement_id: settlementId,
-      details: { error: sanity.error, source },
-    } as any).catch(() => {});
+    try {
+      await supabase.from('system_events' as any).insert({
+        user_id: row.user_id,
+        event_type: 'settlement_save_blocked_sanity',
+        severity: 'warning',
+        marketplace_code: marketplace,
+        settlement_id: settlementId,
+        details: { error: sanity.error, source },
+      } as any);
+    } catch (_) { /* non-blocking */ }
     return { success: false, error: sanity.error };
   }
 
