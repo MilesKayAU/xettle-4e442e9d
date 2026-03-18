@@ -199,6 +199,18 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
   registerAliases(header.settlementId, user.id, 'csv_upload');
   postInsertDuplicateCheck(header.settlementId, marketplace, user.id);
 
+  // Apply source priority guard (canonical invariant)
+  import('@/actions/settlements').then(({ applySourcePriority }) => {
+    applySourcePriority(
+      user.id,
+      marketplace,
+      header.periodStart,
+      header.periodEnd,
+      header.settlementId,
+      'csv_upload',
+    ).catch(console.error);
+  });
+
   // Fire-and-forget: extract fee observations for intelligence engine
   if (extractFees) {
     import('@/utils/fee-observation-engine').then(({ extractAmazonFeeObservations }) => {

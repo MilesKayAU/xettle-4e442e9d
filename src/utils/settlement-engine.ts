@@ -1082,6 +1082,18 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
     // Fire-and-forget: trigger validation sweep
     triggerValidationSweep();
 
+    // Fire-and-forget: apply source priority guard (canonical invariant)
+    import('@/actions/settlements').then(({ applySourcePriority }) => {
+      applySourcePriority(
+        user.id,
+        settlement.marketplace,
+        settlement.period_start,
+        settlement.period_end,
+        settlement.settlement_id,
+        settlement.source,
+      ).catch(console.error);
+    });
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Unknown error' };
