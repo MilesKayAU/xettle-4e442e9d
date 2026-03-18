@@ -310,7 +310,7 @@ export default function GrowthScoutDashboard() {
                     <div className="flex items-center gap-2 pt-1">
                       <Button variant="outline" size="sm" asChild>
                         <a
-                          href={buildSearchUrl(opp.platform, opp.thread_title)}
+                          href={buildSearchUrl(opp.platform, opp.search_query || opp.thread_title)}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
