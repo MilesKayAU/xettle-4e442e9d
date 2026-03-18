@@ -2,13 +2,19 @@
  * ApiConnectionsPanel — Unified section grouping all API integrations
  * in the Settings tab. Wraps existing connection status components
  * under a clear heading with overview badges.
+ * 
+ * Includes Marketplace Data Sources preference (source priority guard).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Globe, CheckCircle2, XCircle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Globe, CheckCircle2, XCircle, Info, FileText, ShoppingBag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { setSourcePreference } from '@/actions/settlements';
+import { toast } from 'sonner';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import ShopifyConnectionStatus from '@/components/admin/ShopifyConnectionStatus';
 import EbayConnectionStatus from '@/components/admin/EbayConnectionStatus';
@@ -31,6 +37,12 @@ interface ConnectionSummary {
   ebay: boolean;
 }
 
+interface SubChannelPref {
+  code: string;
+  name: string;
+  preference: 'csv' | 'api';
+}
+
 export default function ApiConnectionsPanel({
   isPaid = false,
   gstRate = 10,
@@ -45,6 +57,8 @@ export default function ApiConnectionsPanel({
     shopify: false,
     ebay: false,
   });
+  const [subChannels, setSubChannels] = useState<SubChannelPref[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     checkConnections();
@@ -54,6 +68,7 @@ export default function ApiConnectionsPanel({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
       const [xeroRes, amazonRes, shopifyRes, ebayRes] = await Promise.all([
         supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'xero_tenant_id').maybeSingle(),
@@ -68,80 +83,176 @@ export default function ApiConnectionsPanel({
         shopify: !!(shopifyRes.data && shopifyRes.data.length > 0),
         ebay: !!(ebayRes.data && ebayRes.data.length > 0),
       });
+
+      // Load sub-channels for source preference
+      const { data: channels } = await supabase
+        .from('shopify_sub_channels')
+        .select('source_name, marketplace_label, marketplace_code')
+        .eq('user_id', user.id)
+        .eq('ignored', false);
+
+      if (channels && channels.length > 0) {
+        // Load preferences
+        const codes = channels.map(c => c.marketplace_code || c.source_name).filter(Boolean);
+        const prefKeys = codes.map(c => `source_preference:${c}`);
+        const { data: prefs } = await supabase
+          .from('app_settings')
+          .select('key, value')
+          .eq('user_id', user.id)
+          .in('key', prefKeys);
+
+        const prefMap = new Map((prefs || []).map(p => [p.key, p.value]));
+
+        setSubChannels(channels.map(c => {
+          const code = c.marketplace_code || c.source_name;
+          const pref = prefMap.get(`source_preference:${code}`);
+          return {
+            code,
+            name: c.marketplace_label,
+            preference: pref === 'api' ? 'api' : 'csv', // Default to CSV
+          };
+        }));
+      }
     } catch {
       // silent
     }
   }
 
+  const handlePreferenceChange = useCallback(async (code: string, useApi: boolean) => {
+    if (!userId) return;
+    const pref = useApi ? 'api' : 'csv';
+    setSubChannels(prev => prev.map(c => c.code === code ? { ...c, preference: pref } : c));
+    const result = await setSourcePreference(userId, code, pref);
+    if (!result.success) {
+      toast.error('Failed to save preference');
+      setSubChannels(prev => prev.map(c => c.code === code ? { ...c, preference: useApi ? 'csv' : 'api' } : c));
+    } else {
+      toast.success(`${code} source set to ${pref === 'csv' ? 'CSV uploads' : 'Shopify Orders API'}`);
+    }
+  }, [userId]);
+
   const connectedCount = Object.values(summary).filter(Boolean).length;
   const totalCount = Object.keys(summary).length;
 
   return (
-    <Card className="border-border">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div>
+    <div className="space-y-4">
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Globe className="h-4 w-4 text-primary" />
+                API Connections
+              </CardTitle>
+              <CardDescription className="text-xs mt-1">
+                Connect your marketplaces and accounting software. Manage credentials, sync status, and connection details.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant={connectedCount === totalCount ? 'default' : connectedCount > 0 ? 'secondary' : 'outline'}
+                className="text-[10px]"
+              >
+                {connectedCount}/{totalCount} connected
+              </Badge>
+            </div>
+          </div>
+
+          {/* Quick status strip */}
+          <div className="flex flex-wrap gap-2 mt-3">
+            {([
+              { key: 'xero', label: 'Xero' },
+              { key: 'amazon', label: 'Amazon' },
+              { key: 'shopify', label: 'Shopify' },
+              { key: 'ebay', label: 'eBay' },
+            ] as const).map(({ key, label }) => (
+              <div key={key} className="flex items-center gap-1 text-xs">
+                {summary[key] ? (
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                ) : (
+                  <XCircle className="h-3 w-3 text-muted-foreground/50" />
+                )}
+                <span className={summary[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4 pt-0">
+          {/* Xero */}
+          <XeroConnectionStatus />
+
+          {/* Amazon */}
+          <AmazonConnectionPanel
+            isPaid={isPaid}
+            gstRate={gstRate}
+            syncCutoffDate={syncCutoffDate}
+            onSettlementsAutoFetched={onSettlementsAutoFetched ? async () => { onSettlementsAutoFetched(); checkConnections(); } : undefined}
+            onRequestSettings={onRequestSettings}
+            onFetchStateChange={onFetchStateChange}
+          />
+
+          {/* Shopify */}
+          <ShopifyConnectionStatus />
+
+          {/* eBay */}
+          <EbayConnectionStatus />
+
+          {/* Shopify Channel Management */}
+          <ChannelManagement />
+        </CardContent>
+      </Card>
+
+      {/* Marketplace Data Sources — source priority preferences */}
+      {subChannels.length > 0 && (
+        <Card className="border-border">
+          <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Globe className="h-4 w-4 text-primary" />
-              API Connections
+              <ShoppingBag className="h-4 w-4 text-primary" />
+              Marketplace Data Sources
             </CardTitle>
             <CardDescription className="text-xs mt-1">
-              Connect your marketplaces and accounting software. Manage credentials, sync status, and connection details.
+              Choose whether each marketplace uses CSV uploads or the Shopify Orders API for settlement data.
             </CardDescription>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Badge
-              variant={connectedCount === totalCount ? 'default' : connectedCount > 0 ? 'secondary' : 'outline'}
-              className="text-[10px]"
-            >
-              {connectedCount}/{totalCount} connected
-            </Badge>
-          </div>
-        </div>
-
-        {/* Quick status strip */}
-        <div className="flex flex-wrap gap-2 mt-3">
-          {([
-            { key: 'xero', label: 'Xero' },
-            { key: 'amazon', label: 'Amazon' },
-            { key: 'shopify', label: 'Shopify' },
-            { key: 'ebay', label: 'eBay' },
-          ] as const).map(({ key, label }) => (
-            <div key={key} className="flex items-center gap-1 text-xs">
-              {summary[key] ? (
-                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-              ) : (
-                <XCircle className="h-3 w-3 text-muted-foreground/50" />
-              )}
-              <span className={summary[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex items-start gap-2 mb-4 p-3 rounded-lg bg-muted/50 border border-border">
+              <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                <strong>CSV uploads (recommended)</strong> contain full fee breakdowns (commission, shipping charges, adjustments) from the marketplace portal.
+                The <strong>Shopify Orders API</strong> provides order totals but does not include marketplace-specific fees.
+                When a CSV is uploaded, any Shopify-derived record for the same period is automatically suppressed.
+              </p>
             </div>
-          ))}
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4 pt-0">
-        {/* Xero */}
-        <XeroConnectionStatus />
-
-        {/* Amazon */}
-        <AmazonConnectionPanel
-          isPaid={isPaid}
-          gstRate={gstRate}
-          syncCutoffDate={syncCutoffDate}
-          onSettlementsAutoFetched={onSettlementsAutoFetched ? async () => { onSettlementsAutoFetched(); checkConnections(); } : undefined}
-          onRequestSettings={onRequestSettings}
-          onFetchStateChange={onFetchStateChange}
-        />
-
-        {/* Shopify */}
-        <ShopifyConnectionStatus />
-
-        {/* eBay */}
-        <EbayConnectionStatus />
-
-        {/* Shopify Channel Management */}
-        <ChannelManagement />
-      </CardContent>
-    </Card>
+            <div className="space-y-3">
+              {subChannels.map(ch => (
+                <div key={ch.code} className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{ch.name}</span>
+                    <Badge variant="outline" className="text-[9px]">
+                      {ch.preference === 'csv' ? (
+                        <><FileText className="h-2.5 w-2.5 mr-0.5" /> CSV</>
+                      ) : (
+                        <><ShoppingBag className="h-2.5 w-2.5 mr-0.5" /> API</>
+                      )}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`pref-${ch.code}`} className="text-xs text-muted-foreground">
+                      Use API
+                    </Label>
+                    <Switch
+                      id={`pref-${ch.code}`}
+                      checked={ch.preference === 'api'}
+                      onCheckedChange={(checked) => handlePreferenceChange(ch.code, checked)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
