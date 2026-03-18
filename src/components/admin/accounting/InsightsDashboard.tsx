@@ -674,7 +674,7 @@ export default function InsightsDashboard() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-foreground">{s.label}</span>
-                        {s.returnRatio === bestRatio && stats.length > 1 && (
+                        {s.returnRatio === bestRatio && stats.length > 1 && !s.hasEstimatedFees && (
                           <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
                         )}
                         {s.hasEstimatedFees && (
