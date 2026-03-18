@@ -610,7 +610,7 @@ async function saveWithAtomicPromote(settlement: StandardSettlement, fingerprint
         salesPrincipal: settlement.sales_ex_gst,
         salesShipping: meta.shippingExGst || 0,
         promotionalDiscounts: 0,
-        sellerFees: Math.abs(settlement.fees_ex_gst),
+        sellerFees: -(Math.abs(settlement.fees_ex_gst)),
         fbaFees: 0,
         storageFees: 0,
         refunds: meta.refundsExGst || 0,
