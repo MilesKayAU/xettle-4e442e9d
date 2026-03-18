@@ -63,7 +63,24 @@ export interface AiPageContext {
 
   /** Suggested questions for this page */
   suggestedPrompts?: string[];
+
+  /** Recent user actions (last 10, newest first) */
+  recentActions?: AiUserAction[];
 }
+
+// ─── User Action Schema ──────────────────────────────────────────────────────
+
+export interface AiUserAction {
+  /** Short action label, e.g. "pushed_to_xero", "uploaded_file" */
+  action: string;
+  /** ISO timestamp */
+  ts: string;
+  /** Optional context (settlement_id, marketplace, etc.) — keep short */
+  detail?: string;
+}
+
+const MAX_RECENT_ACTIONS = 10;
+const MAX_ACTION_DETAIL_LEN = 120;
 
 // ─── Safety Constants ────────────────────────────────────────────────────────
 
@@ -173,10 +190,23 @@ export function sanitizeContext(ctx: AiPageContext): AiPageContext {
     }));
   }
 
+  // Sanitize recentActions
+  if (ctx.recentActions?.length) {
+    sanitized.recentActions = ctx.recentActions.slice(0, MAX_RECENT_ACTIONS).map(a => ({
+      action: a.action.slice(0, 60),
+      ts: a.ts,
+      detail: a.detail?.slice(0, MAX_ACTION_DETAIL_LEN),
+    }));
+  }
+
   // Enforce byte cap — drop lowest-priority fields if over limit
   let json = JSON.stringify(sanitized);
   if (json.length > MAX_CONTEXT_BYTES) {
     delete sanitized.visibleTables;
+    json = JSON.stringify(sanitized);
+  }
+  if (json.length > MAX_CONTEXT_BYTES) {
+    delete sanitized.recentActions;
     json = JSON.stringify(sanitized);
   }
   if (json.length > MAX_CONTEXT_BYTES) {
