@@ -225,6 +225,12 @@ export default function Admin() {
               <BookOpen className="h-3.5 w-3.5" />
               Knowledge Base
             </TabsTrigger>
+            <TabsTrigger value="growth" className="flex items-center gap-1.5">
+              <Crosshair className="h-3.5 w-3.5" />
+              Growth
+            </TabsTrigger>
+              Knowledge Base
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
