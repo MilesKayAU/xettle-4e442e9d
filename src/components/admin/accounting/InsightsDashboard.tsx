@@ -259,9 +259,30 @@ export default function InsightsDashboard() {
         const apiSyncZeroFeeRows = rows.filter(r => 
           (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01
         );
-        const hasMissingFeeData = totalFees === 0 && totalSales > 500;
+        let hasMissingFeeData = totalFees === 0 && totalSales > 500;
         const hasFeeAnomaly = totalFees > totalSales;
         const hasNegativePayout = netPayout < 0 && totalSales > 0;
+
+        // ─── Apply Estimated Commission When Fee Data Missing ───────────
+        // When ALL settlements are api_sync with $0 fees, apply estimated
+        // commission rates so the $1 breakdown isn't misleadingly optimistic.
+        let effectiveReturnRatio = returnRatio;
+        let effectiveFeeLoad = feeLoad;
+        let effectiveNetPayout = netPayout;
+        let effectiveTotalFees = totalFees;
+        let effectiveHasEstimatedFees = hasEstimatedFees;
+
+        if (hasMissingFeeData && apiSyncZeroFeeRows.length === rows.length) {
+          // All rows are api_sync with zero fees — apply estimated commission
+          const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+          const estimatedFees = totalSalesExGst * estimatedRate; // commission on ex-GST sales
+          effectiveTotalFees = estimatedFees;
+          effectiveNetPayout = totalSales - estimatedFees;
+          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
+          effectiveFeeLoad = totalSales > 0 ? Math.min(estimatedFees / totalSales, 1) : 0;
+          effectiveHasEstimatedFees = true;
+          hasMissingFeeData = false; // We've filled with estimates, no longer "missing"
+        }
 
         // For fee/commission calculations, exclude zero-fee api_sync rows
         // so they don't dilute the averages
@@ -284,11 +305,11 @@ export default function InsightsDashboard() {
           marketplace: mp,
           label: MARKETPLACE_LABELS[mp] || mp,
           totalSales,
-          totalFees,
+          totalFees: effectiveTotalFees,
           totalRefunds,
-          netPayout,
-          returnRatio,
-          feeLoad,
+          netPayout: effectiveNetPayout,
+          returnRatio: effectiveReturnRatio,
+          feeLoad: effectiveFeeLoad,
           settlementCount: rows.length,
           latestPeriodEnd,
           earliestPeriodStart,
@@ -306,7 +327,7 @@ export default function InsightsDashboard() {
           feeBreakdown,
           fulfilmentMethod,
           fulfilmentUnknown,
-          hasEstimatedFees,
+          hasEstimatedFees: effectiveHasEstimatedFees,
           hasMissingFeeData,
           hasFeeAnomaly,
           hasNegativePayout,
