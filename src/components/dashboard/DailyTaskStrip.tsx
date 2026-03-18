@@ -74,7 +74,7 @@ function SetupWarningList({ warnings }: { warnings: SetupWarning[] }) {
   );
 }
 
-export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre }: DailyTaskStripProps) {
+export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre, missingSettlementCount = 0, onUploadClick }: DailyTaskStripProps) {
   const {
     setupRequired,
     setupWarnings,
