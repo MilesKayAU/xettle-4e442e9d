@@ -627,6 +627,21 @@ async function saveWithAtomicPromote(settlement: StandardSettlement, fingerprint
     // Validation sweep
     triggerValidationSweep();
 
+    // Post-RPC: apply source priority synchronously (RPC can't call JS)
+    try {
+      const { applySourcePriority } = await import('@/actions/settlements');
+      await applySourcePriority(
+        user.id,
+        settlement.marketplace,
+        settlement.period_start,
+        settlement.period_end,
+        settlement.settlement_id,
+        settlement.source,
+      );
+    } catch (err) {
+      console.error('[saveWithAtomicPromote] source priority failed:', err);
+    }
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Unknown error' };
