@@ -360,7 +360,7 @@ export default function RailPostingSettings() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium">{getRailLabel(rail)}</span>
                           <SupportTierBadge tier={tier} />
                           {isAuto && (
