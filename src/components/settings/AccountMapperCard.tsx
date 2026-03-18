@@ -409,16 +409,19 @@ export default function AccountMapperCard() {
       // Load active marketplace connections
       const { data: connections } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_name, settings')
+        .select('marketplace_name, marketplace_code, settings')
         .eq('user_id', user.id)
         .in('connection_status', ACTIVE_CONNECTION_STATUSES);
 
       if (connections && connections.length > 0) {
-        setActiveMarketplaces(connections.map(c => c.marketplace_name));
+        // Normalize marketplace names to canonical key labels for consistent override keys
+        const normalizedNames = [...new Set(connections.map(c => normalizeKeyLabel(c.marketplace_code || c.marketplace_name)))];
+        setActiveMarketplaces(normalizedNames);
         const flags: Record<string, boolean> = {};
         for (const c of connections) {
           const settings = (c.settings || {}) as Record<string, any>;
-          flags[c.marketplace_name] = settings.use_global_mappings !== false;
+          const keyLabel = normalizeKeyLabel(c.marketplace_code || c.marketplace_name);
+          flags[keyLabel] = settings.use_global_mappings !== false;
         }
         setGlobalMappingFlags(flags);
       } else {
@@ -429,13 +432,8 @@ export default function AccountMapperCard() {
           .not('status', 'in', '("duplicate_suppressed","already_recorded")');
         if (settlements) {
           const unique = [...new Set(settlements.map(s => s.marketplace).filter(Boolean))];
-          const labelMap: Record<string, string> = {
-            amazon_au: 'Amazon AU', bunnings: 'Bunnings', shopify_payments: 'Shopify',
-            shopify_orders: 'Shopify', catch: 'Catch', mydeal: 'MyDeal',
-            kogan: 'Kogan', woolworths: 'Everyday Market', ebay_au: 'eBay AU',
-            etsy: 'Etsy', theiconic: 'The Iconic',
-          };
-          const labels = unique.map(code => labelMap[code || ''] || code || '').filter(Boolean);
+          // Use normalizeKeyLabel for consistent key generation
+          const labels = unique.map(code => normalizeKeyLabel(code || '')).filter(Boolean);
           setActiveMarketplaces([...new Set(labels)]);
         }
       }
