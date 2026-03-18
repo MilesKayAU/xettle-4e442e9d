@@ -325,7 +325,7 @@ export default function Landing() {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { icon: FileText, title: 'Settlement-first accounting', desc: 'Every invoice is generated from the settlement — the only source of truth for marketplace payouts. Not from orders, not from bank feeds.' },
+              { icon: FileText, title: 'Settlement-first accounting', desc: 'Every invoice is generated from the settlement — the only source of truth for marketplace payouts. The faster you upload settlements, the faster your books are done in Xero.' },
               { icon: Shield, title: 'Deduplication safeguards', desc: 'Fingerprint-based deduplication and idempotent syncing guard against duplicate invoices from re-uploads, split-month overlaps, and tool migrations.' },
               { icon: Repeat, title: 'Safe void and repost', desc: 'Need to correct an invoice? Void the original, repost with a full chain of custody. No orphaned entries.' },
               { icon: ShieldCheck, title: 'Accountant-safe posting', desc: 'Every invoice posts as DRAFT with audit CSV attached. Your accountant reviews before authorising. No surprises.' },
