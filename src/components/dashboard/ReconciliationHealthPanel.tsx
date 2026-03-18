@@ -23,6 +23,8 @@ interface HealthCheck {
   label: string;
   status: CheckStatus;
   detail: string;
+  actionLabel?: string;
+  actionSection?: string;
 }
 
 type OverallStatus = 'ready' | 'incomplete' | 'missing';
