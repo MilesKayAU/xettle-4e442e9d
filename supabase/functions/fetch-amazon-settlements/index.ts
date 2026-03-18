@@ -641,6 +641,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
               sku: l.sku || null,
               posted_date: l.postedDate || null,
               marketplace_name: l.marketplaceName || null,
+              fulfilment_channel: l.fulfilmentChannel || null,
             }));
             for (let j = 0; j < lineRows.length; j += 500) {
               await supabaseAdmin.from('settlement_lines').insert(lineRows.slice(j, j + 500));
