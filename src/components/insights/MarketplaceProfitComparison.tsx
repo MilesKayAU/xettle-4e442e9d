@@ -161,6 +161,7 @@ export default function MarketplaceProfitComparison() {
           total_profit: Math.round(adjustedPayout),
           periods: agg.count,
           has_cost_data: false,
+          has_estimated_fees: agg.hasEstimated,
         });
       }
 
