@@ -51,7 +51,7 @@ export function getPostageDeductionForOrder(
 
   // For explicit line channels regardless of marketplace setting
   if (ch === 'AFN' || ch === 'MCF') return 0;
-  if (ch === 'MFN') return postageCostPerOrder;
+  if (ch === 'MFN') return postageCostPerOrder * orderCount;
 
   // Fall back to marketplace-level method
   switch (fulfilmentMethod) {
