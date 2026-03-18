@@ -55,10 +55,12 @@ const platformDomains: Record<string, string> = {
   forum: 'whirlpool.net.au',
 };
 
-function buildSearchUrl(platform: string, title: string): string {
+function buildSearchUrl(platform: string, title: string, searchQuery?: string): string {
   const domain = platformDomains[platform];
-  const siteFilter = domain ? `+site:${domain}` : '';
-  return `https://www.google.com/search?q=${encodeURIComponent(title)}${siteFilter}`;
+  const siteFilter = domain ? ` site:${domain}` : '';
+  // Use the original search query if available — AI-generated titles often don't match real threads
+  const query = searchQuery || title;
+  return `https://www.google.com/search?q=${encodeURIComponent(query + siteFilter)}`;
 }
 
 export default function GrowthScoutDashboard() {
