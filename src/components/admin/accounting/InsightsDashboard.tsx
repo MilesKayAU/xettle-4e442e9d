@@ -179,6 +179,69 @@ export default function InsightsDashboard() {
         grouped[mp].push(row);
       }
 
+      // ─── Platform Family Fee Redistribution ───────────────────────────
+      // MyDeal, BigW, and Everyday Market all share the Woolworths MarketPlus platform.
+      // The Woolworths CSV allocates platform-level fees (subscriptions, etc.) to MyDeal
+      // even when sales occur on BigW or Everyday Market. This creates an anomaly where
+      // MyDeal shows fees >> sales, while BigW/Everyday Market appear artificially cheap.
+      // Fix: detect fee-heavy marketplaces and redistribute excess fees to siblings.
+      const PLATFORM_FAMILIES: Record<string, string[]> = {
+        woolworths_marketplus: ['mydeal', 'bigw', 'everyday_market', 'woolworths_market'],
+      };
+
+      // For each family, detect excess fees and redistribute
+      for (const siblings of Object.values(PLATFORM_FAMILIES)) {
+        const presentSiblings = siblings.filter(s => grouped[s]);
+        if (presentSiblings.length < 2) continue;
+
+        // Find fee-heavy members (fees > sales * 1.5, indicating platform overhead)
+        const feeHeavy: string[] = [];
+        const salesSiblings: string[] = [];
+        for (const s of presentSiblings) {
+          const rows = grouped[s];
+          const sales = rows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0);
+          const fees = rows.reduce((sum, r) => sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
+          if (fees > Math.max(sales * 1.5, 50)) {
+            feeHeavy.push(s);
+          } else if (sales > 0) {
+            salesSiblings.push(s);
+          }
+        }
+
+        if (feeHeavy.length === 0 || salesSiblings.length === 0) continue;
+
+        // Calculate total excess fees from fee-heavy members
+        let totalExcessFees = 0;
+        for (const fh of feeHeavy) {
+          const rows = grouped[fh];
+          const sales = rows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0);
+          const fees = rows.reduce((sum, r) => sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
+          // Excess = fees beyond what's attributable to own sales (using 15% as normal commission)
+          const ownFees = sales * 0.15;
+          totalExcessFees += Math.max(fees - ownFees, 0);
+        }
+
+        // Distribute proportionally to sales-producing siblings by their sales volume
+        const siblingSales: Record<string, number> = {};
+        let totalSiblingSales = 0;
+        for (const s of salesSiblings) {
+          const sales = grouped[s].reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0);
+          siblingSales[s] = sales;
+          totalSiblingSales += sales;
+        }
+
+        // Store redistributed fees per marketplace for use in stats calculation
+        if (totalSiblingSales > 0 && totalExcessFees > 0) {
+          for (const s of salesSiblings) {
+            const share = siblingSales[s] / totalSiblingSales;
+            const feeShare = totalExcessFees * share;
+            // Add synthetic fee rows to represent redistributed platform fees
+            // We modify by adjusting the seller_fees on a virtual basis — tracked via _redistributedPlatformFees
+            (grouped[s] as any)._redistributedPlatformFees = feeShare;
+          }
+        }
+      }
+
       const results: MarketplaceStats[] = [];
 
       for (const [mp, rows] of Object.entries(grouped)) {
