@@ -87,9 +87,66 @@ export function isAmazonCode(code: string): boolean {
 export function getEffectiveMethod(
   marketplaceCode: string,
   stored?: FulfilmentMethod | null,
+  isNewUser?: boolean,
 ): FulfilmentMethod {
   if (stored) return stored;
-  return isAmazonCode(marketplaceCode) ? 'marketplace_fulfilled' : 'not_sure';
+  if (isAmazonCode(marketplaceCode)) {
+    return isNewUser ? 'mixed_fba_fbm' : 'marketplace_fulfilled';
+  }
+  return 'not_sure';
+}
+
+/**
+ * Load MCF costs for the current user.
+ * Returns a map of marketplace_code → MCF cost per order (number).
+ */
+export async function loadMcfCosts(
+  userId: string,
+): Promise<Record<string, number>> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .eq('user_id', userId)
+    .like('key', 'mcf_cost:%');
+
+  const result: Record<string, number> = {};
+  for (const row of data || []) {
+    const code = row.key.replace('mcf_cost:', '');
+    const num = parseFloat(row.value || '');
+    if (code && !isNaN(num) && num >= 0) {
+      result[code] = num;
+    }
+  }
+  return result;
+}
+
+/**
+ * Save or update an MCF cost for one marketplace.
+ */
+export async function saveMcfCost(
+  userId: string,
+  marketplaceCode: string,
+  amount: number,
+): Promise<void> {
+  const key = `mcf_cost:${marketplaceCode}`;
+
+  const { data: existing } = await supabase
+    .from('app_settings')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('key', key)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from('app_settings')
+      .update({ value: String(amount) })
+      .eq('id', existing.id);
+  } else {
+    await supabase
+      .from('app_settings')
+      .insert({ user_id: userId, key, value: String(amount) });
+  }
 }
 
 /**

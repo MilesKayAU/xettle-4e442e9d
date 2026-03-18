@@ -1479,6 +1479,7 @@ serve(async (req) => {
                     amount_description: l.amountDescription, accounting_category: l.accountingCategory,
                     amount: l.amount, order_id: l.orderId || null, sku: l.sku || null,
                     posted_date: l.postedDate || null, marketplace_name: l.marketplaceName || null,
+                    fulfilment_channel: l.fulfilmentChannel || null,
                   }));
                   for (let j = 0; j < lineRows.length; j += 500) {
                     await supabase.from('settlement_lines').insert(lineRows.slice(j, j + 500));
