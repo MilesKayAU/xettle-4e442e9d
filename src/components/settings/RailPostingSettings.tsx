@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/collapsible';
 import { Zap, Shield, AlertTriangle, RefreshCw, ChevronDown, FileCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { PHASE_1_RAILS, isBankMatchRequired } from '@/constants/settlement-rails';
+import { PHASE_1_RAILS, isBankMatchRequired, getRailDescription } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useSettingsPin } from '@/hooks/use-settings-pin';
