@@ -463,6 +463,7 @@ Deno.serve(async (req) => {
           sales_principal: settlementRecord.sales_principal,
           gst_on_income: settlementRecord.gst_on_income,
           promotional_discounts: settlementRecord.promotional_discounts,
+          seller_fees: settlementRecord.seller_fees,
           bank_deposit: settlementRecord.bank_deposit,
           period_start: settlementRecord.period_start,
           period_end: settlementRecord.period_end,

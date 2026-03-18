@@ -345,6 +345,112 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
   }
 }
 
+// ─── Fee Redistribution Constants ───────────────────────────────────────────
+
+/**
+ * Threshold for detecting anomalous fee-to-sales ratios in multi-marketplace CSVs.
+ * If abs(commission) / grossSales > this threshold, excess fees are redistributed
+ * to sibling marketplace groups in the same bank payment batch.
+ * 
+ * Set to 30% to avoid false positives on legitimate high-commission marketplaces:
+ * - eBay AU runs at ~18% (can spike to 22-25% with promoted listings)
+ * - Amazon FBA can hit 30-45% but is parsed from its own CSV, not Woolworths
+ * - Any legitimate marketplace below 30% won't be flagged
+ * 
+ * Configurable as a constant so it can be adjusted without a code change.
+ */
+export const ANOMALOUS_FEE_RATIO_THRESHOLD = 0.30;
+
+// ─── Fee Redistribution Logic ───────────────────────────────────────────────
+
+/**
+ * Detects fee-only or anomalous-fee groups and redistributes excess fees
+ * to sibling marketplace groups proportionally by gross sales.
+ * 
+ * Conservation invariant: SUM(all group commissions before) === SUM(after)
+ */
+function redistributeAnomalousFees(groups: WoolworthsMarketplaceGroup[]): WoolworthsMarketplaceGroup[] {
+  if (groups.length < 2) return groups; // Nothing to redistribute with single group
+
+  const result = groups.map(g => ({ ...g })); // shallow clone
+
+  // Identify anomalous groups and sibling groups
+  const anomalousIndices: number[] = [];
+  const siblingIndices: number[] = [];
+
+  for (let i = 0; i < result.length; i++) {
+    const g = result[i];
+    const absCommission = Math.abs(g.commission);
+    
+    if (g.grossSales <= 0 && absCommission > 0) {
+      // Fee-only group (zero sales, has fees) — all fees are excess
+      anomalousIndices.push(i);
+    } else if (g.grossSales > 0 && absCommission / g.grossSales > ANOMALOUS_FEE_RATIO_THRESHOLD) {
+      // Fees exceed threshold — partial excess
+      anomalousIndices.push(i);
+    } else {
+      siblingIndices.push(i);
+    }
+  }
+
+  if (anomalousIndices.length === 0 || siblingIndices.length === 0) return result;
+
+  // Calculate total sibling gross sales for proportional redistribution
+  const totalSiblingSales = siblingIndices.reduce((sum, i) => sum + result[i].grossSales, 0);
+  if (totalSiblingSales <= 0) return result; // Can't redistribute if no sibling sales
+
+  const totalCommissionBefore = round2(result.reduce((sum, g) => sum + g.commission, 0));
+
+  for (const ai of anomalousIndices) {
+    const g = result[ai];
+    const absCommission = Math.abs(g.commission);
+    
+    // Calculate expected commission at threshold rate (or 0 if no sales)
+    const expectedCommission = g.grossSales > 0 
+      ? round2(g.grossSales * ANOMALOUS_FEE_RATIO_THRESHOLD)
+      : 0;
+    
+    // Excess = actual fees above expected (commission is negative, so work with abs)
+    const excessAmount = round2(absCommission - expectedCommission);
+    if (excessAmount <= 0) continue;
+
+    // Reduce anomalous group's commission to expected level
+    // commission is negative, so we're making it less negative
+    result[ai] = {
+      ...result[ai],
+      commission: g.grossSales > 0 ? round2(-expectedCommission) : 0,
+      netAmount: round2(g.netAmount + excessAmount), // net increases as fees decrease
+    };
+
+    // Distribute excess to siblings proportionally by gross sales
+    for (const si of siblingIndices) {
+      const share = result[si].grossSales / totalSiblingSales;
+      const feeShare = round2(excessAmount * share);
+      result[si] = {
+        ...result[si],
+        commission: round2(result[si].commission - feeShare), // make more negative
+        netAmount: round2(result[si].netAmount - feeShare), // net decreases as fees increase
+      };
+    }
+  }
+
+  // Verify conservation invariant
+  const totalCommissionAfter = round2(result.reduce((sum, g) => sum + g.commission, 0));
+  const drift = Math.abs(totalCommissionAfter - totalCommissionBefore);
+  if (drift > 0.02) {
+    // Rounding drift — adjust largest sibling to compensate
+    const largestSibling = siblingIndices.reduce((best, i) => 
+      result[i].grossSales > result[best].grossSales ? i : best, siblingIndices[0]);
+    const correction = round2(totalCommissionBefore - totalCommissionAfter);
+    result[largestSibling] = {
+      ...result[largestSibling],
+      commission: round2(result[largestSibling].commission + correction),
+    };
+  }
+
+  return result;
+}
+
 // ─── Settlement Builder ─────────────────────────────────────────────────────
 
 function buildWoolworthsSettlements(
@@ -355,7 +461,10 @@ function buildWoolworthsSettlements(
   const taxRate = 0.10;
   const divisor = 1 + taxRate;
 
-  return groups.map(g => {
+  // Apply fee redistribution before building settlements
+  const adjustedGroups = redistributeAnomalousFees(groups);
+
+  return adjustedGroups.map(g => {
     // Sales and refunds are GST-inclusive in the CSV
     const grossSalesExGst = round2(g.grossSales / divisor);
     const gstOnSales = round2(g.grossSales - grossSalesExGst);
