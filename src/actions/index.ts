@@ -31,11 +31,14 @@ export {
   checkSourceOverlap,
   getSourcePreference,
   setSourcePreference,
-  crossReferenceWoolworthsOrders,
+  crossReferenceOrderMarketplaces,
+  retroactiveLabelSweep,
   type ActionResult,
   type SourcePriorityResult,
   type SaveSettlementCanonicalInput,
   type SaveSettlementCanonicalResult,
+  type MarketplaceCorrectionGroup,
+  type CrossReferenceResult,
 } from './settlements';
 
 // ─── Xero Push / Rollback ────────────────────────────────────────────────────

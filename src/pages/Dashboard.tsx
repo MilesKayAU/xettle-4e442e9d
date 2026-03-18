@@ -41,6 +41,7 @@ import PaymentVerificationSettings from '@/components/settings/PaymentVerificati
 import RailPostingSettings from '@/components/settings/RailPostingSettings';
 import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
+import DataQualityPanel from '@/components/settings/DataQualityPanel';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
@@ -1053,6 +1054,10 @@ export default function Dashboard() {
 
               <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules">
                 <PaymentVerificationSettings />
+              </SettingsAccordion>
+
+              <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications">
+                <DataQualityPanel />
               </SettingsAccordion>
             </div>
           </ErrorBoundary>

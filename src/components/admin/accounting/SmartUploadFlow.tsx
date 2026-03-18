@@ -1022,15 +1022,61 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         } else console.error(`Failed to save settlement ${s.settlement_id}:`, result.error);
       }
 
-      // ── Cross-reference Woolworths order lines against Shopify-derived settlements ──
-      if (marketplace === 'woolworths_marketplus' && savedCount > 0 && user) {
+      // ── Cross-reference order lines against Shopify-derived settlements ──
+      // Fires for any marketplace CSV that saved settlement_lines with order_ids
+      if (savedCount > 0 && user) {
         try {
           const text = await df.file.text();
-          const { parseWoolworthsMarketPlusCSV: parse } = await import('@/utils/woolworths-marketplus-parser');
-          const parsed = parse(text);
-          if (parsed.success && parsed.groups.length > 0) {
-            const { crossReferenceWoolworthsOrders } = await import('@/actions/settlements');
-            await crossReferenceWoolworthsOrders(user.id, parsed.groups);
+          const csvLines = text.split('\n').filter(l => l.trim());
+          if (csvLines.length > 1) {
+            const headers = csvLines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            const mapping = df.detection?.columnMapping || {};
+            const orderCol = mapping.order_id;
+            // Also detect split column for marketplace grouping
+            const { findSplitColumn } = await import('@/utils/multi-marketplace-splitter');
+            const splitCol = findSplitColumn(headers);
+
+            if (orderCol && splitCol) {
+              const orderColIdx = headers.indexOf(orderCol);
+              if (orderColIdx >= 0) {
+                // Group order IDs by marketplace from the split column
+                const groupMap: Record<string, string[]> = {};
+                for (let ri = 1; ri < csvLines.length; ri++) {
+                  const fields = csvLines[ri].split(',').map(f => f.trim().replace(/^"|"$/g, ''));
+                  const orderId = fields[orderColIdx];
+                  const mktLabel = (fields[splitCol.index] || '').trim();
+                  if (orderId && mktLabel) {
+                    if (!groupMap[mktLabel]) groupMap[mktLabel] = [];
+                    groupMap[mktLabel].push(orderId);
+                  }
+                }
+                const correctionGroups = Object.entries(groupMap).map(([displayName, orderIds]) => ({ displayName, orderIds }));
+                if (correctionGroups.length > 0) {
+                  const { crossReferenceOrderMarketplaces } = await import('@/actions/settlements');
+                  const xrefResult = await crossReferenceOrderMarketplaces(user.id, correctionGroups);
+                  if (xrefResult.totalCorrected > 0) {
+                    const detail = Object.entries(xrefResult.corrections).map(([k, v]) => `${v} ${k}`).join(', ');
+                    toast.success(`Updated ${xrefResult.totalCorrected} order labels to match your CSV — ${detail}`);
+                  }
+                }
+              }
+            } else if (marketplace === 'woolworths_marketplus') {
+              // Woolworths fallback: use the dedicated parser which has its own order grouping
+              const { parseWoolworthsMarketPlusCSV: parse } = await import('@/utils/woolworths-marketplus-parser');
+              const parsed = parse(text);
+              if (parsed.success && parsed.groups.length > 0) {
+                const { crossReferenceOrderMarketplaces } = await import('@/actions/settlements');
+                const correctionGroups = parsed.groups.map(g => ({
+                  displayName: g.displayName,
+                  orderIds: g.orders.map(o => o.orderId).filter(Boolean),
+                }));
+                const xrefResult = await crossReferenceOrderMarketplaces(user.id, correctionGroups);
+                if (xrefResult.totalCorrected > 0) {
+                  const detail = Object.entries(xrefResult.corrections).map(([k, v]) => `${v} ${k}`).join(', ');
+                  toast.success(`Updated ${xrefResult.totalCorrected} order labels to match your CSV — ${detail}`);
+                }
+              }
+            }
           }
         } catch { /* non-blocking */ }
       }
