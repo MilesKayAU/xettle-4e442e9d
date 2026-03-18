@@ -19,6 +19,15 @@ import SkuComparisonView from '@/components/insights/SkuComparisonView';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
+// ─── Estimated Commission Rates (mirrors edge function) ─────────────────────
+// Used to show realistic fee data when actual fee data is missing (api_sync with $0 fees)
+const COMMISSION_ESTIMATES: Record<string, number> = {
+  kogan: 0.12, bigw: 0.08, everyday_market: 0.10, mydeal: 0.10,
+  bunnings: 0.10, catch: 0.12, ebay_au: 0.13, iconic: 0.15,
+  tradesquare: 0.10, tiktok: 0.05,
+};
+const DEFAULT_COMMISSION_RATE = 0.10;
+
 interface FeeBreakdown {
   label: string;
   amount: number;
@@ -250,9 +259,30 @@ export default function InsightsDashboard() {
         const apiSyncZeroFeeRows = rows.filter(r => 
           (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01
         );
-        const hasMissingFeeData = totalFees === 0 && totalSales > 500;
+        let hasMissingFeeData = totalFees === 0 && totalSales > 500;
         const hasFeeAnomaly = totalFees > totalSales;
         const hasNegativePayout = netPayout < 0 && totalSales > 0;
+
+        // ─── Apply Estimated Commission When Fee Data Missing ───────────
+        // When ALL settlements are api_sync with $0 fees, apply estimated
+        // commission rates so the $1 breakdown isn't misleadingly optimistic.
+        let effectiveReturnRatio = returnRatio;
+        let effectiveFeeLoad = feeLoad;
+        let effectiveNetPayout = netPayout;
+        let effectiveTotalFees = totalFees;
+        let effectiveHasEstimatedFees = hasEstimatedFees;
+
+        if (hasMissingFeeData && apiSyncZeroFeeRows.length === rows.length) {
+          // All rows are api_sync with zero fees — apply estimated commission
+          const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+          const estimatedFees = totalSalesExGst * estimatedRate; // commission on ex-GST sales
+          effectiveTotalFees = estimatedFees;
+          effectiveNetPayout = totalSales - estimatedFees;
+          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
+          effectiveFeeLoad = totalSales > 0 ? Math.min(estimatedFees / totalSales, 1) : 0;
+          effectiveHasEstimatedFees = true;
+          hasMissingFeeData = false; // We've filled with estimates, no longer "missing"
+        }
 
         // For fee/commission calculations, exclude zero-fee api_sync rows
         // so they don't dilute the averages
@@ -275,11 +305,11 @@ export default function InsightsDashboard() {
           marketplace: mp,
           label: MARKETPLACE_LABELS[mp] || mp,
           totalSales,
-          totalFees,
+          totalFees: effectiveTotalFees,
           totalRefunds,
-          netPayout,
-          returnRatio,
-          feeLoad,
+          netPayout: effectiveNetPayout,
+          returnRatio: effectiveReturnRatio,
+          feeLoad: effectiveFeeLoad,
           settlementCount: rows.length,
           latestPeriodEnd,
           earliestPeriodStart,
@@ -297,7 +327,7 @@ export default function InsightsDashboard() {
           feeBreakdown,
           fulfilmentMethod,
           fulfilmentUnknown,
-          hasEstimatedFees,
+          hasEstimatedFees: effectiveHasEstimatedFees,
           hasMissingFeeData,
           hasFeeAnomaly,
           hasNegativePayout,
@@ -432,7 +462,9 @@ export default function InsightsDashboard() {
     );
   }
 
-  const bestRatio = Math.max(...stats.map(s => s.returnRatio));
+  // For "Best" badge, only consider marketplaces with real (non-estimated) fee data
+  const realFeeStatsForBest = stats.filter(s => !s.hasEstimatedFees);
+  const bestRatio = Math.max(...(realFeeStatsForBest.length > 0 ? realFeeStatsForBest : stats).map(s => s.returnRatio));
   const totalAllSales = stats.reduce((sum, s) => sum + s.totalSales, 0);
   const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout, 0);
   const totalAllFees = stats.reduce((sum, s) => sum + s.totalFees, 0);
@@ -486,8 +518,11 @@ export default function InsightsDashboard() {
   }
 
   // Generate the main insight sentence
+  // For "Best Performer", prefer marketplaces with real fee data over estimated
   const topRevenue = [...stats].sort((a, b) => b.totalSales - a.totalSales)[0];
-  const bestProfit = [...stats].sort((a, b) => b.returnRatio - a.returnRatio)[0];
+  const realFeeStats = stats.filter(s => !s.hasEstimatedFees);
+  const bestProfit = (realFeeStats.length > 0 ? realFeeStats : stats)
+    .sort((a, b) => b.returnRatio - a.returnRatio)[0];
 
   function getHeroInsight(): string {
     if (stats.length === 1) {
@@ -639,7 +674,7 @@ export default function InsightsDashboard() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-foreground">{s.label}</span>
-                        {s.returnRatio === bestRatio && stats.length > 1 && (
+                        {s.returnRatio === bestRatio && stats.length > 1 && !s.hasEstimatedFees && (
                           <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
                         )}
                         {s.hasEstimatedFees && (
@@ -872,7 +907,7 @@ export default function InsightsDashboard() {
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="font-medium text-foreground">{s.label}</span>
-                          {s.returnRatio === bestRatio && stats.length > 1 && (
+                          {s.returnRatio === bestRatio && stats.length > 1 && !s.hasEstimatedFees && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-primary/30 text-primary px-1">Best</Badge>
                           )}
                         </div>
