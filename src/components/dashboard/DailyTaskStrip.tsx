@@ -5,6 +5,8 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 interface DailyTaskStripProps {
   onNavigate: (view: string, subTab?: string) => void;
   onScrollToActionCentre?: () => void;
+  missingSettlementCount?: number;
+  onUploadClick?: () => void;
 }
 
 const STAGES = [
