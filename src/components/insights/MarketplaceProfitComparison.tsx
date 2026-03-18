@@ -147,13 +147,16 @@ export default function MarketplaceProfitComparison() {
       // Apply postage deduction in fallback path
       for (const [mp, agg] of settlementMap) {
         if (mpMap.has(mp)) continue; // already included
+        // Skip zero-revenue fee-only groups (e.g. MyDeal fee-only batches)
+        if (agg.revenue <= 0) continue;
         const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
         const postageCost = postageCosts[mp] || 0;
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         // In fallback path we only have settlement count, not order count — use it as approximation
         const estimatedPostageDeduction = shouldDeductShipping ? postageCost * agg.count : 0;
         const adjustedPayout = agg.payout - estimatedPostageDeduction;
-        const margin = agg.revenue > 0 ? (adjustedPayout / agg.revenue) * 100 : 0;
+        // Cap margin at 100% — payout cannot legitimately exceed gross revenue inc GST
+        const margin = agg.revenue > 0 ? Math.min((adjustedPayout / agg.revenue) * 100, 100) : 0;
         results.push({
           marketplace_code: mp,
           marketplace_name: MARKETPLACE_LABELS[mp] || mp,
