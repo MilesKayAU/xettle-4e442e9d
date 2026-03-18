@@ -122,6 +122,19 @@ export function analyseCoA(
   const detectedMarketplaces = new Set<string>();
   const detectedProviders = new Set<string>();
 
+  // Build a lookup of marketplace_code → keywords for use in mapping suggestions
+  const marketplaceKeywordsMap = new Map<string, string[]>();
+  for (const entry of registryEntries) {
+    const keywords = (entry.detection_keywords || []) as string[];
+    const normalizedKeywords = keywords
+      .map(k => normalize(k))
+      .filter(k => k.length >= 3);
+    // Always include the marketplace name parts as keywords
+    const nameParts = normalize(entry.marketplace_name).split(' ').filter(p => p.length >= 3);
+    const allKeywords = [...new Set([...normalizedKeywords, ...nameParts])];
+    marketplaceKeywordsMap.set(entry.marketplace_code, allKeywords);
+  }
+
   for (const account of accounts) {
     const normalizedName = normalize(account.account_name);
 
@@ -208,13 +221,23 @@ export function analyseCoA(
     }
 
     // ─── Mapping suggestions ──────────────────────────────────
-    // For each detected marketplace, check if this account matches a category
+    // For each detected marketplace, check if this account matches via
+    // full name OR any detection keyword (not just the full marketplace name)
     for (const detected of channels) {
       const marketplaceNorm = normalize(detected.marketplace_name);
-      if (!normalizedName.includes(marketplaceNorm)) continue;
+      const keywords = marketplaceKeywordsMap.get(detected.marketplace_code) || [];
 
-      for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        for (const kw of keywords) {
+      // Check if account name contains the full marketplace name OR any keyword
+      const matchesFull = normalizedName.includes(marketplaceNorm);
+      const matchesKeyword = !matchesFull && keywords.some(kw => normalizedName.includes(kw));
+
+      if (!matchesFull && !matchesKeyword) continue;
+
+      // Determine confidence: full name match = HIGH, keyword match = MEDIUM
+      const baseConfidence: Confidence = matchesFull ? 'HIGH' : 'MEDIUM';
+
+      for (const [category, catKeywords] of Object.entries(CATEGORY_KEYWORDS)) {
+        for (const kw of catKeywords) {
           if (normalizedName.includes(kw)) {
             // Avoid duplicate suggestions
             const exists = mapping_suggestions.some(
@@ -227,7 +250,7 @@ export function analyseCoA(
                 account_code: account.account_code || '',
                 account_name: account.account_name,
                 marketplace_code: detected.marketplace_code,
-                confidence: 'HIGH',
+                confidence: baseConfidence,
               });
             }
             break;
