@@ -57,7 +57,7 @@ export function getPostageDeductionForOrder(
   switch (fulfilmentMethod) {
     case 'self_ship':
     case 'third_party_logistics':
-      return postageCostPerOrder;
+      return postageCostPerOrder * orderCount;
     case 'marketplace_fulfilled':
     case 'not_sure':
     case null:
