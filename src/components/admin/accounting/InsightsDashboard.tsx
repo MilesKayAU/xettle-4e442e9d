@@ -516,8 +516,11 @@ export default function InsightsDashboard() {
   }
 
   // Generate the main insight sentence
+  // For "Best Performer", prefer marketplaces with real fee data over estimated
   const topRevenue = [...stats].sort((a, b) => b.totalSales - a.totalSales)[0];
-  const bestProfit = [...stats].sort((a, b) => b.returnRatio - a.returnRatio)[0];
+  const realFeeStats = stats.filter(s => !s.hasEstimatedFees);
+  const bestProfit = (realFeeStats.length > 0 ? realFeeStats : stats)
+    .sort((a, b) => b.returnRatio - a.returnRatio)[0];
 
   function getHeroInsight(): string {
     if (stats.length === 1) {
