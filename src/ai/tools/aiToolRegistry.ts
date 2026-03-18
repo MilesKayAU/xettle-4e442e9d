@@ -26,6 +26,11 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     availableOn: ["dashboard", "outstanding", "settlements", "insights", "setup"],
   },
   {
+    name: "listRecentSettlements",
+    description: "List recent settlements with status, marketplace, period, and Xero push state.",
+    availableOn: ["dashboard", "settlements", "insights"],
+  },
+  {
     name: "getInvoiceStatusByXeroInvoiceId",
     description: "Get match state, payment status, and readiness of a specific Xero invoice.",
     availableOn: ["outstanding", "settlements", "settlement_detail", "xero_posting_audit"],
@@ -34,6 +39,16 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     name: "getSettlementStatus",
     description: "Get posting state, readiness blockers, and Xero sync status for a specific settlement.",
     availableOn: ["settlements", "settlement_detail", "push_safety_preview", "xero_posting_audit", "dashboard"],
+  },
+  {
+    name: "getRecentSystemEvents",
+    description: "Get recent system events (uploads, syncs, pushes, errors) to understand workflow history.",
+    availableOn: [], // All routes
+  },
+  {
+    name: "explainReadinessBlockers",
+    description: "Explain why a settlement can't be pushed: missing mappings, stale COA, missing contact, support tier.",
+    availableOn: ["settlements", "settlement_detail", "push_safety_preview", "settings"],
   },
 ];
 
