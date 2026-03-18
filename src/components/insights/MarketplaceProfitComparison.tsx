@@ -15,6 +15,14 @@ import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } from '@/utils/fulfilment-settings';
 import type { FulfilmentMethod } from '@/utils/fulfilment-settings';
 
+// Estimated commission rates (mirrors edge function + InsightsDashboard)
+const COMMISSION_ESTIMATES: Record<string, number> = {
+  kogan: 0.12, bigw: 0.08, everyday_market: 0.10, mydeal: 0.10,
+  bunnings: 0.10, catch: 0.12, ebay_au: 0.13, iconic: 0.15,
+  tradesquare: 0.10, tiktok: 0.05,
+};
+const DEFAULT_COMMISSION_RATE = 0.10;
+
 interface AggregatedMarketplace {
   marketplace_code: string;
   marketplace_name: string;
