@@ -68,7 +68,7 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
 const KNOWN_MARKETPLACES = [
   'Amazon AU', 'Amazon USA', 'Amazon JP', 'Amazon SG', 'Amazon UK',
   'Shopify', 'Bunnings', 'eBay AU', 'Catch',
-  'MyDeal', 'Kogan', 'Everyday Market', 'The Iconic', 'Etsy',
+  'MyDeal', 'Kogan', 'Everyday Market', 'The Iconic', 'Etsy', 'BigW',
 ];
 
 const REVENUE_CATEGORIES_SET = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
