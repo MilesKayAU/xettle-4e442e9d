@@ -382,6 +382,12 @@ Deno.serve(async (req) => {
     const totalDiscounts = groupOrders.reduce((sum, o) => sum + o.total_discounts, 0);
     const bankDeposit = groupOrders.reduce((sum, o) => sum + o.total_price, 0);
 
+    // Apply estimated commission for this marketplace
+    const commissionRate = COMMISSION_ESTIMATES[mpCode] || DEFAULT_COMMISSION_RATE;
+    const estimatedSellerFees = -Math.round(salesPrincipal * commissionRate * 100) / 100;
+    // Adjusted bank deposit = gross sales - estimated fees
+    const adjustedBankDeposit = Math.round((bankDeposit + estimatedSellerFees) * 100) / 100;
+
     const settlementRecord = {
       settlement_id: settlementId,
       user_id: userId,
@@ -394,12 +400,15 @@ Deno.serve(async (req) => {
       sales_principal: Math.round(salesPrincipal * 100) / 100,
       gst_on_income: Math.round(gstOnIncome * 100) / 100,
       promotional_discounts: Math.round(totalDiscounts * 100) / 100,
-      bank_deposit: Math.round(bankDeposit * 100) / 100,
+      seller_fees: estimatedSellerFees,
+      bank_deposit: adjustedBankDeposit,
       raw_payload: {
         order_count: groupOrders.length,
         sample_orders: groupOrders.slice(0, 5).map(o => o.order_name),
         generated_at: new Date().toISOString(),
-        source_version: 'auto-generate-shopify-settlements-v2',
+        source_version: 'auto-generate-shopify-settlements-v3',
+        fees_estimated: true,
+        commission_rate_applied: commissionRate,
       },
     };
 
