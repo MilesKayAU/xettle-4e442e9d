@@ -34,6 +34,7 @@ export function getPostageDeductionForOrder(
   fulfilmentMethod: string | null | undefined,
   lineChannel: FulfilmentChannel | string | null | undefined,
   postageCostPerOrder: number,
+  orderCount: number = 1,
 ): number {
   // Zero-cost guard
   if (!postageCostPerOrder || postageCostPerOrder <= 0) return 0;
