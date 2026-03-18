@@ -7,26 +7,29 @@ const corsHeaders = {
 };
 
 const SEARCH_QUERIES = [
-  // LinkedIn / Social
-  '"ecommerce accounting" "xero" australian marketplace',
-  '"marketplace seller" "reconciliation" australia linkedin',
-  '"shopify seller" "xero integration" australia',
-  '"amazon seller" "accounting automation" australia',
-  // Facebook Groups
-  '"australian ecommerce" group "xero" marketplace fees',
-  '"amazon australia sellers" group accounting settlement',
-  '"shopify australia" group "bookkeeper" marketplace',
+  // Facebook Groups — real groups to find and join
+  'facebook groups "xero australia" bookkeepers',
+  'facebook groups "amazon sellers australia"',
+  'facebook groups "australian ecommerce" sellers',
+  'facebook groups "shopify australia" merchants',
+  'facebook groups "ebay australia sellers"',
+  'facebook groups "australian online sellers" marketplace',
+  // Reddit communities
+  'reddit "r/AusFinance" ecommerce accounting',
+  'reddit subreddit australian ecommerce sellers',
+  'reddit "r/ecommerce" marketplace accounting xero',
+  'reddit "r/FulfillmentByAmazon" australia accounting',
+  // LinkedIn Groups
+  'linkedin group "ecommerce australia" sellers',
+  'linkedin group "xero users" australia',
+  'linkedin group "australian bookkeepers" ecommerce',
+  // Xero Community
+  'site:community.xero.com marketplace settlement reconciliation',
+  'site:community.xero.com amazon shopify integration australia',
+  // Whirlpool / forums
+  'site:whirlpool.net.au ecommerce accounting xero marketplace',
   // HubSpot Community
-  '"marketplace accounting" "automation" ecommerce hubspot',
-  '"ecommerce integration" "xero" reconciliation hubspot',
-  // Xero Community & Groups
-  '"marketplace settlement" "xero" community reconciliation',
-  '"amazon xero" "GST" community australia',
-  '"multi-channel" "xero add-on" ecommerce australia',
-  // General social / forums
-  '"ebay seller" "xero" accounting australia',
-  '"bunnings marketplace" accounting integration',
-  '"ecommerce bookkeeper" australia marketplace fees',
+  'site:community.hubspot.com ecommerce xero integration australia',
 ];
 
 serve(async (req) => {
@@ -82,52 +85,55 @@ serve(async (req) => {
 
     const existingTitles = (existingOpps || []).map((o: any) => o.thread_title);
 
-    // Pick 5 random queries for this run
+    // Pick 6 random queries for this run
     const shuffled = [...SEARCH_QUERIES].sort(() => Math.random() - 0.5);
-    const selectedQueries = shuffled.slice(0, 5);
+    const selectedQueries = shuffled.slice(0, 6);
 
-    const systemPrompt = `You are an outreach opportunity scout for Xettle — a new Australian SaaS tool that automates Xero accounting for marketplace sellers (Amazon, Shopify, eBay, Bunnings, etc).
+    const systemPrompt = `You are a community & group scout for Xettle — an Australian SaaS that automates Xero accounting for marketplace sellers (Amazon, Shopify, eBay, Bunnings, etc).
 
-Your job: Find places where Australian ecommerce businesses, bookkeepers, or marketplace sellers are discussing accounting pain points — and suggest outreach opportunities where we can invite them to try Xettle for free.
+Your job: Find REAL, EXISTING communities, groups, and forums where Australian ecommerce businesses gather — places the Xettle team should JOIN to build relationships and find prospects.
 
-TARGET PLATFORMS (in priority order):
-1. LinkedIn — posts, comments, and groups where Australian ecommerce sellers or bookkeepers discuss marketplace accounting
-2. Facebook Groups — Australian ecommerce seller groups, Xero user groups, Amazon AU seller groups
-3. HubSpot Community — ecommerce integration discussions
-4. Xero Community — threads about marketplace integrations, settlement reconciliation
-5. Reddit — r/AusFinance, r/ecommerce, r/FulfillmentByAmazon
-6. Twitter/X — Australian ecommerce and Xero conversations
+TWO TYPES OF RESULTS:
 
-MESSAGING APPROACH — the draft response should:
-- Lead with genuine help and empathy for their pain point
-- Share practical knowledge about the problem (settlement reconciliation, GST, multi-marketplace fees)
-- Then naturally mention: "We've just built a tool called Xettle that handles exactly this — automating Xero entries for marketplace settlements. We're inviting Australian sellers to try it free for a few months while we refine it. Happy to set you up with a no-cost account if you're interested."
-- Keep it warm, personal, and non-salesy — like a peer offering to help
-- Adapt tone to the platform (more professional on LinkedIn, more casual on Reddit/Facebook)
+TYPE 1 — JOINABLE COMMUNITIES (priority)
+Find real Facebook Groups, Reddit subreddits, LinkedIn Groups, Xero Community forums, and other online communities where Australian marketplace sellers hang out. These must be REAL groups that actually exist.
+
+Examples of what we want:
+- "Xero Users Australia" (Facebook Group)
+- "r/AusFinance" (Reddit)
+- "Australian Amazon Sellers" (Facebook Group)
+- "Shopify Entrepreneurs Australia" (Facebook Group)
+- "Xero Community — Marketplace Integrations" (forum section)
+
+For each: provide the group/community name, which platform it's on, why it's relevant, and a draft intro message for joining.
+
+TYPE 2 — ACTIVE DISCUSSION THREADS
+Find topic patterns that commonly appear in these communities — real problems people post about (GST on marketplace fees, reconciling settlements, multi-channel accounting). Suggest the kind of thread to look for and a helpful draft reply.
 
 CRITICAL RULES:
-- Suggest thread/post TOPICS that are likely to exist — do NOT invent specific URLs
-- Each opportunity must have: platform, thread_title, thread_snippet, relevance_score (1-10), and draft_response
-- Focus on AUSTRALIAN companies and sellers — this is the target market
-- thread_url should be empty string — the dashboard will construct search links
-- Vary the platforms — don't put everything on one platform
+- Suggest REAL group names that are likely to exist — use common naming patterns for Australian FB groups
+- search_query should be the Google search string to find this group/thread (e.g. "facebook.com/groups australian amazon sellers")
+- thread_url should be empty string — the dashboard constructs search links
+- Focus on AUSTRALIAN communities
+- For Facebook Groups: suggest the actual group name as it would appear on Facebook
+- For Reddit: use real subreddit names (r/AusFinance, r/ecommerce, etc.)
 
-Return a JSON array of opportunities. Each object:
+Return a JSON array. Each object:
 {
   "platform": "linkedin" | "facebook_group" | "hubspot_community" | "xero_community" | "reddit" | "twitter" | "forum",
-  "thread_title": "string",
+  "thread_title": "string (group name or thread topic)",
   "thread_url": "",
-  "thread_snippet": "string (what the person asked/posted, 1-2 sentences)",
+  "thread_snippet": "string (why this group is valuable / what people discuss there)",
   "relevance_score": number (1-10),
-  "draft_response": "string (the helpful reply with free trial invitation, 2-4 paragraphs)",
-  "search_query": "string (which query found this)"
+  "draft_response": "string (intro message for joining OR helpful reply for a thread)",
+  "search_query": "string (Google search to find this group/community)"
 }`;
 
-    let userMessage = `Find outreach opportunities for these search queries. For each query, suggest 2-3 posts/threads where we could provide genuine value and invite them to try Xettle free:\n\n${selectedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
+    let userMessage = `Find real communities, groups, and forums for these searches. For each, suggest 2 results — prioritise joinable groups/communities over individual threads:\n\n${selectedQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
 
     if (existingTitles.length > 0) {
       const titlesList = existingTitles.slice(0, 50).map((t: string) => `- ${t}`).join("\n");
-      userMessage += `\n\nALREADY COVERED — do NOT suggest similar topics:\n${titlesList}`;
+      userMessage += `\n\nALREADY COVERED — do NOT suggest these again:\n${titlesList}`;
     }
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
