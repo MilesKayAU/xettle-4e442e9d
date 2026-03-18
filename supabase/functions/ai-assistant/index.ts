@@ -388,7 +388,7 @@ serve(async (req) => {
     }
 
     // ─── Final streaming call ────────────────────────────────────────
-    const streamPayload = buildGatewayPayload(systemPrompt, gatewayMessages, true);
+    const streamPayload = buildGatewayPayload(systemPrompt, gatewayMessages, true, toolDefs);
     const streamResp = await callGateway(LOVABLE_API_KEY, streamPayload);
 
     if (!streamResp.ok) {
