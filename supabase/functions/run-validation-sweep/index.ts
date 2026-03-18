@@ -556,7 +556,8 @@ async function sweepUser(adminSupabase: any, userId: string) {
           if (line.posted_date < periodStart || line.posted_date > periodEnd) continue
           // Only count ItemPrice lines as revenue (skip fees, promotions, chargebacks)
           const amt = Number(line.amount) || 0
-          if (line.amount_type === 'ItemPrice' && amt > 0) {
+          const revenueTypes = new Set(['ItemPrice', 'order', 'order_total'])
+          if (revenueTypes.has(line.amount_type || '') && amt > 0) {
             orderTotal += amt
           }
           if (line.order_id) uniqueOrders.add(line.order_id)
