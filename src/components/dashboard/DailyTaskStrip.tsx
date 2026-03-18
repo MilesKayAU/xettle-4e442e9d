@@ -1,5 +1,5 @@
 import { useDashboardTaskCounts, type SetupWarning } from '@/hooks/useDashboardTaskCounts';
-import { Settings, FileText, Send, CheckCircle2, AlertTriangle, ArrowRight, Info } from 'lucide-react';
+import { Settings, FileText, Send, CheckCircle2, AlertTriangle, ArrowRight, Info, Upload } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 interface DailyTaskStripProps {
