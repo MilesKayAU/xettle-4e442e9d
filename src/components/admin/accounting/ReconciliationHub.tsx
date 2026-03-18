@@ -340,6 +340,72 @@ export default function ReconciliationHub() {
     loadItems();
   }, [noteInput, loadItems]);
 
+  const togglePayload = useCallback(async (item: ReconItem) => {
+    const key = item.sourceId;
+    if (expandedPayload === key) { setExpandedPayload(null); return; }
+
+    // Use cache if available
+    if (payloadCache[key]) { setExpandedPayload(key); return; }
+
+    setPayloadLoading(key);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [{ data: settlement }, { data: codeSetting }] = await Promise.all([
+        supabase.from('settlements')
+          .select('*')
+          .eq('id', key)
+          .single(),
+        supabase.from('app_settings')
+          .select('value')
+          .eq('user_id', user.id)
+          .eq('key', 'accounting_xero_account_codes')
+          .maybeSingle(),
+      ]);
+
+      if (!settlement) { toast.error('Settlement not found'); return; }
+
+      let userCodes: Record<string, string> | null = null;
+      try { userCodes = codeSetting?.value ? JSON.parse(codeSetting.value) : null; } catch {}
+
+      // Also load per-marketplace mappings
+      const { data: mpMappings } = await supabase
+        .from('marketplace_account_mapping')
+        .select('category, account_code, marketplace_code')
+        .eq('user_id', user.id);
+
+      const mergedCodes: Record<string, string> = { ...(userCodes || {}) };
+      for (const m of (mpMappings || [])) {
+        mergedCodes[`${m.category}:${m.marketplace_code}`] = m.account_code;
+      }
+
+      const resolver = createAccountCodeResolver(mergedCodes);
+      const lineItems = buildPostingLineItems(settlement as any, resolver, settlement.marketplace || undefined);
+      const previews = toLineItemPreviews(lineItems);
+      const contact = MARKETPLACE_CONTACTS[settlement.marketplace || ''] || settlement.marketplace || 'Unknown';
+      const reference = `Xettle-${settlement.settlement_id}`;
+
+      setPayloadCache(prev => ({
+        ...prev,
+        [key]: {
+          lines: previews,
+          contact,
+          reference,
+          bankDeposit: settlement.bank_deposit || 0,
+          gstIncome: settlement.gst_on_income || 0,
+          gstExpenses: settlement.gst_on_expenses || 0,
+        },
+      }));
+      setExpandedPayload(key);
+    } catch (err) {
+      console.error('Payload load error:', err);
+      toast.error('Failed to load Xero payload');
+    } finally {
+      setPayloadLoading(null);
+    }
+  }, [expandedPayload, payloadCache]);
+
   // ─── Summary counts ──────────────────────────────────────────────
   const summary = useMemo(() => {
     const critical = items.filter(i => i.urgencyTier === 'critical').length;
