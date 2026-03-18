@@ -248,6 +248,33 @@ export default function PushSafetyPreview({
 
         if (!s) continue;
 
+        // Source Push Gate — reconciliation-only settlements cannot be pushed
+        if (s.source === 'api_sync' && (s.marketplace || '').startsWith('shopify_orders_')) {
+          // Inject a red-tier block and skip normal preview
+          results.push({
+            settlement: {
+              settlement_id: s.settlement_id,
+              marketplace: s.marketplace || marketplace,
+              period_start: s.period_start,
+              period_end: s.period_end,
+              sales_principal: 0, sales_shipping: 0, refunds: 0, seller_fees: 0,
+              fba_fees: 0, storage_fees: 0, advertising_costs: 0, other_fees: 0,
+              reimbursements: 0, bank_deposit: s.bank_deposit || 0,
+              gst_on_income: 0, gst_on_expenses: 0,
+              bank_verified: false, reconciliation_status: null,
+            },
+            lineItems: [],
+            checks: [{
+              label: 'Reconciliation-only source (Shopify-derived marketplace)',
+              status: 'red' as const,
+              detail: 'This settlement was auto-generated from Shopify orders and cannot be pushed to Xero. Upload the marketplace CSV settlement instead.',
+            }],
+            contactName: '',
+            reference: `Xettle-${s.settlement_id}`,
+          });
+          continue;
+        }
+
         // Detect repost context
         const isRepost = !!s.repost_of_invoice_id;
         const repostOfInvoiceId = s.repost_of_invoice_id || null;

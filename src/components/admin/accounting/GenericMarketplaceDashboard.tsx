@@ -739,9 +739,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               )}
                             </div>
 
-                            {/* Status badge */}
-                            <div className="flex justify-center">
-                              <SettlementStatusBadge
+                             {/* Status badge */}
+                             <div className="flex justify-center gap-1">
+                               {isReconOnly && (
+                                 <Badge className="bg-amber-500/15 text-amber-700 border-amber-200 text-[10px]">Recon Only</Badge>
+                               )}
+                               <SettlementStatusBadge
                                 status={s.status}
                                 xeroInvoiceNumber={s.xero_invoice_number}
                                 xeroType={(s as any).xero_type}

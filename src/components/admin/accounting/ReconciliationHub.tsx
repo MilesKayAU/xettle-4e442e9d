@@ -146,8 +146,39 @@ export default function ReconciliationHub() {
         let tier: UrgencyTier = 'action';
         let title = '';
         const marketplaceLabel = (s.marketplace || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+        const isReconOnly = (s as any).source === 'api_sync' && (s.marketplace || '').startsWith('shopify_orders_');
 
-        if (s.status === 'push_failed' || s.xero_status === 'error') {
+        // Manual hold: bookkeeper must void previous invoice manually
+        if ((s as any).posting_state === 'manual_hold') {
+          tier = 'critical';
+          const invoiceRef = (s as any).xero_journal_id || 'unknown';
+          title = `⚠ Manual void required — ${marketplaceLabel}`;
+          openItems.push({
+            id: `settlement_${s.id}`,
+            type: 'settlement',
+            urgencyTier: tier,
+            title,
+            subtitle: `A previous Shopify-derived invoice ${invoiceRef} could not be auto-voided in Xero. Please void it manually in Xero, then return here to push the CSV settlement.`,
+            marketplace: s.marketplace || undefined,
+            amount: s.bank_deposit || 0,
+            date: s.period_start,
+            status: 'manual_hold',
+            sourceId: s.id,
+            settlementId: s.settlement_id,
+            depositDate: (s as any).deposit_date || undefined,
+            periodStart: s.period_start,
+            periodEnd: s.period_end,
+            xeroStatus: s.xero_status || undefined,
+            reconStatus: s.reconciliation_status || undefined,
+          });
+          continue;
+        }
+
+        // Recon-only settlements: show as info with badge, skip push actions
+        if (isReconOnly) {
+          tier = 'info';
+          title = `Reconciliation only — ${marketplaceLabel}`;
+        } else if (s.status === 'push_failed' || s.xero_status === 'error') {
           tier = 'critical';
           title = `Xero push failed — ${marketplaceLabel}`;
         } else if (s.status === 'ready_to_push') {

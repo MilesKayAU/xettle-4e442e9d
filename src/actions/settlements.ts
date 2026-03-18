@@ -291,7 +291,7 @@ export async function applySourcePriority(
       // CSV upload → suppress overlapping api_sync records
       const { data: overlapping } = await supabase
         .from('settlements')
-        .select('id, settlement_id')
+        .select('id, settlement_id, xero_journal_id, xero_invoice_id, xero_status, posting_state')
         .eq('user_id', userId)
         .eq('source', 'api_sync')
         .eq('marketplace', marketplace)
@@ -302,6 +302,62 @@ export async function applySourcePriority(
 
       if (overlapping && overlapping.length > 0) {
         for (const rec of overlapping) {
+          // Void-on-suppression: if a Xero invoice exists on the api_sync record, void it first
+          if ((rec as any).xero_journal_id) {
+            try {
+              const { data: voidResult, error: voidError } = await supabase.functions.invoke('sync-settlement-to-xero', {
+                body: {
+                  action: 'rollback',
+                  settlementId: rec.settlement_id,
+                  invoiceIds: [(rec as any).xero_journal_id],
+                  rollbackScope: 'all',
+                },
+              });
+
+              if (voidError || !voidResult?.success) {
+                // Void failed — save CSV anyway but set posting_state = manual_hold on the NEW settlement
+                console.error('[source-priority] Failed to void Xero invoice:', voidError || voidResult?.error);
+
+                // We'll set manual_hold on the new CSV settlement after this loop
+                result.voidFailed = true;
+                result.failedVoidInvoiceId = (rec as any).xero_journal_id;
+
+                await supabase.from('system_events' as any).insert({
+                  user_id: userId,
+                  event_type: 'csv_suppression_void_failed',
+                  severity: 'warning',
+                  marketplace_code: marketplace,
+                  settlement_id: newSettlementId,
+                  details: {
+                    suppressed_settlement_id: rec.settlement_id,
+                    xero_journal_id: (rec as any).xero_journal_id,
+                    error: voidError?.message || voidResult?.error || 'Unknown void error',
+                    period: `${periodStart} → ${periodEnd}`,
+                  },
+                } as any);
+              } else {
+                // Void succeeded — log it
+                await supabase.from('system_events' as any).insert({
+                  user_id: userId,
+                  event_type: 'xero_invoice_voided_on_csv_suppression',
+                  severity: 'info',
+                  marketplace_code: marketplace,
+                  settlement_id: newSettlementId,
+                  details: {
+                    voided_settlement_id: rec.settlement_id,
+                    voided_xero_journal_id: (rec as any).xero_journal_id,
+                    period: `${periodStart} → ${periodEnd}`,
+                  },
+                } as any);
+              }
+            } catch (err: any) {
+              console.error('[source-priority] Void call threw:', err);
+              result.voidFailed = true;
+              result.failedVoidInvoiceId = (rec as any).xero_journal_id;
+            }
+          }
+
+          // Always suppress the api_sync record regardless of void outcome
           await supabase
             .from('settlements')
             .update({
