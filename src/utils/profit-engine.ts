@@ -154,6 +154,7 @@ export interface SettlementLineForProfit {
   order_id: string | null;
   transaction_type: string | null;
   quantity?: number;
+  fulfilment_channel?: string | null;
 }
 
 export interface MarketplaceProfit {
