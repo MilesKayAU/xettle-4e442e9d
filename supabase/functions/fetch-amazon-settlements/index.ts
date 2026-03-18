@@ -1052,6 +1052,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
           sku: l.sku || null,
           posted_date: l.postedDate || null,
           marketplace_name: l.marketplaceName || null,
+          fulfilment_channel: l.fulfilmentChannel || null,
         }));
         for (let j = 0; j < lineRows.length; j += 500) {
           await supabase.from('settlement_lines').insert(lineRows.slice(j, j + 500));
