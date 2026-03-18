@@ -7,6 +7,7 @@
 
 import type { MarketplaceGroup, ShopifyOrderRow } from './shopify-orders-parser';
 import { MARKETPLACE_LABELS } from './settlement-engine';
+import { getPostageDeductionForOrder } from './fulfilment-settings';
 
 export interface ProductCost {
   sku: string;
