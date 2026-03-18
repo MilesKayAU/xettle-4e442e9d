@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { renderPolicyForPrompt } from "../_shared/ai_policy.ts";
+import { getToolsForRoute, toOpenAIToolDefs } from "../_shared/ai_tool_registry.ts";
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-3-flash-preview";
@@ -26,52 +27,8 @@ IMPORTANT BEHAVIOR:
 
 const MONTHLY_LIMIT = 50;
 
-// ─── Tool definitions (OpenAI function-calling format) ───────────────────────
-
-const TOOL_DEFINITIONS = [
-  {
-    type: "function" as const,
-    function: {
-      name: "getPageReadinessSummary",
-      description: "Get summary counts: outstanding invoices by state, settlements by status, ready-to-push counts, gap warnings. Use when user asks about overall status or what needs attention.",
-      parameters: {
-        type: "object",
-        properties: {
-          routeId: { type: "string", description: "The current page route ID" },
-        },
-        required: ["routeId"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "getInvoiceStatusByXeroInvoiceId",
-      description: "Get match state, payment status, and readiness of a specific Xero invoice. Use when user asks about a specific invoice.",
-      parameters: {
-        type: "object",
-        properties: {
-          xeroInvoiceId: { type: "string", description: "The Xero invoice ID" },
-        },
-        required: ["xeroInvoiceId"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "getSettlementStatus",
-      description: "Get posting state, readiness blockers, and Xero sync status for a specific settlement. Use when user asks about a settlement's status or readiness.",
-      parameters: {
-        type: "object",
-        properties: {
-          settlementId: { type: "string", description: "The settlement ID" },
-        },
-        required: ["settlementId"],
-      },
-    },
-  },
-];
+// Tool definitions are imported from _shared/ai_tool_registry.ts
+// Route-filtered at request time based on context.routeId
 
 // ─── Tool execution ──────────────────────────────────────────────────────────
 
@@ -233,11 +190,12 @@ function buildGatewayPayload(
   systemPrompt: string,
   messages: Array<{ role: string; content: string; tool_call_id?: string; tool_calls?: any[] }>,
   stream: boolean,
+  toolDefs: ReturnType<typeof toOpenAIToolDefs>,
 ) {
   return {
     model: MODEL,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
-    tools: TOOL_DEFINITIONS,
+    tools: toolDefs,
     stream,
     ...(stream ? {} : { max_tokens: 1024 }),
   };
@@ -346,6 +304,11 @@ serve(async (req) => {
       ? `${SYSTEM_PROMPT}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}`
       : SYSTEM_PROMPT;
 
+    // ─── Route-filtered tools ────────────────────────────────────────
+    const routeId = context?.routeId ?? null;
+    const routeTools = getToolsForRoute(routeId);
+    const toolDefs = toOpenAIToolDefs(routeTools);
+
     // ─── Tool-calling loop (max 3 rounds, non-streaming) ─────────────
     let gatewayMessages: any[] = messages.map((m: any) => ({
       role: m.role,
@@ -355,7 +318,7 @@ serve(async (req) => {
     const MAX_TOOL_ROUNDS = 3;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const payload = buildGatewayPayload(systemPrompt, gatewayMessages, false);
+      const payload = buildGatewayPayload(systemPrompt, gatewayMessages, false, toolDefs);
       const response = await callGateway(LOVABLE_API_KEY, payload);
 
       if (!response.ok) {
@@ -425,7 +388,7 @@ serve(async (req) => {
     }
 
     // ─── Final streaming call ────────────────────────────────────────
-    const streamPayload = buildGatewayPayload(systemPrompt, gatewayMessages, true);
+    const streamPayload = buildGatewayPayload(systemPrompt, gatewayMessages, true, toolDefs);
     const streamResp = await callGateway(LOVABLE_API_KEY, streamPayload);
 
     if (!streamResp.ok) {
