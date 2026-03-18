@@ -12,6 +12,7 @@ import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, M
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
+import { loadFulfilmentMethods, getEffectiveMethod, type FulfilmentMethod } from '@/utils/fulfilment-settings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
 import SkuComparisonView from '@/components/insights/SkuComparisonView';
@@ -44,6 +45,8 @@ interface MarketplaceStats {
   estimatedShippingCost: number;
   returnAfterShipping: number | null;
   returnAfterAdsAndShipping: number | null;
+  fulfilmentMethod: FulfilmentMethod;
+  fulfilmentUnknown: boolean;
   // Fee breakdown
   commissionTotal: number;
   fbaTotal: number;
@@ -88,7 +91,8 @@ export default function InsightsDashboard() {
     try {
       // Insights is an analytics view — include pre-boundary (historical) settlements
       // so that all marketplace sales data contributes to trends and totals.
-      const [settlementsRes, adSpendRes, shippingRes] = await Promise.all([
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods] = await Promise.all([
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary')
@@ -102,6 +106,7 @@ export default function InsightsDashboard() {
         supabase
           .from('marketplace_shipping_costs')
           .select('marketplace_code, cost_per_order'),
+        currentUser ? loadFulfilmentMethods(currentUser.id) : Promise.resolve({} as Record<string, FulfilmentMethod>),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
@@ -186,15 +191,19 @@ export default function InsightsDashboard() {
         const adSpend = adSpendByMp[mp] || 0;
         const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
 
-        // Shipping cost estimation
+        // Fulfilment method
+        const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
+        const fulfilmentUnknown = fulfilmentMethod === 'not_sure';
+
+        // Shipping cost estimation — only applied for self_ship / third_party_logistics
         const shippingCostPerOrder = shippingCostByMp[mp] || 0;
-        // Rough estimate: assume average order value from sales data
-        const estimatedOrderCount = rows.length > 0 ? rows.length : 1; // Use settlement count as proxy
-        const estimatedShippingCost = shippingCostPerOrder * estimatedOrderCount;
-        const returnAfterShipping = totalSales > 0 && shippingCostPerOrder > 0 
+        const estimatedOrderCount = rows.length > 0 ? rows.length : 1;
+        const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
+        const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;
+        const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 
           ? Math.max(Math.min((netPayout - estimatedShippingCost) / totalSales, 1), -1) 
           : null;
-        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || shippingCostPerOrder > 0)
+        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || (shouldDeductShipping && shippingCostPerOrder > 0))
           ? Math.max(Math.min((netPayout - adSpend - estimatedShippingCost) / totalSales, 1), -1)
           : null;
 
@@ -231,6 +240,8 @@ export default function InsightsDashboard() {
           storageTotal,
           otherFeesTotal,
           feeBreakdown,
+          fulfilmentMethod,
+          fulfilmentUnknown,
         });
       }
 
@@ -648,6 +659,29 @@ export default function InsightsDashboard() {
                     </div>
                   )}
 
+                  {/* Fulfilment method context */}
+                  {s.fulfilmentMethod === 'marketplace_fulfilled' && (
+                    <p className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+                      <Truck className="h-3 w-3" /> Fulfilment included in settlement fees
+                    </p>
+                  )}
+
+                  {s.fulfilmentUnknown && (
+                    <div className="rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-700/30 px-3 py-2">
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                        ⚠ Fulfilment method unknown — update in Settings → Fulfilment Methods for accurate margins
+                      </p>
+                    </div>
+                  )}
+
+                  {s.fulfilmentMethod === 'third_party_logistics' && s.shippingCostPerOrder === 0 && (
+                    <div className="rounded-md border border-blue-300/50 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-700/30 px-3 py-2">
+                      <p className="text-[11px] text-blue-800 dark:text-blue-300">
+                        3PL costs not tracked — add estimated cost per order to improve margin accuracy
+                      </p>
+                    </div>
+                  )}
+
                   {/* After shipping estimate row */}
                   {s.shippingCostPerOrder > 0 && s.returnAfterAdsAndShipping !== null ? (
                     <div className="flex items-center justify-between text-xs">
@@ -658,14 +692,14 @@ export default function InsightsDashboard() {
                         ${s.returnAfterAdsAndShipping.toFixed(2)}
                       </span>
                     </div>
-                  ) : (
+                  ) : s.fulfilmentMethod === 'self_ship' || s.fulfilmentMethod === 'third_party_logistics' ? (
                     <div className="flex items-center gap-2">
                       <p className="text-[11px] text-muted-foreground">Add est. shipping to see full cost</p>
                       <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-primary" onClick={() => openShippingDialog(s.marketplace)}>
                         <Plus className="h-3 w-3 mr-1" /> Add Shipping
                       </Button>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Impact insight text */}
                   {impactText && (

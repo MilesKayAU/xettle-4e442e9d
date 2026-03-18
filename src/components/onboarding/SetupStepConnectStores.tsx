@@ -9,6 +9,15 @@ import { toast } from 'sonner';
 import { getCachedXeroAccounts } from '@/actions';
 import { getMarketplaceCoverage } from '@/actions/coaCoverage';
 import CoaBlockerCta from '@/components/shared/CoaBlockerCta';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import {
+  type FulfilmentMethod,
+  FULFILMENT_LABELS,
+  loadFulfilmentMethods,
+  saveFulfilmentMethod,
+  getEffectiveMethod,
+} from '@/utils/fulfilment-settings';
 
 interface Props {
   onNext: () => void;
@@ -103,6 +112,20 @@ export default function SetupStepConnectStores({
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customName, setCustomName] = useState('');
   const [persistingSelections, setPersistingSelections] = useState(false);
+  const [fulfilmentChoices, setFulfilmentChoices] = useState<Record<string, FulfilmentMethod>>({});
+
+  // Pre-populate fulfilment defaults when selection changes
+  useEffect(() => {
+    setFulfilmentChoices(prev => {
+      const next = { ...prev };
+      for (const code of selectedMarketplaces) {
+        if (!(code in next)) {
+          next[code] = getEffectiveMethod(code);
+        }
+      }
+      return next;
+    });
+  }, [selectedMarketplaces]);
 
   const handleConnectAmazon = async () => {
     setConnectingAmazon(true);
@@ -289,6 +312,19 @@ export default function SetupStepConnectStores({
       .upsert(connectionRows as any, { onConflict: 'user_id,marketplace_code' } as any);
 
     if (connectionErr) throw connectionErr;
+
+    // Persist fulfilment methods — only for keys that don't already exist
+    try {
+      const existingMethods = await loadFulfilmentMethods(user.id);
+      for (const code of uniqueCodes) {
+        if (!existingMethods[code]) {
+          const method = fulfilmentChoices[code] || getEffectiveMethod(code);
+          await saveFulfilmentMethod(user.id, code, method);
+        }
+      }
+    } catch {
+      // Non-fatal — don't block onboarding
+    }
 
     const codesToResolve = expandMarketplaceCodes(uniqueCodes);
     await supabase
@@ -527,9 +563,35 @@ export default function SetupStepConnectStores({
           </div>
 
           {selectedMarketplaces.length > 0 && (
-            <p className="text-xs text-center text-primary font-medium">
-              {selectedMarketplaces.length} marketplace{selectedMarketplaces.length !== 1 ? 's' : ''} selected — settlement folders will be created for each
-            </p>
+            <div className="space-y-3">
+              <p className="text-xs text-center text-primary font-medium">
+                {selectedMarketplaces.length} marketplace{selectedMarketplaces.length !== 1 ? 's' : ''} selected — settlement folders will be created for each
+              </p>
+
+              {/* Fulfilment method pickers */}
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground text-center font-medium">How are orders fulfilled?</p>
+                {selectedMarketplaces.map((code) => (
+                  <div key={code} className="rounded-lg border border-border p-3 space-y-2">
+                    <span className="text-xs font-medium text-foreground">{marketplaceLabelFromCode(code)}</span>
+                    <RadioGroup
+                      value={fulfilmentChoices[code] || getEffectiveMethod(code)}
+                      onValueChange={(v) => setFulfilmentChoices(prev => ({ ...prev, [code]: v as FulfilmentMethod }))}
+                      className="grid grid-cols-2 gap-1"
+                    >
+                      {(['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'] as FulfilmentMethod[]).map((opt) => (
+                        <div key={opt} className="flex items-center space-x-1.5">
+                          <RadioGroupItem value={opt} id={`onboard-${code}-${opt}`} />
+                          <Label htmlFor={`onboard-${code}-${opt}`} className="text-[11px] cursor-pointer leading-tight">
+                            {FULFILMENT_LABELS[opt]}
+                          </Label>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {showCustomInput ? (
