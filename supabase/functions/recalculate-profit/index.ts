@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
 
     const fulfilmentMethods: Record<string, string> = {};
     const postageCosts: Record<string, number> = {};
+    const mcfCosts: Record<string, number> = {};
 
     for (const row of settingsRows || []) {
       if (row.key.startsWith("fulfilment_method:")) {
@@ -65,6 +66,10 @@ Deno.serve(async (req) => {
         const code = row.key.replace("postage_cost:", "");
         const num = parseFloat(row.value || "");
         if (code && !isNaN(num) && num >= 0) postageCosts[code] = num;
+      } else if (row.key.startsWith("mcf_cost:")) {
+        const code = row.key.replace("mcf_cost:", "");
+        const num = parseFloat(row.value || "");
+        if (code && !isNaN(num) && num >= 0) mcfCosts[code] = num;
       }
     }
 
