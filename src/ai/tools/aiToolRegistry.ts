@@ -7,6 +7,9 @@
  *
  * IMPORTANT: If you add/remove tools, update supabase/functions/_shared/ai_tool_registry.ts
  * (the server source of truth) and then sync this file.
+ *
+ * DRIFT DETECTION: The server exports EXPECTED_TOOL_COUNT = 6.
+ * If you change tool count on the server, update the assertion below.
  */
 
 // ─── Types (mirrored from server) ────────────────────────────────────────────
@@ -17,40 +20,52 @@ export interface AiToolDef {
   availableOn: string[];
 }
 
+// ─── Drift Detection ─────────────────────────────────────────────────────────
+
+/** Must match EXPECTED_TOOL_COUNT in supabase/functions/_shared/ai_tool_registry.ts */
+export const EXPECTED_TOOL_COUNT = 6;
+
 // ─── Static registry (synced from server canonical) ──────────────────────────
 
 export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "getPageReadinessSummary",
-    description: "Get summary counts: outstanding invoices, settlements by status, ready-to-push counts, gap warnings.",
+    description: "[Read-only] Get summary counts: outstanding invoices, settlements by status, ready-to-push counts, gap warnings.",
     availableOn: ["dashboard", "outstanding", "settlements", "insights", "setup"],
   },
   {
     name: "listRecentSettlements",
-    description: "List recent settlements with status, marketplace, period, and Xero push state.",
+    description: "[Read-only] List recent settlements with status, marketplace, period, and Xero push state.",
     availableOn: ["dashboard", "settlements", "insights"],
   },
   {
     name: "getInvoiceStatusByXeroInvoiceId",
-    description: "Get match state, payment status, and readiness of a specific Xero invoice.",
+    description: "[Read-only] Get match state, payment status, and readiness of a specific Xero invoice.",
     availableOn: ["outstanding", "settlements", "settlement_detail", "xero_posting_audit"],
   },
   {
     name: "getSettlementStatus",
-    description: "Get posting state, readiness blockers, and Xero sync status for a specific settlement.",
+    description: "[Read-only] Get posting state, readiness blockers, and Xero sync status for a specific settlement.",
     availableOn: ["settlements", "settlement_detail", "push_safety_preview", "xero_posting_audit", "dashboard"],
   },
   {
     name: "getRecentSystemEvents",
-    description: "Get recent system events (uploads, syncs, pushes, errors) to understand workflow history.",
+    description: "[Read-only] Get recent system events (uploads, syncs, pushes, errors) to understand workflow history.",
     availableOn: [], // All routes
   },
   {
     name: "explainReadinessBlockers",
-    description: "Explain why a settlement can't be pushed: missing mappings, stale COA, missing contact, support tier.",
+    description: "[Read-only] Explain why a settlement can't be pushed: missing mappings, stale COA, missing contact, support tier.",
     availableOn: ["settlements", "settlement_detail", "push_safety_preview", "settings"],
   },
 ];
+
+// Runtime drift check (development aid — logs warning if count mismatches)
+if (AI_TOOL_REGISTRY.length !== EXPECTED_TOOL_COUNT) {
+  console.warn(
+    `[aiToolRegistry] DRIFT DETECTED: Client has ${AI_TOOL_REGISTRY.length} tools but EXPECTED_TOOL_COUNT is ${EXPECTED_TOOL_COUNT}. Sync with server registry.`,
+  );
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
