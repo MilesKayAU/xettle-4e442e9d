@@ -472,16 +472,27 @@ export default function AccountMapperCard() {
               restored[cat] = { code: codes[cat], name: coaEntry?.account_name || `Account ${codes[cat]}` };
             }
           }
+          // Normalize override keys on load for backward compatibility
+          // e.g. "Sales:Shopify Payments" → "Sales:Shopify"
           for (const key of Object.keys(codes)) {
             if (key.includes(':')) {
+              const [cat, rawMp] = key.split(':');
+              const normalizedMp = normalizeKeyLabel(rawMp);
+              const normalizedKey = `${cat}:${normalizedMp}`;
               const coaEntry = accounts.find(a => a.account_code === codes[key]);
-              restored[key] = { code: codes[key], name: coaEntry?.account_name || `Account ${codes[key]}` };
+              restored[normalizedKey] = { code: codes[key], name: coaEntry?.account_name || `Account ${codes[key]}` };
             }
           }
           setMapping(restored);
           const editable: Record<string, string> = {};
           for (const [k, v] of Object.entries(codes)) {
-            editable[k] = v as string;
+            if (k.includes(':')) {
+              const [cat, rawMp] = k.split(':');
+              const normalizedKey = `${cat}:${normalizeKeyLabel(rawMp)}`;
+              editable[normalizedKey] = v as string;
+            } else {
+              editable[k] = v as string;
+            }
           }
           setEditableMapping(editable);
           // Always show editable fields so users can review/change mappings
