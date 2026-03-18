@@ -535,6 +535,7 @@ Deno.serve(async (req) => {
       amount_description: 'Shopify Order Revenue',
       amount: Math.round((order.total_price - order.total_tax) * 100) / 100,
       accounting_category: 'revenue',
+      fulfilment_channel: order.isMcf ? 'MCF' : null,
     }));
 
     // Add tax lines
