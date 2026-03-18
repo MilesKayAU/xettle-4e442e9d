@@ -125,6 +125,8 @@ export default function ReconciliationHealthPanel() {
           label: 'Destination accounts mapped',
           status: 'warn',
           detail: `Map destination accounts for: ${unmappedRails.join(', ')}`,
+          actionLabel: 'Map destinations',
+          actionSection: 'destination-accounts',
         });
       }
 
