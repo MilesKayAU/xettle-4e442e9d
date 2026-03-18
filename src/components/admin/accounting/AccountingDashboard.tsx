@@ -139,36 +139,44 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
     });
   }
 
-  // 1. Insert settlement record
-  const { error: settError } = await supabase.from('settlements').insert({
-    user_id: user.id,
-    settlement_id: header.settlementId,
+  // 1. Insert settlement record via canonical action
+  const { saveSettlementCanonical } = await import('@/actions/settlements');
+  const canonResult = await saveSettlementCanonical({
+    row: {
+      user_id: user.id,
+      settlement_id: header.settlementId,
+      marketplace,
+      period_start: header.periodStart,
+      period_end: header.periodEnd,
+      deposit_date: header.depositDate,
+      sales_principal: summary.salesPrincipal,
+      sales_shipping: summary.salesShipping,
+      promotional_discounts: summary.promotionalDiscounts,
+      seller_fees: summary.sellerFees,
+      fba_fees: summary.fbaFees,
+      storage_fees: summary.storageFees,
+      refunds: summary.refunds,
+      reimbursements: summary.reimbursements,
+      advertising_costs: summary.advertisingCosts,
+      other_fees: summary.otherFees,
+      net_ex_gst: summary.netExGst,
+      gst_on_income: summary.gstOnIncome,
+      gst_on_expenses: summary.gstOnExpenses,
+      bank_deposit: summary.bankDeposit,
+      reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
+      status: 'saved',
+      is_split_month: splitMonth.isSplitMonth,
+      split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
+      split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
+      parser_version: PARSER_VERSION,
+    },
     marketplace,
-    period_start: header.periodStart,
-    period_end: header.periodEnd,
-    deposit_date: header.depositDate,
-    sales_principal: summary.salesPrincipal,
-    sales_shipping: summary.salesShipping,
-    promotional_discounts: summary.promotionalDiscounts,
-    seller_fees: summary.sellerFees,
-    fba_fees: summary.fbaFees,
-    storage_fees: summary.storageFees,
-    refunds: summary.refunds,
-    reimbursements: summary.reimbursements,
-    advertising_costs: summary.advertisingCosts,
-    other_fees: summary.otherFees,
-    net_ex_gst: summary.netExGst,
-    gst_on_income: summary.gstOnIncome,
-    gst_on_expenses: summary.gstOnExpenses,
-    bank_deposit: summary.bankDeposit,
-    reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
-    status: 'saved',
-    is_split_month: splitMonth.isSplitMonth,
-    split_month_1_data: splitMonth.month1 ? JSON.stringify(splitMonth.month1) : null,
-    split_month_2_data: splitMonth.month2 ? JSON.stringify(splitMonth.month2) : null,
-    parser_version: PARSER_VERSION,
-  } as any);
-  if (settError) throw settError;
+    periodStart: header.periodStart,
+    periodEnd: header.periodEnd,
+    settlementId: header.settlementId,
+    source: 'csv_upload',
+  });
+  if (!canonResult.success) throw new Error(canonResult.error || 'Settlement save failed');
 
   // Compute and persist settlement components (deterministic anchors for matching)
   import('@/utils/settlement-components').then(({ upsertSettlementComponents }) => {
@@ -199,17 +207,7 @@ async function saveAmazonSettlement({ parsed, marketplace, extractFees = false }
   registerAliases(header.settlementId, user.id, 'csv_upload');
   postInsertDuplicateCheck(header.settlementId, marketplace, user.id);
 
-  // Apply source priority guard (canonical invariant)
-  import('@/actions/settlements').then(({ applySourcePriority }) => {
-    applySourcePriority(
-      user.id,
-      marketplace,
-      header.periodStart,
-      header.periodEnd,
-      header.settlementId,
-      'csv_upload',
-    ).catch(console.error);
-  });
+  // Source priority already applied synchronously inside saveSettlementCanonical()
 
   // Fire-and-forget: extract fee observations for intelligence engine
   if (extractFees) {

@@ -26,12 +26,15 @@ export {
   resetFailedSettlement,
   resetFailedSettlements,
   markBankVerified,
+  saveSettlementCanonical,
   applySourcePriority,
   checkSourceOverlap,
   getSourcePreference,
   setSourcePreference,
   type ActionResult,
   type SourcePriorityResult,
+  type SaveSettlementCanonicalInput,
+  type SaveSettlementCanonicalResult,
 } from './settlements';
 
 // ─── Xero Push / Rollback ────────────────────────────────────────────────────

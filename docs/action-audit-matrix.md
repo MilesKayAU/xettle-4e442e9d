@@ -30,11 +30,12 @@
 
 | Entry Point | File | Tables Written | Idempotency | Canonical Path |
 |---|---|---|---|---|
-| SmartUploadFlow CSV parse | `SmartUploadFlow.tsx:854` | `settlements`, `settlement_lines` | `dedup-check` + `applySourcePriority()` post-insert | ✅ via `saveSettlement()` → `applySourcePriority()` |
-| AccountingDashboard save | `AccountingDashboard.tsx:142,235` | `settlements`, `settlement_lines` | `dedup-check` + `applySourcePriority()` post-insert | ✅ `applySourcePriority()` called post-insert |
-| ShopifyOrdersDashboard save | `ShopifyOrdersDashboard.tsx:387` | `settlements`, `settlement_lines` | `dedup-check` | ✅ via `saveSettlement()` → `applySourcePriority()` |
-| settlement-engine.saveSettlement | `settlement-engine.ts:847,913` | `settlements` | `dedup-check` + `applySourcePriority()` post-insert | ✅ `applySourcePriority()` canonical action |
-| promote_and_save_settlement (RPC) | DB function | `settlements`, `marketplace_file_fingerprints`, `system_events` | atomic RPC | ✅ (server-side atomic) |
+| SmartUploadFlow CSV parse | `SmartUploadFlow.tsx:854` | `settlements`, `settlement_lines` | `dedup-check` via `saveSettlementCanonical()` | ✅ `saveSettlementCanonical()` |
+| AccountingDashboard save | `AccountingDashboard.tsx:142` | `settlements`, `settlement_lines` | `dedup-check` via `saveSettlementCanonical()` | ✅ `saveSettlementCanonical()` |
+| ShopifyOrdersDashboard save | `ShopifyOrdersDashboard.tsx:387` | `settlements`, `settlement_lines` | `dedup-check` via `saveSettlementCanonical()` | ✅ `saveSettlementCanonical()` |
+| settlement-engine.saveSettlement | `settlement-engine.ts` | `settlements` | `dedup-check` via `saveSettlementCanonical()` | ✅ `saveSettlementCanonical()` |
+| settlement-engine.saveWithAtomicPromote | `settlement-engine.ts` (RPC) | `settlements`, `marketplace_file_fingerprints`, `system_events` | atomic RPC + post-RPC `applySourcePriority()` | ✅ `applySourcePriority()` synchronous post-RPC |
+| promote_and_save_settlement (RPC) | DB function | `settlements`, `marketplace_file_fingerprints`, `system_events` | atomic RPC | ✅ (server-side atomic, client calls applySourcePriority post-RPC) |
 | fetch-amazon-settlements | `supabase/functions/fetch-amazon-settlements/` | `settlements`, `settlement_lines`, `settlement_components`, `marketplace_validation`, `system_events` | `upsert` (settlement_id) | ✅ (server-side) |
 | fetch-shopify-payouts | `supabase/functions/fetch-shopify-payouts/` | `settlements`, `settlement_lines` | `upsert` | ✅ (server-side) |
 | fetch-ebay-settlements | `supabase/functions/fetch-ebay-settlements/` | `settlements`, `settlement_lines` | `upsert` | ✅ (server-side) |
@@ -44,12 +45,13 @@
 
 | Action | Location | Enforcement |
 |---|---|---|
+| `saveSettlementCanonical()` | `src/actions/settlements.ts` | **Canonical insert wrapper** — performs insert + synchronous `applySourcePriority()` in one call |
 | `applySourcePriority()` | `src/actions/settlements.ts` | Canonical action — suppresses api_sync when CSV uploaded, self-suppresses api_sync when manual exists |
 | `checkSourceOverlap()` | `src/actions/settlements.ts` | Read-only query for UI overlap warning (SmartUploadFlow) |
 | `getSourcePreference()` | `src/actions/settlements.ts` | Reads `app_settings` source_preference:{code} |
 | `setSourcePreference()` | `src/actions/settlements.ts` | Writes preference (Settings UI only) |
 | Source preference check | `auto-generate-shopify-settlements` edge fn | Skips generation if user prefers CSV |
-| Guardrail test | `canonical-actions.test.ts` | Blocks direct `settlements.insert()` outside canonical paths |
+| Guardrail test | `canonical-actions.test.ts` | Blocks **ALL** direct `settlements.insert()` outside `src/actions/` — no exemptions |
 
 ### Settlement Delete Paths
 
@@ -213,9 +215,12 @@
 | `settlement-engine.ts` | `syncSettlementToXero()` orchestrator | ✅ Delegates to `pushSettlementToXero()` for invoke |
 | `settlement-engine.ts` | `rollbackSettlementFromXero()` | ✅ Thin wrapper → `rollbackFromXero()` |
 | `settlement-engine.ts` | `deleteSettlement()` | ✅ Thin wrapper → `@/actions/settlements.deleteSettlement()` |
+| `settlement-engine.ts` | `saveSettlement()` + boundary insert | ✅ Both use `saveSettlementCanonical()` — no direct insert |
+| `settlement-engine.ts` | `saveWithAtomicPromote()` (RPC) | ✅ Post-RPC `applySourcePriority()` synchronous call |
+| `AccountingDashboard.tsx` | `saveAmazonSettlement()` | ✅ Uses `saveSettlementCanonical()` — no direct insert |
 | `marketplace-token-map.ts` | Ghost cleanup (delete only) | ✅ Cleanup utility, no provisioning |
 
-**No allowlisted legacy bypasses remain.** All client-side paths route through canonical actions.
+**No allowlisted legacy bypasses remain.** All client-side settlement inserts go through `saveSettlementCanonical()`. Guardrail test blocks ALL direct `from('settlements').insert()` outside `src/actions/` with zero exemptions.
 
 ---
 
