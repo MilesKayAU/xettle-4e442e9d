@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     // Step 1: Get all distinct order_ids for Amazon lines with null fulfilment_channel
     const { data: nullLines, error: queryErr } = await admin
       .from("settlement_lines")
-      .select("order_id, amount_description")
+      .select("order_id, amount_description, transaction_type")
       .eq("user_id", userId)
       .is("fulfilment_channel", null)
       .ilike("marketplace_name", "%amazon%");
