@@ -157,11 +157,21 @@ function parseSettlementTSV(tsvContent: string, gstRate = 10): ParsedSettlement 
     const hasIntlOrderMatch = orderIdentifiers.some(id => intlOrderIds.has(id));
     const isIntlOrder = isExplicitNonAu || hasIntlOrderMatch;
 
+    // Read fulfillment-channel from TSV (Amazon → AFN, Merchant → MFN)
+    const rawFulfilmentChannel = getField(fields, 'fulfillment-channel');
+    let fulfilmentChannel: string | null = null;
+    if (rawFulfilmentChannel) {
+      const fcLower = rawFulfilmentChannel.toLowerCase().trim();
+      if (fcLower === 'amazon') fulfilmentChannel = 'AFN';
+      else if (fcLower === 'merchant') fulfilmentChannel = 'MFN';
+      else fulfilmentChannel = rawFulfilmentChannel.trim();
+    }
+
     const mapKey = `${transactionType}|${amountType}|${amountDescription}`;
     const category = CATEGORY_MAP[mapKey];
 
     if (category) {
-      lines.push({ transactionType, amountType, amountDescription, accountingCategory: category, amount, orderId, sku, postedDate, marketplaceName, isAuMarketplace: marketplaceName === AU_MARKETPLACE && !hasIntlOrderMatch });
+      lines.push({ transactionType, amountType, amountDescription, accountingCategory: category, amount, orderId, sku, postedDate, marketplaceName, isAuMarketplace: marketplaceName === AU_MARKETPLACE && !hasIntlOrderMatch, fulfilmentChannel });
       if (category === 'Sales' && amountDescription === 'Principal') salesPrincipal += amount;
       else if (category === 'Sales' && amountDescription === 'Shipping') salesShipping += amount;
       if ((category === 'Sales' || category === 'Promotional Discounts') && marketplaceName === AU_MARKETPLACE && !isIntlOrder) {
