@@ -112,6 +112,20 @@ export default function SetupStepConnectStores({
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customName, setCustomName] = useState('');
   const [persistingSelections, setPersistingSelections] = useState(false);
+  const [fulfilmentChoices, setFulfilmentChoices] = useState<Record<string, FulfilmentMethod>>({});
+
+  // Pre-populate fulfilment defaults when selection changes
+  useEffect(() => {
+    setFulfilmentChoices(prev => {
+      const next = { ...prev };
+      for (const code of selectedMarketplaces) {
+        if (!(code in next)) {
+          next[code] = getEffectiveMethod(code);
+        }
+      }
+      return next;
+    });
+  }, [selectedMarketplaces]);
 
   const handleConnectAmazon = async () => {
     setConnectingAmazon(true);
