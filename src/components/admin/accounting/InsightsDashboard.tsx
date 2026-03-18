@@ -162,11 +162,7 @@ export default function InsightsDashboard() {
       }
 
       // e.g. 'woolworths_marketplus_bigw' → 'bigw', 'shopify_orders_kogan' → 'kogan'
-      function normalizeMarketplace(mp: string): string {
-        if (mp.startsWith('woolworths_marketplus_')) return mp.replace('woolworths_marketplus_', '');
-        if (mp.startsWith('shopify_orders_')) return mp.replace('shopify_orders_', '');
-        return mp;
-      }
+      const normalizeMarketplace = canonicalNormalizeMarketplace;
 
       const grouped: Record<string, typeof data> = {};
       for (const row of data) {
