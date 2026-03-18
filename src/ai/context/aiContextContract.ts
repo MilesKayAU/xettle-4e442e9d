@@ -190,10 +190,23 @@ export function sanitizeContext(ctx: AiPageContext): AiPageContext {
     }));
   }
 
+  // Sanitize recentActions
+  if (ctx.recentActions?.length) {
+    sanitized.recentActions = ctx.recentActions.slice(0, MAX_RECENT_ACTIONS).map(a => ({
+      action: a.action.slice(0, 60),
+      ts: a.ts,
+      detail: a.detail?.slice(0, MAX_ACTION_DETAIL_LEN),
+    }));
+  }
+
   // Enforce byte cap — drop lowest-priority fields if over limit
   let json = JSON.stringify(sanitized);
   if (json.length > MAX_CONTEXT_BYTES) {
     delete sanitized.visibleTables;
+    json = JSON.stringify(sanitized);
+  }
+  if (json.length > MAX_CONTEXT_BYTES) {
+    delete sanitized.recentActions;
     json = JSON.stringify(sanitized);
   }
   if (json.length > MAX_CONTEXT_BYTES) {
