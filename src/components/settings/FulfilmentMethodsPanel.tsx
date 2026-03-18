@@ -28,7 +28,8 @@ interface MarketplaceRow {
   marketplace_name: string;
 }
 
-const METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'];
+const BASE_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'];
+const AMAZON_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'mixed_fba_fbm', 'not_sure'];
 
 async function triggerProfitRecalc(): Promise<{ updated: number; skipped: number } | null> {
   try {
