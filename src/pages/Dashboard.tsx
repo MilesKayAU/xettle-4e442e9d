@@ -483,8 +483,11 @@ export default function Dashboard() {
     claimDemo();
   }, [user]);
 
+  const trackAction = useAiActionTracker();
+
   function switchView(view: DashboardView) {
     setActiveView(view);
+    trackAction('switched_tab', view);
     localStorage.setItem('xettle_dashboard_view', view);
   }
 
