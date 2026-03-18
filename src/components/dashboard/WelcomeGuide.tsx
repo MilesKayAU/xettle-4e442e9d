@@ -93,7 +93,7 @@ export default function WelcomeGuide({ onUpload, onConnectStore }: WelcomeGuideP
                     <span className="text-xs font-bold">3</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    <strong className="text-foreground">One click</strong> pushes perfectly formatted journals to Xero
+                    <strong className="text-foreground">One click</strong> pushes a verified DRAFT invoice to Xero
                   </p>
                 </div>
               </div>

@@ -325,7 +325,7 @@ export default function Landing() {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { icon: FileText, title: 'Settlement-first accounting', desc: 'Every invoice is generated from the settlement — the only source of truth for marketplace payouts. Not from orders, not from bank feeds.' },
+              { icon: FileText, title: 'Settlement-first accounting', desc: 'Every invoice is generated from the settlement — the only source of truth for marketplace payouts. The faster you upload settlements, the faster your books are done in Xero.' },
               { icon: Shield, title: 'Deduplication safeguards', desc: 'Fingerprint-based deduplication and idempotent syncing guard against duplicate invoices from re-uploads, split-month overlaps, and tool migrations.' },
               { icon: Repeat, title: 'Safe void and repost', desc: 'Need to correct an invoice? Void the original, repost with a full chain of custody. No orphaned entries.' },
               { icon: ShieldCheck, title: 'Accountant-safe posting', desc: 'Every invoice posts as DRAFT with audit CSV attached. Your accountant reviews before authorising. No surprises.' },
@@ -340,6 +340,76 @@ export default function Landing() {
                 <p className="text-sm text-muted-foreground">{desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
+          INVOICES, NOT JOURNALS
+          ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-4 bg-card border-y border-border">
+        <div className="container-custom max-w-5xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold mb-4">
+              <Receipt className="h-3.5 w-3.5" />
+              Accounting model
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              Invoices, not journals.<br />Simpler books.
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Xettle uses a 1:1 invoice model — each settlement becomes one DRAFT invoice in Xero. Here's why that matters.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Xettle invoice model */}
+            <div className="p-6 rounded-2xl border-2 border-primary/30 bg-primary/5">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <CheckCircle className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground">Xettle — Invoice model</h3>
+              </div>
+              <ul className="space-y-3">
+                {[
+                  'One DRAFT invoice per settlement period',
+                  'Line items for sales, fees, refunds, and GST',
+                  'Invoice total matches the bank deposit',
+                  'Your accountant reviews and authorises',
+                  'Reconciles directly against the bank feed',
+                  'Full audit CSV attached to every invoice',
+                ].map(item => (
+                  <li key={item} className="flex items-start gap-2.5 text-sm">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    <span className="text-foreground">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {/* Journal model comparison */}
+            <div className="p-6 rounded-2xl border border-border bg-background">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center">
+                  <Ban className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground">Other tools — Journal model</h3>
+              </div>
+              <ul className="space-y-3">
+                {[
+                  'Journal entries split across multiple accounts',
+                  'No single document to review or approve',
+                  'Harder to match against bank feed deposits',
+                  'Requires clearing accounts and manual journals',
+                  'Difficult to audit — no attached evidence',
+                  'Accountants often redo the work manually',
+                ].map(item => (
+                  <li key={item} className="flex items-start gap-2.5 text-sm">
+                    <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                    <span className="text-muted-foreground">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </section>

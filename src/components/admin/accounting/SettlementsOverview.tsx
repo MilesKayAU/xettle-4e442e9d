@@ -229,9 +229,14 @@ export default function SettlementsOverview({
         );
       case 'never_sent':
         return (
-          <Badge variant="destructive" className="text-[10px]">
-            🔴 {row.statusLabel}
-          </Badge>
+          <div className="flex flex-col items-center gap-1">
+            <Badge variant="destructive" className="text-[10px]">
+              🔴 {row.statusLabel}
+            </Badge>
+            <span className="text-[9px] text-destructive font-medium leading-tight text-center max-w-[120px]">
+              No settlement — Xero has no visibility
+            </span>
+          </div>
         );
       case 'up_to_date':
         return (
@@ -241,9 +246,14 @@ export default function SettlementsOverview({
         );
       case 'no_recent_data':
         return (
-          <Badge variant="outline" className="text-muted-foreground text-[10px]">
-            ⚠️ {row.statusLabel}
-          </Badge>
+          <div className="flex flex-col items-center gap-1">
+            <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">
+              ⚠️ {row.statusLabel}
+            </Badge>
+            <span className="text-[9px] text-amber-600 dark:text-amber-400 font-medium leading-tight text-center max-w-[120px]">
+              Upload a settlement for Xero visibility
+            </span>
+          </div>
         );
       default:
         return null;

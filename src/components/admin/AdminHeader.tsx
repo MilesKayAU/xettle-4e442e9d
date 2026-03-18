@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LogOut, Key, ShieldAlert } from 'lucide-react';
+import { LogOut, Key, ShieldAlert, FileText } from 'lucide-react';
 import AccountResetButton from './AccountResetButton';
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +52,13 @@ export default function AdminHeader({ onSignOut, userEmail }: AdminHeaderProps) 
           <span className="font-mono text-xs text-orange-500">v1.7.0</span>
         </CardContent>
       </Card>
+
+      <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm text-foreground">
+        <FileText className="h-4 w-4 text-primary shrink-0" />
+        <span>
+          <strong>Invoice model</strong> — each settlement becomes one DRAFT invoice in Xero. No journals. No clearing accounts. Your accountant reviews before authorising.
+        </span>
+      </div>
     </>
   );
 }

@@ -737,6 +737,7 @@ export default function Dashboard() {
                     document.getElementById('action-centre-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   }, 100);
                 }}
+                onUploadClick={() => setShowUploadSheet(true)}
               />
               {/* Post-setup scan banner — triggers adaptive sync on first load */}
               <PostSetupBanner
