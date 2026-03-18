@@ -240,6 +240,8 @@ export default function InsightsDashboard() {
           storageTotal,
           otherFeesTotal,
           feeBreakdown,
+          fulfilmentMethod,
+          fulfilmentUnknown,
         });
       }
 

@@ -1057,6 +1057,10 @@ export default function Dashboard() {
                 <PaymentVerificationSettings />
               </SettingsAccordion>
 
+              <SettingsAccordion title="Fulfilment Methods" description="Set how orders are fulfilled per marketplace — affects profit calculations">
+                <FulfilmentMethodsPanel />
+              </SettingsAccordion>
+
               <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications">
                 <DataQualityPanel />
               </SettingsAccordion>

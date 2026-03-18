@@ -563,9 +563,35 @@ export default function SetupStepConnectStores({
           </div>
 
           {selectedMarketplaces.length > 0 && (
-            <p className="text-xs text-center text-primary font-medium">
-              {selectedMarketplaces.length} marketplace{selectedMarketplaces.length !== 1 ? 's' : ''} selected — settlement folders will be created for each
-            </p>
+            <div className="space-y-3">
+              <p className="text-xs text-center text-primary font-medium">
+                {selectedMarketplaces.length} marketplace{selectedMarketplaces.length !== 1 ? 's' : ''} selected — settlement folders will be created for each
+              </p>
+
+              {/* Fulfilment method pickers */}
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground text-center font-medium">How are orders fulfilled?</p>
+                {selectedMarketplaces.map((code) => (
+                  <div key={code} className="rounded-lg border border-border p-3 space-y-2">
+                    <span className="text-xs font-medium text-foreground">{marketplaceLabelFromCode(code)}</span>
+                    <RadioGroup
+                      value={fulfilmentChoices[code] || getEffectiveMethod(code)}
+                      onValueChange={(v) => setFulfilmentChoices(prev => ({ ...prev, [code]: v as FulfilmentMethod }))}
+                      className="grid grid-cols-2 gap-1"
+                    >
+                      {(['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'] as FulfilmentMethod[]).map((opt) => (
+                        <div key={opt} className="flex items-center space-x-1.5">
+                          <RadioGroupItem value={opt} id={`onboard-${code}-${opt}`} />
+                          <Label htmlFor={`onboard-${code}-${opt}`} className="text-[11px] cursor-pointer leading-tight">
+                            {FULFILMENT_LABELS[opt]}
+                          </Label>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {showCustomInput ? (

@@ -241,7 +241,15 @@ export function calculateMarketplaceProfit(
 
   orders_count = orderIds.size || revenueLines.length;
 
-  const gross_profit = gross_revenue - total_cogs - marketplace_fees;
+  // Postage deduction — only for self_ship or third_party_logistics
+  const fulfilmentMethod = options?.fulfilmentMethod || 'not_sure';
+  const postageCostPerOrder = options?.postageCostPerOrder || 0;
+  const postage_deduction =
+    (fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics')
+      ? postageCostPerOrder * orders_count
+      : 0;
+
+  const gross_profit = gross_revenue - total_cogs - marketplace_fees - postage_deduction;
   const margin_percent = gross_revenue > 0 ? (gross_profit / gross_revenue) * 100 : 0;
 
   return {
@@ -251,12 +259,15 @@ export function calculateMarketplaceProfit(
     gross_revenue: round(gross_revenue),
     total_cogs: round(total_cogs),
     marketplace_fees: round(marketplace_fees),
+    postage_deduction: round(postage_deduction),
     gross_profit: round(gross_profit),
     margin_percent: round(margin_percent),
     orders_count,
     units_sold,
     uncosted_sku_count: uncostedSkus.size,
     uncosted_revenue: round(uncosted_revenue),
+    fulfilment_method: fulfilmentMethod,
+    fulfilment_unknown: fulfilmentMethod === 'not_sure',
   };
 }
 
