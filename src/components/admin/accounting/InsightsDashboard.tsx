@@ -636,10 +636,31 @@ export default function InsightsDashboard() {
                 <div key={s.marketplace} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-foreground">{s.label}</span>
                         {s.returnRatio === bestRatio && stats.length > 1 && (
                           <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
+                        )}
+                        {s.hasEstimatedFees && (
+                          <Badge variant="outline" className="text-[10px] h-4 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20">
+                            <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                            Estimated
+                          </Badge>
+                        )}
+                        {s.hasMissingFeeData && !s.hasEstimatedFees && (
+                          <Badge variant="outline" className="text-[10px] h-4 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20">
+                            Fee data missing
+                          </Badge>
+                        )}
+                        {s.hasFeeAnomaly && (
+                          <Badge variant="destructive" className="text-[10px] h-4">
+                            Fee anomaly
+                          </Badge>
+                        )}
+                        {s.hasNegativePayout && (
+                          <Badge variant="outline" className="text-[10px] h-4 border-destructive/50 text-destructive">
+                            Negative payout
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
