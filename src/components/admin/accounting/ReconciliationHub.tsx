@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronRight, MessageSquarePlus, X, Send, Clock, History } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronRight, MessageSquarePlus, X, Send, Clock, History, Eye, Loader2, Paperclip } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow, differenceInDays, subMonths, subDays } from 'date-fns';
 import { toast } from 'sonner';
+import { buildPostingLineItems, toLineItemPreviews, createAccountCodeResolver, type LineItemPreview } from '@/utils/xero-posting-line-items';
+import { MARKETPLACE_CONTACTS } from '@/constants/marketplace-contacts';
 
 const HistoricalAudit = lazy(() => import('./HistoricalAudit'));
 
@@ -88,6 +91,9 @@ export default function ReconciliationHub() {
   const [resolvedDays] = useState(14);
   const [noteInput, setNoteInput] = useState<Record<string, string>>({});
   const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
+  const [expandedPayload, setExpandedPayload] = useState<string | null>(null);
+  const [payloadCache, setPayloadCache] = useState<Record<string, { lines: LineItemPreview[]; contact: string; reference: string; bankDeposit: number; gstIncome: number; gstExpenses: number }>>({});
+  const [payloadLoading, setPayloadLoading] = useState<string | null>(null);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -334,6 +340,72 @@ export default function ReconciliationHub() {
     loadItems();
   }, [noteInput, loadItems]);
 
+  const togglePayload = useCallback(async (item: ReconItem) => {
+    const key = item.sourceId;
+    if (expandedPayload === key) { setExpandedPayload(null); return; }
+
+    // Use cache if available
+    if (payloadCache[key]) { setExpandedPayload(key); return; }
+
+    setPayloadLoading(key);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [{ data: settlement }, { data: codeSetting }] = await Promise.all([
+        supabase.from('settlements')
+          .select('*')
+          .eq('id', key)
+          .single(),
+        supabase.from('app_settings')
+          .select('value')
+          .eq('user_id', user.id)
+          .eq('key', 'accounting_xero_account_codes')
+          .maybeSingle(),
+      ]);
+
+      if (!settlement) { toast.error('Settlement not found'); return; }
+
+      let userCodes: Record<string, string> | null = null;
+      try { userCodes = codeSetting?.value ? JSON.parse(codeSetting.value) : null; } catch {}
+
+      // Also load per-marketplace mappings
+      const { data: mpMappings } = await supabase
+        .from('marketplace_account_mapping')
+        .select('category, account_code, marketplace_code')
+        .eq('user_id', user.id);
+
+      const mergedCodes: Record<string, string> = { ...(userCodes || {}) };
+      for (const m of (mpMappings || [])) {
+        mergedCodes[`${m.category}:${m.marketplace_code}`] = m.account_code;
+      }
+
+      const resolver = createAccountCodeResolver(mergedCodes);
+      const lineItems = buildPostingLineItems(settlement as any, resolver, settlement.marketplace || undefined);
+      const previews = toLineItemPreviews(lineItems);
+      const contact = MARKETPLACE_CONTACTS[settlement.marketplace || ''] || settlement.marketplace || 'Unknown';
+      const reference = `Xettle-${settlement.settlement_id}`;
+
+      setPayloadCache(prev => ({
+        ...prev,
+        [key]: {
+          lines: previews,
+          contact,
+          reference,
+          bankDeposit: settlement.bank_deposit || 0,
+          gstIncome: settlement.gst_on_income || 0,
+          gstExpenses: settlement.gst_on_expenses || 0,
+        },
+      }));
+      setExpandedPayload(key);
+    } catch (err) {
+      console.error('Payload load error:', err);
+      toast.error('Failed to load Xero payload');
+    } finally {
+      setPayloadLoading(null);
+    }
+  }, [expandedPayload, payloadCache]);
+
   // ─── Summary counts ──────────────────────────────────────────────
   const summary = useMemo(() => {
     const critical = items.filter(i => i.urgencyTier === 'critical').length;
@@ -513,6 +585,22 @@ export default function ReconciliationHub() {
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
+                  {item.type === 'settlement' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      onClick={() => togglePayload(item)}
+                      title="Preview Xero payload"
+                      disabled={payloadLoading === item.sourceId}
+                    >
+                      {payloadLoading === item.sourceId ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Eye className={`h-3.5 w-3.5 ${expandedPayload === item.sourceId ? 'text-primary' : ''}`} />
+                      )}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -524,6 +612,78 @@ export default function ReconciliationHub() {
                   </Button>
                 </div>
               </div>
+
+              {/* ─── Xero Payload Preview (expanded) ─── */}
+              {expandedPayload === item.sourceId && payloadCache[item.sourceId] && (() => {
+                const pl = payloadCache[item.sourceId];
+                const lineSum = pl.lines.reduce((s, l) => s + l.amount, 0);
+                const roundedSum = Math.round(lineSum * 100) / 100;
+                const diff = Math.round((roundedSum - pl.bankDeposit) * 100) / 100;
+                return (
+                  <div className="mt-3 border-t border-border pt-3 space-y-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Eye className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-semibold text-foreground">Proposed Xero Invoice</span>
+                    </div>
+
+                    {/* Meta */}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div><span className="text-muted-foreground">Contact:</span> <span className="font-medium text-foreground">{pl.contact}</span></div>
+                      <div><span className="text-muted-foreground">Reference:</span> <span className="font-mono text-foreground">{pl.reference}</span></div>
+                    </div>
+
+                    {/* Line items table */}
+                    <div className="rounded border border-border overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/30">
+                            <TableHead className="text-[11px] h-8 py-1">Description</TableHead>
+                            <TableHead className="text-[11px] h-8 py-1">Account</TableHead>
+                            <TableHead className="text-[11px] h-8 py-1">Tax Type</TableHead>
+                            <TableHead className="text-[11px] h-8 py-1 text-right">Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pl.lines.map((line, idx) => (
+                            <TableRow key={idx} className="text-xs">
+                              <TableCell className="py-1.5">{line.description}</TableCell>
+                              <TableCell className="py-1.5 font-mono">{line.accountCode === 'UNMAPPED' ? <span className="text-destructive font-bold">UNMAPPED</span> : line.accountCode}</TableCell>
+                              <TableCell className="py-1.5">{line.taxType}</TableCell>
+                              <TableCell className="py-1.5 text-right font-mono">{formatAUD(line.amount)}</TableCell>
+                            </TableRow>
+                          ))}
+                          {/* Totals row */}
+                          <TableRow className="bg-muted/20 font-medium text-xs border-t-2 border-border">
+                            <TableCell className="py-1.5" colSpan={3}>
+                              Line item total
+                              {Math.abs(diff) > 0.02 && (
+                                <span className="ml-2 text-destructive text-[10px]">
+                                  (Δ {formatAUD(diff)} vs bank deposit)
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-mono">{formatAUD(roundedSum)}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* GST + Attachments */}
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                      {pl.gstIncome !== 0 && (
+                        <span>GST on income: <span className="text-foreground font-mono">{formatAUD(pl.gstIncome)}</span></span>
+                      )}
+                      {pl.gstExpenses !== 0 && (
+                        <span>GST on expenses: <span className="text-foreground font-mono">{formatAUD(pl.gstExpenses)}</span></span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Paperclip className="h-3 w-3" />
+                        2 attachments: Line-item CSV + Raw source data
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         ))}
