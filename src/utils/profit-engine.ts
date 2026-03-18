@@ -243,13 +243,32 @@ export function calculateMarketplaceProfit(
 
   orders_count = orderIds.size || revenueLines.length;
 
-  // Postage deduction — only for self_ship or third_party_logistics
+  // Postage deduction — use canonical function per line
   const fulfilmentMethod = options?.fulfilmentMethod || 'not_sure';
   const postageCostPerOrder = options?.postageCostPerOrder || 0;
-  const postage_deduction =
-    (fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics')
-      ? postageCostPerOrder * orders_count
-      : 0;
+  let postage_deduction = 0;
+
+  if (fulfilmentMethod === 'mixed_fba_fbm') {
+    // Line-level split: count deductions per line channel
+    const hasLineData = revenueLines.some(l => l.fulfilment_channel);
+    if (hasLineData) {
+      // Deduplicate by order_id to avoid double-counting
+      const orderChannels = new Map<string, string | null>();
+      for (const line of revenueLines) {
+        const key = line.order_id || `line_${revenueLines.indexOf(line)}`;
+        if (!orderChannels.has(key)) {
+          orderChannels.set(key, line.fulfilment_channel || null);
+        }
+      }
+      for (const [, ch] of orderChannels) {
+        postage_deduction += getPostageDeductionForOrder(fulfilmentMethod, ch, postageCostPerOrder);
+      }
+    }
+    // else: no line data (legacy) → fall back to zero deduction (treat all as FBA)
+  } else {
+    // Non-mixed: use canonical function with null channel (marketplace-level decision)
+    postage_deduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder) * orders_count;
+  }
 
   const gross_profit = gross_revenue - total_cogs - marketplace_fees - postage_deduction;
   const margin_percent = gross_revenue > 0 ? (gross_profit / gross_revenue) * 100 : 0;
