@@ -106,6 +106,11 @@ export default function XeroPostingAudit() {
       current_filter: filter,
     },
     capabilities: ['view_settlement_detail', 'filter_audit'],
+    suggestedPrompts: [
+      'Which settlements failed to push?',
+      'Show me settlements not yet in Xero',
+      'Why did this push fail?',
+    ],
   }));
 
   useEffect(() => {

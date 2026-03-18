@@ -141,6 +141,11 @@ export default function PushSafetyPreview({
       has_mapping_error: !!mappingInvalidError,
     },
     capabilities: ['push_to_xero'],
+    suggestedPrompts: [
+      'What checks need to pass before I push?',
+      'Why is there a red validation error?',
+      'Explain the line items on this invoice',
+    ],
   }));
 
   useEffect(() => {

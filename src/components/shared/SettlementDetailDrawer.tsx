@@ -90,6 +90,11 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
       has_external_candidate: !!externalCandidate,
     },
     capabilities: ['compare_invoice', 'view_audit_trail'],
+    suggestedPrompts: [
+      'Why can\'t I push this settlement?',
+      'What happened with this settlement?',
+      'Explain the fee breakdown',
+    ],
   }));
 
   useEffect(() => {
