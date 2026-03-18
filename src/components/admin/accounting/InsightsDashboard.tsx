@@ -379,15 +379,24 @@ export default function InsightsDashboard() {
           effectiveHasEstimatedFees = true;
         }
 
+        // Derive effectiveAvgCommission aligned with the estimated fee logic above
+        let effectiveAvgCommission: number;
+        if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
+          // Case 1: ALL api_sync zero-fee — use the estimated rate directly
+          effectiveAvgCommission = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+        } else if (apiSyncZeroFeeRows.length > 0 && feeRelevantRows.length > 0) {
+          // Case 2: Mixed — derive rate from real CSV rows
+          const csvSales = feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
+          const csvFees = Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
+          effectiveAvgCommission = csvSales > 0 ? csvFees / csvSales : (COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE);
+        } else {
+          // Default: use raw commission calculation
+          effectiveAvgCommission = avgCommission;
+        }
+
         const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
           ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
           : commissionTotal;
-        const adjustedTotalSalesForFees = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
-          ? feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0)
-          : totalSales;
-        const adjustedAvgCommission = adjustedTotalSalesForFees > 0 
-          ? Math.min(adjustedCommissionTotal / adjustedTotalSalesForFees, 1) 
-          : avgCommission;
 
         results.push({
           marketplace: mp,
