@@ -816,6 +816,29 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       let savedCount = 0;
       let dupCount = 0;
 
+      // Check for overlapping api_sync settlements before saving (read-only warning)
+      if (settlements.length > 0) {
+        try {
+          const { checkSourceOverlap } = await import('@/actions/settlements');
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (currentUser) {
+            const first = settlements[0];
+            const overlap = await checkSourceOverlap(
+              currentUser.id,
+              first.marketplace,
+              first.period_start,
+              first.period_end,
+            );
+            if (overlap.hasOverlap) {
+              toast.info(
+                `A Shopify-derived settlement exists for this period (${formatAUD(overlap.totalAmount)}). Your CSV upload will take priority and the Shopify record will be suppressed.`,
+                { duration: 6000 }
+              );
+            }
+          }
+        } catch { /* non-blocking */ }
+      }
+
       // For Woolworths MarketPlus, parse the raw rows for drill-down
       let woolworthsRows: any[] = [];
       if (marketplace === 'woolworths_marketplus' && df.settlements) {
