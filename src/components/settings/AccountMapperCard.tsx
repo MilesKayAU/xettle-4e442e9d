@@ -202,8 +202,14 @@ export default function AccountMapperCard() {
   const renderCloneBanner = () => {
     if (!splitByMarketplace || !isAdmin || activeMarketplaces.length === 0 || coaAccounts.length === 0) return null;
 
-    // No-template-available: nothing covered at all
-    if (coveredMarketplaces.length === 0 && activeMarketplaces.length > 0) {
+    // Only show clone options for truly uncovered marketplaces
+    const uncoveredDetails = coverageDetails.filter(d => d.status === 'uncovered');
+
+    // If everything has at least some accounts, don't show the clone banner
+    if (uncoveredDetails.length === 0) return null;
+
+    // No-template-available: nothing covered at all (can't clone from anything)
+    if (coveredMarketplaces.length === 0) {
       return (
         <Alert className="border-amber-300 bg-amber-50">
           <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
@@ -219,13 +225,14 @@ export default function AccountMapperCard() {
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Info className="h-3.5 w-3.5 shrink-0" />
-          <span>Select marketplaces that need Xero accounts created. Detected coverage shown below.</span>
+          <span>
+            {uncoveredDetails.length} marketplace{uncoveredDetails.length !== 1 ? 's have' : ' has'} no
+            Xero accounts yet. Select to clone from an existing template.
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-          {coverageDetails.map(detail => {
-            const isCovered = detail.status === 'covered';
+          {uncoveredDetails.map(detail => {
             const isSelected = selectedForClone.has(detail.marketplace);
-            const isPotentiallyMissing = detail.status === 'uncovered' || detail.status === 'partial';
 
             return (
               <label
@@ -233,9 +240,7 @@ export default function AccountMapperCard() {
                 className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs cursor-pointer transition-colors ${
                   isSelected
                     ? 'border-primary bg-primary/5'
-                    : isCovered
-                      ? 'border-border bg-background'
-                      : 'border-amber-200 bg-amber-50/50'
+                    : 'border-amber-200 bg-amber-50/50'
                 }`}
               >
                 <input
@@ -250,11 +255,7 @@ export default function AccountMapperCard() {
                   className="rounded border-muted-foreground/30 h-3.5 w-3.5"
                 />
                 <span className="font-medium truncate">{detail.marketplace}</span>
-                {isCovered ? (
-                  <CheckCircle2 className="h-3 w-3 text-emerald-500 ml-auto shrink-0" />
-                ) : isPotentiallyMissing ? (
-                  <AlertTriangle className="h-3 w-3 text-amber-500 ml-auto shrink-0" />
-                ) : null}
+                <XCircle className="h-3 w-3 text-amber-500 ml-auto shrink-0" />
               </label>
             );
           })}
