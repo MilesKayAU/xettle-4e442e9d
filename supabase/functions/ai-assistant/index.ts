@@ -190,11 +190,12 @@ function buildGatewayPayload(
   systemPrompt: string,
   messages: Array<{ role: string; content: string; tool_call_id?: string; tool_calls?: any[] }>,
   stream: boolean,
+  toolDefs: ReturnType<typeof toOpenAIToolDefs>,
 ) {
   return {
     model: MODEL,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
-    tools: TOOL_DEFINITIONS,
+    tools: toolDefs,
     stream,
     ...(stream ? {} : { max_tokens: 1024 }),
   };
