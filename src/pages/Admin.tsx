@@ -229,8 +229,6 @@ export default function Admin() {
               <Crosshair className="h-3.5 w-3.5" />
               Growth
             </TabsTrigger>
-              Knowledge Base
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
