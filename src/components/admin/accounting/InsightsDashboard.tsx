@@ -191,15 +191,19 @@ export default function InsightsDashboard() {
         const adSpend = adSpendByMp[mp] || 0;
         const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
 
-        // Shipping cost estimation
+        // Fulfilment method
+        const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
+        const fulfilmentUnknown = fulfilmentMethod === 'not_sure';
+
+        // Shipping cost estimation — only applied for self_ship / third_party_logistics
         const shippingCostPerOrder = shippingCostByMp[mp] || 0;
-        // Rough estimate: assume average order value from sales data
-        const estimatedOrderCount = rows.length > 0 ? rows.length : 1; // Use settlement count as proxy
-        const estimatedShippingCost = shippingCostPerOrder * estimatedOrderCount;
-        const returnAfterShipping = totalSales > 0 && shippingCostPerOrder > 0 
+        const estimatedOrderCount = rows.length > 0 ? rows.length : 1;
+        const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
+        const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;
+        const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 
           ? Math.max(Math.min((netPayout - estimatedShippingCost) / totalSales, 1), -1) 
           : null;
-        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || shippingCostPerOrder > 0)
+        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || (shouldDeductShipping && shippingCostPerOrder > 0))
           ? Math.max(Math.min((netPayout - adSpend - estimatedShippingCost) / totalSales, 1), -1)
           : null;
 
