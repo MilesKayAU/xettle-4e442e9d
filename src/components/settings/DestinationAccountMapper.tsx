@@ -25,6 +25,8 @@ import {
   LEGACY_KEY_PREFIX,
   LEGACY_DEFAULT_KEY,
   toRailCode,
+  getRailDescription,
+  getValidDestTypes,
 } from '@/constants/settlement-rails';
 
 interface XeroBankAccount {
