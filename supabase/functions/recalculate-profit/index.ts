@@ -8,6 +8,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { getPostageDeductionForOrder } from "../_shared/fulfilment-policy.ts";
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
@@ -113,35 +114,6 @@ Deno.serve(async (req) => {
       return isAmazonCode(mp) ? "marketplace_fulfilled" : "not_sure";
     }
 
-    /**
-     * Canonical postage deduction — mirrors getPostageDeductionForOrder from
-     * src/utils/fulfilment-settings.ts (duplicated here for edge function context)
-     */
-    function getPostageDeduction(
-      fulfilmentMethod: string | null | undefined,
-      lineChannel: string | null | undefined,
-      postageCostPerOrder: number,
-    ): number {
-      if (!postageCostPerOrder || postageCostPerOrder <= 0) return 0;
-      const ch = (lineChannel || "").toUpperCase().trim();
-
-      if (fulfilmentMethod === "mixed_fba_fbm") {
-        if (ch === "MFN") return postageCostPerOrder;
-        return 0;
-      }
-
-      if (ch === "AFN" || ch === "MCF") return 0;
-      if (ch === "MFN") return postageCostPerOrder;
-
-      switch (fulfilmentMethod) {
-        case "self_ship":
-        case "third_party_logistics":
-          return postageCostPerOrder;
-        default:
-          return 0;
-      }
-    }
-
     let updated = 0;
     let skipped = 0;
     const upsertBatch: any[] = [];
@@ -196,8 +168,9 @@ Deno.serve(async (req) => {
       const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
       const postageCostPerOrder = postageCosts[mp] || 0;
 
-      // Calculate postage deduction using canonical function
+      // Calculate postage deduction using canonical shared function
       let postageDeduction = 0;
+      let fulfilmentDataIncomplete = false;
 
       if (fulfilmentMethod === "mixed_fba_fbm") {
         // Line-level split
@@ -212,13 +185,15 @@ Deno.serve(async (req) => {
             }
           }
           for (const [, ch] of orderChannels) {
-            postageDeduction += getPostageDeduction(fulfilmentMethod, ch, postageCostPerOrder);
+            postageDeduction += getPostageDeductionForOrder(fulfilmentMethod, ch, postageCostPerOrder);
           }
+        } else {
+          // No line data (legacy) → zero deduction (treat all as FBA)
+          fulfilmentDataIncomplete = true;
         }
-        // else: no line data (legacy) → zero deduction (treat all as FBA)
       } else {
-        // Non-mixed: canonical function with null channel × order count
-        postageDeduction = getPostageDeduction(fulfilmentMethod, null, postageCostPerOrder) * ordersCount;
+        // Non-mixed: canonical function owns the multiplication via orderCount
+        postageDeduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, ordersCount);
       }
 
       const grossProfit = salesExGst - totalCogs - feesAmount - postageDeduction;
@@ -240,6 +215,7 @@ Deno.serve(async (req) => {
         units_sold: unitsSold,
         uncosted_sku_count: uncostedSkus.size,
         uncosted_revenue: round(uncostedRevenue),
+        fulfilment_data_incomplete: fulfilmentDataIncomplete,
         calculated_at: new Date().toISOString(),
       });
 

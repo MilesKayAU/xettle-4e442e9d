@@ -173,6 +173,7 @@ export interface MarketplaceProfit {
   uncosted_revenue: number;
   fulfilment_method: string;
   fulfilment_unknown: boolean;
+  fulfilment_data_incomplete: boolean;
 }
 
 function normalizeSku(sku: string): string {
@@ -266,12 +267,16 @@ export function calculateMarketplaceProfit(
     }
     // else: no line data (legacy) → fall back to zero deduction (treat all as FBA)
   } else {
-    // Non-mixed: use canonical function with null channel (marketplace-level decision)
-    postage_deduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder) * orders_count;
+    // Non-mixed: canonical function owns the multiplication via orderCount
+    postage_deduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, orders_count);
   }
 
   const gross_profit = gross_revenue - total_cogs - marketplace_fees - postage_deduction;
   const margin_percent = gross_revenue > 0 ? (gross_profit / gross_revenue) * 100 : 0;
+
+  // Determine if mixed mode is missing line-level data
+  const fulfilmentDataIncomplete = fulfilmentMethod === 'mixed_fba_fbm' &&
+    !revenueLines.some(l => l.fulfilment_channel);
 
   return {
     marketplace_code: marketplaceCode,
@@ -289,6 +294,7 @@ export function calculateMarketplaceProfit(
     uncosted_revenue: round(uncosted_revenue),
     fulfilment_method: fulfilmentMethod,
     fulfilment_unknown: fulfilmentMethod === 'not_sure',
+    fulfilment_data_incomplete: fulfilmentDataIncomplete,
   };
 }
 
