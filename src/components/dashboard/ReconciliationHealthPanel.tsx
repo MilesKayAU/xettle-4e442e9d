@@ -164,6 +164,8 @@ export default function ReconciliationHealthPanel() {
           label: 'Account mappings incomplete',
           status: 'warn',
           detail: `Mappings needed for: ${unmappedMarketplaces.map(m => m.marketplace_name).join(', ')}`,
+          actionLabel: 'Set up mappings',
+          actionSection: 'account-mapper',
         });
       }
 

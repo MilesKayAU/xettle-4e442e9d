@@ -1027,11 +1027,11 @@ export default function Dashboard() {
                 </Suspense>
               </SettingsAccordion>
 
-              <SettingsAccordion title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts">
+              <SettingsAccordion id="destination-accounts" title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts">
                 <DestinationAccountMapper />
               </SettingsAccordion>
 
-              <SettingsAccordion title="Account Mapper" description="AI-assisted account code suggestions and overrides">
+              <SettingsAccordion id="account-mapper" title="Account Mapper" description="AI-assisted account code suggestions and overrides">
                 <AccountMapperCard />
               </SettingsAccordion>
 
