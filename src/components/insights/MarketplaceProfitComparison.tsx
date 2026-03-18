@@ -23,6 +23,7 @@ interface AggregatedMarketplace {
   total_profit: number;
   periods: number;
   has_cost_data: boolean;
+  has_estimated_fees: boolean;
 }
 
 function formatAUD(amount: number): string {
