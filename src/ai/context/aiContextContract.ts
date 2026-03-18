@@ -63,7 +63,24 @@ export interface AiPageContext {
 
   /** Suggested questions for this page */
   suggestedPrompts?: string[];
+
+  /** Recent user actions (last 10, newest first) */
+  recentActions?: AiUserAction[];
 }
+
+// ─── User Action Schema ──────────────────────────────────────────────────────
+
+export interface AiUserAction {
+  /** Short action label, e.g. "pushed_to_xero", "uploaded_file" */
+  action: string;
+  /** ISO timestamp */
+  ts: string;
+  /** Optional context (settlement_id, marketplace, etc.) — keep short */
+  detail?: string;
+}
+
+const MAX_RECENT_ACTIONS = 10;
+const MAX_ACTION_DETAIL_LEN = 120;
 
 // ─── Safety Constants ────────────────────────────────────────────────────────
 
