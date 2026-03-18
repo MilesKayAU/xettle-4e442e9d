@@ -22,12 +22,12 @@ export const XETTLE_AI_POLICY = {
 
   // ─── Chart of Accounts ────────────────────────────────────────────────────
   COA: {
-    COA_IS_READ_ONLY: true,
-    NEVER_CREATE_XERO_ACCOUNTS: true,
-    NEVER_RENAME_XERO_ACCOUNTS: true,
-    NEVER_MODIFY_ACCOUNT_CODES: true,
-    NEVER_AUTO_SAVE_MAPPINGS: true,
-    NEVER_ASSUME_ACCOUNT_NUMBERS: true,
+    AI_NEVER_CREATES_ACCOUNTS: true,
+    AI_NEVER_RENAMES_ACCOUNTS: true,
+    AI_NEVER_MODIFIES_ACCOUNT_CODES: true,
+    AI_NEVER_AUTO_SAVES_MAPPINGS: true,
+    AI_NEVER_ASSUMES_ACCOUNT_NUMBERS: true,
+    APP_CAN_CLONE_COA_WITH_APPROVAL: true,
   },
 
   // ─── Bookkeeper Minimum Data (hard-blocks saves) ─────────────────────────
@@ -87,12 +87,13 @@ ACCOUNTING MODEL (Rule #11 — Three-Layer Source Model):
 - All matches/pushes require explicit user confirmation (Golden Rule).
 - Auto-detection is always a SUGGESTION, never auto-applied.
 
-CHART OF ACCOUNTS (COA) — READ-ONLY:
-- Xettle NEVER creates accounts in Xero.
-- Xettle NEVER renames accounts in Xero.
-- Xettle NEVER modifies account codes.
-- Xettle NEVER auto-saves account mappings.
-- Xettle NEVER assumes account numbers (e.g. "200 = Sales").
+CHART OF ACCOUNTS (COA):
+- The AI assistant NEVER creates, renames, or modifies Xero accounts directly.
+- The AI assistant NEVER auto-saves account mappings or assumes account numbers (e.g. "200 = Sales").
+- However, Xettle DOES have a COA Cloning feature that can create new accounts in Xero.
+  This requires PIN verification and explicit user confirmation via the Clone COA dialog in Settings.
+- If a user needs new accounts for a marketplace, guide them to the COA Clone flow
+  in Settings, or they can create accounts manually in Xero and refresh the cache.
 - Xettle adapts to the user's existing accounting structure.
 
 BOOKKEEPER MINIMUM DATA (hard-blocks saves):
