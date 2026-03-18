@@ -185,7 +185,11 @@ export function calculateMarketplaceProfit(
   periodLabel: string,
   settlement: SettlementForProfit,
   settlementLines: SettlementLineForProfit[],
-  productCosts: ProductCost[]
+  productCosts: ProductCost[],
+  options?: {
+    fulfilmentMethod?: string;
+    postageCostPerOrder?: number;
+  }
 ): MarketplaceProfit {
   // MARKETPLACE_LABELS imported at top level
   const marketplaceName = MARKETPLACE_LABELS[marketplaceCode] || marketplaceCode;
