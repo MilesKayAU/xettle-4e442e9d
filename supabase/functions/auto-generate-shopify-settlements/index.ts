@@ -122,11 +122,28 @@ function parseNoteAttributes(
  * 5. Gateway
  * 6. Source Name
  */
+/** MCF detection keywords in note attributes */
+const MCF_INDICATORS = ['cedcommerce_channel', 'mcf_order', 'fulfillment_by_amazon', 'amazon_mcf', 'fba_multi_channel'];
+
+function detectMcfOrder(order: any): boolean {
+  const noteAttrs = parseNoteAttributes(order.note_attributes);
+  for (const attr of noteAttrs) {
+    const nameLower = (attr.name || '').toLowerCase();
+    const valueLower = (attr.value || '').toLowerCase();
+    if (MCF_INDICATORS.some(k => nameLower.includes(k) || valueLower.includes(k))) return true;
+  }
+  if (order.tags) {
+    const tags = String(order.tags).split(',').map((t: string) => t.trim().toLowerCase());
+    if (tags.some((t: string) => MCF_INDICATORS.some(k => t.includes(k)))) return true;
+  }
+  return false;
+}
+
 function detectOrder(
   order: any,
   dbRegistry: RegistryRow[],
   entityLibrary: EntityRow[]
-): { code: string; name: string; method: string } | null {
+): { code: string; name: string; method: string; isMcf?: boolean } | null {
   const aggregators: string[] = [];
 
   // Priority 1: Tags — check fallback first, then DB registry
@@ -207,6 +224,7 @@ interface DetectedOrder {
   processed_at: string;
   order_name: string;
   shopify_order_id: number;
+  isMcf: boolean;
 }
 
 // ─── Main handler ───────────────────────────────────────────────────────────
@@ -339,6 +357,7 @@ Deno.serve(async (req) => {
       processed_at: order.processed_at || new Date().toISOString(),
       order_name: order.order_name || String(order.shopify_order_id),
       shopify_order_id: order.shopify_order_id,
+      isMcf: detected.isMcf || detectMcfOrder(order),
     });
   }
 
@@ -516,6 +535,7 @@ Deno.serve(async (req) => {
       amount_description: 'Shopify Order Revenue',
       amount: Math.round((order.total_price - order.total_tax) * 100) / 100,
       accounting_category: 'revenue',
+      fulfilment_channel: order.isMcf ? 'MCF' : null,
     }));
 
     // Add tax lines

@@ -108,6 +108,7 @@ export interface SettlementLine {
   postedDate: string;
   marketplaceName: string;
   isAuMarketplace: boolean;
+  fulfilmentChannel: string | null;
 }
 
 export interface UnmappedLine {
@@ -367,6 +368,16 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
     const isAuMarketplace = marketplaceName === AU_MARKETPLACE && !hasIntlOrderMatch;
     const isIntlOrder = isExplicitNonAu || hasIntlOrderMatch;
 
+    // Read fulfillment-channel from TSV (Amazon → AFN, Merchant → MFN)
+    const rawFulfilmentChannel = getField(fields, 'fulfillment-channel');
+    let fulfilmentChannel: string | null = null;
+    if (rawFulfilmentChannel) {
+      const fcLower = rawFulfilmentChannel.toLowerCase().trim();
+      if (fcLower === 'amazon') fulfilmentChannel = 'AFN';
+      else if (fcLower === 'merchant') fulfilmentChannel = 'MFN';
+      else fulfilmentChannel = rawFulfilmentChannel.trim();
+    }
+
     if (sampleMarketplaceValues.length < 10 && transactionType) {
       sampleMarketplaceValues.push(marketplaceName);
     }
@@ -392,7 +403,7 @@ export function parseSettlementTSV(tsvContent: string, options?: ParserOptions):
         transactionType, amountType, amountDescription,
         accountingCategory: category,
         amount: normAmount, orderId, sku, postedDate,
-        marketplaceName, isAuMarketplace,
+        marketplaceName, isAuMarketplace, fulfilmentChannel,
       });
 
       // Track principal vs shipping for Sales breakdown

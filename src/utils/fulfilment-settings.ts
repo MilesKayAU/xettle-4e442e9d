@@ -35,11 +35,17 @@ export function getPostageDeductionForOrder(
   lineChannel: FulfilmentChannel | string | null | undefined,
   postageCostPerOrder: number,
   orderCount: number = 1,
+  mcfCostPerOrder: number = 0,
 ): number {
-  // Zero-cost guard
-  if (!postageCostPerOrder || postageCostPerOrder <= 0) return 0;
+  // Normalise channel: strip _inferred suffix for logic purposes
+  const raw = (lineChannel || '').toUpperCase().trim();
+  const ch = raw.replace('_INFERRED', '');
 
-  const ch = (lineChannel || '').toUpperCase().trim();
+  // MCF handling — uses its own cost parameter
+  if (ch === 'MCF') return (mcfCostPerOrder || 0) * orderCount;
+
+  // Zero-cost guard (after MCF, which has its own cost)
+  if (!postageCostPerOrder || postageCostPerOrder <= 0) return 0;
 
   // Line-level channel takes priority when in mixed mode
   if (fulfilmentMethod === 'mixed_fba_fbm') {
@@ -50,7 +56,7 @@ export function getPostageDeductionForOrder(
   }
 
   // For explicit line channels regardless of marketplace setting
-  if (ch === 'AFN' || ch === 'MCF') return 0;
+  if (ch === 'AFN') return 0;
   if (ch === 'MFN') return postageCostPerOrder * orderCount;
 
   // Fall back to marketplace-level method
@@ -81,9 +87,66 @@ export function isAmazonCode(code: string): boolean {
 export function getEffectiveMethod(
   marketplaceCode: string,
   stored?: FulfilmentMethod | null,
+  isNewUser?: boolean,
 ): FulfilmentMethod {
   if (stored) return stored;
-  return isAmazonCode(marketplaceCode) ? 'marketplace_fulfilled' : 'not_sure';
+  if (isAmazonCode(marketplaceCode)) {
+    return isNewUser ? 'mixed_fba_fbm' : 'marketplace_fulfilled';
+  }
+  return 'not_sure';
+}
+
+/**
+ * Load MCF costs for the current user.
+ * Returns a map of marketplace_code → MCF cost per order (number).
+ */
+export async function loadMcfCosts(
+  userId: string,
+): Promise<Record<string, number>> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .eq('user_id', userId)
+    .like('key', 'mcf_cost:%');
+
+  const result: Record<string, number> = {};
+  for (const row of data || []) {
+    const code = row.key.replace('mcf_cost:', '');
+    const num = parseFloat(row.value || '');
+    if (code && !isNaN(num) && num >= 0) {
+      result[code] = num;
+    }
+  }
+  return result;
+}
+
+/**
+ * Save or update an MCF cost for one marketplace.
+ */
+export async function saveMcfCost(
+  userId: string,
+  marketplaceCode: string,
+  amount: number,
+): Promise<void> {
+  const key = `mcf_cost:${marketplaceCode}`;
+
+  const { data: existing } = await supabase
+    .from('app_settings')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('key', key)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from('app_settings')
+      .update({ value: String(amount) })
+      .eq('id', existing.id);
+  } else {
+    await supabase
+      .from('app_settings')
+      .insert({ user_id: userId, key, value: String(amount) });
+  }
 }
 
 /**

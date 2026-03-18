@@ -47,15 +47,16 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, supabaseServiceKey);
     const userId = user.id;
 
-    // Load user's fulfilment methods and postage costs from app_settings
+    // Load user's fulfilment methods, postage costs, and MCF costs from app_settings
     const { data: settingsRows } = await admin
       .from("app_settings")
       .select("key, value")
       .eq("user_id", userId)
-      .or("key.like.fulfilment_method:%,key.like.postage_cost:%");
+      .or("key.like.fulfilment_method:%,key.like.postage_cost:%,key.like.mcf_cost:%");
 
     const fulfilmentMethods: Record<string, string> = {};
     const postageCosts: Record<string, number> = {};
+    const mcfCosts: Record<string, number> = {};
 
     for (const row of settingsRows || []) {
       if (row.key.startsWith("fulfilment_method:")) {
@@ -65,6 +66,10 @@ Deno.serve(async (req) => {
         const code = row.key.replace("postage_cost:", "");
         const num = parseFloat(row.value || "");
         if (code && !isNaN(num) && num >= 0) postageCosts[code] = num;
+      } else if (row.key.startsWith("mcf_cost:")) {
+        const code = row.key.replace("mcf_cost:", "");
+        const num = parseFloat(row.value || "");
+        if (code && !isNaN(num) && num >= 0) mcfCosts[code] = num;
       }
     }
 
@@ -167,6 +172,7 @@ Deno.serve(async (req) => {
       const ordersCount = orderIds.size || revenueLines.length || 1;
       const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
       const postageCostPerOrder = postageCosts[mp] || 0;
+      const mcfCostPerOrder = mcfCosts[mp] || 0;
 
       // Calculate postage deduction using canonical shared function
       let postageDeduction = 0;
@@ -185,7 +191,7 @@ Deno.serve(async (req) => {
             }
           }
           for (const [, ch] of orderChannels) {
-            postageDeduction += getPostageDeductionForOrder(fulfilmentMethod, ch, postageCostPerOrder);
+            postageDeduction += getPostageDeductionForOrder(fulfilmentMethod, ch, postageCostPerOrder, 1, mcfCostPerOrder);
           }
         } else {
           // No line data (legacy) → zero deduction (treat all as FBA)
@@ -193,7 +199,7 @@ Deno.serve(async (req) => {
         }
       } else {
         // Non-mixed: canonical function owns the multiplication via orderCount
-        postageDeduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, ordersCount);
+        postageDeduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, ordersCount, mcfCostPerOrder);
       }
 
       const grossProfit = salesExGst - totalCogs - feesAmount - postageDeduction;
