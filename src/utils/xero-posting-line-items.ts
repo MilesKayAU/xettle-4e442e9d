@@ -47,6 +47,7 @@
 
 export const CANONICAL_VERSION = 'v2-10cat';
 import { TOL_LINE_SUM } from '@/constants/reconciliation-tolerance';
+import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 
 // ─── Category Definitions ───────────────────────────────────────────────
 
@@ -165,6 +166,16 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function getMarketplaceKeyCandidates(marketplace?: string): string[] {
+  if (!marketplace) return [];
+
+  const trimmed = marketplace.trim();
+  if (!trimmed) return [];
+
+  const normalized = normalizeKeyLabel(trimmed);
+  return [...new Set([normalized, trimmed].filter(Boolean))];
+}
+
 /**
  * Build the default account code resolver from a user codes map.
  * Accepts the parsed JSON from app_settings.accounting_xero_account_codes
@@ -178,19 +189,16 @@ export function createAccountCodeResolver(
     const legacyKey = LEGACY_ACCOUNT_KEY_MAP[categoryName] || categoryName;
     const codes = userCodes || {};
 
-    // 1. Marketplace-specific key  e.g. "Sales:Amazon AU"
-    if (marketplace) {
-      const mpKey = `${legacyKey}:${marketplace}`;
+    for (const candidate of getMarketplaceKeyCandidates(marketplace)) {
+      const mpKey = `${legacyKey}:${candidate}`;
       if (codes[mpKey]) return codes[mpKey];
     }
-    // 2. Base key  e.g. "Sales" (skipped when use_global_mappings === false)
+
     if (!options?.skipBaseKeyFallback) {
       if (codes[legacyKey]) return codes[legacyKey];
       if (codes[categoryName]) return codes[categoryName];
     }
 
-    // 3. No fallback — return null to block push
-    // defaultAccountCode is retained on category defs for documentation only
     return null;
   };
 }

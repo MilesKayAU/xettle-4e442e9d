@@ -454,50 +454,64 @@ export default function AccountMapperCard() {
         .eq('key', 'accounting_xero_account_codes_draft')
         .maybeSingle();
 
-      // Use confirmed if exists, otherwise fall back to draft
-      const activeSetting = confirmedSetting?.value ? confirmedSetting : (draftSetting?.value ? draftSetting : null);
-      const isFromDraft = !confirmedSetting?.value && !!draftSetting?.value;
+      let confirmedCodesMap: Record<string, string> = {};
+      let draftCodesMap: Record<string, string> = {};
 
-      if (activeSetting?.value) {
+      if (confirmedSetting?.value) {
         try {
-          const codes = JSON.parse(activeSetting.value);
-          // Store confirmed codes for overwrite detection
-          if (confirmedSetting?.value) {
-            try { setConfirmedCodes(JSON.parse(confirmedSetting.value)); } catch { /* */ }
+          confirmedCodesMap = JSON.parse(confirmedSetting.value);
+          setConfirmedCodes(confirmedCodesMap);
+        } catch {
+          confirmedCodesMap = {};
+        }
+      }
+
+      if (draftSetting?.value) {
+        try {
+          draftCodesMap = JSON.parse(draftSetting.value);
+        } catch {
+          draftCodesMap = {};
+        }
+      }
+
+      // In review mode, draft should override confirmed so unsaved marketplace-specific fixes are visible.
+      const codes = Object.keys(draftCodesMap).length > 0
+        ? { ...confirmedCodesMap, ...draftCodesMap }
+        : confirmedCodesMap;
+
+      if (Object.keys(codes).length > 0) {
+        const restored: Record<string, MappingEntry> = {};
+        for (const cat of CATEGORIES) {
+          if (codes[cat]) {
+            const coaEntry = accounts.find(a => a.account_code === codes[cat]);
+            restored[cat] = { code: codes[cat], name: coaEntry?.account_name || `Account ${codes[cat]}` };
           }
-          const restored: Record<string, MappingEntry> = {};
-          for (const cat of CATEGORIES) {
-            if (codes[cat]) {
-              const coaEntry = accounts.find(a => a.account_code === codes[cat]);
-              restored[cat] = { code: codes[cat], name: coaEntry?.account_name || `Account ${codes[cat]}` };
-            }
+        }
+        // Normalize override keys on load for backward compatibility
+        // e.g. "Sales:Shopify Payments" → "Sales:Shopify"
+        for (const key of Object.keys(codes)) {
+          if (key.includes(':')) {
+            const [cat, rawMp] = key.split(':');
+            const normalizedMp = normalizeKeyLabel(rawMp);
+            const normalizedKey = `${cat}:${normalizedMp}`;
+            const coaEntry = accounts.find(a => a.account_code === codes[key]);
+            restored[normalizedKey] = { code: codes[key], name: coaEntry?.account_name || `Account ${codes[key]}` };
           }
-          // Normalize override keys on load for backward compatibility
-          // e.g. "Sales:Shopify Payments" → "Sales:Shopify"
-          for (const key of Object.keys(codes)) {
-            if (key.includes(':')) {
-              const [cat, rawMp] = key.split(':');
-              const normalizedMp = normalizeKeyLabel(rawMp);
-              const normalizedKey = `${cat}:${normalizedMp}`;
-              const coaEntry = accounts.find(a => a.account_code === codes[key]);
-              restored[normalizedKey] = { code: codes[key], name: coaEntry?.account_name || `Account ${codes[key]}` };
-            }
+        }
+        setMapping(restored);
+
+        const editable: Record<string, string> = {};
+        for (const [k, v] of Object.entries(codes)) {
+          if (k.includes(':')) {
+            const [cat, rawMp] = k.split(':');
+            const normalizedKey = `${cat}:${normalizeKeyLabel(rawMp)}`;
+            editable[normalizedKey] = v as string;
+          } else {
+            editable[k] = v as string;
           }
-          setMapping(restored);
-          const editable: Record<string, string> = {};
-          for (const [k, v] of Object.entries(codes)) {
-            if (k.includes(':')) {
-              const [cat, rawMp] = k.split(':');
-              const normalizedKey = `${cat}:${normalizeKeyLabel(rawMp)}`;
-              editable[normalizedKey] = v as string;
-            } else {
-              editable[k] = v as string;
-            }
-          }
-          setEditableMapping(editable);
-          // Always show editable fields so users can review/change mappings
-          setState('review');
-        } catch { /* fall through */ }
+        }
+        setEditableMapping(editable);
+        setState('review');
         setLoading(false);
         return;
       }

@@ -15,6 +15,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,16 @@ export interface AccountMappings {
   codes: Record<string, string>;
   /** Whether this was loaded from draft (not yet confirmed) */
   isDraft: boolean;
+}
+
+function getMarketplaceKeyCandidates(marketplace?: string): string[] {
+  if (!marketplace) return [];
+
+  const trimmed = marketplace.trim();
+  if (!trimmed) return [];
+
+  const normalized = normalizeKeyLabel(trimmed);
+  return [...new Set([normalized, trimmed].filter(Boolean))];
 }
 
 // ─── Read ────────────────────────────────────────────────────────────────────
@@ -96,10 +107,11 @@ export function getEffectiveMapping(
   category: string,
   marketplace?: string,
 ): string | null {
-  if (marketplace) {
-    const mpKey = `${category}:${marketplace}`;
+  for (const candidate of getMarketplaceKeyCandidates(marketplace)) {
+    const mpKey = `${category}:${candidate}`;
     if (codes[mpKey]) return codes[mpKey];
   }
+
   if (codes[category]) return codes[category];
   return null;
 }

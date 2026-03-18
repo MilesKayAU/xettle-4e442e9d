@@ -723,13 +723,46 @@ serve(async (req) => {
       console.error('Failed to load user account codes, using defaults:', e);
     }
 
+    const CANONICAL_KEY_LABELS: Record<string, string> = {
+      amazon_au: 'Amazon AU', amazon_us: 'Amazon USA', amazon_uk: 'Amazon UK',
+      amazon_ca: 'Amazon CA', amazon_jp: 'Amazon JP', amazon_sg: 'Amazon SG',
+      shopify_payments: 'Shopify', shopify_orders: 'Shopify',
+      ebay_au: 'eBay AU', bunnings: 'Bunnings', catch: 'Catch',
+      mydeal: 'MyDeal', kogan: 'Kogan', bigw: 'BigW',
+      woolworths: 'Woolworths', woolworths_marketplus: 'Everyday Market',
+      everyday_market: 'Everyday Market', theiconic: 'The Iconic', etsy: 'Etsy',
+    };
+
+    const DISPLAY_ALIASES: Record<string, string> = {
+      'shopify payments': 'Shopify', 'shopify': 'Shopify',
+      'ebay australia': 'eBay AU', 'ebay au': 'eBay AU',
+      'bunnings marketplace': 'Bunnings', 'bunnings': 'Bunnings',
+      'big w marketplace': 'BigW', 'big w': 'BigW', 'bigw': 'BigW',
+      'woolworths marketplace': 'Woolworths',
+      'woolworths marketplus': 'Everyday Market', 'everyday market': 'Everyday Market',
+      'mydeal marketplace': 'MyDeal', 'mydeal': 'MyDeal', 'my deal': 'MyDeal',
+      'kogan marketplace': 'Kogan', 'kogan': 'Kogan',
+      'catch marketplace': 'Catch', 'catch': 'Catch',
+      'the iconic': 'The Iconic', 'theiconic': 'The Iconic',
+      'etsy': 'Etsy',
+      'amazon au': 'Amazon AU', 'amazon usa': 'Amazon USA',
+      'amazon uk': 'Amazon UK', 'amazon jp': 'Amazon JP', 'amazon sg': 'Amazon SG',
+    };
+
+    const getMarketplaceKeyCandidates = (marketplace?: string | null): string[] => {
+      if (!marketplace) return [];
+      const trimmed = marketplace.trim();
+      if (!trimmed) return [];
+      const normalized = CANONICAL_KEY_LABELS[trimmed] || DISPLAY_ALIASES[trimmed.toLowerCase()] || trimmed;
+      return [...new Set([normalized, trimmed].filter(Boolean))];
+    };
+
     const getCode = (category: string, marketplace?: string): string | null => {
-      if (marketplace) {
-        const mpKey = `${category}:${marketplace}`;
+      for (const candidate of getMarketplaceKeyCandidates(marketplace)) {
+        const mpKey = `${category}:${candidate}`;
         if (userAccountCodes[mpKey]) return userAccountCodes[mpKey];
       }
       if (userAccountCodes[category]) return userAccountCodes[category];
-      // No fallback — return null to block push
       return null;
     };
 
@@ -742,8 +775,9 @@ serve(async (req) => {
 
     let lineItems: InvoiceLineItem[];
     const lineItemsSource: 'server_rebuilt' = 'server_rebuilt';
+    const mappingMarketplace = body.settlementData?.marketplace || body.marketplace || contactName || null;
 
-    lineItems = buildServerLineItems(body.settlementData, getCode, contactName);
+    lineItems = buildServerLineItems(body.settlementData, getCode, mappingMarketplace || undefined);
     console.log(`[line-items] Rebuilt ${lineItems.length} line items server-side from settlementData (net=${isNegativeSettlement ? 'negative' : 'positive'})`);
 
     // If client also provided lineItems, compare hashes for mismatch detection
