@@ -659,6 +659,29 @@ export default function InsightsDashboard() {
                     </div>
                   )}
 
+                  {/* Fulfilment method context */}
+                  {s.fulfilmentMethod === 'marketplace_fulfilled' && (
+                    <p className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+                      <Truck className="h-3 w-3" /> Fulfilment included in settlement fees
+                    </p>
+                  )}
+
+                  {s.fulfilmentUnknown && (
+                    <div className="rounded-md border border-amber-300/50 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-700/30 px-3 py-2">
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                        ⚠ Fulfilment method unknown — update in Settings → Fulfilment Methods for accurate margins
+                      </p>
+                    </div>
+                  )}
+
+                  {s.fulfilmentMethod === 'third_party_logistics' && s.shippingCostPerOrder === 0 && (
+                    <div className="rounded-md border border-blue-300/50 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-700/30 px-3 py-2">
+                      <p className="text-[11px] text-blue-800 dark:text-blue-300">
+                        3PL costs not tracked — add estimated cost per order to improve margin accuracy
+                      </p>
+                    </div>
+                  )}
+
                   {/* After shipping estimate row */}
                   {s.shippingCostPerOrder > 0 && s.returnAfterAdsAndShipping !== null ? (
                     <div className="flex items-center justify-between text-xs">
@@ -669,14 +692,14 @@ export default function InsightsDashboard() {
                         ${s.returnAfterAdsAndShipping.toFixed(2)}
                       </span>
                     </div>
-                  ) : (
+                  ) : s.fulfilmentMethod === 'self_ship' || s.fulfilmentMethod === 'third_party_logistics' ? (
                     <div className="flex items-center gap-2">
                       <p className="text-[11px] text-muted-foreground">Add est. shipping to see full cost</p>
                       <Button variant="ghost" size="sm" className="h-6 text-[11px] px-2 text-primary" onClick={() => openShippingDialog(s.marketplace)}>
                         <Plus className="h-3 w-3 mr-1" /> Add Shipping
                       </Button>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Impact insight text */}
                   {impactText && (
