@@ -367,6 +367,7 @@ export default function DestinationAccountMapper() {
             </CardTitle>
             <CardDescription>
               Select which bank or clearing account each settlement rail pays into.
+              Rails represent payout sources — Shopify orders paid via PayPal use the PayPal rail.
             </CardDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={refreshAccounts} disabled={fetchingAccounts}>
