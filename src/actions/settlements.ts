@@ -518,3 +518,56 @@ export async function setSourcePreference(
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
+
+// ─── Woolworths Cross-Reference ─────────────────────────────────────────────
+
+/**
+ * After a Woolworths MarketPlus CSV is saved, correct the marketplace_name
+ * on any Shopify-derived api_sync settlement_lines whose order_id matches
+ * an order in the CSV. This makes the reconciliation view trustworthy
+ * without touching settlement IDs or the settlements table.
+ *
+ * Fire-and-forget — errors are logged but never block the CSV save.
+ */
+export async function crossReferenceWoolworthsOrders(
+  userId: string,
+  groups: Array<{ marketplaceCode: string; displayName: string; orders: Array<{ orderId: string }> }>,
+): Promise<void> {
+  try {
+    let totalCorrected = 0;
+
+    for (const group of groups) {
+      const orderIds = group.orders.map(o => o.orderId).filter(Boolean);
+      if (orderIds.length === 0) continue;
+
+      // Find settlement_lines from api_sync Shopify settlements with matching order IDs
+      const { data: lines } = await supabase
+        .from('settlement_lines')
+        .select('id, settlement_id, marketplace_name')
+        .eq('user_id', userId)
+        .in('order_id', orderIds)
+        .like('settlement_id', 'shopify_orders_%');
+
+      if (!lines || lines.length === 0) continue;
+
+      // Only update lines whose marketplace_name differs from the CSV truth
+      const toUpdate = lines.filter(l => l.marketplace_name !== group.displayName);
+      if (toUpdate.length === 0) continue;
+
+      const ids = toUpdate.map(l => l.id);
+      await supabase
+        .from('settlement_lines')
+        .update({ marketplace_name: group.displayName } as any)
+        .in('id', ids)
+        .eq('user_id', userId);
+
+      totalCorrected += toUpdate.length;
+    }
+
+    if (totalCorrected > 0) {
+      console.log(`[crossReferenceWoolworthsOrders] Corrected ${totalCorrected} Shopify-derived lines to match CSV ground truth`);
+    }
+  } catch (err) {
+    console.error('[crossReferenceWoolworthsOrders] Non-blocking error:', err);
+  }
+}
