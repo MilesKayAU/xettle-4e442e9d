@@ -156,6 +156,25 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     }
   }
 
+  // 5. Fulfilment method — warn if any active marketplace has no explicit method set
+  if (connections.length > 0) {
+    const unconfiguredMarketplaces: string[] = [];
+    for (const conn of connections) {
+      const fulfilmentValue = settingsMap.get(`fulfilment_method:${conn.marketplace_code}`);
+      if (!fulfilmentValue || fulfilmentValue === 'not_sure') {
+        unconfiguredMarketplaces.push(conn.marketplace_name || conn.marketplace_code);
+      }
+    }
+    if (unconfiguredMarketplaces.length > 0) {
+      setupWarnings.push({
+        key: 'fulfilment_methods_incomplete',
+        label: 'Fulfilment methods not configured',
+        severity: 'warning',
+        message: `Review and save fulfilment method for: ${unconfiguredMarketplaces.join(', ')}.`,
+      });
+    }
+  }
+
   // ─── Settlement stage counts ───────────────────────────────────────────
 
   let needsReview = 0;
