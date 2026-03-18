@@ -519,28 +519,35 @@ export async function setSourcePreference(
   return { success: true };
 }
 
-// ─── Woolworths Cross-Reference ─────────────────────────────────────────────
+// ─── Generic Multi-Marketplace Cross-Reference ─────────────────────────────
+
+export interface MarketplaceCorrectionGroup {
+  displayName: string;
+  orderIds: string[];
+}
+
+export interface CrossReferenceResult {
+  totalCorrected: number;
+  corrections: Record<string, number>;
+}
 
 /**
- * After a Woolworths MarketPlus CSV is saved, correct the marketplace_name
- * on any Shopify-derived api_sync settlement_lines whose order_id matches
- * an order in the CSV. This makes the reconciliation view trustworthy
- * without touching settlement IDs or the settlements table.
+ * After any multi-marketplace CSV is saved, correct the marketplace_name
+ * on Shopify-derived api_sync settlement_lines whose order_id matches
+ * an order in the CSV. Works for Woolworths, Catch, or any aggregator CSV.
  *
  * Fire-and-forget — errors are logged but never block the CSV save.
  */
-export async function crossReferenceWoolworthsOrders(
+export async function crossReferenceOrderMarketplaces(
   userId: string,
-  groups: Array<{ marketplaceCode: string; displayName: string; orders: Array<{ orderId: string }> }>,
-): Promise<void> {
+  groups: MarketplaceCorrectionGroup[],
+): Promise<CrossReferenceResult> {
+  const result: CrossReferenceResult = { totalCorrected: 0, corrections: {} };
   try {
-    let totalCorrected = 0;
-
     for (const group of groups) {
-      const orderIds = group.orders.map(o => o.orderId).filter(Boolean);
+      const orderIds = group.orderIds.filter(Boolean);
       if (orderIds.length === 0) continue;
 
-      // Find settlement_lines from api_sync Shopify settlements with matching order IDs
       const { data: lines } = await supabase
         .from('settlement_lines')
         .select('id, settlement_id, marketplace_name')
@@ -550,24 +557,92 @@ export async function crossReferenceWoolworthsOrders(
 
       if (!lines || lines.length === 0) continue;
 
-      // Only update lines whose marketplace_name differs from the CSV truth
       const toUpdate = lines.filter(l => l.marketplace_name !== group.displayName);
       if (toUpdate.length === 0) continue;
 
-      const ids = toUpdate.map(l => l.id);
       await supabase
         .from('settlement_lines')
         .update({ marketplace_name: group.displayName } as any)
-        .in('id', ids)
+        .in('id', toUpdate.map(l => l.id))
         .eq('user_id', userId);
 
-      totalCorrected += toUpdate.length;
+      result.totalCorrected += toUpdate.length;
+      result.corrections[group.displayName] = (result.corrections[group.displayName] || 0) + toUpdate.length;
     }
 
-    if (totalCorrected > 0) {
-      console.log(`[crossReferenceWoolworthsOrders] Corrected ${totalCorrected} Shopify-derived lines to match CSV ground truth`);
+    // Log system event if corrections were made
+    if (result.totalCorrected > 0) {
+      console.log(`[crossReferenceOrderMarketplaces] Corrected ${result.totalCorrected} Shopify-derived lines to match CSV ground truth`);
+      await supabase.from('system_events' as any).insert({
+        user_id: userId,
+        event_type: 'marketplace_labels_corrected',
+        severity: 'info',
+        details: {
+          corrected_count: result.totalCorrected,
+          marketplace_corrections: result.corrections,
+        },
+      } as any);
     }
   } catch (err) {
-    console.error('[crossReferenceWoolworthsOrders] Non-blocking error:', err);
+    console.error('[crossReferenceOrderMarketplaces] Non-blocking error:', err);
   }
+  return result;
+}
+
+/**
+ * Retroactive sweep: query all CSV-uploaded settlements with settlement_lines,
+ * extract order IDs grouped by marketplace_name, and cross-reference against
+ * Shopify-derived lines. For use from a manual "Re-sync" button.
+ */
+export async function retroactiveLabelSweep(userId: string): Promise<CrossReferenceResult> {
+  const result: CrossReferenceResult = { totalCorrected: 0, corrections: {} };
+  try {
+    // Get all CSV-uploaded settlement_lines with order_ids (ground truth)
+    const { data: csvLines } = await supabase
+      .from('settlement_lines')
+      .select('order_id, marketplace_name, settlement_id')
+      .eq('user_id', userId)
+      .not('order_id', 'is', null)
+      .not('marketplace_name', 'is', null);
+
+    if (!csvLines || csvLines.length === 0) return result;
+
+    // Filter to lines from CSV settlements (not shopify_orders_%)
+    const groundTruthLines = csvLines.filter(l => !l.settlement_id.startsWith('shopify_orders_'));
+    if (groundTruthLines.length === 0) return result;
+
+    // Group by marketplace_name
+    const groups: Record<string, string[]> = {};
+    for (const line of groundTruthLines) {
+      if (!line.marketplace_name || !line.order_id) continue;
+      if (!groups[line.marketplace_name]) groups[line.marketplace_name] = [];
+      groups[line.marketplace_name].push(line.order_id);
+    }
+
+    const correctionGroups: MarketplaceCorrectionGroup[] = Object.entries(groups).map(
+      ([displayName, orderIds]) => ({ displayName, orderIds: [...new Set(orderIds)] })
+    );
+
+    if (correctionGroups.length === 0) return result;
+
+    const sweepResult = await crossReferenceOrderMarketplaces(userId, correctionGroups);
+    result.totalCorrected = sweepResult.totalCorrected;
+    result.corrections = sweepResult.corrections;
+
+    // Log retroactive sweep event
+    if (result.totalCorrected > 0) {
+      await supabase.from('system_events' as any).insert({
+        user_id: userId,
+        event_type: 'marketplace_labels_retroactive_sweep',
+        severity: 'info',
+        details: {
+          corrected_count: result.totalCorrected,
+          marketplace_corrections: result.corrections,
+        },
+      } as any);
+    }
+  } catch (err) {
+    console.error('[retroactiveLabelSweep] Non-blocking error:', err);
+  }
+  return result;
 }
