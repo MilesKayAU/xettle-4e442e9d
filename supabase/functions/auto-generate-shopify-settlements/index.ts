@@ -357,6 +357,7 @@ Deno.serve(async (req) => {
       processed_at: order.processed_at || new Date().toISOString(),
       order_name: order.order_name || String(order.shopify_order_id),
       shopify_order_id: order.shopify_order_id,
+      isMcf: detected.isMcf || detectMcfOrder(order),
     });
   }
 
