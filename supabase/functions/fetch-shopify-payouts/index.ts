@@ -256,9 +256,12 @@ async function syncPayoutsForUser(
             totalRefunds += Math.abs(amount);
             totalFees += fee;
             break;
+          case "payout":
+            // Payout is the bank transfer itself — NOT an accounting line item.
+            // Its amount equals bank_deposit; including it would double-count.
+            break;
           case "adjustment":
           case "reserve":
-          case "payout":
             totalAdjustments += amount;
             break;
           default:
