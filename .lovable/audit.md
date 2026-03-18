@@ -921,7 +921,7 @@ Added fulfilment channel tracking (FBA/FBM/MCF) across Amazon settlement ingesti
 | 5 | `supabase/functions/_shared/fulfilment-policy.ts` | Modified | Deno mirror of Fix 4 — identical `_INFERRED` stripping + MCF handling. |
 | 6 | `src/utils/profit-engine.ts` | Modified | Loads `mcf_cost` from `app_settings`, passes as `mcfCostPerOrder` to canonical function. |
 | 7 | `supabase/functions/recalculate-profit/index.ts` | Modified | Server-side mirror — loads MCF cost setting, passes to `getPostageDeductionForOrder()`. |
-| 8 | `supabase/functions/auto-generate-shopify-settlements/index.ts` | Modified | Detects CedCommerce MCF indicators in Shopify `note_attributes` (e.g. `cedcommerce_channel`, `mcf_order`, `fulfillment_by_amazon`). Sets `fulfilment_channel = 'MCF'`. |
+| 8 | `supabase/functions/auto-generate-shopify-settlements/index.ts` | Modified | Detects CedCommerce MCF indicators in Shopify `note_attributes`. Sets `fulfilment_channel = 'MCF'`. **Scoped to sub-channels only** — own-store orders (`shopify_web`, `shopify_pos`) are never flagged as MCF. |
 | 9 | `src/components/settings/DataQualityPanel.tsx` | Modified | Added "Classify Amazon fulfilment data" button. Calls `backfill-fulfilment-channel` edge function, shows summary toast. |
 | 10 | `src/components/settings/FulfilmentMethodsPanel.tsx` | Modified | Added MCF cost input (default $8.00) under Amazon section when method is `mixed_fba_fbm`. Added one-time dismissible upgrade prompt for existing users on `marketplace_fulfilled`. |
 | 11 | `src/components/admin/accounting/AccountingDashboard.tsx` | Modified | Passes `fulfilment_channel` at Amazon settlement_lines insert site. |
@@ -936,14 +936,15 @@ if (ch === "MCF") return (mcfCostPerOrder || 0) * orderCount;
 // ... existing AFN/MFN/mixed logic unchanged
 ```
 
-### Inference Backfill Logic
+### Inference Backfill Logic (v2 — with refund-only fix)
 ```
 For each order_id where fulfilment_channel IS NULL and marketplace ILIKE '%amazon%':
   IF any row has amount_description IN ('FBAPerUnitFulfillmentFee', 'FBAWeightBasedFee', 'FBAPerOrderFulfillmentFee')
     → all rows for that order_id = 'AFN_inferred'
+  ELSE IF ALL rows for that order_id have transaction_type = 'Refund'
+    → all rows for that order_id = 'AFN_inferred' (conservative default — original order was likely FBA)
   ELSE
     → 'MFN_inferred'
-  Special: refund-only orders default to 'AFN_inferred'
 ```
 
 ### Pre-Build Validation
@@ -954,10 +955,25 @@ For each order_id where fulfilment_channel IS NULL and marketplace ILIKE '%amazo
 | Amazon orders without FBA fees (refund-only) | 3 |
 | Non-Amazon orders (correctly excluded) | 955 |
 
+### Post-Build Blocker Fixes (Phase B.1)
+
+Two blockers identified by Copilot audit and fixed before backfill execution:
+
+**Blocker 1 — Refund-only orders misclassified as MFN_inferred**
+- **Problem:** Orders with no FBA fee lines but ALL lines being refunds were classified as `MFN_inferred`. These 3 orders are refunds of FBA orders and should be `AFN_inferred`.
+- **Fix:** Added `transaction_type` tracking per order. Orders where every line has `transaction_type = 'Refund'` now get `AFN_inferred` (conservative default).
+- **File:** `supabase/functions/backfill-fulfilment-channel/index.ts`
+
+**Blocker 2 — MCF detection not scoped to sub-channel orders**
+- **Problem:** `detectMcfOrder()` fired on ALL Shopify orders including own-store (`shopify_web`, `shopify_pos`). If an own-store order had a matching note attribute, it would be incorrectly flagged as MCF.
+- **Fix:** Added guard: `const isSubChannel = detected.code !== 'shopify_web' && detected.code !== 'shopify_pos'`. MCF detection only runs for sub-channel orders.
+- **File:** `supabase/functions/auto-generate-shopify-settlements/index.ts`
+
 ### Security
 - Backfill function uses `verify_jwt = true` — requires authenticated user
 - All queries scoped to `user_id` from JWT
 - `_inferred` values can be overwritten by confirmed parser values on re-import
+- MCF detection scoped to sub-channels — own-store orders cannot be misclassified
 
 ### Not Changed
 - Non-Amazon marketplace parsers (Woolworths, Kogan, Bunnings, eBay)
