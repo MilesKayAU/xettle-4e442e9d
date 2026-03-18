@@ -222,7 +222,22 @@ export default function ReconciliationHealthPanel() {
               <StatusIcon status={check.status} />
               <div className="flex-1 min-w-0">
                 <span className="font-medium text-xs">{check.label}</span>
-                <p className="text-[11px] text-muted-foreground">{check.detail}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {check.detail}
+                  {check.actionLabel && check.actionSection && (
+                    <button
+                      className="ml-1.5 text-primary hover:underline font-medium"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('open-settings-tab'));
+                        setTimeout(() => {
+                          window.dispatchEvent(new CustomEvent('open-settings-section', { detail: { section: check.actionSection } }));
+                        }, 150);
+                      }}
+                    >
+                      {check.actionLabel} →
+                    </button>
+                  )}
+                </p>
               </div>
             </div>
           ))}
