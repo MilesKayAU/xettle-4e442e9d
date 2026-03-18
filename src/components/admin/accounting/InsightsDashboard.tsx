@@ -19,14 +19,12 @@ import SkuComparisonView from '@/components/insights/SkuComparisonView';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
-// ─── Estimated Commission Rates (mirrors edge function) ─────────────────────
-// Used to show realistic fee data when actual fee data is missing (api_sync with $0 fees)
-const COMMISSION_ESTIMATES: Record<string, number> = {
-  kogan: 0.12, bigw: 0.08, everyday_market: 0.10, mydeal: 0.10,
-  bunnings: 0.10, catch: 0.12, ebay_au: 0.13, iconic: 0.15,
-  tradesquare: 0.10, tiktok: 0.05,
-};
-const DEFAULT_COMMISSION_RATE = 0.10;
+import {
+  COMMISSION_ESTIMATES,
+  DEFAULT_COMMISSION_RATE,
+  normalizeMarketplace as canonicalNormalizeMarketplace,
+  PLATFORM_FAMILIES,
+} from '@/utils/insights-fee-attribution';
 
 interface FeeBreakdown {
   label: string;
@@ -164,11 +162,7 @@ export default function InsightsDashboard() {
       }
 
       // e.g. 'woolworths_marketplus_bigw' → 'bigw', 'shopify_orders_kogan' → 'kogan'
-      function normalizeMarketplace(mp: string): string {
-        if (mp.startsWith('woolworths_marketplus_')) return mp.replace('woolworths_marketplus_', '');
-        if (mp.startsWith('shopify_orders_')) return mp.replace('shopify_orders_', '');
-        return mp;
-      }
+      const normalizeMarketplace = canonicalNormalizeMarketplace;
 
       const grouped: Record<string, typeof data> = {};
       for (const row of data) {
@@ -185,11 +179,7 @@ export default function InsightsDashboard() {
       // even when sales occur on BigW or Everyday Market. This creates an anomaly where
       // MyDeal shows fees >> sales, while BigW/Everyday Market appear artificially cheap.
       // Fix: detect fee-heavy marketplaces and redistribute excess fees to siblings.
-      const PLATFORM_FAMILIES: Record<string, string[]> = {
-        woolworths_marketplus: ['mydeal', 'bigw', 'everyday_market', 'woolworths_market'],
-      };
-
-      // For each family, detect excess fees and redistribute
+      // Platform family fee redistribution using canonical PLATFORM_FAMILIES
       for (const siblings of Object.values(PLATFORM_FAMILIES)) {
         const presentSiblings = siblings.filter(s => grouped[s]);
         if (presentSiblings.length < 2) continue;

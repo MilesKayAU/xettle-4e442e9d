@@ -1,6 +1,8 @@
 /**
  * MarketplaceProfitComparison — Cross-marketplace profit ranking.
  * Pro/Admin-only feature with upgrade prompt for free users.
+ * 
+ * Uses canonical fee-attribution utility for consistent fee estimation.
  */
 
 import { useEffect, useState } from 'react';
@@ -14,14 +16,15 @@ import { useNavigate } from 'react-router-dom';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } from '@/utils/fulfilment-settings';
 import type { FulfilmentMethod } from '@/utils/fulfilment-settings';
-
-// Estimated commission rates (mirrors edge function + InsightsDashboard)
-const COMMISSION_ESTIMATES: Record<string, number> = {
-  kogan: 0.12, bigw: 0.08, everyday_market: 0.10, mydeal: 0.10,
-  bunnings: 0.10, catch: 0.12, ebay_au: 0.13, iconic: 0.15,
-  tradesquare: 0.10, tiktok: 0.05,
-};
-const DEFAULT_COMMISSION_RATE = 0.10;
+import {
+  COMMISSION_ESTIMATES,
+  DEFAULT_COMMISSION_RATE,
+  normalizeMarketplace,
+  attributeFees,
+  redistributePlatformFees,
+  isMarginSuspicious,
+  type SettlementRow,
+} from '@/utils/insights-fee-attribution';
 
 interface AggregatedMarketplace {
   marketplace_code: string;
@@ -85,11 +88,11 @@ export default function MarketplaceProfitComparison() {
       const [profitRes, settlementsRes, fulfilmentMethods, postageCosts] = await Promise.all([
         supabase
           .from('settlement_profit')
-          .select('marketplace_code, gross_revenue, gross_profit, margin_percent')
+          .select('marketplace_code, settlement_id, gross_revenue, gross_profit, margin_percent')
           .eq('user_id', user.id),
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, sales_shipping, gst_on_income, bank_deposit, source, seller_fees, raw_payload')
+          .select('marketplace, sales_principal, sales_shipping, gst_on_income, bank_deposit, source, seller_fees, raw_payload, period_start, period_end, is_hidden, is_pre_boundary, fba_fees, other_fees, storage_fees, refunds, settlement_id')
           .eq('user_id', user.id)
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
@@ -104,10 +107,33 @@ export default function MarketplaceProfitComparison() {
       const profits = profitRes.data || [];
       const settlements = settlementsRes.data || [];
 
-      // Aggregate profit data by marketplace, filtering out corrupted rows
+      // Build a set of active settlement IDs for cross-referencing profit rows
+      const activeSettlementIds = new Set(settlements.map(s => (s as any).settlement_id));
+
+      // Group settlements by normalised marketplace
+      const grouped: Record<string, SettlementRow[]> = {};
+      for (const row of settlements) {
+        const rawMp = row.marketplace;
+        if (!rawMp) continue;
+        const mp = normalizeMarketplace(rawMp);
+        if (!grouped[mp]) grouped[mp] = [];
+        grouped[mp].push(row as unknown as SettlementRow);
+      }
+
+      // Calculate redistributed platform fees
+      const redistFees = redistributePlatformFees(grouped);
+
+      // Aggregate profit data by marketplace, filtering out stale/malformed rows
       const mpMap = new Map<string, { revenue: number; profit: number; margins: number[]; count: number }>();
       for (const row of profits) {
+        // Skip profit rows for settlements that no longer exist
+        if (!activeSettlementIds.has(row.settlement_id)) continue;
+        // Skip corrupted rows
         if (Math.abs(Number(row.gross_revenue) || 0) > 10_000_000) continue;
+        if ((Number(row.gross_revenue) || 0) <= 0) continue;
+        // Skip rows with suspiciously high margins for marketplaces with known fees
+        if (isMarginSuspicious(row.marketplace_code, Number(row.margin_percent) || 0)) continue;
+
         const mp = row.marketplace_code;
         if (!mpMap.has(mp)) mpMap.set(mp, { revenue: 0, profit: 0, margins: [], count: 0 });
         const entry = mpMap.get(mp)!;
@@ -117,156 +143,63 @@ export default function MarketplaceProfitComparison() {
         entry.count++;
       }
 
-      // Also aggregate settlement-level data for marketplaces without profit rows
-      // Track per-marketplace with source breakdown for mixed CSV/api_sync handling
-      interface SettlementAgg {
-        revenue: number; payout: number; count: number; hasEstimated: boolean;
-        csvSalesExGst: number; csvFees: number; csvPayout: number; csvGst: number; csvCount: number;
-        apiSyncSalesExGst: number; apiSyncGst: number; apiSyncCount: number;
-      }
-      const settlementMap = new Map<string, SettlementAgg>();
-      for (const row of settlements) {
-        const mp = row.marketplace;
-        if (!mp) continue;
-        if (!settlementMap.has(mp)) settlementMap.set(mp, {
-          revenue: 0, payout: 0, count: 0, hasEstimated: false,
-          csvSalesExGst: 0, csvFees: 0, csvPayout: 0, csvGst: 0, csvCount: 0,
-          apiSyncSalesExGst: 0, apiSyncGst: 0, apiSyncCount: 0,
-        });
-        const entry = settlementMap.get(mp)!;
-        const salesExGst = Number(row.sales_principal) || 0;
-        const gst = Number(row.gst_on_income) || 0;
-        const shipping = Number(row.sales_shipping) || 0;
-        entry.revenue += salesExGst + shipping + gst;
-        entry.payout += Number(row.bank_deposit) || 0;
-        entry.count++;
-        const payload = row.raw_payload as any;
-        if (payload?.fees_estimated === true) entry.hasEstimated = true;
-
-        const isApiSyncZeroFee = (row as any).source === 'api_sync' && Math.abs(Number(row.seller_fees) || 0) < 0.01;
-        if (isApiSyncZeroFee) {
-          entry.apiSyncSalesExGst += salesExGst;
-          entry.apiSyncGst += gst;
-          entry.apiSyncCount++;
-        } else {
-          entry.csvSalesExGst += salesExGst;
-          entry.csvFees += Math.abs(Number(row.seller_fees) || 0);
-          entry.csvPayout += Number(row.bank_deposit) || 0;
-          entry.csvGst += gst;
-          entry.csvCount++;
-        }
-      }
-
       const results: AggregatedMarketplace[] = [];
 
-      // ─── Platform Family Fee Redistribution ───────────────────────────
-      // MyDeal, BigW, and Everyday Market share the Woolworths MarketPlus platform.
-      // Platform-level fees get assigned to MyDeal even when sales are on BigW/Everyday Market.
-      const PLATFORM_FAMILIES: Record<string, string[]> = {
-        woolworths_marketplus: ['mydeal', 'bigw', 'everyday_market', 'woolworths_market'],
-      };
-
-      const redistributedFees: Record<string, number> = {};
-      for (const siblings of Object.values(PLATFORM_FAMILIES)) {
-        const presentSiblings = siblings.filter(s => settlementMap.has(s));
-        if (presentSiblings.length < 2) continue;
-
-        const feeHeavy: string[] = [];
-        const salesSiblings: string[] = [];
-        for (const s of presentSiblings) {
-          const agg = settlementMap.get(s)!;
-          const sales = agg.revenue;
-          const fees = agg.csvFees + Math.abs(agg.csvSalesExGst > 0 ? 0 : agg.apiSyncSalesExGst * (COMMISSION_ESTIMATES[s] || DEFAULT_COMMISSION_RATE));
-          const totalFees = fees || Math.abs(agg.csvFees);
-          if (totalFees > Math.max(sales * 1.5, 50)) {
-            feeHeavy.push(s);
-          } else if (sales > 0) {
-            salesSiblings.push(s);
-          }
-        }
-
-        if (feeHeavy.length === 0 || salesSiblings.length === 0) continue;
-
-        let totalExcessFees = 0;
-        for (const fh of feeHeavy) {
-          const agg = settlementMap.get(fh)!;
-          const ownFees = agg.revenue * 0.15;
-          totalExcessFees += Math.max(agg.csvFees - ownFees, 0);
-        }
-
-        let totalSiblingSales = 0;
-        const siblingSalesMap: Record<string, number> = {};
-        for (const s of salesSiblings) {
-          const sales = settlementMap.get(s)!.revenue;
-          siblingSalesMap[s] = sales;
-          totalSiblingSales += sales;
-        }
-
-        if (totalSiblingSales > 0 && totalExcessFees > 0) {
-          for (const s of salesSiblings) {
-            redistributedFees[s] = (totalExcessFees * siblingSalesMap[s]) / totalSiblingSales;
-          }
-        }
-      }
-
-      // Add marketplaces with profit data (postage already included in gross_profit)
+      // Add marketplaces with valid profit data
       for (const [mp, agg] of mpMap) {
         const avg_margin = agg.margins.length > 0
           ? agg.margins.reduce((a, b) => a + b, 0) / agg.margins.length
           : 0;
+
+        // Deduct redistributed platform fees from profit
+        const adjustedProfit = agg.profit - (redistFees[mp] || 0);
+        const adjustedMargin = agg.revenue > 0
+          ? Math.min((adjustedProfit / agg.revenue) * 100, 100)
+          : avg_margin;
+
+        const settRows = grouped[mp];
+        const hasEstimated = settRows?.some(r => (r.raw_payload as any)?.fees_estimated === true) || (redistFees[mp] || 0) > 0;
+
         results.push({
           marketplace_code: mp,
           marketplace_name: MARKETPLACE_LABELS[mp] || mp,
-          avg_margin: Math.round(avg_margin * 10) / 10,
+          avg_margin: Math.round((redistFees[mp] ? adjustedMargin : avg_margin) * 10) / 10,
           total_revenue: Math.round(agg.revenue),
-          total_profit: Math.round(agg.profit - (redistributedFees[mp] || 0)),
+          total_profit: Math.round(adjustedProfit),
           periods: agg.count,
           has_cost_data: true,
-          has_estimated_fees: settlementMap.get(mp)?.hasEstimated || redistributedFees[mp] > 0 || false,
+          has_estimated_fees: hasEstimated,
         });
       }
 
-      // Add marketplaces that only have settlement data (no profit rows)
-      for (const [mp, agg] of settlementMap) {
+      // Add marketplaces that only have settlement data (no valid profit rows)
+      for (const [mp, rows] of Object.entries(grouped)) {
         if (mpMap.has(mp)) continue;
-        if (agg.revenue <= 0) continue;
+        const totalSalesExGst = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
+        const totalGst = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
+        const totalSales = totalSalesExGst + totalGst;
+        if (totalSales <= 0) continue;
+
         const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
         const postageCost = postageCosts[mp] || 0;
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
-        const estimatedPostageDeduction = shouldDeductShipping ? postageCost * agg.count : 0;
+        const estimatedPostageDeduction = shouldDeductShipping ? postageCost * rows.length : 0;
 
-        let adjustedPayout = agg.payout - estimatedPostageDeduction;
-        let hasEstimated = agg.hasEstimated;
+        // Use canonical fee attribution
+        const attribution = attributeFees(mp, rows, redistFees[mp] || 0);
 
-        // Handle mixed CSV + api_sync: extrapolate real CSV fee rate onto api_sync rows
-        if (agg.apiSyncCount > 0 && agg.csvCount > 0) {
-          const realFeeRate = agg.csvSalesExGst > 0 ? agg.csvFees / agg.csvSalesExGst : (COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE);
-          const estimatedApiSyncFees = agg.apiSyncSalesExGst * realFeeRate;
-          adjustedPayout = agg.csvPayout + (agg.apiSyncSalesExGst + agg.apiSyncGst - estimatedApiSyncFees) - estimatedPostageDeduction;
-          hasEstimated = true;
-        } else if (agg.apiSyncCount > 0 && agg.csvCount === 0) {
-          const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
-          const estimatedFees = agg.apiSyncSalesExGst * estimatedRate;
-          adjustedPayout = agg.revenue - estimatedFees - estimatedPostageDeduction;
-          hasEstimated = true;
-        }
+        const adjustedPayout = attribution.effectiveNetPayout - estimatedPostageDeduction;
+        const margin = totalSales > 0 ? Math.min((adjustedPayout / totalSales) * 100, 100) : 0;
 
-        // Deduct redistributed platform fees
-        if (redistributedFees[mp]) {
-          adjustedPayout -= redistributedFees[mp];
-          hasEstimated = true;
-        }
-
-        const margin = agg.revenue > 0 ? Math.min((adjustedPayout / agg.revenue) * 100, 100) : 0;
         results.push({
           marketplace_code: mp,
           marketplace_name: MARKETPLACE_LABELS[mp] || mp,
           avg_margin: Math.round(margin * 10) / 10,
-          total_revenue: Math.round(agg.revenue),
+          total_revenue: Math.round(totalSales),
           total_profit: Math.round(adjustedPayout),
-          periods: agg.count,
+          periods: rows.length,
           has_cost_data: false,
-          has_estimated_fees: hasEstimated,
+          has_estimated_fees: attribution.hasEstimatedFees,
         });
       }
 
@@ -310,7 +243,6 @@ export default function MarketplaceProfitComparison() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pb-4 opacity-30 pointer-events-none select-none">
-          {/* Blurred placeholder rows */}
           {[1, 2, 3].map(i => (
             <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
               <div className="flex items-center gap-2">
