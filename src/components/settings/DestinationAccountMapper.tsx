@@ -416,7 +416,10 @@ export default function DestinationAccountMapper() {
               return (
                 <div key={rail.code} className="rounded-md border p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{rail.label}</span>
+                    <div>
+                      <span className="text-sm font-medium">{rail.label}</span>
+                      <p className="text-[10px] text-muted-foreground">{getRailDescription(rail.code)}</p>
+                    </div>
                     <div className="flex items-center gap-2">
                       <Label htmlFor={`default-${rail.code}`} className="text-xs text-muted-foreground">
                         Use default
