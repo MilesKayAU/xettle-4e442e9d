@@ -2,11 +2,16 @@
  * FulfilmentMethodsPanel — Settings panel to edit fulfilment method per marketplace.
  */
 
+/**
+ * FulfilmentMethodsPanel — Settings panel to edit fulfilment method per marketplace.
+ */
+
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Store } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Store, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   type FulfilmentMethod,
@@ -14,6 +19,8 @@ import {
   loadFulfilmentMethods,
   saveFulfilmentMethod,
   getEffectiveMethod,
+  loadPostageCosts,
+  savePostageCost,
 } from '@/utils/fulfilment-settings';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
@@ -27,6 +34,7 @@ const METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics'
 export default function FulfilmentMethodsPanel() {
   const [marketplaces, setMarketplaces] = useState<MarketplaceRow[]>([]);
   const [methods, setMethods] = useState<Record<string, FulfilmentMethod>>({});
+  const [postageCosts, setPostageCosts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
 
@@ -36,17 +44,24 @@ export default function FulfilmentMethodsPanel() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const [connRes, stored] = await Promise.all([
+        const [connRes, stored, costs] = await Promise.all([
           supabase
             .from('marketplace_connections')
             .select('marketplace_code, marketplace_name')
             .eq('user_id', user.id)
             .eq('connection_status', 'active'),
           loadFulfilmentMethods(user.id),
+          loadPostageCosts(user.id),
         ]);
 
         setMarketplaces(connRes.data || []);
         setMethods(stored);
+        // Convert numbers to display strings
+        const costStrings: Record<string, string> = {};
+        for (const [code, val] of Object.entries(costs)) {
+          costStrings[code] = val > 0 ? String(val) : '';
+        }
+        setPostageCosts(costStrings);
       } catch {
         // silent
       } finally {
@@ -71,6 +86,20 @@ export default function FulfilmentMethodsPanel() {
     }
   };
 
+  const handlePostageSave = async (code: string, value: string) => {
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await savePostageCost(user.id, code, num);
+      toast.success(`Postage cost saved for ${code}`);
+    } catch {
+      toast.error('Failed to save postage cost');
+    }
+  };
+
   if (loading) return <LoadingSpinner size="sm" text="Loading..." />;
 
   if (marketplaces.length === 0) {
@@ -88,6 +117,7 @@ export default function FulfilmentMethodsPanel() {
       </p>
       {marketplaces.map((mp) => {
         const effective = getEffectiveMethod(mp.marketplace_code, methods[mp.marketplace_code]);
+        const showPostageInput = effective === 'self_ship' || effective === 'third_party_logistics';
         return (
           <div key={mp.marketplace_code} className="rounded-lg border border-border p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -111,6 +141,30 @@ export default function FulfilmentMethodsPanel() {
                 </div>
               ))}
             </RadioGroup>
+            {showPostageInput && (
+              <div className="pt-1 space-y-1">
+                <Label htmlFor={`postage-${mp.marketplace_code}`} className="text-xs text-muted-foreground flex items-center gap-1">
+                  <DollarSign className="h-3 w-3" />
+                  Avg. postage cost per order
+                </Label>
+                <div className="relative w-40">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                  <Input
+                    id={`postage-${mp.marketplace_code}`}
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    placeholder="0.00"
+                    value={postageCosts[mp.marketplace_code] || ''}
+                    onChange={(e) =>
+                      setPostageCosts(prev => ({ ...prev, [mp.marketplace_code]: e.target.value }))
+                    }
+                    onBlur={(e) => handlePostageSave(mp.marketplace_code, e.target.value)}
+                    className="pl-7 h-8 text-sm"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

@@ -12,7 +12,7 @@ import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, M
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { loadFulfilmentMethods, getEffectiveMethod, type FulfilmentMethod } from '@/utils/fulfilment-settings';
+import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod, type FulfilmentMethod } from '@/utils/fulfilment-settings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
 import SkuComparisonView from '@/components/insights/SkuComparisonView';
@@ -92,7 +92,7 @@ export default function InsightsDashboard() {
       // Insights is an analytics view — include pre-boundary (historical) settlements
       // so that all marketplace sales data contributes to trends and totals.
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts] = await Promise.all([
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary')
@@ -107,6 +107,7 @@ export default function InsightsDashboard() {
           .from('marketplace_shipping_costs')
           .select('marketplace_code, cost_per_order'),
         currentUser ? loadFulfilmentMethods(currentUser.id) : Promise.resolve({} as Record<string, FulfilmentMethod>),
+        currentUser ? loadPostageCosts(currentUser.id) : Promise.resolve({} as Record<string, number>),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
@@ -196,7 +197,8 @@ export default function InsightsDashboard() {
         const fulfilmentUnknown = fulfilmentMethod === 'not_sure';
 
         // Shipping cost estimation — only applied for self_ship / third_party_logistics
-        const shippingCostPerOrder = shippingCostByMp[mp] || 0;
+        // Use marketplace_shipping_costs table first, fall back to app_settings postage_cost
+        const shippingCostPerOrder = shippingCostByMp[mp] || postageCosts[mp] || 0;
         const estimatedOrderCount = rows.length > 0 ? rows.length : 1;
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;
