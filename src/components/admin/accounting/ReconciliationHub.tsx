@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronRight, MessageSquarePlus, X, Send, Clock, History } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronRight, MessageSquarePlus, X, Send, Clock, History, Eye, Loader2, Paperclip } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow, differenceInDays, subMonths, subDays } from 'date-fns';
 import { toast } from 'sonner';
+import { buildPostingLineItems, toLineItemPreviews, createAccountCodeResolver, type LineItemPreview } from '@/utils/xero-posting-line-items';
+import { MARKETPLACE_CONTACTS } from '@/constants/marketplace-contacts';
 
 const HistoricalAudit = lazy(() => import('./HistoricalAudit'));
 
