@@ -138,6 +138,7 @@ export default function MarketplaceProfitComparison() {
           total_profit: Math.round(agg.profit),
           periods: agg.count,
           has_cost_data: true,
+          has_estimated_fees: settlementMap.get(mp)?.hasEstimated || false,
         });
       }
 
