@@ -318,7 +318,7 @@ serve(async (req) => {
     const MAX_TOOL_ROUNDS = 3;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const payload = buildGatewayPayload(systemPrompt, gatewayMessages, false);
+      const payload = buildGatewayPayload(systemPrompt, gatewayMessages, false, toolDefs);
       const response = await callGateway(LOVABLE_API_KEY, payload);
 
       if (!response.ok) {
