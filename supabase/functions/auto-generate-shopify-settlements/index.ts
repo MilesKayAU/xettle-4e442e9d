@@ -122,11 +122,28 @@ function parseNoteAttributes(
  * 5. Gateway
  * 6. Source Name
  */
+/** MCF detection keywords in note attributes */
+const MCF_INDICATORS = ['cedcommerce_channel', 'mcf_order', 'fulfillment_by_amazon', 'amazon_mcf', 'fba_multi_channel'];
+
+function detectMcfOrder(order: any): boolean {
+  const noteAttrs = parseNoteAttributes(order.note_attributes);
+  for (const attr of noteAttrs) {
+    const nameLower = (attr.name || '').toLowerCase();
+    const valueLower = (attr.value || '').toLowerCase();
+    if (MCF_INDICATORS.some(k => nameLower.includes(k) || valueLower.includes(k))) return true;
+  }
+  if (order.tags) {
+    const tags = String(order.tags).split(',').map((t: string) => t.trim().toLowerCase());
+    if (tags.some((t: string) => MCF_INDICATORS.some(k => t.includes(k)))) return true;
+  }
+  return false;
+}
+
 function detectOrder(
   order: any,
   dbRegistry: RegistryRow[],
   entityLibrary: EntityRow[]
-): { code: string; name: string; method: string } | null {
+): { code: string; name: string; method: string; isMcf?: boolean } | null {
   const aggregators: string[] = [];
 
   // Priority 1: Tags — check fallback first, then DB registry
