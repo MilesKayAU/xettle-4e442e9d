@@ -110,15 +110,17 @@ export default function MarketplaceProfitComparison() {
       }
 
       // Also aggregate settlement-level data for marketplaces without profit rows
-      const settlementMap = new Map<string, { revenue: number; payout: number; count: number }>();
+      const settlementMap = new Map<string, { revenue: number; payout: number; count: number; hasEstimated: boolean }>();
       for (const row of settlements) {
         const mp = row.marketplace;
         if (!mp) continue;
-        if (!settlementMap.has(mp)) settlementMap.set(mp, { revenue: 0, payout: 0, count: 0 });
+        if (!settlementMap.has(mp)) settlementMap.set(mp, { revenue: 0, payout: 0, count: 0, hasEstimated: false });
         const entry = settlementMap.get(mp)!;
         entry.revenue += (Number(row.sales_principal) || 0) + (Number(row.sales_shipping) || 0);
         entry.payout += Number(row.bank_deposit) || 0;
         entry.count++;
+        const payload = row.raw_payload as any;
+        if (payload?.fees_estimated === true) entry.hasEstimated = true;
       }
 
       const results: AggregatedMarketplace[] = [];
