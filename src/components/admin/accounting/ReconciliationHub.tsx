@@ -585,6 +585,22 @@ export default function ReconciliationHub() {
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
+                  {item.type === 'settlement' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      onClick={() => togglePayload(item)}
+                      title="Preview Xero payload"
+                      disabled={payloadLoading === item.sourceId}
+                    >
+                      {payloadLoading === item.sourceId ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Eye className={`h-3.5 w-3.5 ${expandedPayload === item.sourceId ? 'text-primary' : ''}`} />
+                      )}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
