@@ -42,6 +42,7 @@ import RailPostingSettings from '@/components/settings/RailPostingSettings';
 import AccountingBoundarySettings from '@/components/onboarding/AccountingBoundarySettings';
 import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
 import DataQualityPanel from '@/components/settings/DataQualityPanel';
+import FulfilmentMethodsPanel from '@/components/settings/FulfilmentMethodsPanel';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
