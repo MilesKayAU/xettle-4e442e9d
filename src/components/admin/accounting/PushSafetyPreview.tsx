@@ -359,6 +359,7 @@ export default function PushSafetyPreview({
 
   const handleConfirm = async () => {
     setPushing(true);
+    trackAction('confirmed_push_to_xero', `${settlements.length} settlement(s)`);
     try {
       await onConfirm();
     } finally {
