@@ -95,17 +95,20 @@ function normalize(text: string): string {
 }
 
 // ─── Category detection keywords ────────────────────────────────
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  sales: ['sales', 'revenue', 'income'],
-  seller_fees: ['seller fee', 'referral fee', 'selling fee', 'commission'],
-  fba_fees: ['fba', 'fulfilment', 'fulfillment', 'pick pack', 'delivery fee'],
-  storage_fees: ['storage', 'warehouse', 'inventory storage'],
-  advertising: ['advertising', 'sponsored', 'ppc', 'ad spend', 'ads'],
-  refunds: ['refund', 'return'],
-  shipping: ['shipping', 'freight', 'postage', 'delivery'],
-  other_fees: ['fee', 'charge', 'adjustment'],
-};
+// IMPORTANT: Order matters! Most specific categories first.
+// Matching is exclusive: first category match wins per account+marketplace.
+const CATEGORY_KEYWORDS_ORDERED: [string, string[]][] = [
+  ['reimbursements', ['reimbursement', 'reimbursment']], // includes common typo
+  ['fba_fees', ['fba', 'fulfilment', 'fulfillment', 'pick pack']],
+  ['storage_fees', ['storage', 'warehouse', 'inventory storage']],
+  ['advertising', ['advertising', 'sponsored', 'ppc', 'ad spend', 'campaign']],
+  ['refunds', ['refund', 'return']],
+  ['shipping', ['shipping', 'freight', 'postage', 'delivery']],
+  ['promotional_discounts', ['discount', 'promotion', 'voucher', 'coupon']],
+  ['sales', ['sales', 'revenue', 'income']],
+  ['seller_fees', ['seller fee', 'referral fee', 'selling fee', 'commission', 'fees']],
+  ['other_fees', ['adjustment', 'charge', 'miscellaneous', 'other fee', 'reserved']],
+];
 
 // ─── Core Analysis ──────────────────────────────────────────────
 
