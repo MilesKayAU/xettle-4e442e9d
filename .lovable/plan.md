@@ -1,37 +1,43 @@
 
 
-## Accounting Boundary: What It Is and The Fix
+## Fix: Kogan (and all generic CSV) orders showing "0" in validation sweep
 
-### What is the boundary?
+### Root cause
 
-The `accounting_boundary_date` is a safety gate set during onboarding. Its purpose: **prevent Xettle from creating duplicate Xero entries for settlements that were already recorded in Xero before you started using Xettle.**
+The validation sweep edge function (`run-validation-sweep`) counts orders from `settlement_lines` using this filter (line 559):
 
-During setup on **March 14**, the onboarding wizard ran `scan-xero-history` which scanned your Xero for existing marketplace invoices. Based on what it found, it recommended **2026-03-11** as the cutoff. No `accounting_boundary_source` was saved (the key is missing from `app_settings`), so it was likely set via the default "today" path or the scan's recommendation.
+```
+if (line.amount_type === 'ItemPrice' && amt > 0)
+```
 
-### How it works
+`'ItemPrice'` is an Amazon-specific value. Generic CSV uploads (Kogan, Catch, MyDeal, etc.) save lines with `amount_type: 'order'` (SmartUploadFlow line 959). So all non-Amazon CSV-uploaded settlements show 0 orders even when line items exist.
 
-- Settlements with `period_end < boundary` get flagged `is_pre_boundary: true`
-- Pre-boundary settlements are filtered out of the action queue and never pushed to Xero
-- Most pre-boundary items are also marked `status: already_recorded` (assumed to exist in Xero already)
+### What data goes to Xero
 
-### Current state of pre-boundary settlements
+For clarity on the second question:
+- **Invoice line items**: Summary-level only (Sales, Fees, GST) — no per-order breakdown
+- **File attachment**: Raw `settlement_lines` CSV is attached to the Xero invoice, giving accountants order-level visibility
+- This matches the Link My Books pattern
 
-There are ~20 pre-boundary settlements across Amazon AU and Shopify. All are marked `already_recorded` **except one**:
+### Fix
 
-| Settlement | Marketplace | Deposit | Period End | Status |
-|---|---|---|---|---|
-| 132787241207 | shopify_payments | $41.84 | Mar 10 | `ready_to_push` but `is_pre_boundary: true` |
+**Single change in `supabase/functions/run-validation-sweep/index.ts`** (~line 559):
 
-This is the missing 5th payout that Link My Books shows. It fell 1 day before the boundary.
+Broaden the `amount_type` filter to include generic CSV values:
 
-### The fix
+```typescript
+// Before:
+if (line.amount_type === 'ItemPrice' && amt > 0) {
 
-**Move the boundary from 2026-03-11 to 2026-03-10** and flip `is_pre_boundary` to `false` on settlement `132787241207`.
+// After:
+const revenueTypes = new Set(['ItemPrice', 'order', 'order_total']);
+if (revenueTypes.has(line.amount_type || '') && amt > 0) {
+```
 
-Implementation:
-1. Update `app_settings` row: set `accounting_boundary_date` to `2026-03-10`
-2. Update `settlements` row for ID `132787241207`: set `is_pre_boundary = false`
-3. No code changes needed -- the existing boundary logic will handle everything correctly with the new date
+This single change makes the Orders column accurate for all marketplaces:
+- Amazon: `ItemPrice` (from SP-API)
+- Generic CSV (Kogan, Catch, MyDeal, etc.): `order` (from SmartUploadFlow)
+- Shopify Orders: `order_total` (from ShopifyOrdersDashboard)
 
-This is a data-only change (two UPDATE statements). The $41.84 payout will immediately appear in the action queue, matching Link My Books' count of 5.
+No database migration needed. No client-side changes. Just redeploy the edge function and re-run the validation sweep.
 
