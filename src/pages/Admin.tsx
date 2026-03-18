@@ -368,6 +368,10 @@ export default function Admin() {
           <TabsContent value="knowledge">
             <KnowledgeBaseDashboard />
           </TabsContent>
+
+          <TabsContent value="growth">
+            <GrowthScoutDashboard />
+          </TabsContent>
         </Tabs>
       </div>
 
