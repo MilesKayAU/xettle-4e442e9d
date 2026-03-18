@@ -44,7 +44,7 @@ export function getPostageDeductionForOrder(
   // Line-level channel takes priority when in mixed mode
   if (fulfilmentMethod === 'mixed_fba_fbm') {
     // Only MFN (merchant-fulfilled) lines get postage deducted
-    if (ch === 'MFN') return postageCostPerOrder;
+    if (ch === 'MFN') return postageCostPerOrder * orderCount;
     // AFN, MCF, or unknown/null → no deduction
     return 0;
   }
