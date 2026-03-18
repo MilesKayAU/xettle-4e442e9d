@@ -34,6 +34,7 @@ import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 import { Save, Upload, Copy } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
+import CoaAuditPanel from './CoaAuditPanel';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
 
@@ -1048,6 +1049,7 @@ export default function AccountMapperCard() {
         </CardHeader>
         <CardContent className="space-y-4">
           {renderCoaRefreshStrip()}
+          {isAdmin && coaAccounts.length > 0 && <CoaAuditPanel />}
           {renderCloneBanner()}
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={handleApplySuggestionsToMissing} className="h-7 text-xs gap-1">
@@ -1183,6 +1185,7 @@ export default function AccountMapperCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         {renderCoaRefreshStrip()}
+        {isAdmin && coaAccounts.length > 0 && <CoaAuditPanel />}
         {renderCloneBanner()}
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
