@@ -1,17 +1,15 @@
 /**
  * FulfilmentMethodsPanel — Settings panel to edit fulfilment method per marketplace.
+ * Includes postage cost input and auto-triggers profit recalculation on changes.
  */
 
-/**
- * FulfilmentMethodsPanel — Settings panel to edit fulfilment method per marketplace.
- */
-
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Store, DollarSign } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Store, DollarSign, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   type FulfilmentMethod,
@@ -31,12 +29,26 @@ interface MarketplaceRow {
 
 const METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'];
 
+async function triggerProfitRecalc(): Promise<{ updated: number; skipped: number } | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('recalculate-profit', {
+      method: 'POST',
+    });
+    if (error) throw error;
+    return data as { updated: number; skipped: number };
+  } catch (e) {
+    console.error('[recalculate-profit] failed:', e);
+    return null;
+  }
+}
+
 export default function FulfilmentMethodsPanel() {
   const [marketplaces, setMarketplaces] = useState<MarketplaceRow[]>([]);
   const [methods, setMethods] = useState<Record<string, FulfilmentMethod>>({});
   const [postageCosts, setPostageCosts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -56,7 +68,6 @@ export default function FulfilmentMethodsPanel() {
 
         setMarketplaces(connRes.data || []);
         setMethods(stored);
-        // Convert numbers to display strings
         const costStrings: Record<string, string> = {};
         for (const [code, val] of Object.entries(costs)) {
           costStrings[code] = val > 0 ? String(val) : '';
@@ -70,6 +81,15 @@ export default function FulfilmentMethodsPanel() {
     })();
   }, []);
 
+  // Background recalc after settings change (debounced via fire-and-forget)
+  const recalcInBackground = useCallback(() => {
+    triggerProfitRecalc().then((result) => {
+      if (result) {
+        console.log(`[profit-recalc] Updated ${result.updated} settlements`);
+      }
+    });
+  }, []);
+
   const handleChange = async (code: string, method: FulfilmentMethod) => {
     setSaving(code);
     try {
@@ -79,6 +99,7 @@ export default function FulfilmentMethodsPanel() {
       await saveFulfilmentMethod(user.id, code, method);
       setMethods(prev => ({ ...prev, [code]: method }));
       toast.success(`Fulfilment method updated for ${code}`);
+      recalcInBackground();
     } catch {
       toast.error('Failed to save fulfilment method');
     } finally {
@@ -95,8 +116,23 @@ export default function FulfilmentMethodsPanel() {
 
       await savePostageCost(user.id, code, num);
       toast.success(`Postage cost saved for ${code}`);
+      recalcInBackground();
     } catch {
       toast.error('Failed to save postage cost');
+    }
+  };
+
+  const handleManualRecalc = async () => {
+    setRecalculating(true);
+    try {
+      const result = await triggerProfitRecalc();
+      if (result) {
+        toast.success(`Profit recalculated for ${result.updated} settlement${result.updated !== 1 ? 's' : ''}`);
+      } else {
+        toast.error('Recalculation failed — check console');
+      }
+    } finally {
+      setRecalculating(false);
     }
   };
 
@@ -112,9 +148,21 @@ export default function FulfilmentMethodsPanel() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted-foreground">
-        Set how orders are fulfilled per marketplace. This affects postage cost deductions in Profit Analysis.
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Set how orders are fulfilled per marketplace. This affects postage cost deductions in Profit Analysis.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleManualRecalc}
+          disabled={recalculating}
+          className="shrink-0 ml-4"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${recalculating ? 'animate-spin' : ''}`} />
+          {recalculating ? 'Recalculating…' : 'Recalculate Profit'}
+        </Button>
+      </div>
       {marketplaces.map((mp) => {
         const effective = getEffectiveMethod(mp.marketplace_code, methods[mp.marketplace_code]);
         const showPostageInput = effective === 'self_ship' || effective === 'third_party_logistics';
