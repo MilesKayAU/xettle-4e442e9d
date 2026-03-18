@@ -256,9 +256,12 @@ async function syncPayoutsForUser(
             totalRefunds += Math.abs(amount);
             totalFees += fee;
             break;
+          case "payout":
+            // Payout is the bank transfer itself — NOT an accounting line item.
+            // Its amount equals bank_deposit; including it would double-count.
+            break;
           case "adjustment":
           case "reserve":
-          case "payout":
             totalAdjustments += amount;
             break;
           default:
@@ -282,6 +285,7 @@ async function syncPayoutsForUser(
       const settlementStatus = isBeforeBoundary ? "ingested" : "ready_to_push";
 
       // ─── Insert settlement (ON CONFLICT DO NOTHING) ─────────
+      // SIGN CONVENTION: fees/expenses stored NEGATIVE per canonical posting rules
       const { error: insertError } = await supabase.from("settlements").upsert({
         user_id: userId,
         settlement_id: String(payout.id),
@@ -295,15 +299,15 @@ async function syncPayoutsForUser(
         deposit_date: payoutDate,
         sales_principal: salesExGst,
         sales_shipping: 0,
-        seller_fees: feesExGst,
+        seller_fees: -feesExGst,           // NEGATIVE: expense reduces invoice total
         fba_fees: 0,
         storage_fees: 0,
         refunds: -totalRefunds,
         reimbursements: 0,
         promotional_discounts: 0,
-        other_fees: totalAdjustments,
+        other_fees: totalAdjustments !== 0 ? totalAdjustments : 0,  // adjustments keep natural sign
         gst_on_income: gstOnIncome,
-        gst_on_expenses: -gstOnExpenses,
+        gst_on_expenses: -gstOnExpenses,   // NEGATIVE: input tax credit
         net_ex_gst: netExGst,
         bank_deposit: netPayout,
         raw_payload: { payout, transactions },

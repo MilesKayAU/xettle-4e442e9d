@@ -463,7 +463,7 @@ export default function ReconciliationHub() {
                         <div><span className="text-muted-foreground">Sales:</span> <span className="text-foreground">{formatAUD(item.salesPrincipal)}</span></div>
                       )}
                       {(item.sellerFees != null || item.fbaFees != null) && (
-                        <div><span className="text-muted-foreground">Fees:</span> <span className="text-foreground">{formatAUD((item.sellerFees || 0) + (item.fbaFees || 0) + (item.otherFees || 0))}</span></div>
+                        <div><span className="text-muted-foreground">Fees:</span> <span className="text-foreground">{formatAUD(-(Math.abs(item.sellerFees || 0) + Math.abs(item.fbaFees || 0) + Math.abs(item.otherFees || 0)))}</span></div>
                       )}
                       {item.refunds != null && item.refunds !== 0 && (
                         <div><span className="text-muted-foreground">Refunds:</span> <span className="text-destructive">{formatAUD(item.refunds)}</span></div>
