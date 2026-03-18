@@ -92,7 +92,7 @@ export default function InsightsDashboard() {
       // Insights is an analytics view — include pre-boundary (historical) settlements
       // so that all marketplace sales data contributes to trends and totals.
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes] = await Promise.all([
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary')
@@ -108,6 +108,9 @@ export default function InsightsDashboard() {
           .select('marketplace_code, cost_per_order'),
         currentUser ? loadFulfilmentMethods(currentUser.id) : Promise.resolve({} as Record<string, FulfilmentMethod>),
         currentUser ? loadPostageCosts(currentUser.id) : Promise.resolve({} as Record<string, number>),
+        supabase
+          .from('settlement_profit')
+          .select('marketplace_code, orders_count'),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
