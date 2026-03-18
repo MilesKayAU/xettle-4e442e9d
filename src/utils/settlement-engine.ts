@@ -466,6 +466,68 @@ export async function postInsertDuplicateCheck(
   }
 }
 
+// ─── Settlement ID Validation ────────────────────────────────────────────────
+
+/**
+ * Patterns that indicate a settlement ID is junk/non-settlement data.
+ * These catch header rows, separator lines, credit note labels, etc.
+ * that a generic parser might accidentally treat as settlement IDs.
+ */
+const JUNK_SETTLEMENT_ID_PATTERNS: RegExp[] = [
+  /^-{3,}$/,                              // Separator lines: "-----"
+  /^={3,}$/,                              // Separator lines: "====="
+  /^~{3,}$/,                              // Separator lines: "~~~~~"
+  /^\*{3,}$/,                             // Separator lines: "*****"
+  /^#{3,}$/,                              // Separator lines: "#####"
+  /^(claim|credit\s*note|debit\s*note|adjustment)\s*(details|summary|report)?/i,
+  /^(ap|ar)?(credit|debit)\s*note/i,      // "APCreditNote", "ARDebitNote"
+  /^(total|subtotal|grand\s*total|sum|summary|header|footer)/i,
+  /^(note|notes|comment|comments|remark|remarks)$/i,
+  /^(page|sheet|tab|section)\s*\d*/i,
+  /^(start|end|begin|finish|close)$/i,
+  /^(n\/a|na|nil|null|none|undefined|tbd|tbc)$/i,
+  /^(report|document|file|export|download)\s*(name|title|date|id)?$/i,
+  /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/, // Pure date used as ID: "15/03/2026"
+  /^[a-z]{1,2}$/i,                        // Single/double letter IDs: "A", "BC"
+];
+
+/**
+ * Characters that should never dominate a settlement ID.
+ * If >50% of the ID is these characters, it's likely junk.
+ */
+function isJunkSettlementId(id: string): { isJunk: boolean; reason?: string } {
+  const trimmed = id.trim();
+
+  // Empty or whitespace-only
+  if (!trimmed) return { isJunk: true, reason: 'Empty settlement ID' };
+
+  // Too short (less than 3 chars)
+  if (trimmed.length < 3) return { isJunk: true, reason: `Settlement ID "${trimmed}" is too short (< 3 chars)` };
+
+  // Too long (> 200 chars) — likely a full row dumped as an ID
+  if (trimmed.length > 200) return { isJunk: true, reason: `Settlement ID is too long (${trimmed.length} chars) — likely a full row` };
+
+  // Check against known junk patterns
+  for (const pattern of JUNK_SETTLEMENT_ID_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return { isJunk: true, reason: `Settlement ID "${trimmed}" matches junk pattern: ${pattern.source}` };
+    }
+  }
+
+  // More than 50% non-alphanumeric (excluding common ID chars like - _ /)
+  const alphanumCount = (trimmed.match(/[a-zA-Z0-9\-_\/]/g) || []).length;
+  if (alphanumCount / trimmed.length < 0.5) {
+    return { isJunk: true, reason: `Settlement ID "${trimmed}" contains >50% special characters` };
+  }
+
+  // Contains "below" or "above" (header text like "Claim details below")
+  if (/\b(below|above|following|attached)\b/i.test(trimmed)) {
+    return { isJunk: true, reason: `Settlement ID "${trimmed}" contains instructional text` };
+  }
+
+  return { isJunk: false };
+}
+
 // ─── Settlement Sanity Validation ────────────────────────────────────────────
 
 export interface SanityCheckResult {
@@ -479,6 +541,12 @@ export interface SanityCheckResult {
  * Catches bad column mappings that produce implausible numbers.
  */
 export function validateSettlementSanity(settlement: StandardSettlement): SanityCheckResult {
+  // ─── Settlement ID validation (first — catches garbage rows before number checks) ───
+  const idCheck = isJunkSettlementId(settlement.settlement_id);
+  if (idCheck.isJunk) {
+    return { passed: false, error: `Invalid settlement ID: ${idCheck.reason}. This row is likely not a settlement.` };
+  }
+
   const sales = Math.abs(settlement.sales_ex_gst);
   const fees = Math.abs(settlement.fees_ex_gst);
   const net = settlement.net_payout;
@@ -498,9 +566,23 @@ export function validateSettlementSanity(settlement: StandardSettlement): Sanity
     return { passed: false, error: `Bank deposit is $0 but sales are ${formatSanityAmount(sales)}. This likely indicates incorrect column mapping.` };
   }
 
+  // ─── Zero net with ANY large component — catches the Kogan credit note scenario ───
+  if (net === 0 && (sales > 100 || fees > 100)) {
+    const maxComponent = Math.max(sales, fees);
+    return { passed: false, error: `Bank deposit is $0 but individual components total ${formatSanityAmount(maxComponent)}. This file likely contains non-settlement data (e.g., claims, credit notes, or order details).` };
+  }
+
   // Fees wildly exceed sales — wrong column mapped to fees
   if (fees > sales * 5 && fees > 500) {
     return { passed: false, error: `Fees of ${formatSanityAmount(fees)} exceed sales of ${formatSanityAmount(sales)} by more than 5×. This likely indicates incorrect column mapping.` };
+  }
+
+  // ─── Sign inversion detector: sales negative + GST positive of same magnitude ───
+  if (settlement.sales_ex_gst < -100 && settlement.gst_on_sales > 100) {
+    const ratio = Math.abs(settlement.sales_ex_gst) / settlement.gst_on_sales;
+    if (ratio > 0.8 && ratio < 1.2) {
+      return { passed: false, error: `Sales (${formatSanityAmount(settlement.sales_ex_gst)}) and GST (${formatSanityAmount(settlement.gst_on_sales)}) appear to be sign-inverted or swapped. This indicates a column mapping error.` };
+    }
   }
 
   // Warning only: negative net with positive sales (valid for refund-heavy periods)

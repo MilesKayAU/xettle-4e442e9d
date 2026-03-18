@@ -189,6 +189,42 @@ export async function saveSettlementCanonical(
 ): Promise<SaveSettlementCanonicalResult> {
   const { row, marketplace, periodStart, periodEnd, settlementId, source } = input;
 
+  // ─── Guardrail: Settlement ID validation ─────────────────────────
+  const { validateSettlementSanity } = await import('@/utils/settlement-engine');
+
+  // Quick settlement ID junk check (reuses the sanity validator)
+  const stubSettlement = {
+    marketplace,
+    settlement_id: settlementId,
+    period_start: periodStart,
+    period_end: periodEnd,
+    sales_ex_gst: row.sales_principal || 0,
+    gst_on_sales: row.gst_on_income || 0,
+    fees_ex_gst: Math.abs(row.seller_fees || 0),
+    gst_on_fees: Math.abs(row.gst_on_expenses || 0),
+    net_payout: row.bank_deposit || 0,
+    source: source as any,
+    reconciles: true,
+  };
+  const sanity = validateSettlementSanity(stubSettlement);
+  if (!sanity.passed) {
+    console.error(`[saveSettlementCanonical] BLOCKED by sanity check: ${settlementId} — ${sanity.error}`);
+    await supabase.from('system_events' as any).insert({
+      user_id: row.user_id,
+      event_type: 'settlement_save_blocked_sanity',
+      severity: 'warning',
+      marketplace_code: marketplace,
+      settlement_id: settlementId,
+      details: { error: sanity.error, source },
+    } as any).catch(() => {});
+    return { success: false, error: sanity.error };
+  }
+
+  // ─── Guardrail: Date validation ──────────────────────────────────
+  if (!periodStart || !periodEnd) {
+    return { success: false, error: 'Settlement dates are missing. Cannot save without period_start and period_end.' };
+  }
+
   // Step 1: Insert
   const { error } = await supabase.from('settlements').insert(row as any);
   if (error) return { success: false, error: error.message };
