@@ -179,9 +179,28 @@ serve(async (req) => {
       console.error('Failed to load user account codes:', e);
     }
 
+    // Canonical key label map (mirrors src/utils/marketplace-codes.ts)
+    const CANONICAL_KEY_LABELS: Record<string, string> = {
+      amazon_au: 'Amazon AU', amazon_us: 'Amazon USA', amazon_uk: 'Amazon UK',
+      amazon_ca: 'Amazon CA', amazon_jp: 'Amazon JP', amazon_sg: 'Amazon SG',
+      shopify_payments: 'Shopify', shopify_orders: 'Shopify',
+      ebay_au: 'eBay AU', bunnings: 'Bunnings', catch: 'Catch',
+      mydeal: 'MyDeal', kogan: 'Kogan', bigw: 'BigW',
+      woolworths: 'Woolworths', woolworths_marketplus: 'Everyday Market',
+      everyday_market: 'Everyday Market', theiconic: 'The Iconic', etsy: 'Etsy',
+    };
+
+    const getKeyCandidates = (mp?: string): string[] => {
+      if (!mp) return [];
+      const trimmed = mp.trim();
+      if (!trimmed) return [];
+      const normalized = CANONICAL_KEY_LABELS[trimmed] || CANONICAL_KEY_LABELS[trimmed.toLowerCase()] || trimmed;
+      return [...new Set([normalized, trimmed].filter(Boolean))];
+    };
+
     const getCode = (category: string, mp?: string): string | null => {
-      if (mp) {
-        const mpKey = `${category}:${mp}`;
+      for (const candidate of getKeyCandidates(mp)) {
+        const mpKey = `${category}:${candidate}`;
         if (userAccountCodes[mpKey]) return userAccountCodes[mpKey];
       }
       if (userAccountCodes[category]) return userAccountCodes[category];
