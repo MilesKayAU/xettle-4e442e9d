@@ -150,15 +150,20 @@ export function getMarketplaceCoverage(
     const templates = findTemplateAccounts(mp, coaAccounts);
     const categories = [...new Set(templates.map(t => t.category))];
 
+    // Required categories for full coverage
+    const CORE_CATEGORIES = new Set(['Sales', 'Seller Fees']);
+    const hasCoreCategories = [...CORE_CATEGORIES].every(c => categories.includes(c));
+
     let status: CoverageStatus;
     if (templates.length === 0) {
       status = 'uncovered';
       uncovered.push(mp);
-    } else if (categories.length >= 3) {
-      // At least Sales + Fees + one other = covered
+    } else if (hasCoreCategories && categories.length >= 2) {
+      // Has at least Sales + Fees = covered (may still have gaps but has a structure)
       status = 'covered';
       covered.push(mp);
     } else {
+      // Has some accounts but missing core categories
       status = 'partial';
       partial.push(mp);
     }
