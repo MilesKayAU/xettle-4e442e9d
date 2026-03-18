@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet, Truck } from 'lucide-react';
+import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet, Truck, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
