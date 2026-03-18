@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
+import { useAiActionTracker } from '@/ai/context/useAiActionTracker';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/use-admin-auth';
 import SetupWizard from '@/components/onboarding/SetupWizard';
