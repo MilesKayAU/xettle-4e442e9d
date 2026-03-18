@@ -31,6 +31,7 @@ import {
 } from '@/actions';
 import { generateNextCode, getAccountTypeForCategory } from '@/policy/accountCodePolicy';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
+import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 import { Save, Upload, Copy } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
 
