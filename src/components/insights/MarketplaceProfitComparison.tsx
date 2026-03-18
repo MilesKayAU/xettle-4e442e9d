@@ -81,7 +81,7 @@ export default function MarketplaceProfitComparison() {
           .eq('user_id', user.id),
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, sales_shipping, bank_deposit')
+          .select('marketplace, sales_principal, sales_shipping, bank_deposit, source, seller_fees, raw_payload')
           .eq('user_id', user.id)
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
