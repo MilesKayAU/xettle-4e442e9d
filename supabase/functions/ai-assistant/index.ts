@@ -2,6 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
+const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const MODEL = "google/gemini-3-flash-preview";
+
 const SYSTEM_PROMPT = `You are Xettle's accounting assistant for Australian marketplace sellers.
 You help small business owners understand their settlement data, reconciliation gaps, Xero invoices, and marketplace fees.
 Speak plainly — no accounting jargon. The user is a seller, not an accountant.
@@ -20,40 +23,49 @@ IMPORTANT BEHAVIOR:
 
 const MONTHLY_LIMIT = 50;
 
-// ─── Tool definitions for Anthropic ──────────────────────────────────────────
+// ─── Tool definitions (OpenAI function-calling format) ───────────────────────
 
 const TOOL_DEFINITIONS = [
   {
-    name: "getPageReadinessSummary",
-    description: "Get summary counts: outstanding invoices by state, settlements by status, ready-to-push counts, gap warnings. Use when user asks about overall status or what needs attention.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        routeId: { type: "string", description: "The current page route ID" },
+    type: "function" as const,
+    function: {
+      name: "getPageReadinessSummary",
+      description: "Get summary counts: outstanding invoices by state, settlements by status, ready-to-push counts, gap warnings. Use when user asks about overall status or what needs attention.",
+      parameters: {
+        type: "object",
+        properties: {
+          routeId: { type: "string", description: "The current page route ID" },
+        },
+        required: ["routeId"],
       },
-      required: ["routeId"],
     },
   },
   {
-    name: "getInvoiceStatusByXeroInvoiceId",
-    description: "Get match state, payment status, and readiness of a specific Xero invoice. Use when user asks about a specific invoice.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        xeroInvoiceId: { type: "string", description: "The Xero invoice ID" },
+    type: "function" as const,
+    function: {
+      name: "getInvoiceStatusByXeroInvoiceId",
+      description: "Get match state, payment status, and readiness of a specific Xero invoice. Use when user asks about a specific invoice.",
+      parameters: {
+        type: "object",
+        properties: {
+          xeroInvoiceId: { type: "string", description: "The Xero invoice ID" },
+        },
+        required: ["xeroInvoiceId"],
       },
-      required: ["xeroInvoiceId"],
     },
   },
   {
-    name: "getSettlementStatus",
-    description: "Get posting state, readiness blockers, and Xero sync status for a specific settlement. Use when user asks about a settlement's status or readiness.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        settlementId: { type: "string", description: "The settlement ID" },
+    type: "function" as const,
+    function: {
+      name: "getSettlementStatus",
+      description: "Get posting state, readiness blockers, and Xero sync status for a specific settlement. Use when user asks about a settlement's status or readiness.",
+      parameters: {
+        type: "object",
+        properties: {
+          settlementId: { type: "string", description: "The settlement ID" },
+        },
+        required: ["settlementId"],
       },
-      required: ["settlementId"],
     },
   },
 ];
@@ -69,7 +81,6 @@ async function executeTool(
   try {
     switch (toolName) {
       case "getPageReadinessSummary": {
-        // Fetch counts from settlements + outstanding_invoices_cache
         const [settlementsRes, outstandingRes, readyRes, pushedRes, gapRes] = await Promise.all([
           serviceClient.from("settlements")
             .select("id", { count: "exact", head: true })
@@ -94,7 +105,6 @@ async function executeTool(
             .eq("overall_status", "gap_detected"),
         ]);
 
-        // Also get breakdown by xero_status
         const { data: statusBreakdown } = await serviceClient
           .from("settlements")
           .select("xero_status, status")
@@ -105,7 +115,7 @@ async function executeTool(
 
         const xeroStatusCounts: Record<string, number> = {};
         for (const s of (statusBreakdown || [])) {
-          const key = s.xero_status || s.status || 'unknown';
+          const key = s.xero_status || s.status || "unknown";
           xeroStatusCounts[key] = (xeroStatusCounts[key] || 0) + 1;
         }
 
@@ -121,7 +131,6 @@ async function executeTool(
 
       case "getInvoiceStatusByXeroInvoiceId": {
         const xeroInvoiceId = toolInput.xeroInvoiceId;
-        // Look in outstanding_invoices_cache
         const { data: cached } = await serviceClient
           .from("outstanding_invoices_cache")
           .select("*")
@@ -129,7 +138,6 @@ async function executeTool(
           .eq("xero_invoice_id", xeroInvoiceId)
           .maybeSingle();
 
-        // Look for matched settlement
         const { data: settlement } = await serviceClient
           .from("settlements")
           .select("settlement_id, marketplace, status, xero_status, xero_invoice_id, xero_invoice_number, bank_verified, posting_state, period_start, period_end, bank_deposit")
@@ -176,7 +184,6 @@ async function executeTool(
           return JSON.stringify({ error: "Settlement not found", settlement_id: settlementId });
         }
 
-        // Check account mappings for readiness
         const { data: mappings } = await serviceClient
           .from("marketplace_account_mapping")
           .select("category, account_code")
@@ -217,6 +224,36 @@ async function executeTool(
   }
 }
 
+// ─── Gateway helper ──────────────────────────────────────────────────────────
+
+function buildGatewayPayload(
+  systemPrompt: string,
+  messages: Array<{ role: string; content: string; tool_call_id?: string; tool_calls?: any[] }>,
+  stream: boolean,
+) {
+  return {
+    model: MODEL,
+    messages: [{ role: "system", content: systemPrompt }, ...messages],
+    tools: TOOL_DEFINITIONS,
+    stream,
+    ...(stream ? {} : { max_tokens: 1024 }),
+  };
+}
+
+async function callGateway(
+  apiKey: string,
+  payload: Record<string, any>,
+): Promise<Response> {
+  return fetch(GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -238,7 +275,7 @@ serve(async (req) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      { global: { headers: { Authorization: authHeader } } },
     );
 
     const token = authHeader.replace("Bearer ", "");
@@ -259,7 +296,7 @@ serve(async (req) => {
     if (!isPro && !isAdmin && !isStarter) {
       return new Response(
         JSON.stringify({ error: "AI Assistant is a Pro feature. Upgrade to unlock." }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -267,7 +304,7 @@ serve(async (req) => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
     if (!isAdmin) {
@@ -284,7 +321,7 @@ serve(async (req) => {
             error: "Monthly AI question limit reached (50/50). Resets next month.",
             usage: { used: usage.question_count, limit: MONTHLY_LIMIT },
           }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
     }
@@ -297,86 +334,118 @@ serve(async (req) => {
       });
     }
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const systemPrompt = context
       ? `${SYSTEM_PROMPT}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}`
       : SYSTEM_PROMPT;
 
-    // ─── Tool-calling loop (max 3 rounds) ────────────────────────────
-    let anthropicMessages = messages.map((m: any) => ({
+    // ─── Tool-calling loop (max 3 rounds, non-streaming) ─────────────
+    let gatewayMessages: any[] = messages.map((m: any) => ({
       role: m.role,
       content: m.content,
     }));
 
-    let finalTextContent = "";
     const MAX_TOOL_ROUNDS = 3;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1024,
-          system: systemPrompt,
-          messages: anthropicMessages,
-          tools: TOOL_DEFINITIONS,
-          // Only stream the final round (when no tool_use)
-          ...(round === MAX_TOOL_ROUNDS - 1 ? {} : {}),
-        }),
-      });
+      const payload = buildGatewayPayload(systemPrompt, gatewayMessages, false);
+      const response = await callGateway(LOVABLE_API_KEY, payload);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Anthropic API error:", response.status, errorText);
+        console.error("AI gateway error:", response.status, errorText);
+
+        if (response.status === 429) {
+          return new Response(JSON.stringify({ error: "Rate limits exceeded, please try again later." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ error: "Payment required, please add funds to your workspace." }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         return new Response(
           JSON.stringify({ error: "AI service error" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       const result = await response.json();
+      const choice = result.choices?.[0];
+      const message = choice?.message;
 
-      // Check if the response contains tool_use blocks
-      const toolUseBlocks = (result.content || []).filter((b: any) => b.type === "tool_use");
-      const textBlocks = (result.content || []).filter((b: any) => b.type === "text");
-
-      if (toolUseBlocks.length === 0) {
-        // No tool calls — collect text and break
-        finalTextContent = textBlocks.map((b: any) => b.text).join("");
+      if (!message) {
         break;
       }
 
-      // Execute tool calls
-      const toolResults: any[] = [];
-      for (const toolBlock of toolUseBlocks) {
+      const toolCalls = message.tool_calls;
+
+      if (!toolCalls || toolCalls.length === 0) {
+        // No tool calls — break, we'll stream the final round
+        break;
+      }
+
+      // Append assistant message with tool_calls
+      gatewayMessages.push({
+        role: "assistant",
+        content: message.content || null,
+        tool_calls: toolCalls,
+      });
+
+      // Execute each tool call and append results
+      for (const tc of toolCalls) {
+        const args = typeof tc.function.arguments === "string"
+          ? JSON.parse(tc.function.arguments)
+          : tc.function.arguments || {};
+
         const toolResult = await executeTool(
-          toolBlock.name,
-          toolBlock.input || {},
+          tc.function.name,
+          args,
           userId,
-          serviceClient
+          serviceClient,
         );
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: toolBlock.id,
+
+        gatewayMessages.push({
+          role: "tool",
+          tool_call_id: tc.id,
           content: toolResult,
         });
       }
+    }
 
-      // Append assistant response + tool results to conversation
-      anthropicMessages = [
-        ...anthropicMessages,
-        { role: "assistant", content: result.content },
-        { role: "user", content: toolResults },
-      ];
+    // ─── Final streaming call ────────────────────────────────────────
+    const streamPayload = buildGatewayPayload(systemPrompt, gatewayMessages, true);
+    const streamResp = await callGateway(LOVABLE_API_KEY, streamPayload);
+
+    if (!streamResp.ok) {
+      const errorText = await streamResp.text();
+      console.error("AI gateway stream error:", streamResp.status, errorText);
+
+      if (streamResp.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limits exceeded, please try again later." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (streamResp.status === 402) {
+        return new Response(JSON.stringify({ error: "Payment required, please add funds to your workspace." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({ error: "AI service error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // ─── Increment usage counter ─────────────────────────────────────
@@ -403,32 +472,15 @@ serve(async (req) => {
       });
     }
 
-    // ─── Return final text as SSE stream (compatibility with client) ──
-    const { readable, writable } = new TransformStream();
-    const writer = writable.getWriter();
-    const encoder = new TextEncoder();
-
-    (async () => {
-      try {
-        // Emit the final text as a single SSE chunk
-        const chunk = {
-          choices: [{ delta: { content: finalTextContent } }],
-        };
-        await writer.write(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-        await writer.write(encoder.encode("data: [DONE]\n\n"));
-      } finally {
-        writer.close();
-      }
-    })();
-
-    return new Response(readable, {
+    // Pipe the gateway SSE stream directly to the client
+    return new Response(streamResp.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
     console.error("ai-assistant error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

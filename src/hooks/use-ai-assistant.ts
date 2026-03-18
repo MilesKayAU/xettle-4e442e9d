@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { type AiPageContext } from '@/ai/context/aiContextContract';
 
@@ -11,12 +11,34 @@ interface UseAiAssistantOptions {
   context?: AiPageContext;
 }
 
+const STORAGE_KEY = 'xettle_ai_messages';
+
+function loadPersistedMessages(): AiMessage[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistMessages(msgs: AiMessage[]) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
+  } catch { /* quota exceeded — silent */ }
+}
+
 export function useAiAssistant({ context }: UseAiAssistantOptions = {}) {
-  const [messages, setMessages] = useState<AiMessage[]>([]);
+  const [messages, setMessages] = useState<AiMessage[]>(loadPersistedMessages);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usageCount, setUsageCount] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Persist messages on every change
+  useEffect(() => {
+    persistMessages(messages);
+  }, [messages]);
 
   const loadUsage = useCallback(async () => {
     try {
@@ -162,6 +184,7 @@ export function useAiAssistant({ context }: UseAiAssistantOptions = {}) {
   const clearMessages = useCallback(() => {
     setMessages([]);
     setError(null);
+    sessionStorage.removeItem(STORAGE_KEY);
   }, []);
 
   return {
