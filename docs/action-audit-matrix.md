@@ -215,9 +215,12 @@
 | `settlement-engine.ts` | `syncSettlementToXero()` orchestrator | ✅ Delegates to `pushSettlementToXero()` for invoke |
 | `settlement-engine.ts` | `rollbackSettlementFromXero()` | ✅ Thin wrapper → `rollbackFromXero()` |
 | `settlement-engine.ts` | `deleteSettlement()` | ✅ Thin wrapper → `@/actions/settlements.deleteSettlement()` |
+| `settlement-engine.ts` | `saveSettlement()` + boundary insert | ✅ Both use `saveSettlementCanonical()` — no direct insert |
+| `settlement-engine.ts` | `saveWithAtomicPromote()` (RPC) | ✅ Post-RPC `applySourcePriority()` synchronous call |
+| `AccountingDashboard.tsx` | `saveAmazonSettlement()` | ✅ Uses `saveSettlementCanonical()` — no direct insert |
 | `marketplace-token-map.ts` | Ghost cleanup (delete only) | ✅ Cleanup utility, no provisioning |
 
-**No allowlisted legacy bypasses remain.** All client-side paths route through canonical actions.
+**No allowlisted legacy bypasses remain.** All client-side settlement inserts go through `saveSettlementCanonical()`. Guardrail test blocks ALL direct `from('settlements').insert()` outside `src/actions/` with zero exemptions.
 
 ---
 
