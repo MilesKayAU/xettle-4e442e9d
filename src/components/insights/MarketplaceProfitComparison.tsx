@@ -159,6 +159,56 @@ export default function MarketplaceProfitComparison() {
 
       const results: AggregatedMarketplace[] = [];
 
+      // ─── Platform Family Fee Redistribution ───────────────────────────
+      // MyDeal, BigW, and Everyday Market share the Woolworths MarketPlus platform.
+      // Platform-level fees get assigned to MyDeal even when sales are on BigW/Everyday Market.
+      const PLATFORM_FAMILIES: Record<string, string[]> = {
+        woolworths_marketplus: ['mydeal', 'bigw', 'everyday_market', 'woolworths_market'],
+      };
+
+      const redistributedFees: Record<string, number> = {};
+      for (const siblings of Object.values(PLATFORM_FAMILIES)) {
+        const presentSiblings = siblings.filter(s => settlementMap.has(s));
+        if (presentSiblings.length < 2) continue;
+
+        const feeHeavy: string[] = [];
+        const salesSiblings: string[] = [];
+        for (const s of presentSiblings) {
+          const agg = settlementMap.get(s)!;
+          const sales = agg.revenue;
+          const fees = agg.csvFees + Math.abs(agg.csvSalesExGst > 0 ? 0 : agg.apiSyncSalesExGst * (COMMISSION_ESTIMATES[s] || DEFAULT_COMMISSION_RATE));
+          const totalFees = fees || Math.abs(agg.csvFees);
+          if (totalFees > Math.max(sales * 1.5, 50)) {
+            feeHeavy.push(s);
+          } else if (sales > 0) {
+            salesSiblings.push(s);
+          }
+        }
+
+        if (feeHeavy.length === 0 || salesSiblings.length === 0) continue;
+
+        let totalExcessFees = 0;
+        for (const fh of feeHeavy) {
+          const agg = settlementMap.get(fh)!;
+          const ownFees = agg.revenue * 0.15;
+          totalExcessFees += Math.max(agg.csvFees - ownFees, 0);
+        }
+
+        let totalSiblingSales = 0;
+        const siblingSalesMap: Record<string, number> = {};
+        for (const s of salesSiblings) {
+          const sales = settlementMap.get(s)!.revenue;
+          siblingSalesMap[s] = sales;
+          totalSiblingSales += sales;
+        }
+
+        if (totalSiblingSales > 0 && totalExcessFees > 0) {
+          for (const s of salesSiblings) {
+            redistributedFees[s] = (totalExcessFees * siblingSalesMap[s]) / totalSiblingSales;
+          }
+        }
+      }
+
       // Add marketplaces with profit data (postage already included in gross_profit)
       for (const [mp, agg] of mpMap) {
         const avg_margin = agg.margins.length > 0
@@ -169,10 +219,10 @@ export default function MarketplaceProfitComparison() {
           marketplace_name: MARKETPLACE_LABELS[mp] || mp,
           avg_margin: Math.round(avg_margin * 10) / 10,
           total_revenue: Math.round(agg.revenue),
-          total_profit: Math.round(agg.profit),
+          total_profit: Math.round(agg.profit - (redistributedFees[mp] || 0)),
           periods: agg.count,
           has_cost_data: true,
-          has_estimated_fees: settlementMap.get(mp)?.hasEstimated || false,
+          has_estimated_fees: settlementMap.get(mp)?.hasEstimated || redistributedFees[mp] > 0 || false,
         });
       }
 
@@ -190,16 +240,20 @@ export default function MarketplaceProfitComparison() {
 
         // Handle mixed CSV + api_sync: extrapolate real CSV fee rate onto api_sync rows
         if (agg.apiSyncCount > 0 && agg.csvCount > 0) {
-          // Use real CSV fee rate
           const realFeeRate = agg.csvSalesExGst > 0 ? agg.csvFees / agg.csvSalesExGst : (COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE);
           const estimatedApiSyncFees = agg.apiSyncSalesExGst * realFeeRate;
           adjustedPayout = agg.csvPayout + (agg.apiSyncSalesExGst + agg.apiSyncGst - estimatedApiSyncFees) - estimatedPostageDeduction;
           hasEstimated = true;
         } else if (agg.apiSyncCount > 0 && agg.csvCount === 0) {
-          // All api_sync — apply estimated commission
           const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
           const estimatedFees = agg.apiSyncSalesExGst * estimatedRate;
           adjustedPayout = agg.revenue - estimatedFees - estimatedPostageDeduction;
+          hasEstimated = true;
+        }
+
+        // Deduct redistributed platform fees
+        if (redistributedFees[mp]) {
+          adjustedPayout -= redistributedFees[mp];
           hasEstimated = true;
         }
 
