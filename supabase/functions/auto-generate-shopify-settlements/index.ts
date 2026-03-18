@@ -16,6 +16,24 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logger } from '../_shared/logger.ts';
 
+// ─── Estimated Commission Rates for Shopify Sub-Channels ────────────────────
+// These are applied to api_sync settlements so the Insights page shows realistic
+// fee data rather than 0% fees. Flagged as estimates in raw_payload metadata.
+// Configurable here — adjust rates as marketplace terms change.
+const COMMISSION_ESTIMATES: Record<string, number> = {
+  kogan:            0.12,  // ~12% commission
+  bigw:             0.08,  // ~8% commission
+  everyday_market:  0.10,  // ~10% commission
+  mydeal:           0.10,  // ~10% commission
+  bunnings:         0.10,  // ~10% Mirakl commission
+  catch:            0.12,  // ~12% commission
+  ebay_au:          0.13,  // ~13% final value fee
+  iconic:           0.15,  // ~15% commission
+  tradesquare:      0.10,  // ~10% commission
+  tiktok:           0.05,  // ~5% commission
+};
+const DEFAULT_COMMISSION_RATE = 0.10; // 10% fallback for unknown marketplaces
+
 // ─── Hardcoded fallback registries (used only if DB query fails) ────────────
 
 const FALLBACK_MARKETPLACE_REGISTRY: Record<string, { code: string; name: string }> = {
@@ -364,6 +382,12 @@ Deno.serve(async (req) => {
     const totalDiscounts = groupOrders.reduce((sum, o) => sum + o.total_discounts, 0);
     const bankDeposit = groupOrders.reduce((sum, o) => sum + o.total_price, 0);
 
+    // Apply estimated commission for this marketplace
+    const commissionRate = COMMISSION_ESTIMATES[mpCode] || DEFAULT_COMMISSION_RATE;
+    const estimatedSellerFees = -Math.round(salesPrincipal * commissionRate * 100) / 100;
+    // Adjusted bank deposit = gross sales - estimated fees
+    const adjustedBankDeposit = Math.round((bankDeposit + estimatedSellerFees) * 100) / 100;
+
     const settlementRecord = {
       settlement_id: settlementId,
       user_id: userId,
@@ -376,12 +400,15 @@ Deno.serve(async (req) => {
       sales_principal: Math.round(salesPrincipal * 100) / 100,
       gst_on_income: Math.round(gstOnIncome * 100) / 100,
       promotional_discounts: Math.round(totalDiscounts * 100) / 100,
-      bank_deposit: Math.round(bankDeposit * 100) / 100,
+      seller_fees: estimatedSellerFees,
+      bank_deposit: adjustedBankDeposit,
       raw_payload: {
         order_count: groupOrders.length,
         sample_orders: groupOrders.slice(0, 5).map(o => o.order_name),
         generated_at: new Date().toISOString(),
-        source_version: 'auto-generate-shopify-settlements-v2',
+        source_version: 'auto-generate-shopify-settlements-v3',
+        fees_estimated: true,
+        commission_rate_applied: commissionRate,
       },
     };
 
@@ -436,6 +463,7 @@ Deno.serve(async (req) => {
           sales_principal: settlementRecord.sales_principal,
           gst_on_income: settlementRecord.gst_on_income,
           promotional_discounts: settlementRecord.promotional_discounts,
+          seller_fees: settlementRecord.seller_fees,
           bank_deposit: settlementRecord.bank_deposit,
           period_start: settlementRecord.period_start,
           period_end: settlementRecord.period_end,

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
-import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown } from 'lucide-react';
+import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } from '@/utils/fulfilment-settings';
@@ -23,6 +23,7 @@ interface AggregatedMarketplace {
   total_profit: number;
   periods: number;
   has_cost_data: boolean;
+  has_estimated_fees: boolean;
 }
 
 function formatAUD(amount: number): string {
@@ -80,7 +81,7 @@ export default function MarketplaceProfitComparison() {
           .eq('user_id', user.id),
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, sales_shipping, bank_deposit')
+          .select('marketplace, sales_principal, sales_shipping, bank_deposit, source, seller_fees, raw_payload')
           .eq('user_id', user.id)
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
@@ -109,15 +110,17 @@ export default function MarketplaceProfitComparison() {
       }
 
       // Also aggregate settlement-level data for marketplaces without profit rows
-      const settlementMap = new Map<string, { revenue: number; payout: number; count: number }>();
+      const settlementMap = new Map<string, { revenue: number; payout: number; count: number; hasEstimated: boolean }>();
       for (const row of settlements) {
         const mp = row.marketplace;
         if (!mp) continue;
-        if (!settlementMap.has(mp)) settlementMap.set(mp, { revenue: 0, payout: 0, count: 0 });
+        if (!settlementMap.has(mp)) settlementMap.set(mp, { revenue: 0, payout: 0, count: 0, hasEstimated: false });
         const entry = settlementMap.get(mp)!;
         entry.revenue += (Number(row.sales_principal) || 0) + (Number(row.sales_shipping) || 0);
         entry.payout += Number(row.bank_deposit) || 0;
         entry.count++;
+        const payload = row.raw_payload as any;
+        if (payload?.fees_estimated === true) entry.hasEstimated = true;
       }
 
       const results: AggregatedMarketplace[] = [];
@@ -135,6 +138,7 @@ export default function MarketplaceProfitComparison() {
           total_profit: Math.round(agg.profit),
           periods: agg.count,
           has_cost_data: true,
+          has_estimated_fees: settlementMap.get(mp)?.hasEstimated || false,
         });
       }
 
@@ -157,6 +161,7 @@ export default function MarketplaceProfitComparison() {
           total_profit: Math.round(adjustedPayout),
           periods: agg.count,
           has_cost_data: false,
+          has_estimated_fees: agg.hasEstimated,
         });
       }
 
@@ -256,6 +261,12 @@ export default function MarketplaceProfitComparison() {
                       {isWorst && <TrendingDown className="h-3 w-3 text-destructive" />}
                       {!mp.has_cost_data && (
                         <Badge variant="outline" className="text-[9px] px-1 py-0 border-muted-foreground/30 text-muted-foreground">payout margin</Badge>
+                      )}
+                      {mp.has_estimated_fees && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400/50 text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="h-2 w-2 mr-0.5" />
+                          Estimated
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell className={`text-xs text-right font-semibold ${getMarginColor(mp.avg_margin)}`}>

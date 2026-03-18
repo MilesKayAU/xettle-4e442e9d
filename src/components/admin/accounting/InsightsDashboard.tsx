@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet, Truck } from 'lucide-react';
+import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet, Truck, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -47,6 +47,11 @@ interface MarketplaceStats {
   returnAfterAdsAndShipping: number | null;
   fulfilmentMethod: FulfilmentMethod;
   fulfilmentUnknown: boolean;
+  // Data quality flags
+  hasEstimatedFees: boolean;
+  hasMissingFeeData: boolean;
+  hasFeeAnomaly: boolean;
+  hasNegativePayout: boolean;
   // Fee breakdown
   commissionTotal: number;
   fbaTotal: number;
@@ -95,7 +100,7 @@ export default function InsightsDashboard() {
       const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes] = await Promise.all([
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary')
+          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
           .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")')
@@ -234,6 +239,37 @@ export default function InsightsDashboard() {
         if (otherFeesTotal > 0) feeBreakdown.push({ label: 'Other fees', amount: otherFeesTotal, pctOfSales: totalSales > 0 ? otherFeesTotal / totalSales : 0, color: 'bg-muted-foreground/40' });
         feeBreakdown.sort((a, b) => b.amount - a.amount);
 
+        // ─── Universal Data Quality Guards ──────────────────────────────
+        // These guards apply to ALL marketplaces (present and future) based on
+        // universal patterns rather than per-marketplace patches.
+        const hasEstimatedFees = rows.some(r => {
+          const payload = r.raw_payload as any;
+          return payload?.fees_estimated === true;
+        });
+        const apiSyncZeroFeeRows = rows.filter(r => 
+          (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01
+        );
+        const hasMissingFeeData = totalFees === 0 && totalSales > 500;
+        const hasFeeAnomaly = totalFees > totalSales;
+        const hasNegativePayout = netPayout < 0 && totalSales > 0;
+
+        // For fee/commission calculations, exclude zero-fee api_sync rows
+        // so they don't dilute the averages
+        const feeRelevantRows = rows.filter(r => {
+          const isApiSyncZeroFee = (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01;
+          return !isApiSyncZeroFee;
+        });
+        // Recalculate commission metrics excluding zero-fee api_sync rows if mixed
+        const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
+          ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
+          : commissionTotal;
+        const adjustedTotalSalesForFees = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
+          ? feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0)
+          : totalSales;
+        const adjustedAvgCommission = adjustedTotalSalesForFees > 0 
+          ? Math.min(adjustedCommissionTotal / adjustedTotalSalesForFees, 1) 
+          : avgCommission;
+
         results.push({
           marketplace: mp,
           label: MARKETPLACE_LABELS[mp] || mp,
@@ -246,20 +282,24 @@ export default function InsightsDashboard() {
           settlementCount: rows.length,
           latestPeriodEnd,
           earliestPeriodStart,
-          avgCommission,
+          avgCommission: adjustedAvgCommission,
           adSpend,
           returnAfterAds,
           shippingCostPerOrder,
           estimatedShippingCost,
           returnAfterShipping,
           returnAfterAdsAndShipping,
-          commissionTotal,
+          commissionTotal: adjustedCommissionTotal,
           fbaTotal,
           storageTotal,
           otherFeesTotal,
           feeBreakdown,
           fulfilmentMethod,
           fulfilmentUnknown,
+          hasEstimatedFees,
+          hasMissingFeeData,
+          hasFeeAnomaly,
+          hasNegativePayout,
         });
       }
 
@@ -596,10 +636,31 @@ export default function InsightsDashboard() {
                 <div key={s.marketplace} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-foreground">{s.label}</span>
                         {s.returnRatio === bestRatio && stats.length > 1 && (
                           <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
+                        )}
+                        {s.hasEstimatedFees && (
+                          <Badge variant="outline" className="text-[10px] h-4 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20">
+                            <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                            Estimated
+                          </Badge>
+                        )}
+                        {s.hasMissingFeeData && !s.hasEstimatedFees && (
+                          <Badge variant="outline" className="text-[10px] h-4 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20">
+                            Fee data missing
+                          </Badge>
+                        )}
+                        {s.hasFeeAnomaly && (
+                          <Badge variant="destructive" className="text-[10px] h-4">
+                            Fee anomaly
+                          </Badge>
+                        )}
+                        {s.hasNegativePayout && (
+                          <Badge variant="outline" className="text-[10px] h-4 border-destructive/50 text-destructive">
+                            Negative payout
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
