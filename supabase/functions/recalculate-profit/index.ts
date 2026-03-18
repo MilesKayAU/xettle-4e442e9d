@@ -2,6 +2,8 @@
  * recalculate-profit — One-shot or on-demand edge function to recalculate
  * all settlement_profit rows for the authenticated user using current
  * fulfilment methods and postage costs from app_settings.
+ *
+ * Phase A: Uses settlement_lines.fulfilment_channel for mixed FBA/FBM split.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -75,10 +77,10 @@ Deno.serve(async (req) => {
 
     if (sErr) throw sErr;
 
-    // Load settlement lines and product costs
+    // Load settlement lines (now including fulfilment_channel) and product costs
     const [linesRes, costsRes] = await Promise.all([
       admin.from("settlement_lines")
-        .select("settlement_id, sku, amount, order_id, transaction_type")
+        .select("settlement_id, sku, amount, order_id, transaction_type, fulfilment_channel")
         .eq("user_id", userId),
       admin.from("product_costs")
         .select("sku, cost, currency, label")
@@ -109,6 +111,35 @@ Deno.serve(async (req) => {
     function getEffectiveMethod(mp: string, stored?: string | null): string {
       if (stored) return stored;
       return isAmazonCode(mp) ? "marketplace_fulfilled" : "not_sure";
+    }
+
+    /**
+     * Canonical postage deduction — mirrors getPostageDeductionForOrder from
+     * src/utils/fulfilment-settings.ts (duplicated here for edge function context)
+     */
+    function getPostageDeduction(
+      fulfilmentMethod: string | null | undefined,
+      lineChannel: string | null | undefined,
+      postageCostPerOrder: number,
+    ): number {
+      if (!postageCostPerOrder || postageCostPerOrder <= 0) return 0;
+      const ch = (lineChannel || "").toUpperCase().trim();
+
+      if (fulfilmentMethod === "mixed_fba_fbm") {
+        if (ch === "MFN") return postageCostPerOrder;
+        return 0;
+      }
+
+      if (ch === "AFN" || ch === "MCF") return 0;
+      if (ch === "MFN") return postageCostPerOrder;
+
+      switch (fulfilmentMethod) {
+        case "self_ship":
+        case "third_party_logistics":
+          return postageCostPerOrder;
+        default:
+          return 0;
+      }
     }
 
     let updated = 0;
@@ -164,10 +195,31 @@ Deno.serve(async (req) => {
       const ordersCount = orderIds.size || revenueLines.length || 1;
       const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
       const postageCostPerOrder = postageCosts[mp] || 0;
-      const postageDeduction =
-        fulfilmentMethod === "self_ship" || fulfilmentMethod === "third_party_logistics"
-          ? postageCostPerOrder * ordersCount
-          : 0;
+
+      // Calculate postage deduction using canonical function
+      let postageDeduction = 0;
+
+      if (fulfilmentMethod === "mixed_fba_fbm") {
+        // Line-level split
+        const hasLineData = revenueLines.some((l) => l.fulfilment_channel);
+        if (hasLineData) {
+          // Deduplicate by order_id
+          const orderChannels = new Map<string, string | null>();
+          for (const line of revenueLines) {
+            const key = line.order_id || `line_${revenueLines.indexOf(line)}`;
+            if (!orderChannels.has(key)) {
+              orderChannels.set(key, line.fulfilment_channel || null);
+            }
+          }
+          for (const [, ch] of orderChannels) {
+            postageDeduction += getPostageDeduction(fulfilmentMethod, ch, postageCostPerOrder);
+          }
+        }
+        // else: no line data (legacy) → zero deduction (treat all as FBA)
+      } else {
+        // Non-mixed: canonical function with null channel × order count
+        postageDeduction = getPostageDeduction(fulfilmentMethod, null, postageCostPerOrder) * ordersCount;
+      }
 
       const grossProfit = salesExGst - totalCogs - feesAmount - postageDeduction;
       const marginPercent = salesExGst > 0 ? (grossProfit / salesExGst) * 100 : 0;

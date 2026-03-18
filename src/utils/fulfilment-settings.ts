@@ -7,14 +7,64 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
-export type FulfilmentMethod = 'self_ship' | 'third_party_logistics' | 'marketplace_fulfilled' | 'not_sure';
+export type FulfilmentMethod = 'self_ship' | 'third_party_logistics' | 'marketplace_fulfilled' | 'mixed_fba_fbm' | 'not_sure';
 
 export const FULFILMENT_LABELS: Record<FulfilmentMethod, string> = {
   self_ship: 'Self-fulfilled',
   third_party_logistics: '3PL (third-party logistics)',
   marketplace_fulfilled: 'Marketplace-fulfilled (e.g. FBA)',
+  mixed_fba_fbm: 'Mixed (FBA + FBM)',
   not_sure: 'Not sure yet',
 };
+
+/** Fulfilment channel values stored per settlement line */
+export type FulfilmentChannel = 'AFN' | 'MFN' | 'MCF' | null;
+
+/**
+ * Canonical postage deduction function.
+ * This is the ONLY function that should determine postage cost for an order.
+ * No other code may multiply postage cost directly.
+ *
+ * @param fulfilmentMethod - The marketplace-level fulfilment setting
+ * @param lineChannel - The line-level fulfilment channel (AFN/MFN/MCF/null)
+ * @param postageCostPerOrder - The configured cost per order
+ * @returns The postage amount to deduct for this order/line
+ */
+export function getPostageDeductionForOrder(
+  fulfilmentMethod: string | null | undefined,
+  lineChannel: FulfilmentChannel | string | null | undefined,
+  postageCostPerOrder: number,
+): number {
+  // Zero-cost guard
+  if (!postageCostPerOrder || postageCostPerOrder <= 0) return 0;
+
+  const ch = (lineChannel || '').toUpperCase().trim();
+
+  // Line-level channel takes priority when in mixed mode
+  if (fulfilmentMethod === 'mixed_fba_fbm') {
+    // Only MFN (merchant-fulfilled) lines get postage deducted
+    if (ch === 'MFN') return postageCostPerOrder;
+    // AFN, MCF, or unknown/null → no deduction
+    return 0;
+  }
+
+  // For explicit line channels regardless of marketplace setting
+  if (ch === 'AFN' || ch === 'MCF') return 0;
+  if (ch === 'MFN') return postageCostPerOrder;
+
+  // Fall back to marketplace-level method
+  switch (fulfilmentMethod) {
+    case 'self_ship':
+    case 'third_party_logistics':
+      return postageCostPerOrder;
+    case 'marketplace_fulfilled':
+    case 'not_sure':
+    case null:
+    case undefined:
+    default:
+      return 0;
+  }
+}
 
 /** Amazon marketplace codes default to marketplace_fulfilled */
 const AMAZON_PREFIXES = ['amazon'];

@@ -19,6 +19,7 @@ import {
   getEffectiveMethod,
   loadPostageCosts,
   savePostageCost,
+  isAmazonCode,
 } from '@/utils/fulfilment-settings';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
@@ -27,7 +28,8 @@ interface MarketplaceRow {
   marketplace_name: string;
 }
 
-const METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'];
+const BASE_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'];
+const AMAZON_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'mixed_fba_fbm', 'not_sure'];
 
 async function triggerProfitRecalc(): Promise<{ updated: number; skipped: number } | null> {
   try {
@@ -165,7 +167,9 @@ export default function FulfilmentMethodsPanel() {
       </div>
       {marketplaces.map((mp) => {
         const effective = getEffectiveMethod(mp.marketplace_code, methods[mp.marketplace_code]);
-        const showPostageInput = effective === 'self_ship' || effective === 'third_party_logistics';
+        const isAmazon = isAmazonCode(mp.marketplace_code);
+        const methodOptions = isAmazon ? AMAZON_METHOD_OPTIONS : BASE_METHOD_OPTIONS;
+        const showPostageInput = effective === 'self_ship' || effective === 'third_party_logistics' || effective === 'mixed_fba_fbm';
         return (
           <div key={mp.marketplace_code} className="rounded-lg border border-border p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -180,7 +184,7 @@ export default function FulfilmentMethodsPanel() {
               onValueChange={(v) => handleChange(mp.marketplace_code, v as FulfilmentMethod)}
               className="grid grid-cols-1 sm:grid-cols-2 gap-2"
             >
-              {METHOD_OPTIONS.map((opt) => (
+              {methodOptions.map((opt) => (
                 <div key={opt} className="flex items-center space-x-2">
                   <RadioGroupItem value={opt} id={`${mp.marketplace_code}-${opt}`} />
                   <Label htmlFor={`${mp.marketplace_code}-${opt}`} className="text-xs cursor-pointer">
@@ -193,7 +197,9 @@ export default function FulfilmentMethodsPanel() {
               <div className="pt-1 space-y-1">
                 <Label htmlFor={`postage-${mp.marketplace_code}`} className="text-xs text-muted-foreground flex items-center gap-1">
                   <DollarSign className="h-3 w-3" />
-                  Avg. postage cost per order
+                  {effective === 'mixed_fba_fbm'
+                    ? 'Avg. postage cost per order (applied to merchant-fulfilled FBM orders only)'
+                    : 'Avg. postage cost per order'}
                 </Label>
                 <div className="relative w-40">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>

@@ -1609,6 +1609,7 @@ export type Database = {
           amount_type: string | null
           connection_id: string | null
           created_at: string
+          fulfilment_channel: string | null
           id: string
           marketplace_name: string | null
           order_id: string | null
@@ -1625,6 +1626,7 @@ export type Database = {
           amount_type?: string | null
           connection_id?: string | null
           created_at?: string
+          fulfilment_channel?: string | null
           id?: string
           marketplace_name?: string | null
           order_id?: string | null
@@ -1641,6 +1643,7 @@ export type Database = {
           amount_type?: string | null
           connection_id?: string | null
           created_at?: string
+          fulfilment_channel?: string | null
           id?: string
           marketplace_name?: string | null
           order_id?: string | null
