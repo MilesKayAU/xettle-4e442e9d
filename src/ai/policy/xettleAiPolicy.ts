@@ -20,11 +20,12 @@ export const XETTLE_AI_CAPABILITIES = {
     "Help interpret GST obligations from settlement data",
     "Guide users through the upload → map → push workflow",
     "Explain what's blocking a push and how to fix it",
+    "Guide users to the COA Clone flow for creating new marketplace accounts in Xero",
   ],
 
   /** Things the AI assistant must NEVER suggest */
   CANNOT_DO: [
-    "Create, rename, or modify Xero accounts",
+    "Create, rename, or modify Xero accounts directly (the COA Clone feature handles account creation with PIN approval)",
     "Auto-save account mappings without user confirmation",
     "Assume account numbers (e.g. '200 = Sales')",
     "Create accounting entries from orders or payments",
