@@ -47,12 +47,12 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, supabaseServiceKey);
     const userId = user.id;
 
-    // Load user's fulfilment methods and postage costs from app_settings
+    // Load user's fulfilment methods, postage costs, and MCF costs from app_settings
     const { data: settingsRows } = await admin
       .from("app_settings")
       .select("key, value")
       .eq("user_id", userId)
-      .or("key.like.fulfilment_method:%,key.like.postage_cost:%");
+      .or("key.like.fulfilment_method:%,key.like.postage_cost:%,key.like.mcf_cost:%");
 
     const fulfilmentMethods: Record<string, string> = {};
     const postageCosts: Record<string, number> = {};
