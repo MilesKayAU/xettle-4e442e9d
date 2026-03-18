@@ -239,6 +239,37 @@ export default function InsightsDashboard() {
         if (otherFeesTotal > 0) feeBreakdown.push({ label: 'Other fees', amount: otherFeesTotal, pctOfSales: totalSales > 0 ? otherFeesTotal / totalSales : 0, color: 'bg-muted-foreground/40' });
         feeBreakdown.sort((a, b) => b.amount - a.amount);
 
+        // ─── Universal Data Quality Guards ──────────────────────────────
+        // These guards apply to ALL marketplaces (present and future) based on
+        // universal patterns rather than per-marketplace patches.
+        const hasEstimatedFees = rows.some(r => {
+          const payload = r.raw_payload as any;
+          return payload?.fees_estimated === true;
+        });
+        const apiSyncZeroFeeRows = rows.filter(r => 
+          (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01
+        );
+        const hasMissingFeeData = totalFees === 0 && totalSales > 500;
+        const hasFeeAnomaly = totalFees > totalSales;
+        const hasNegativePayout = netPayout < 0 && totalSales > 0;
+
+        // For fee/commission calculations, exclude zero-fee api_sync rows
+        // so they don't dilute the averages
+        const feeRelevantRows = rows.filter(r => {
+          const isApiSyncZeroFee = (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01;
+          return !isApiSyncZeroFee;
+        });
+        // Recalculate commission metrics excluding zero-fee api_sync rows if mixed
+        const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
+          ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
+          : commissionTotal;
+        const adjustedTotalSalesForFees = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
+          ? feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0)
+          : totalSales;
+        const adjustedAvgCommission = adjustedTotalSalesForFees > 0 
+          ? Math.min(adjustedCommissionTotal / adjustedTotalSalesForFees, 1) 
+          : avgCommission;
+
         results.push({
           marketplace: mp,
           label: MARKETPLACE_LABELS[mp] || mp,
@@ -251,20 +282,24 @@ export default function InsightsDashboard() {
           settlementCount: rows.length,
           latestPeriodEnd,
           earliestPeriodStart,
-          avgCommission,
+          avgCommission: adjustedAvgCommission,
           adSpend,
           returnAfterAds,
           shippingCostPerOrder,
           estimatedShippingCost,
           returnAfterShipping,
           returnAfterAdsAndShipping,
-          commissionTotal,
+          commissionTotal: adjustedCommissionTotal,
           fbaTotal,
           storageTotal,
           otherFeesTotal,
           feeBreakdown,
           fulfilmentMethod,
           fulfilmentUnknown,
+          hasEstimatedFees,
+          hasMissingFeeData,
+          hasFeeAnomaly,
+          hasNegativePayout,
         });
       }
 
