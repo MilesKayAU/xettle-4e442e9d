@@ -127,6 +127,14 @@ Deno.serve(async (req) => {
     const nullOrderLineCount = nullLines.filter((l) => !l.order_id).length;
 
     // Step 2: Batch update by order_id
+    // Helper: apply the correct fulfilment_channel filter for updates
+    const applyChannelFilter = (q: any) => {
+      if (forceReclassify) {
+        return q.or("fulfilment_channel.is.null,fulfilment_channel.eq.AFN_inferred,fulfilment_channel.eq.MFN_inferred");
+      }
+      return q.is("fulfilment_channel", null);
+    };
+
     let classifiedFba = 0;
     let classifiedFbm = 0;
     const orderIds = [...orderHasAnyLine];
