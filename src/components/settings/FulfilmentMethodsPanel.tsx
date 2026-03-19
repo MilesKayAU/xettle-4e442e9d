@@ -61,6 +61,8 @@ export default function FulfilmentMethodsPanel() {
   const [saving, setSaving] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
   const [mixedModePromptDismissed, setMixedModePromptDismissed] = useState(true);
+  const [mcfDetected, setMcfDetected] = useState<McfDetectionMap>({});
+  const [mfnDetected, setMfnDetected] = useState<MfnDetectionMap>({});
 
   useEffect(() => {
     (async () => {
