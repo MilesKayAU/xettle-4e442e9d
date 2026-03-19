@@ -233,6 +233,12 @@ export default function ReconciliationHealthPanel() {
   const passCount = checks.filter(c => c.status === 'pass').length;
   const totalCount = checks.length;
 
+  // Hide entirely when all checks pass — free up dashboard space
+  if (overall === 'ready') return null;
+
+  // Only show incomplete/failed checks
+  const incompleteChecks = checks.filter(c => c.status !== 'pass');
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -247,12 +253,12 @@ export default function ReconciliationHealthPanel() {
           </div>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Complete all checks below to enable automated Xero posting and reconciliation.
+          Complete the remaining {incompleteChecks.length} item{incompleteChecks.length !== 1 ? 's' : ''} to enable automated Xero posting and reconciliation.
         </p>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {checks.map((check, i) => (
+          {incompleteChecks.map((check, i) => (
             <div key={i} className="flex items-start gap-2 text-sm">
               <StatusIcon status={check.status} />
               <div className="flex-1 min-w-0">
