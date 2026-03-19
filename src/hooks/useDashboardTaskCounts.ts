@@ -189,6 +189,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         label: 'Fulfilment methods not configured',
         severity: 'warning',
         message: `Review and save fulfilment method for: ${unconfiguredMarketplaces.join(', ')}.`,
+        actionLabel: 'Configure',
+        actionTarget: 'settings:fulfilment',
       });
     }
     if (missingPostageCost.length > 0) {
@@ -197,6 +199,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         label: 'Postage cost not set',
         severity: 'warning',
         message: `Set your average postage cost for: ${missingPostageCost.join(', ')} in Settings → Fulfilment Methods.`,
+        actionLabel: 'Set costs',
+        actionTarget: 'settings:fulfilment',
       });
     }
 
