@@ -54,6 +54,7 @@ async function triggerProfitRecalc(): Promise<{ updated: number; skipped: number
 }
 
 export default function FulfilmentMethodsPanel() {
+  const queryClient = useQueryClient();
   const [marketplaces, setMarketplaces] = useState<MarketplaceRow[]>([]);
   const [methods, setMethods] = useState<Record<string, FulfilmentMethod>>({});
   const [postageCosts, setPostageCosts] = useState<Record<string, string>>({});
