@@ -10,6 +10,24 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { getPostageDeductionForOrder } from "../_shared/fulfilment-policy.ts";
 
+/** Paginated fetch helper — avoids the 1000-row default cap */
+async function fetchAllRows<T>(
+  query: any,
+  pageSize = 1000,
+): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
   const headers = getCorsHeaders(origin);
