@@ -173,6 +173,7 @@ export default function AccountingBoundarySettings({
 
   const sourceLabel =
     boundarySource === 'xero_scan' ? 'Xero scan' :
+    boundarySource === 'auto_first_upload' ? 'Auto-detected from first upload' :
     boundarySource === 'manual' ? 'Manual' : 'Today';
 
   return (
