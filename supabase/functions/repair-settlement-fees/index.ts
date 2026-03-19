@@ -138,22 +138,26 @@ Deno.serve(async (req) => {
   }
 
   // ─── Step 2: Remove stale settlement_profit rows ──────────────────
-  // Get all active settlement IDs for this user
-  const { data: activeSettlements } = await admin
-    .from("settlements")
-    .select("settlement_id")
-    .eq("user_id", userId)
-    .eq("is_hidden", false)
-    .is("duplicate_of_settlement_id", null)
-    .not("status", "in", '("push_failed_permanent","duplicate_suppressed")');
+  // Get all active settlement IDs for this user (paginated)
+  const activeSettlements = await fetchAllRows<{ settlement_id: string }>(
+    admin
+      .from("settlements")
+      .select("settlement_id")
+      .eq("user_id", userId)
+      .eq("is_hidden", false)
+      .is("duplicate_of_settlement_id", null)
+      .not("status", "in", '("push_failed_permanent","duplicate_suppressed")')
+  );
 
-  const activeIds = new Set((activeSettlements || []).map(s => s.settlement_id));
+  const activeIds = new Set(activeSettlements.map(s => s.settlement_id));
 
-  // Get all profit rows
-  const { data: profitRows } = await admin
-    .from("settlement_profit")
-    .select("id, settlement_id, marketplace_code, margin_percent, gross_revenue")
-    .eq("user_id", userId);
+  // Get all profit rows (paginated)
+  const profitRows = await fetchAllRows<{ id: string; settlement_id: string; marketplace_code: string; margin_percent: number; gross_revenue: number }>(
+    admin
+      .from("settlement_profit")
+      .select("id, settlement_id, marketplace_code, margin_percent, gross_revenue")
+      .eq("user_id", userId)
+  );
 
   const toDelete: string[] = [];
   for (const pr of (profitRows || [])) {
