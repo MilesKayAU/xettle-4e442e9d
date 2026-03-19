@@ -125,6 +125,11 @@ Deno.serve(async (req) => {
       boundary_date: string | null
       trial_started_at: string | null
       pushed_to_xero_count: number
+      ai_questions_total: number
+      xero_api_calls: number
+      syncs_total: number
+      settlement_saves: number
+      usage_breakdown: Record<string, number>
     }
 
     // Group settlements by user
