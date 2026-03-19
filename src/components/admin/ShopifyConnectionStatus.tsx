@@ -342,6 +342,18 @@ const ShopifyConnectionStatus = () => {
       return;
     }
 
+    // If already connected to a different store, show replacement warning
+    if (status?.connected && status.shops.length > 0 && status.shops[0].shop_domain !== domain) {
+      setPendingConnectDomain(domain);
+      setStoreReplaceOpen(true);
+      return;
+    }
+
+    await saveManualToken(domain, token);
+  };
+
+  const saveManualToken = async (domain: string, token?: string) => {
+    const accessToken = token || manualToken.trim();
     setSavingToken(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -351,12 +363,18 @@ const ShopifyConnectionStatus = () => {
         return;
       }
 
+      // Deactivate other tokens first
+      await supabase.from('shopify_tokens' as any).update({ is_active: false } as any)
+        .eq('user_id', session.user.id)
+        .neq('shop_domain', domain);
+
       const { error } = await supabase.from('shopify_tokens').upsert({
         user_id: session.user.id,
         shop_domain: domain,
-        access_token: token,
+        access_token: accessToken,
         scope: 'custom_app',
-      }, { onConflict: 'user_id,shop_domain' } as any);
+        is_active: true,
+      } as any, { onConflict: 'user_id,shop_domain' } as any);
 
       if (error) throw error;
 
