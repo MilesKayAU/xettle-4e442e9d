@@ -21,8 +21,6 @@ import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
 import {
-  COMMISSION_ESTIMATES,
-  DEFAULT_COMMISSION_RATE,
   normalizeMarketplace as canonicalNormalizeMarketplace,
   PLATFORM_FAMILIES,
 } from '@/utils/insights-fee-attribution';
