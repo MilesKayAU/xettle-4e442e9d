@@ -172,7 +172,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       const fulfilmentValue = settingsMap.get(`fulfilment_method:${conn.marketplace_code}`);
       if (!fulfilmentValue || fulfilmentValue === 'not_sure') {
         unconfiguredMarketplaces.push(conn.marketplace_name || conn.marketplace_code);
-      } else if (fulfilmentValue === 'self_ship' || fulfilmentValue === 'third_party_logistics') {
+      } else if (fulfilmentValue === 'self_ship' || fulfilmentValue === 'third_party_logistics' || fulfilmentValue === 'mixed_fba_fbm') {
         // Check if postage cost is set
         const postageCost = settingsMap.get(`postage_cost:${conn.marketplace_code}`);
         const costNum = parseFloat(postageCost || '');
@@ -196,6 +196,31 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         severity: 'warning',
         message: `Set your average postage cost for: ${missingPostageCost.join(', ')} in Settings → Fulfilment Methods.`,
       });
+    }
+
+    // 6. FBM mismatch detection — MFN lines found but marketplace set to FBA-only
+    const mfnLines = mfnLinesRes.data || [];
+    if (mfnLines.length > 0) {
+      // Get marketplace codes from settlements that have MFN lines
+      const mfnSettlementIds = new Set(mfnLines.map(l => l.settlement_id));
+      const mfnMarketplaces = new Set(
+        settlements
+          .filter(s => mfnSettlementIds.has(s.id))
+          .map(s => s.marketplace)
+          .filter(Boolean)
+      );
+
+      for (const conn of connections) {
+        const fulfilmentValue = settingsMap.get(`fulfilment_method:${conn.marketplace_code}`);
+        if (fulfilmentValue === 'marketplace_fulfilled' && mfnMarketplaces.has(conn.marketplace_code)) {
+          setupWarnings.push({
+            key: `fbm_mismatch_detected:${conn.marketplace_code}`,
+            label: 'FBM orders detected on FBA-only account',
+            severity: 'warning',
+            message: `We found merchant-fulfilled orders for ${conn.marketplace_name || conn.marketplace_code}. Update your fulfilment method to "Mixed FBA + FBM" in Settings → Fulfilment Methods for accurate profit.`,
+          });
+        }
+      }
     }
   }
 
