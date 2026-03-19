@@ -606,26 +606,26 @@ export default function InsightsDashboard() {
     return `Advertising reduced return from $${s.returnRatio.toFixed(2)} → $${s.returnAfterAds.toFixed(2)}`;
   }
 
-  // Generate the main insight sentence
-  // For "Best Performer", prefer marketplaces with real fee data over estimated
+  // Best performer = highest returnRatio across ALL marketplaces (not filtered by estimated status)
   const topRevenue = [...stats].sort((a, b) => b.totalSales - a.totalSales)[0];
-  const realFeeStats = stats.filter(s => !s.hasEstimatedFees);
-  const bestProfit = (realFeeStats.length > 0 ? realFeeStats : stats)
-    .sort((a, b) => b.returnRatio - a.returnRatio)[0];
+  const bestProfit = [...stats].sort((a, b) => b.returnRatio - a.returnRatio)[0];
 
   function getHeroInsight(): string {
     if (stats.length === 1) {
-      return `${stats[0].label} returns $${stats[0].returnRatio.toFixed(2)} for every $1 sold after marketplace fees.`;
+      const r = stats[0].returnRatio;
+      if (r < 0.60) {
+        return `${stats[0].label} keeps $${r.toFixed(2)} per $1 sold — ${((1 - r) * 100).toFixed(0)}% goes to marketplace fees and deductions.`;
+      }
+      return `${stats[0].label} returns $${r.toFixed(2)} for every $1 sold after marketplace fees.`;
     }
     // If same marketplace leads both, simple message
     if (topRevenue.marketplace === bestProfit.marketplace) {
-      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and profit efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1).`;
+      if (topRevenue.returnRatio < 0.60) {
+        return `${topRevenue.label} leads in revenue (${formatCurrency(topRevenue.totalSales)}) and retains the most at $${topRevenue.returnRatio.toFixed(2)} per $1 — though ${((1 - topRevenue.returnRatio) * 100).toFixed(0)}% is consumed by fees.`;
+      }
+      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1).`;
     }
-    const profitMultiple = bestProfit.returnRatio / topRevenue.returnRatio;
-    if (profitMultiple >= 1.5) {
-      return `${topRevenue.label} generates the most revenue, but ${bestProfit.label} returns ${profitMultiple.toFixed(1)}× more profit per sale.`;
-    }
-    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} keeps $${bestProfit.returnRatio.toFixed(2)} per $1 sold.`;
+    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} retains the most at $${bestProfit.returnRatio.toFixed(2)} per $1 sold.`;
   }
 
   // Stacked bar segments for $1 breakdown
