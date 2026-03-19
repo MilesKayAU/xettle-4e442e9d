@@ -4,6 +4,7 @@
 // xero-mapping-readiness.ts, bookkeeper-readiness.ts
 // ══════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { analyseCoA, type RegistryEntry, type ProcessorEntry, type CoaAccount as CoaIntelAccount } from '@/utils/coa-intelligence';
 import { Button } from '@/components/ui/button';
