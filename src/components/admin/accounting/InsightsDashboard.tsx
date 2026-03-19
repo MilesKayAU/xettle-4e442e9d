@@ -382,15 +382,36 @@ export default function InsightsDashboard() {
           ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
           : commissionTotal;
 
+        // ─── Build fee breakdown using EFFECTIVE values (after estimation & redistribution) ───
+        const effectiveCommission = adjustedCommissionTotal + (redistributedPlatformFees > 0 ? redistributedPlatformFees : 0);
+        // For all-api_sync case, commission IS the effective total fees (no FBA/storage/other)
+        const finalCommission = (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length)
+          ? effectiveTotalFees
+          : effectiveCommission;
+        const effectiveOther = otherFeesTotal + (redistributedPlatformFees < 0 ? redistributedPlatformFees : 0);
+        const finalOther = Math.max(effectiveOther, 0);
+
+        const feeBreakdown: FeeBreakdown[] = [];
+        if (finalCommission > 0) feeBreakdown.push({ label: 'Commission', amount: finalCommission, pctOfSales: totalSales > 0 ? finalCommission / totalSales : 0, color: 'bg-primary' });
+        if (totalRefunds > 0) feeBreakdown.push({ label: 'Refunds', amount: totalRefunds, pctOfSales: totalSales > 0 ? totalRefunds / totalSales : 0, color: 'bg-muted-foreground/60' });
+        if (fbaTotal > 0) feeBreakdown.push({ label: 'FBA Fulfilment', amount: fbaTotal, pctOfSales: totalSales > 0 ? fbaTotal / totalSales : 0, color: 'bg-destructive' });
+        if (storageTotal > 0) feeBreakdown.push({ label: 'Storage', amount: storageTotal, pctOfSales: totalSales > 0 ? storageTotal / totalSales : 0, color: 'bg-muted-foreground' });
+        if (finalOther > 0) feeBreakdown.push({ label: 'Other fees', amount: finalOther, pctOfSales: totalSales > 0 ? finalOther / totalSales : 0, color: 'bg-muted-foreground/40' });
+        feeBreakdown.sort((a, b) => b.amount - a.amount);
+
+        // ─── Compute feeLoad from breakdown so Total row always equals sum of rows ───
+        const breakdownTotal = feeBreakdown.reduce((sum, f) => sum + f.amount, 0);
+        const consistentFeeLoad = totalSales > 0 ? Math.min(breakdownTotal / totalSales, 1) : 0;
+
         results.push({
           marketplace: mp,
           label: MARKETPLACE_LABELS[mp] || mp,
           totalSales,
-          totalFees: effectiveTotalFees,
+          totalFees: breakdownTotal,
           totalRefunds,
           netPayout: effectiveNetPayout,
           returnRatio: effectiveReturnRatio,
-          feeLoad: effectiveFeeLoad,
+          feeLoad: consistentFeeLoad,
           settlementCount: rows.length,
           latestPeriodEnd,
           earliestPeriodStart,
@@ -404,13 +425,13 @@ export default function InsightsDashboard() {
           commissionTotal: adjustedCommissionTotal,
           fbaTotal,
           storageTotal,
-          otherFeesTotal,
+          otherFeesTotal: finalOther,
           feeBreakdown,
           fulfilmentMethod,
           fulfilmentUnknown,
           hasEstimatedFees: effectiveHasEstimatedFees,
           hasMissingFeeData,
-          hasFeeAnomaly: effectiveTotalFees > totalSales,
+          hasFeeAnomaly: breakdownTotal > totalSales,
           hasNegativePayout: effectiveNetPayout < 0 && totalSales > 0,
         });
       }
