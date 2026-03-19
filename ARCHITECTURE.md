@@ -958,6 +958,36 @@ Tables with no write protection needed (non-financial, user-scoped):
 | **No pagination on settlements query in InsightsDashboard** | Client-side `loadStats()` fetches all settlements without `.range()` | 1000-row cap applies; large accounts see incomplete insights | Medium — Add paginated fetch or server-side aggregation |
 | **Settlement_profit re-calculation is full-replace** | `recalculate-profit` upserts ALL profit rows on every run | Expensive for incremental changes | Low — Add incremental mode (only recalc settlements modified since last run) |
 
+#### Onboarding — Xero Health Check (Not Yet Built)
+
+| Gap | Risk | Severity | Recommendation |
+|-----|------|----------|----------------|
+| **No inbound Xero data quality scan** | System is defensive about outbound pushes (5-point safety preview, mapping gates, DRAFT enforcement) but blind to pre-existing problems in the connected Xero org | High trust risk during onboarding — bookkeepers won't trust Xettle if it doesn't acknowledge the mess it's inheriting | High — Build before first paid cohort |
+
+**Problem**: Real customers migrating from LMB, A2X, or manual processes will have Xero organisations containing duplicate invoices, wrong account codes, missing GST, orphaned contacts, and inconsistent naming. Xettle currently ignores all of this. The accounting boundary date prevents Xettle from *adding* to the mess, but it doesn't help the bookkeeper understand or clean up what's already there.
+
+**Proposed Feature: "Xero Health Check"**
+
+A structured onboarding scan that runs against the connected Xero org and surfaces known problem patterns:
+
+| Check | What It Detects | Why It Matters |
+|-------|----------------|----------------|
+| **Duplicate invoice detection** | Multiple AUTHORISED/PAID invoices with the same marketplace reference (e.g. two invoices both referencing settlement `16727637921`) | Common when switching from another tool or manual process; causes double-counted revenue |
+| **Account code audit** | Marketplace income/fees posted to generic accounts (e.g. all Amazon fees to "General Expenses") instead of dedicated accounts | Prevents forensic reconciliation; Xettle's account mapper can fix this going forward but the bookkeeper needs to know it was wrong before |
+| **GST classification errors** | Invoices with `LineAmountTypes: Exclusive` where the marketplace collects GST (platform-collected model), or vice versa | Causes BAS discrepancies; particularly acute for Amazon AU where GST model changed |
+| **Orphaned marketplace contacts** | Multiple Xero contacts for the same marketplace (e.g. "Amazon", "Amazon AU", "Amazon.com.au", "AMAZON SELLER") | Splits reporting; Xettle's contact classification can recommend consolidation |
+| **Missing settlement coverage** | Periods where bank deposits from marketplace narration patterns exist but no corresponding invoice was created | Identifies historical gaps that the bookkeeper may need to journal-adjust |
+| **Stale draft invoices** | DRAFT invoices older than 90 days with marketplace references that were never approved | Likely abandoned attempts from a previous tool; should be voided or completed |
+
+**Implementation approach**:
+- New edge function `xero-health-check` that uses the existing Xero token to scan invoices, contacts, and bank transactions for the last 12 months
+- Returns a structured report with severity levels (🔴 action required, 🟡 review recommended, 🟢 clean)
+- Surface in a new "Xero Health Check" card during onboarding (post-Xero-connect, pre-first-upload)
+- Results stored in `app_settings` so the bookkeeper can revisit and track resolution
+- Each finding links to the specific Xero invoice/contact where possible
+
+**Trust impact**: This is the single highest-trust feature Xettle could ship for bookkeeper onboarding. It says "we looked at your books, we understand the problems, and we won't make them worse." No competitor does this.
+
 ### 18.5 Competitive Positioning
 
 | Capability | Xettle | LinkMyBooks | A2X | Connector by Synder |
