@@ -57,6 +57,8 @@ export const SETTLEMENT_STATUS = {
   PUSH_FAILED: 'push_failed',
   /** Exhausted retries */
   PUSH_FAILED_PERMANENT: 'push_failed_permanent',
+  /** Account mapping references invalid/inactive Xero accounts */
+  MAPPING_ERROR: 'mapping_error',
 } as const;
 
 export type SettlementStatus = typeof SETTLEMENT_STATUS[keyof typeof SETTLEMENT_STATUS];
