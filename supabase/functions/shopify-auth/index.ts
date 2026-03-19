@@ -261,8 +261,9 @@ Deno.serve(async (req) => {
 
       const { data: tokens, error } = await supabase
         .from('shopify_tokens')
-        .select('shop_domain, scope, installed_at')
+        .select('shop_domain, scope, installed_at, is_active')
         .eq('user_id', userId)
+        .eq('is_active', true)
 
       if (error) {
         console.error('Failed to fetch Shopify status:', error)
