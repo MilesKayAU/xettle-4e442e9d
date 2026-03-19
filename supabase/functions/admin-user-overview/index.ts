@@ -53,6 +53,8 @@ Deno.serve(async (req) => {
       { data: ebayTokens },
       { data: profitData },
       { data: settingsData },
+      { data: aiUsageData },
+      { data: systemEventsData },
     ] = await Promise.all([
       admin.auth.admin.listUsers({ perPage: 1000 }),
       admin.from('settlements')
@@ -69,6 +71,10 @@ Deno.serve(async (req) => {
       admin.from('app_settings')
         .select('user_id, key, value')
         .in('key', ['tax_profile', 'accounting_boundary_date', 'trial_started_at']),
+      admin.from('ai_usage')
+        .select('user_id, month, question_count'),
+      admin.from('system_events')
+        .select('user_id, event_type'),
     ])
 
     const xeroSet = new Set((xeroTokens || []).map(t => t.user_id))
@@ -82,43 +88,18 @@ Deno.serve(async (req) => {
       userSettings[s.user_id][s.key] = s.value || ''
     }
 
-    // Build per-user marketplace breakdown
-    type MpBreakdown = {
-      marketplace: string
-      settlement_count: number
-      gross_sales: number
-      total_fees: number
-      refunds: number
-      net_deposit: number
-      gst: number
+    // Build per-user AI usage map
+    const userAiUsage: Record<string, number> = {}
+    for (const a of aiUsageData || []) {
+      userAiUsage[a.user_id] = (userAiUsage[a.user_id] || 0) + (a.question_count || 0)
     }
 
-    type UserOverview = {
-      id: string
-      email: string
-      created_at: string
-      last_sign_in_at: string | null
-      xero_connected: boolean
-      amazon_connected: boolean
-      ebay_connected: boolean
-      marketplace_count: number
-      marketplaces: string[]
-      total_settlements: number
-      total_gross_sales: number
-      total_fees: number
-      total_refunds: number
-      total_net_deposit: number
-      total_gst: number
-      fee_rate_pct: number
-      profit_margin_pct: number | null
-      total_orders: number
-      total_units: number
-      total_gross_profit: number
-      marketplace_breakdown: MpBreakdown[]
-      tax_profile: string | null
-      boundary_date: string | null
-      trial_started_at: string | null
-      pushed_to_xero_count: number
+    // Build per-user system event counts
+    const SYNC_EVENTS = ['xero_sync_complete', 'xero_api_call', 'shopify_fetch_complete', 'shopify_payout_synced', 'amazon_fetch_complete', 'amazon_settlement_synced', 'ebay_fetch_complete', 'ebay_settlement_imported', 'bank_txn_fetch']
+    const userEventCounts: Record<string, Record<string, number>> = {}
+    for (const e of systemEventsData || []) {
+      if (!userEventCounts[e.user_id]) userEventCounts[e.user_id] = {}
+      userEventCounts[e.user_id][e.event_type] = (userEventCounts[e.user_id][e.event_type] || 0) + 1
     }
 
     // Group settlements by user
@@ -147,14 +128,15 @@ Deno.serve(async (req) => {
       userProfit[p.user_id].units += p.units_sold || 0
     }
 
-    const users: UserOverview[] = (authUsers?.users || []).map(u => {
+    const users = (authUsers?.users || []).map(u => {
       const setts = userSettlements[u.id] || []
       const conns = userConnections[u.id] || new Set<string>()
       const profit = userProfit[u.id]
       const settings = userSettings[u.id] || {}
+      const events = userEventCounts[u.id] || {}
 
       // Build marketplace breakdown
-      const mpMap: Record<string, MpBreakdown> = {}
+      const mpMap: Record<string, { marketplace: string; settlement_count: number; gross_sales: number; total_fees: number; refunds: number; net_deposit: number; gst: number }> = {}
       for (const s of setts) {
         const mp = s.marketplace || 'Unknown'
         if (!mpMap[mp]) {
@@ -177,6 +159,18 @@ Deno.serve(async (req) => {
       const pushedCount = setts.filter(s => s.xero_status === 'pushed' || s.xero_status === 'posted').length
 
       const allMarketplaces = [...new Set([...Object.keys(mpMap), ...conns])]
+
+      // Usage metrics
+      const aiQuestions = userAiUsage[u.id] || 0
+      const xeroApiCalls = events['xero_api_call'] || 0
+      const syncsTotal = SYNC_EVENTS.reduce((sum, evt) => sum + (events[evt] || 0), 0)
+      const settlementSaves = events['settlement_saved'] || 0
+
+      // Top event types for this user (for breakdown)
+      const usageBreakdown: Record<string, number> = {}
+      for (const [evt, count] of Object.entries(events)) {
+        if (count > 0) usageBreakdown[evt] = count
+      }
 
       return {
         id: u.id,
@@ -204,6 +198,11 @@ Deno.serve(async (req) => {
         boundary_date: settings.accounting_boundary_date || null,
         trial_started_at: settings.trial_started_at || null,
         pushed_to_xero_count: pushedCount,
+        ai_questions_total: aiQuestions,
+        xero_api_calls: xeroApiCalls,
+        syncs_total: syncsTotal,
+        settlement_saves: settlementSaves,
+        usage_breakdown: usageBreakdown,
       }
     })
 
@@ -220,6 +219,9 @@ Deno.serve(async (req) => {
       xero_connected: users.filter(u => u.xero_connected).length,
       amazon_connected: users.filter(u => u.amazon_connected).length,
       ebay_connected: users.filter(u => u.ebay_connected).length,
+      total_ai_questions: users.reduce((s, u) => s + u.ai_questions_total, 0),
+      total_xero_api_calls: users.reduce((s, u) => s + u.xero_api_calls, 0),
+      total_syncs: users.reduce((s, u) => s + u.syncs_total, 0),
     }
 
     return new Response(JSON.stringify({ users, summary }), {

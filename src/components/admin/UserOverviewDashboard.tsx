@@ -5,9 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { RefreshCw, ChevronDown, ChevronRight, TrendingUp, DollarSign, Store, Package, Users, Search, ArrowUpDown } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronRight, TrendingUp, DollarSign, Package, Users, Search, ArrowUpDown, Brain, Zap, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface MpBreakdown {
@@ -46,6 +45,11 @@ interface UserOverview {
   boundary_date: string | null;
   trial_started_at: string | null;
   pushed_to_xero_count: number;
+  ai_questions_total: number;
+  xero_api_calls: number;
+  syncs_total: number;
+  settlement_saves: number;
+  usage_breakdown: Record<string, number>;
 }
 
 interface Summary {
@@ -57,9 +61,12 @@ interface Summary {
   xero_connected: number;
   amazon_connected: number;
   ebay_connected: number;
+  total_ai_questions: number;
+  total_xero_api_calls: number;
+  total_syncs: number;
 }
 
-type SortKey = 'total_gross_sales' | 'total_settlements' | 'marketplace_count' | 'total_orders' | 'email' | 'created_at';
+type SortKey = 'total_gross_sales' | 'total_settlements' | 'marketplace_count' | 'total_orders' | 'email' | 'created_at' | 'ai_questions_total' | 'syncs_total' | 'pushed_to_xero_count';
 
 const fmt = (n: number) => n.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtPct = (n: number) => `${n.toFixed(1)}%`;
@@ -103,7 +110,7 @@ export default function UserOverviewDashboard() {
     let av: any, bv: any;
     if (sortKey === 'email') { av = a.email; bv = b.email; }
     else if (sortKey === 'created_at') { av = a.created_at; bv = b.created_at; }
-    else { av = a[sortKey]; bv = b[sortKey]; }
+    else { av = (a as any)[sortKey]; bv = (b as any)[sortKey]; }
     const cmp = av < bv ? -1 : av > bv ? 1 : 0;
     return sortAsc ? cmp : -cmp;
   });
@@ -129,7 +136,7 @@ export default function UserOverviewDashboard() {
     <div className="space-y-6">
       {/* Platform summary cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <Card>
             <CardHeader className="pb-1 pt-3 px-4">
               <CardDescription className="text-xs flex items-center gap-1"><Users className="h-3 w-3" /> Active Users</CardDescription>
@@ -152,6 +159,24 @@ export default function UserOverviewDashboard() {
             <CardHeader className="pb-1 pt-3 px-4">
               <CardDescription className="text-xs flex items-center gap-1"><Package className="h-3 w-3" /> Settlements</CardDescription>
               <CardTitle className="text-2xl">{summary.total_settlements.toLocaleString()}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardDescription className="text-xs flex items-center gap-1"><Brain className="h-3 w-3" /> AI Questions</CardDescription>
+              <CardTitle className="text-2xl">{summary.total_ai_questions.toLocaleString()}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardDescription className="text-xs flex items-center gap-1"><Zap className="h-3 w-3" /> Xero API Calls</CardDescription>
+              <CardTitle className="text-2xl">{summary.total_xero_api_calls.toLocaleString()}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardDescription className="text-xs flex items-center gap-1"><UploadCloud className="h-3 w-3" /> Total Syncs</CardDescription>
+              <CardTitle className="text-2xl">{summary.total_syncs.toLocaleString()}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -196,12 +221,11 @@ export default function UserOverviewDashboard() {
                   <SortHeader label="Gross Sales" field="total_gross_sales" />
                   <SortHeader label="Settlements" field="total_settlements" />
                   <SortHeader label="Marketplaces" field="marketplace_count" />
-                  <SortHeader label="Orders" field="total_orders" />
-                  <TableHead className="text-right">Fees</TableHead>
+                  <SortHeader label="Xero Pushes" field="pushed_to_xero_count" />
+                  <SortHeader label="AI Qs" field="ai_questions_total" />
+                  <SortHeader label="Syncs" field="syncs_total" />
                   <TableHead className="text-right">Fee %</TableHead>
-                  <TableHead className="text-right">Net Deposit</TableHead>
                   <TableHead>Connections</TableHead>
-                  <TableHead>Tax</TableHead>
                   <SortHeader label="Joined" field="created_at" />
                 </TableRow>
               </TableHeader>
@@ -229,15 +253,17 @@ export default function UserOverviewDashboard() {
                             <Badge variant="secondary" className="text-[10px]">{u.marketplace_count}</Badge>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="text-right text-xs">{u.total_orders > 0 ? u.total_orders.toLocaleString() : '—'}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {u.total_fees > 0 ? fmt(u.total_fees) : '—'}
+                        <TableCell className="text-right text-xs">
+                          {u.pushed_to_xero_count > 0 ? u.pushed_to_xero_count : '—'}
+                        </TableCell>
+                        <TableCell className="text-right text-xs">
+                          {u.ai_questions_total > 0 ? u.ai_questions_total : '—'}
+                        </TableCell>
+                        <TableCell className="text-right text-xs">
+                          {u.syncs_total > 0 ? u.syncs_total : '—'}
                         </TableCell>
                         <TableCell className="text-right text-xs">
                           {u.fee_rate_pct > 0 ? fmtPct(u.fee_rate_pct) : '—'}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {u.total_net_deposit !== 0 ? fmt(u.total_net_deposit) : '—'}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
@@ -249,22 +275,17 @@ export default function UserOverviewDashboard() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs">
-                          {u.tax_profile ? (
-                            <Badge variant="secondary" className="text-[9px]">{u.tax_profile === 'AU_GST' ? 'GST' : 'No GST'}</Badge>
-                          ) : <span className="text-muted-foreground">—</span>}
-                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {new Date(u.created_at).toLocaleDateString()}
                         </TableCell>
                       </TableRow>
 
-                      {/* Expanded marketplace breakdown */}
+                      {/* Expanded detail */}
                       {isExpanded && (
                         <TableRow className="bg-muted/20">
-                          <TableCell colSpan={12} className="p-0">
-                            <div className="px-6 py-4 space-y-3">
-                              {/* User summary strip */}
+                          <TableCell colSpan={11} className="p-0">
+                            <div className="px-6 py-4 space-y-4">
+                              {/* Financial summary strip */}
                               <div className="flex flex-wrap gap-4 text-xs">
                                 <div>
                                   <span className="text-muted-foreground">Pushed to Xero: </span>
@@ -273,6 +294,10 @@ export default function UserOverviewDashboard() {
                                 <div>
                                   <span className="text-muted-foreground">Refunds: </span>
                                   <span className="font-medium">{fmt(u.total_refunds)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Net Deposit: </span>
+                                  <span className="font-medium">{fmt(u.total_net_deposit)}</span>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">GST Collected: </span>
@@ -303,6 +328,48 @@ export default function UserOverviewDashboard() {
                                   <div>
                                     <span className="text-muted-foreground">Last active: </span>
                                     <span className="font-medium">{new Date(u.last_sign_in_at).toLocaleDateString()}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Usage metrics strip */}
+                              <div className="border rounded-md p-3 bg-background">
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                                  <Zap className="h-3 w-3" /> Usage Metrics
+                                </h4>
+                                <div className="flex flex-wrap gap-4 text-xs">
+                                  <div>
+                                    <span className="text-muted-foreground">AI Questions: </span>
+                                    <span className="font-medium">{u.ai_questions_total}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Xero API Calls: </span>
+                                    <span className="font-medium">{u.xero_api_calls}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Total Syncs: </span>
+                                    <span className="font-medium">{u.syncs_total}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Settlement Saves: </span>
+                                    <span className="font-medium">{u.settlement_saves}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Xero Pushes: </span>
+                                    <span className="font-medium">{u.pushed_to_xero_count}</span>
+                                  </div>
+                                </div>
+                                {/* Detailed event breakdown */}
+                                {Object.keys(u.usage_breakdown).length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {Object.entries(u.usage_breakdown)
+                                      .sort(([, a], [, b]) => b - a)
+                                      .slice(0, 10)
+                                      .map(([evt, count]) => (
+                                        <Badge key={evt} variant="outline" className="text-[9px] gap-0.5 font-mono">
+                                          {evt.replace(/_/g, ' ')}: {count}
+                                        </Badge>
+                                      ))}
                                   </div>
                                 )}
                               </div>
