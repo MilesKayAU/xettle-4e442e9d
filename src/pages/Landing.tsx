@@ -62,6 +62,9 @@ export default function Landing() {
               <Link to="/marketplaces">Marketplaces</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
+              <Link to="/insights">Insights</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
               <Link to="/pricing">Pricing</Link>
             </Button>
             <Button variant="ghost" asChild>
