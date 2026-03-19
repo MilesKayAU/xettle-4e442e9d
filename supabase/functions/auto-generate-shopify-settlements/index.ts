@@ -251,8 +251,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ─── Fetch marketplace_registry + entity_library for detection ────
-  const [registryResult, entityResult, shopifyTokenResult] = await Promise.all([
+  // ─── Fetch marketplace_registry + entity_library + observed rates for detection ────
+  const [registryResult, entityResult, shopifyTokenResult, rateSettingsResult] = await Promise.all([
     adminClient
       .from("marketplace_registry")
       .select("marketplace_code, marketplace_name, detection_keywords, shopify_source_names")
@@ -267,7 +267,19 @@ Deno.serve(async (req) => {
       .eq("user_id", userId)
       .limit(1)
       .maybeSingle(),
+    adminClient
+      .from("app_settings")
+      .select("key, value")
+      .eq("user_id", userId)
+      .like("key", "observed_commission_rate:%"),
   ]);
+
+  const observedRates: Record<string, number> = {};
+  for (const r of rateSettingsResult.data || []) {
+    const code = r.key.replace("observed_commission_rate:", "");
+    const num = parseFloat(r.value || "");
+    if (code && !isNaN(num) && num > 0 && num < 1) observedRates[code] = num;
+  }
 
   const dbRegistry: RegistryRow[] = (registryResult.data || []).map(r => ({
     marketplace_code: r.marketplace_code,

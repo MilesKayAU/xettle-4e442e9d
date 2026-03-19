@@ -124,7 +124,7 @@ export function attributeFees(
     const csvSales = feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
     const csvFees = Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
     const realFeeRate =
-      csvSales > 0 ? csvFees / csvSales : COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+      csvSales > 0 ? csvFees / csvSales : observedRates[mp] ?? COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE;
 
     const apiSyncSales = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
     const estimatedApiSyncFees = apiSyncSales * realFeeRate;
