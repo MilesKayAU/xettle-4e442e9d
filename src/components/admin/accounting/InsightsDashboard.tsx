@@ -416,8 +416,8 @@ export default function InsightsDashboard() {
           fulfilmentUnknown,
           hasEstimatedFees: effectiveHasEstimatedFees,
           hasMissingFeeData,
-          hasFeeAnomaly,
-          hasNegativePayout,
+          hasFeeAnomaly: effectiveTotalFees > totalSales,
+          hasNegativePayout: effectiveNetPayout < 0 && totalSales > 0,
         });
       }
 
