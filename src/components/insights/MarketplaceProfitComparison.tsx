@@ -120,8 +120,34 @@ export default function MarketplaceProfitComparison() {
         grouped[mp].push(row as unknown as SettlementRow);
       }
 
+      // ─── Exclude api_sync rows when real CSV data exists ───
+      for (const [mp, rows] of Object.entries(grouped)) {
+        const realRows = rows.filter(r => r.source !== 'api_sync');
+        const apiSyncRows = rows.filter(r => r.source === 'api_sync');
+        if (realRows.length > 0 && apiSyncRows.length > 0) {
+          grouped[mp] = realRows;
+        }
+      }
+
+      // Load observed rates for redistribution
+      const { data: observedRatesData } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .like('key', 'observed_commission_rate_%');
+      
+      const observedRates: Record<string, number> = {};
+      if (observedRatesData) {
+        for (const row of observedRatesData as any[]) {
+          const mpCode = (row.key as string).replace('observed_commission_rate_', '');
+          const rate = parseFloat(row.value);
+          if (!isNaN(rate) && rate > 0 && rate < 1) {
+            observedRates[mpCode] = rate;
+          }
+        }
+      }
+
       // Calculate redistributed platform fees
-      const redistFees = redistributePlatformFees(grouped);
+      const redistFees = redistributePlatformFees(grouped, observedRates);
 
       // Aggregate profit data by marketplace, filtering out stale/malformed rows
       const mpMap = new Map<string, { revenue: number; profit: number; margins: number[]; count: number }>();
