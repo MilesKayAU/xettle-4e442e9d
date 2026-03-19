@@ -77,6 +77,7 @@ export function attributeFees(
   mp: string,
   rows: SettlementRow[],
   redistributedPlatformFees = 0,
+  observedRates: Record<string, number> = {},
 ): FeeAttribution {
   const totalSalesExGst = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
   const totalGst = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
