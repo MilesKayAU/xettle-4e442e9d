@@ -89,7 +89,7 @@ export function attributeFees(
       Math.abs(r.seller_fees || 0) +
       Math.abs(r.fba_fees || 0) +
       Math.abs(r.storage_fees || 0) +
-      Math.max(r.other_fees || 0, 0),
+      Math.abs(r.other_fees || 0),
     0,
   );
 

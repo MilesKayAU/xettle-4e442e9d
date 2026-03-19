@@ -242,7 +242,7 @@ export default function InsightsDashboard() {
         const totalSales = totalSalesExGst + totalGstOnSales;
         if (totalSales <= 0) continue;
         const totalFees = rows.reduce((sum, r) =>
-          sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.max(r.other_fees || 0, 0), 0);
+          sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
         const totalRefunds = rows.reduce((sum, r) => sum + Math.abs(r.refunds || 0), 0);
         // Check if ANY rows in this group came from shopify_orders (clearing invoices with $0 bank_deposit)
         const hasShopifyOrdersRows = rows.some(r => (r.marketplace || '').startsWith('shopify_orders_'));
@@ -267,7 +267,7 @@ export default function InsightsDashboard() {
           : null;
         const fbaTotal = Math.abs(rows.reduce((sum, r) => sum + (r.fba_fees || 0), 0));
         const storageTotal = Math.abs(rows.reduce((sum, r) => sum + (r.storage_fees || 0), 0));
-        const otherFeesTotal = rows.reduce((sum, r) => sum + Math.max(r.other_fees || 0, 0), 0);
+        const otherFeesTotal = Math.abs(rows.reduce((sum, r) => sum + (r.other_fees || 0), 0));
 
         const adSpend = adSpendByMp[mp] || 0;
         const returnAfterAds = totalSales > 0 ? Math.max(Math.min((netPayout - adSpend) / totalSales, 1), -1) : null;
@@ -549,9 +549,11 @@ export default function InsightsDashboard() {
     );
   }
 
-  // For "Best" badge, only consider marketplaces with real (non-estimated) fee data
-  const realFeeStatsForBest = stats.filter(s => !s.hasEstimatedFees);
-  const bestRatio = Math.max(...(realFeeStatsForBest.length > 0 ? realFeeStatsForBest : stats).map(s => s.returnRatio));
+  // Best performer = highest returnRatio across ALL marketplaces.
+  // Previously this excluded estimated-fee marketplaces, but that created contradictions
+  // (e.g. "Best Performer" at $0.44 while overall average was $0.53).
+  // Now we pick the true best and annotate if it uses estimated data.
+  const bestRatio = Math.max(...stats.map(s => s.returnRatio));
   const totalAllSales = stats.reduce((sum, s) => sum + s.totalSales, 0);
   const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout, 0);
   const totalAllFees = stats.reduce((sum, s) => sum + s.totalFees, 0);
@@ -604,26 +606,26 @@ export default function InsightsDashboard() {
     return `Advertising reduced return from $${s.returnRatio.toFixed(2)} → $${s.returnAfterAds.toFixed(2)}`;
   }
 
-  // Generate the main insight sentence
-  // For "Best Performer", prefer marketplaces with real fee data over estimated
+  // Best performer = highest returnRatio across ALL marketplaces (not filtered by estimated status)
   const topRevenue = [...stats].sort((a, b) => b.totalSales - a.totalSales)[0];
-  const realFeeStats = stats.filter(s => !s.hasEstimatedFees);
-  const bestProfit = (realFeeStats.length > 0 ? realFeeStats : stats)
-    .sort((a, b) => b.returnRatio - a.returnRatio)[0];
+  const bestProfit = [...stats].sort((a, b) => b.returnRatio - a.returnRatio)[0];
 
   function getHeroInsight(): string {
     if (stats.length === 1) {
-      return `${stats[0].label} returns $${stats[0].returnRatio.toFixed(2)} for every $1 sold after marketplace fees.`;
+      const r = stats[0].returnRatio;
+      if (r < 0.60) {
+        return `${stats[0].label} keeps $${r.toFixed(2)} per $1 sold — ${((1 - r) * 100).toFixed(0)}% goes to marketplace fees and deductions.`;
+      }
+      return `${stats[0].label} returns $${r.toFixed(2)} for every $1 sold after marketplace fees.`;
     }
     // If same marketplace leads both, simple message
     if (topRevenue.marketplace === bestProfit.marketplace) {
-      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and profit efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1).`;
+      if (topRevenue.returnRatio < 0.60) {
+        return `${topRevenue.label} leads in revenue (${formatCurrency(topRevenue.totalSales)}) and retains the most at $${topRevenue.returnRatio.toFixed(2)} per $1 — though ${((1 - topRevenue.returnRatio) * 100).toFixed(0)}% is consumed by fees.`;
+      }
+      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1).`;
     }
-    const profitMultiple = bestProfit.returnRatio / topRevenue.returnRatio;
-    if (profitMultiple >= 1.5) {
-      return `${topRevenue.label} generates the most revenue, but ${bestProfit.label} returns ${profitMultiple.toFixed(1)}× more profit per sale.`;
-    }
-    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} keeps $${bestProfit.returnRatio.toFixed(2)} per $1 sold.`;
+    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} retains the most at $${bestProfit.returnRatio.toFixed(2)} per $1 sold.`;
   }
 
   // Stacked bar segments for $1 breakdown
@@ -750,12 +752,17 @@ export default function InsightsDashboard() {
             <CardContent className="pt-5 pb-4">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Best Performer</p>
+                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">
+                    {stats.length > 1 ? 'Highest Return' : 'Return Rate'}
+                  </p>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs max-w-xs">The marketplace returning the most profit per $1 sold — your efficiency engine.</TooltipContent>
+                <TooltipContent className="text-xs max-w-xs">The marketplace that retains the most per $1 sold after fees. Does not mean "profitable" — just the least fee-heavy.</TooltipContent>
               </Tooltip>
-              <p className="text-xl font-bold text-primary mt-1">{bestProfit.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">${bestProfit.returnRatio.toFixed(2)} per $1</p>
+              <p className={`text-xl font-bold mt-1 ${getRatioColor(bestProfit.returnRatio)}`}>{bestProfit.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ${bestProfit.returnRatio.toFixed(2)} per $1
+                {bestProfit.hasEstimatedFees && ' (est.)'}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -804,7 +811,7 @@ export default function InsightsDashboard() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-foreground">{s.label}</span>
-                        {s.returnRatio === bestRatio && stats.length > 1 && !s.hasEstimatedFees && (
+                        {s.returnRatio === bestRatio && stats.length > 1 && (
                           <Badge variant="outline" className="text-[10px] h-4 border-primary/30 text-primary">Best</Badge>
                         )}
                         {s.hasEstimatedFees && (
@@ -1037,7 +1044,7 @@ export default function InsightsDashboard() {
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="font-medium text-foreground">{s.label}</span>
-                          {s.returnRatio === bestRatio && stats.length > 1 && !s.hasEstimatedFees && (
+                          {s.returnRatio === bestRatio && stats.length > 1 && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-primary/30 text-primary px-1">Best</Badge>
                           )}
                         </div>
