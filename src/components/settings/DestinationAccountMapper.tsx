@@ -48,6 +48,7 @@ function getAccountTypeBadge(acc: XeroBankAccount): { label: string; className: 
 }
 
 export default function DestinationAccountMapper() {
+  const queryClient = useQueryClient();
   const [accounts, setAccounts] = useState<XeroBankAccount[]>([]);
   const [rails, setRails] = useState<Array<{ code: string; label: string }>>([]);
   const [defaultAccountId, setDefaultAccountId] = useState<string>('');

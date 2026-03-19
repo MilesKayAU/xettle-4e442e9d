@@ -22,6 +22,7 @@ export default function AccountingBoundarySettings({
   onConnectXero,
   onGoToUpload,
 }: AccountingBoundarySettingsProps) {
+  const queryClient = useQueryClient();
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [boundarySource, setBoundarySource] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

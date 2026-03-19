@@ -78,6 +78,7 @@ const REVENUE_ACCOUNT_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIREC
 const EXPENSE_ACCOUNT_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
 
 export default function AccountMapperCard() {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<MapperState>('unmapped');
   const [mapping, setMapping] = useState<Record<string, MappingEntry>>({});
   const [editableMapping, setEditableMapping] = useState<Record<string, string>>({});
