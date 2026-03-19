@@ -490,9 +490,9 @@ export default function Landing() {
               <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <DollarSign className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="text-base font-semibold text-foreground mb-2">Bank deposit matching</h3>
+              <h3 className="text-base font-semibold text-foreground mb-2">Xero deposit verification</h3>
               <p className="text-sm text-muted-foreground">
-                Match the settlement payout to a real bank transaction in Xero. Tolerance-based matching handles rounding differences.
+                Optionally match the settlement payout to a deposit already in Xero. Tolerance-based matching handles rounding — you confirm before it's linked.
               </p>
             </div>
             <div className="p-6 rounded-2xl border border-border bg-card text-center">
