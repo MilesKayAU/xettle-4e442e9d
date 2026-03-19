@@ -15,9 +15,17 @@ import { type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
 import { detectAllMarketplaces, classifyUnknownTag, type BatchDetectionResult } from '@/utils/shopify-order-detector';
 import MarketplaceDiscovery from '@/components/shopify/MarketplaceDiscovery';
 
+interface ShopifyShop {
+  shop_domain: string;
+  scope: string;
+  installed_at: string;
+  is_active?: boolean;
+}
+
 interface ShopifyStatus {
   connected: boolean;
-  shops: Array<{ shop_domain: string; scope: string; installed_at: string; is_active?: boolean }>;
+  shops: ShopifyShop[];
+  inactive_shops?: ShopifyShop[];
 }
 
 
