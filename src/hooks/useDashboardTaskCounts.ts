@@ -24,6 +24,8 @@ export interface SetupWarning {
   label: string;
   severity: 'blocking' | 'warning';
   message: string;
+  actionLabel?: string;
+  actionTarget?: string;
 }
 
 export interface DashboardTaskCounts {
@@ -187,6 +189,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         label: 'Fulfilment methods not configured',
         severity: 'warning',
         message: `Review and save fulfilment method for: ${unconfiguredMarketplaces.join(', ')}.`,
+        actionLabel: 'Configure',
+        actionTarget: 'settings:fulfilment',
       });
     }
     if (missingPostageCost.length > 0) {
@@ -195,6 +199,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         label: 'Postage cost not set',
         severity: 'warning',
         message: `Set your average postage cost for: ${missingPostageCost.join(', ')} in Settings → Fulfilment Methods.`,
+        actionLabel: 'Set costs',
+        actionTarget: 'settings:fulfilment',
       });
     }
 
@@ -217,7 +223,9 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
             key: `fbm_mismatch_detected:${conn.marketplace_code}`,
             label: 'FBM orders detected on FBA-only account',
             severity: 'warning',
-            message: `We found merchant-fulfilled orders for ${conn.marketplace_name || conn.marketplace_code}. Update your fulfilment method to "Mixed FBA + FBM" in Settings → Fulfilment Methods for accurate profit.`,
+            message: `We found merchant-fulfilled orders for ${conn.marketplace_name || conn.marketplace_code}. Update your fulfilment method to "Mixed FBA + FBM" for accurate profit.`,
+            actionLabel: 'Update now',
+            actionTarget: 'settings:fulfilment',
           });
         }
       }
