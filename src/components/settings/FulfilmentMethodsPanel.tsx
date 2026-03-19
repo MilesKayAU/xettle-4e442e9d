@@ -31,6 +31,11 @@ interface MarketplaceRow {
   marketplace_name: string;
 }
 
+/** Marketplace codes that have MCF-tagged settlement lines */
+type McfDetectionMap = Record<string, boolean>;
+/** Marketplace codes that have MFN lines but are set to marketplace_fulfilled */
+type MfnDetectionMap = Record<string, boolean>;
+
 const BASE_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'];
 const AMAZON_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'mixed_fba_fbm', 'not_sure'];
 
@@ -56,6 +61,8 @@ export default function FulfilmentMethodsPanel() {
   const [saving, setSaving] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
   const [mixedModePromptDismissed, setMixedModePromptDismissed] = useState(true);
+  const [mcfDetected, setMcfDetected] = useState<McfDetectionMap>({});
+  const [mfnDetected, setMfnDetected] = useState<MfnDetectionMap>({});
 
   useEffect(() => {
     (async () => {
@@ -95,6 +102,59 @@ export default function FulfilmentMethodsPanel() {
           .eq('key', 'mixed_mode_prompt_dismissed')
           .maybeSingle();
         setMixedModePromptDismissed(dismissed?.value === 'true');
+
+        // Detect MCF and MFN lines across all marketplaces
+        try {
+          const codes = (connRes.data || []).map(m => m.marketplace_code);
+          if (codes.length > 0) {
+            // Check for MCF lines
+            const { data: mcfLines } = await supabase
+              .from('settlement_lines')
+              .select('settlement_id')
+              .eq('user_id', user.id)
+              .in('fulfilment_channel', ['MCF', 'MCF_inferred'])
+              .limit(100);
+            
+            if (mcfLines && mcfLines.length > 0) {
+              // Get marketplace codes for these settlements
+              const settlementIds = [...new Set(mcfLines.map(l => l.settlement_id))];
+              const { data: settlements } = await supabase
+                .from('settlements')
+                .select('settlement_id, marketplace')
+                .in('settlement_id', settlementIds)
+                .eq('user_id', user.id);
+              const mcfMap: McfDetectionMap = {};
+              for (const s of settlements || []) {
+                if (s.marketplace) mcfMap[s.marketplace] = true;
+              }
+              setMcfDetected(mcfMap);
+            }
+
+            // Check for MFN lines
+            const { data: mfnLines } = await supabase
+              .from('settlement_lines')
+              .select('settlement_id')
+              .eq('user_id', user.id)
+              .in('fulfilment_channel', ['MFN', 'MFN_inferred'])
+              .limit(100);
+            
+            if (mfnLines && mfnLines.length > 0) {
+              const settlementIds = [...new Set(mfnLines.map(l => l.settlement_id))];
+              const { data: settlements } = await supabase
+                .from('settlements')
+                .select('settlement_id, marketplace')
+                .in('settlement_id', settlementIds)
+                .eq('user_id', user.id);
+              const mfnMap: MfnDetectionMap = {};
+              for (const s of settlements || []) {
+                if (s.marketplace) mfnMap[s.marketplace] = true;
+              }
+              setMfnDetected(mfnMap);
+            }
+          }
+        } catch {
+          // Non-fatal — detection is advisory
+        }
 
       } catch {
         // silent
@@ -242,7 +302,8 @@ export default function FulfilmentMethodsPanel() {
         const isAmazon = isAmazonCode(mp.marketplace_code);
         const methodOptions = isAmazon ? AMAZON_METHOD_OPTIONS : BASE_METHOD_OPTIONS;
         const showPostageInput = effective === 'self_ship' || effective === 'third_party_logistics' || effective === 'mixed_fba_fbm';
-        const showMcfInput = isAmazon && effective === 'mixed_fba_fbm';
+        const showMcfInput = (isAmazon && effective === 'mixed_fba_fbm') || mcfDetected[mp.marketplace_code];
+        const showMfnBanner = mfnDetected[mp.marketplace_code] && effective === 'marketplace_fulfilled';
         return (
           <div key={mp.marketplace_code} className="rounded-lg border border-border p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -291,6 +352,13 @@ export default function FulfilmentMethodsPanel() {
                   />
                 </div>
               </div>
+            )}
+            {showMfnBanner && (
+              <Alert className="border-amber-300/30 bg-amber-50/50 dark:border-amber-800/30 dark:bg-amber-900/10">
+                <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
+                  We detected merchant-fulfilled (FBM) orders for {mp.marketplace_name}. Consider switching to <strong>Mixed FBA + FBM</strong> for accurate postage deductions.
+                </AlertDescription>
+              </Alert>
             )}
             {showMcfInput && (
               <div className="pt-1 space-y-1">

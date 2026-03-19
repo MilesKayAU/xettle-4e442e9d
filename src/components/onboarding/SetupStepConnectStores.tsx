@@ -17,7 +17,10 @@ import {
   loadFulfilmentMethods,
   saveFulfilmentMethod,
   getEffectiveMethod,
+  isAmazonCode,
 } from '@/utils/fulfilment-settings';
+
+const AMAZON_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'mixed_fba_fbm', 'not_sure'];
 
 interface Props {
   onNext: () => void;
@@ -173,10 +176,21 @@ export default function SetupStepConnectStores({
     setStep(2);
   };
 
+  const [amazonFulfilmentChoice, setAmazonFulfilmentChoice] = useState<FulfilmentMethod>('marketplace_fulfilled');
+
   const advanceFromAmazon = () => {
     if (hasAmazon && onFireBackgroundScan) {
       onFireBackgroundScan('fetch-amazon-settlements');
     }
+    // Persist fulfilment choice for amazon_au
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await saveFulfilmentMethod(user.id, 'amazon_au', amazonFulfilmentChoice);
+        }
+      } catch { /* non-fatal */ }
+    })();
     setStep(3);
   };
 
@@ -505,9 +519,28 @@ export default function SetupStepConnectStores({
             )}
 
             {hasAmazon && (
-              <Button onClick={advanceFromAmazon} className="w-full">
-                Continue <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border p-3 space-y-2">
+                  <p className="text-xs font-medium text-foreground">How do you fulfil Amazon orders?</p>
+                  <RadioGroup
+                    value={amazonFulfilmentChoice}
+                    onValueChange={(v) => setAmazonFulfilmentChoice(v as FulfilmentMethod)}
+                    className="grid grid-cols-2 gap-1"
+                  >
+                    {AMAZON_METHOD_OPTIONS.map((opt) => (
+                      <div key={opt} className="flex items-center space-x-1.5">
+                        <RadioGroupItem value={opt} id={`onboard-amazon-${opt}`} />
+                        <Label htmlFor={`onboard-amazon-${opt}`} className="text-[11px] cursor-pointer leading-tight">
+                          {FULFILMENT_LABELS[opt]}
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
+                <Button onClick={advanceFromAmazon} className="w-full">
+                  Continue <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
             )}
 
             <div className="flex items-center justify-between">
