@@ -1502,12 +1502,16 @@ export default function InsightsDashboard() {
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <Receipt className="h-3 w-3" /> Marketplace fees
                     </div>
-                    <span className="text-right tabular-nums text-foreground">{formatPct(s.feeLoad)} of sales</span>
+                    <span className="text-right tabular-nums text-foreground">
+                      {s.hasMissingFeeData ? <span className="text-amber-600 dark:text-amber-400 text-[10px]">N/A</span> : `${formatPct(s.feeLoad)} of sales`}
+                    </span>
 
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <TrendingUp className="h-3 w-3" /> Avg commission
                     </div>
-                    <span className="text-right tabular-nums text-foreground">{formatPct(s.avgCommission)}</span>
+                    <span className="text-right tabular-nums text-foreground">
+                      {s.hasMissingFeeData ? <span className="text-amber-600 dark:text-amber-400 text-[10px]">N/A</span> : formatPct(s.avgCommission)}
+                    </span>
 
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <Megaphone className="h-3 w-3" /> Ad spend
