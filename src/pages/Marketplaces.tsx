@@ -27,7 +27,16 @@ export default function Marketplaces() {
               <Link to="/amazon">Amazon AU</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
+              <Link to="/marketplaces">Marketplaces</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/insights">Insights</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
               <Link to="/pricing">Pricing</Link>
+            </Button>
+            <Button variant="ghost" asChild>
+              <Link to="/auth">Sign In</Link>
             </Button>
             <Button asChild>
               <Link to="/auth?tab=signup">
