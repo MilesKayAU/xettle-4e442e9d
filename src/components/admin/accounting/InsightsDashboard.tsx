@@ -1492,67 +1492,140 @@ export default function InsightsDashboard() {
 
         {/* Add Ad Spend Dialog */}
         <Dialog open={adDialogOpen} onOpenChange={setAdDialogOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Add Advertising Spend</DialogTitle>
               <DialogDescription>
-                Record monthly ad spend for <strong>{MARKETPLACE_LABELS[adDialogMarketplace] || adDialogMarketplace}</strong>. This is analytics only — not synced to your accounting software.
+                {adDialogMarketplace
+                  ? <>Record ad spend for <strong>{MARKETPLACE_LABELS[adDialogMarketplace] || adDialogMarketplace}</strong>. Analytics only — not synced to accounting.</>
+                  : <>Upload an ad spend invoice or enter manually. Analytics only — not synced to accounting.</>
+                }
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="ad-month">Month</Label>
-                <Input
-                  id="ad-month"
-                  type="month"
-                  value={adMonth}
-                  onChange={(e) => setAdMonth(e.target.value)}
-                  placeholder="2026-03"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ad-amount">Spend Amount</Label>
-                <Input
-                  id="ad-amount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={adAmount}
-                  onChange={(e) => setAdAmount(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ad-currency">Currency</Label>
-                <Select value={adCurrency} onValueChange={setAdCurrency}>
-                  <SelectTrigger id="ad-currency">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="AUD">AUD</SelectItem>
-                    <SelectItem value="USD">USD</SelectItem>
-                    <SelectItem value="GBP">GBP</SelectItem>
-                    <SelectItem value="EUR">EUR</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ad-notes">Notes (optional)</Label>
-                <Textarea
-                  id="ad-notes"
-                  value={adNotes}
-                  onChange={(e) => setAdNotes(e.target.value)}
-                  placeholder="e.g. Sponsored Products campaign"
-                  rows={2}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAdDialogOpen(false)}>Cancel</Button>
-              <Button onClick={saveAdSpend} disabled={adSaving}>
-                {adSaving ? 'Saving...' : 'Save Ad Spend'}
-              </Button>
-            </DialogFooter>
+
+            <Tabs value={adUploadMode} onValueChange={(v) => setAdUploadMode(v as 'manual' | 'upload')}>
+              <TabsList className="w-full">
+                <TabsTrigger value="manual" className="flex-1 gap-1.5"><FileText className="h-3.5 w-3.5" /> Manual Entry</TabsTrigger>
+                <TabsTrigger value="upload" className="flex-1 gap-1.5"><Upload className="h-3.5 w-3.5" /> Upload Invoice</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="manual" className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label htmlFor="ad-month">Month</Label>
+                  <Input id="ad-month" type="month" value={adMonth} onChange={(e) => setAdMonth(e.target.value)} placeholder="2026-03" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ad-amount">Spend Amount (ex-GST)</Label>
+                  <Input id="ad-amount" type="number" min="0" step="0.01" value={adAmount} onChange={(e) => setAdAmount(e.target.value)} placeholder="0.00" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ad-currency">Currency</Label>
+                  <Select value={adCurrency} onValueChange={setAdCurrency}>
+                    <SelectTrigger id="ad-currency"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AUD">AUD</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="GBP">GBP</SelectItem>
+                      <SelectItem value="EUR">EUR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ad-notes">Notes (optional)</Label>
+                  <Textarea id="ad-notes" value={adNotes} onChange={(e) => setAdNotes(e.target.value)} placeholder="e.g. Sponsored Products campaign" rows={2} />
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setAdDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={saveAdSpend} disabled={adSaving}>
+                    {adSaving ? 'Saving...' : 'Save Ad Spend'}
+                  </Button>
+                </DialogFooter>
+              </TabsContent>
+
+              <TabsContent value="upload" className="space-y-4 pt-2">
+                {adParsedEntries.length === 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Upload a PDF invoice or CSV/Excel ad spend report. We'll automatically detect the marketplace, period, and cost.
+                    </p>
+                    <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+                      {adUploadParsing ? (
+                        <>
+                          <LoadingSpinner />
+                          <span className="text-sm text-muted-foreground">Parsing invoice…</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-8 w-8 text-muted-foreground" />
+                          <span className="text-sm font-medium text-foreground">Drop file or click to browse</span>
+                          <span className="text-xs text-muted-foreground">PDF, CSV, or Excel</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.csv,.xlsx,.xls,.tsv"
+                        disabled={adUploadParsing}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleAdSpendFileUpload(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-foreground">
+                      {adParsedEntries.length} {adParsedEntries.length === 1 ? 'entry' : 'entries'} detected — review and save:
+                    </p>
+                    <div className="max-h-60 overflow-y-auto space-y-2">
+                      {adParsedEntries.map((entry, idx) => (
+                        <div key={idx} className="rounded-md border border-border p-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-sm text-foreground">{entry.marketplace_label}</span>
+                            <Badge variant={entry.confidence >= 0.8 ? 'default' : 'secondary'} className="text-[10px]">
+                              {Math.round(entry.confidence * 100)}% match
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span>Period</span>
+                            <span className="text-right text-foreground tabular-nums">
+                              {new Date(entry.period_start).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}
+                            </span>
+                            <span>Amount {entry.includes_gst ? '(inc GST)' : '(ex GST)'}</span>
+                            <span className="text-right text-foreground tabular-nums font-medium">
+                              ${entry.spend_amount.toFixed(2)} {entry.currency}
+                            </span>
+                            {entry.gst_amount != null && entry.gst_amount > 0 && (
+                              <>
+                                <span>GST</span>
+                                <span className="text-right tabular-nums">${entry.gst_amount.toFixed(2)}</span>
+                              </>
+                            )}
+                            {entry.invoice_number && (
+                              <>
+                                <span>Invoice #</span>
+                                <span className="text-right">{entry.invoice_number}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <DialogFooter className="flex-col sm:flex-row gap-2">
+                      <Button variant="outline" onClick={() => setAdParsedEntries([])} className="gap-1.5">
+                        <Upload className="h-3.5 w-3.5" /> Upload Different File
+                      </Button>
+                      <Button onClick={saveAllParsedAdSpend} disabled={adSaving} className="gap-1.5">
+                        <Check className="h-3.5 w-3.5" />
+                        {adSaving ? 'Saving...' : `Save ${adParsedEntries.length} ${adParsedEntries.length === 1 ? 'Entry' : 'Entries'}`}
+                      </Button>
+                    </DialogFooter>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
 
