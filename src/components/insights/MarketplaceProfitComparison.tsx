@@ -270,7 +270,7 @@ export default function MarketplaceProfitComparison() {
   const worst = data[data.length - 1];
 
   return (
-    <Card className="border-border">
+    <TooltipProvider>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-primary" />
