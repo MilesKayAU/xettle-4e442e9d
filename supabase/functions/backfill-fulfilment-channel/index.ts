@@ -57,15 +57,33 @@ Deno.serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
+    // Parse optional force_reclassify parameter
+    let forceReclassify = false;
+    try {
+      const body = await req.json();
+      forceReclassify = body?.force_reclassify === true;
+    } catch {
+      // No body or invalid JSON — use defaults
+    }
+
     const admin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Step 1: Get all distinct order_ids for Amazon lines with null fulfilment_channel
-    const { data: nullLines, error: queryErr } = await admin
+    // Step 1: Get all distinct order_ids for Amazon lines needing classification
+    // If force_reclassify is true, also re-evaluate *_inferred values (but never parser-confirmed AFN/MFN)
+    let query = admin
       .from("settlement_lines")
-      .select("order_id, amount_description, transaction_type")
+      .select("order_id, amount_description, transaction_type, fulfilment_channel")
       .eq("user_id", userId)
-      .is("fulfilment_channel", null)
       .ilike("marketplace_name", "%amazon%");
+
+    if (forceReclassify) {
+      // Include null + *_inferred rows, skip parser-confirmed (AFN, MFN without suffix)
+      query = query.or("fulfilment_channel.is.null,fulfilment_channel.eq.AFN_inferred,fulfilment_channel.eq.MFN_inferred");
+    } else {
+      query = query.is("fulfilment_channel", null);
+    }
+
+    const { data: nullLines, error: queryErr } = await query;
 
     if (queryErr) throw queryErr;
     if (!nullLines || nullLines.length === 0) {
