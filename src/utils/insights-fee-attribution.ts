@@ -112,7 +112,7 @@ export function attributeFees(
 
   if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
     // Case 1: ALL rows are api_sync with zero fees
-    const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+    const estimatedRate = observedRates[mp] ?? COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE;
     const estimatedFees = totalSalesExGst * estimatedRate;
     effectiveTotalFees = estimatedFees;
     effectiveNetPayout = totalSales - estimatedFees;
