@@ -1066,7 +1066,6 @@ export default function Dashboard() {
                       </p>
                     )}
                   </div>
-                  </div>
                   <Button variant="ghost" size="sm" onClick={() => { setShowUploadSheet(false); setMissingSettlements([]); }} className="shrink-0 ml-4">
                     ✕ Close
                   </Button>
