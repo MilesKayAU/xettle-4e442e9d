@@ -242,7 +242,7 @@ export default function InsightsDashboard() {
         const totalSales = totalSalesExGst + totalGstOnSales;
         if (totalSales <= 0) continue;
         const totalFees = rows.reduce((sum, r) =>
-          sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.max(r.other_fees || 0, 0), 0);
+          sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
         const totalRefunds = rows.reduce((sum, r) => sum + Math.abs(r.refunds || 0), 0);
         // Check if ANY rows in this group came from shopify_orders (clearing invoices with $0 bank_deposit)
         const hasShopifyOrdersRows = rows.some(r => (r.marketplace || '').startsWith('shopify_orders_'));
