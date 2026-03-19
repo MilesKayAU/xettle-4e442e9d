@@ -656,6 +656,34 @@ const ShopifyConnectionStatus = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Store Replacement Warning */}
+      <Dialog open={storeReplaceOpen} onOpenChange={setStoreReplaceOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Replace Shopify Store?
+            </DialogTitle>
+            <DialogDescription className="text-left space-y-3 pt-2">
+              <p>
+                You already have a connected Shopify store: <strong>{status?.shops?.[0]?.shop_domain}</strong>
+              </p>
+              <p>
+                Connecting <strong>{pendingConnectDomain}</strong> will replace it. Your existing Shopify data will be preserved but the new store will be used for future syncs.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setStoreReplaceOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmReplace}>
+              Replace Store
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
