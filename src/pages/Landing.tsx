@@ -911,6 +911,8 @@ export default function Landing() {
               © {new Date().getFullYear()} Xettle. Australian marketplace settlements → verified Xero invoices.
             </p>
             <div className="flex flex-wrap gap-6">
+              <Link to="/amazon" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Amazon AU</Link>
+              <Link to="/marketplaces" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Marketplaces</Link>
               <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
               <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Privacy Policy</Link>
               <Link to="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Terms of Service</Link>
