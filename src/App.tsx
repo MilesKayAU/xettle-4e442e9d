@@ -60,6 +60,8 @@ function App() {
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/pricing" element={<Pricing />} />
+                  <Route path="/amazon" element={<Amazon />} />
+                  <Route path="/marketplaces" element={<Marketplaces />} />
                   {/* Authenticated routes — trial banner renders on all */}
                   <Route element={<AuthenticatedLayout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
