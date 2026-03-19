@@ -312,8 +312,6 @@ export default function InsightsDashboard() {
           (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01
         );
         let hasMissingFeeData = totalFees === 0 && totalSales > 500;
-        const hasFeeAnomaly = totalFees > totalSales;
-        const hasNegativePayout = netPayout < 0 && totalSales > 0;
 
         // Include redistributed platform fees from sibling marketplaces
         const redistributedPlatformFees = (grouped[mp] as any)?._redistributedPlatformFees || 0;
@@ -322,7 +320,7 @@ export default function InsightsDashboard() {
         let effectiveFeeLoad = feeLoad;
         let effectiveNetPayout = netPayout;
         let effectiveTotalFees = totalFees + redistributedPlatformFees;
-        let effectiveHasEstimatedFees = hasEstimatedFees || redistributedPlatformFees > 0;
+        let effectiveHasEstimatedFees = hasEstimatedFees || redistributedPlatformFees !== 0;
 
         // For fee/commission calculations, identify rows with real fee data
         const feeRelevantRows = rows.filter(r => {
