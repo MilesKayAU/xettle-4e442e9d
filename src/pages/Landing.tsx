@@ -377,9 +377,9 @@ export default function Landing() {
                 {[
                   'One DRAFT invoice per settlement period',
                   'Line items for sales, fees, refunds, and GST',
-                  'Invoice total matches the bank deposit',
+                  'Invoice total matches the marketplace payout',
                   'Your accountant reviews and authorises',
-                  'Reconciles directly against the bank feed',
+                  'Reconciles directly against Xero bank transactions',
                   'Full audit CSV attached to every invoice',
                 ].map(item => (
                   <li key={item} className="flex items-start gap-2.5 text-sm">
