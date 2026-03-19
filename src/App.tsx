@@ -22,6 +22,8 @@ const AmazonCallback = lazy(() => import("@/pages/AmazonCallback"));
 const ShopifyCallback = lazy(() => import("@/pages/ShopifyCallback"));
 const EbayCallback = lazy(() => import("@/pages/EbayCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
+const Amazon = lazy(() => import("@/pages/Amazon"));
+const Marketplaces = lazy(() => import("@/pages/Marketplaces"));
 const Setup = lazy(() => import("@/pages/Setup"));
 const XeroPostingAudit = lazy(() => import("@/pages/XeroPostingAudit"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
