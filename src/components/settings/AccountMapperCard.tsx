@@ -963,6 +963,37 @@ export default function AccountMapperCard() {
     />
   );
 
+  // ─── Tax profile selector ────────────────────────────────────────
+  const handleSaveTaxProfile = useCallback(async (value: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setTaxProfile(value);
+    await supabase.from('app_settings').upsert(
+      { user_id: user.id, key: 'tax_profile', value },
+      { onConflict: 'user_id,key' }
+    );
+    queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
+    toast.success(`Tax profile set to ${value === 'AU_GST' ? 'GST Registered' : 'Not GST Registered'}`);
+  }, [queryClient]);
+
+  const renderTaxProfileSelector = () => (
+    <div id="tax-profile-selector" className="flex items-center gap-3 bg-muted/30 rounded-md px-3 py-2.5 border border-border/50">
+      <div className="flex-1">
+        <div className="text-sm font-medium">Tax profile</div>
+        <div className="text-xs text-muted-foreground">Set your organisation's GST registration status</div>
+      </div>
+      <Select value={taxProfile || ''} onValueChange={handleSaveTaxProfile}>
+        <SelectTrigger className="w-[200px] h-8 text-xs">
+          <SelectValue placeholder="Select tax profile…" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="AU_GST">GST Registered (AU)</SelectItem>
+          <SelectItem value="EXPORT_NO_GST">Not GST Registered</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   // ─── Shared COA refresh strip ──────────────────────────────────────
   const renderCoaRefreshStrip = () => (
     <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
