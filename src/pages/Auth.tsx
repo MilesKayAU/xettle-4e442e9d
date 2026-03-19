@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import XettleLogo from '@/components/shared/XettleLogo';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,17 @@ import { toast } from "@/hooks/use-toast";
 import { sanitizeEmail } from "@/utils/input-sanitization";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import Honeypot from "@/components/ui/honeypot";
-import { Lock, UserPlus, Mail, Shield } from 'lucide-react';
+import { Lock, UserPlus, Mail, Shield, Store } from 'lucide-react';
 import { hashPin } from "@/hooks/use-settings-pin";
 
 export default function Auth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const defaultTab = searchParams.get('tab') === 'signup' ? 'signup' : 'signin';
+  const shopifyShop = searchParams.get('shop');
+  const isShopifyInstall = searchParams.get('source') === 'shopify_install' && !!shopifyShop;
+  const shopifyOAuthTriggered = useRef(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [honeypot, setHoneypot] = useState('');
   const [signInData, setSignInData] = useState({ email: '', password: '' });
@@ -36,15 +40,41 @@ export default function Auth() {
   const [resendSent, setResendSent] = useState(false);
   const [showResendVerification, setShowResendVerification] = useState(false);
 
+  // Auto-initiate Shopify OAuth after auth (login or signup)
+  const initiateShopifyOAuth = async (userId: string) => {
+    if (!shopifyShop || shopifyOAuthTriggered.current) return;
+    shopifyOAuthTriggered.current = true;
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-auth', {
+        body: { action: 'initiate', shop: shopifyShop, userId },
+      });
+      if (error) throw error;
+      if (data?.authUrl) {
+        window.location.href = data.authUrl;
+        return;
+      }
+      throw new Error('No auth URL returned');
+    } catch (err: any) {
+      console.error('Failed to initiate Shopify OAuth:', err);
+      shopifyOAuthTriggered.current = false;
+      toast({ title: "Shopify Connection", description: "Failed to initiate Shopify connection. You can connect from the dashboard.", variant: "destructive" });
+      navigate('/dashboard');
+    }
+  };
+
   useEffect(() => {
-    // Use onAuthStateChange instead of getSession to avoid blocking on slow DB
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session && event !== 'SIGNED_OUT') {
-        navigate('/dashboard');
+        if (isShopifyInstall) {
+          // After auth, auto-initiate Shopify OAuth
+          initiateShopifyOAuth(session.user.id);
+        } else {
+          navigate('/dashboard');
+        }
       }
     });
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, isShopifyInstall, shopifyShop]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +90,6 @@ export default function Auth() {
     }
     setIsLoading(true);
     try {
-      // Race against a timeout to handle slow DB responses
       const signInPromise = supabase.auth.signInWithPassword({ email: sanitizedEmail, password: signInData.password });
       const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000));
       
@@ -74,7 +103,10 @@ export default function Auth() {
         return;
       }
       toast({ title: "Welcome back!", description: "You have been signed in successfully." });
-      navigate('/dashboard');
+      // Navigation handled by onAuthStateChange
+      if (!isShopifyInstall) {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       const msg = err?.message === 'timeout'
         ? "Sign in is taking longer than usual — please try again"
@@ -100,7 +132,6 @@ export default function Auth() {
       toast({ title: "Weak Password", description: "Password must be at least 6 characters long", variant: "destructive" });
       return;
     }
-    // Validate settings PIN
     if (!signUpData.settingsPin || signUpData.settingsPin.length !== 4 || !/^\d{4}$/.test(signUpData.settingsPin)) {
       toast({ title: "Settings PIN Required", description: "Please enter a 4-digit settings PIN", variant: "destructive" });
       return;
@@ -116,11 +147,15 @@ export default function Auth() {
     }
     setIsLoading(true);
     try {
+      const redirectTo = isShopifyInstall
+        ? `${window.location.origin}/auth?source=shopify_install&shop=${encodeURIComponent(shopifyShop!)}&tab=signin`
+        : `${window.location.origin}/dashboard`;
+
       const { data: signUpResult, error } = await supabase.auth.signUp({
         email: sanitizedEmail,
         password: signUpData.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          emailRedirectTo: redirectTo,
           data: { full_name: signUpData.fullName },
         },
       });
@@ -129,7 +164,6 @@ export default function Auth() {
         return;
       }
 
-      // Store the hashed settings PIN if user was created
       if (signUpResult?.user?.id) {
         const pinHash = await hashPin(signUpData.settingsPin);
         await supabase.from('app_settings').upsert({
@@ -208,6 +242,21 @@ export default function Auth() {
           </Link>
           <p className="text-muted-foreground mt-2">Amazon settlements, Xettled.</p>
         </div>
+
+        {/* Shopify install banner */}
+        {isShopifyInstall && (
+          <Card className="mb-4 border-primary/30 bg-primary/5">
+            <CardContent className="py-4 flex items-start gap-3">
+              <Store className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">Connect your Shopify store</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {defaultTab === 'signup' ? 'Create an account' : 'Sign in'} to connect <span className="font-medium">{shopifyShop}</span>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Resend verification banner */}
         {showResendVerification && (

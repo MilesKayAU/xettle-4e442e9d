@@ -114,7 +114,26 @@ Deno.serve(async (req) => {
         .map(b => b.toString(16).padStart(2, '0'))
         .join('')
 
-      if (computedHmac !== hmac) {
+      // Timing-safe comparison to prevent timing attacks
+      const hmacEncoder = new TextEncoder()
+      const aBytes = hmacEncoder.encode(computedHmac)
+      const bBytes = hmacEncoder.encode(hmac)
+      let hmacValid = aBytes.byteLength === bBytes.byteLength
+      if (hmacValid) {
+        const rndKey = crypto.getRandomValues(new Uint8Array(32))
+        const cmpKey = await crypto.subtle.importKey('raw', rndKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+        const [sigA, sigB] = await Promise.all([
+          crypto.subtle.sign('HMAC', cmpKey, aBytes),
+          crypto.subtle.sign('HMAC', cmpKey, bBytes),
+        ])
+        const vA = new Uint8Array(sigA)
+        const vB = new Uint8Array(sigB)
+        let diff = 0
+        for (let i = 0; i < vA.length; i++) diff |= vA[i] ^ vB[i]
+        hmacValid = diff === 0
+      }
+
+      if (!hmacValid) {
         console.error('HMAC verification failed')
         return new Response(
           JSON.stringify({ error: 'Invalid signature' }),
