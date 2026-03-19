@@ -85,10 +85,10 @@ export default function Landing() {
             <span className="text-primary">verified and posted to Xero.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Xettle parses your marketplace settlements, reconciles them against your bank feed, and posts verified DRAFT invoices to Xero — with GST, account codes, and a full audit trail. Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
+            Xettle parses your marketplace settlements, validates totals, and posts verified DRAFT invoices to Xero — with GST, account codes, and a full audit trail. Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
-            Not a file uploader. A settlement engine with duplicate prevention, push-safety preview, and bank verification built in.
+            Not a file uploader. A settlement engine with duplicate prevention, push-safety preview, and Xero deposit verification built in.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
