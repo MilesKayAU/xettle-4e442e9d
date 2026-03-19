@@ -47,7 +47,11 @@ const ShopifyCallback = () => {
         // Trigger validation sweep after Shopify connection
         triggerValidationSweep();
 
-        setTimeout(() => navigate('/dashboard?connected=shopify'), 2000);
+        // If coming from Shopify App Store install flow, redirect to setup
+        const redirectTo = state?.includes('shopify_install') || sessionStorage.getItem('shopify_install_flow')
+          ? '/setup?shopify_connected=true'
+          : '/dashboard?connected=shopify';
+        setTimeout(() => navigate(redirectTo), 2000);
       } catch (err: any) {
         console.error('Shopify callback error:', err);
         setStatus('error');
