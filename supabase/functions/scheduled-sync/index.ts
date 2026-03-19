@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
 
   // ─── Collect all user IDs early for interim records ─────────────
   const { data: amazonTokens } = await adminClient.from('amazon_tokens').select('user_id');
-  const { data: shopifyTokens } = await adminClient.from('shopify_tokens').select('user_id');
+  const { data: shopifyTokens } = await adminClient.from('shopify_tokens').select('user_id').eq('is_active', true);
   const { data: xeroTokens } = await adminClient.from('xero_tokens').select('user_id');
   const { data: ebayTokens } = await adminClient.from('ebay_tokens').select('user_id');
 

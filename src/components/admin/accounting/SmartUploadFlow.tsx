@@ -174,7 +174,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   // Check if Shopify is connected and validate the token
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('shopify_tokens').select('id, scope, shop_domain').limit(1);
+      const { data } = await supabase.from('shopify_tokens').select('id, scope, shop_domain').eq('is_active', true).limit(1);
       if (!data || data.length === 0) {
         setHasShopifyConnection(false);
         return;

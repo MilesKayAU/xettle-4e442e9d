@@ -308,10 +308,12 @@ Deno.serve(async (req) => {
 
       const userId = user.id
 
+      // Soft-delete: mark as inactive instead of deleting
       const { error } = await supabase
         .from('shopify_tokens')
-        .delete()
+        .update({ is_active: false })
         .eq('user_id', userId)
+        .eq('is_active', true)
 
       if (error) {
         console.error('Failed to disconnect Shopify:', error)

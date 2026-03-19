@@ -265,6 +265,7 @@ Deno.serve(async (req) => {
       .from("shopify_tokens")
       .select("id, shop_domain")
       .eq("user_id", userId)
+      .eq("is_active", true)
       .limit(1)
       .maybeSingle(),
     adminClient
