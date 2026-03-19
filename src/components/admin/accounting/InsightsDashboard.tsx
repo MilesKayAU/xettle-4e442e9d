@@ -208,7 +208,10 @@ export default function InsightsDashboard() {
           const fees = rows.reduce((sum, r) => sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
           // Excess = fees beyond what's attributable to own sales (using 15% as normal commission)
           const ownFees = sales * 0.15;
-          totalExcessFees += Math.max(fees - ownFees, 0);
+          const excess = Math.max(fees - ownFees, 0);
+          totalExcessFees += excess;
+          // Subtract excess from fee-heavy sibling so its card shows only its own share
+          (grouped[fh] as any)._redistributedPlatformFees = -excess;
         }
 
         // Distribute proportionally to sales-producing siblings by their sales volume
@@ -225,8 +228,6 @@ export default function InsightsDashboard() {
           for (const s of salesSiblings) {
             const share = siblingSales[s] / totalSiblingSales;
             const feeShare = totalExcessFees * share;
-            // Add synthetic fee rows to represent redistributed platform fees
-            // We modify by adjusting the seller_fees on a virtual basis — tracked via _redistributedPlatformFees
             (grouped[s] as any)._redistributedPlatformFees = feeShare;
           }
         }
@@ -311,8 +312,6 @@ export default function InsightsDashboard() {
           (r as any).source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01
         );
         let hasMissingFeeData = totalFees === 0 && totalSales > 500;
-        const hasFeeAnomaly = totalFees > totalSales;
-        const hasNegativePayout = netPayout < 0 && totalSales > 0;
 
         // Include redistributed platform fees from sibling marketplaces
         const redistributedPlatformFees = (grouped[mp] as any)?._redistributedPlatformFees || 0;
@@ -321,7 +320,7 @@ export default function InsightsDashboard() {
         let effectiveFeeLoad = feeLoad;
         let effectiveNetPayout = netPayout;
         let effectiveTotalFees = totalFees + redistributedPlatformFees;
-        let effectiveHasEstimatedFees = hasEstimatedFees || redistributedPlatformFees > 0;
+        let effectiveHasEstimatedFees = hasEstimatedFees || redistributedPlatformFees !== 0;
 
         // For fee/commission calculations, identify rows with real fee data
         const feeRelevantRows = rows.filter(r => {
@@ -360,12 +359,13 @@ export default function InsightsDashboard() {
           hasMissingFeeData = false;
         }
 
-        // After api_sync estimation, add redistributed platform fees from siblings
-        if (redistributedPlatformFees > 0) {
+        // After api_sync estimation, apply redistributed platform fees from siblings
+        // Positive = fees added to sales sibling, Negative = excess removed from fee-heavy sibling
+        if (redistributedPlatformFees !== 0) {
           effectiveTotalFees += redistributedPlatformFees;
           effectiveNetPayout -= redistributedPlatformFees;
           effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
-          effectiveFeeLoad = totalSales > 0 ? Math.min(effectiveTotalFees / totalSales, 1) : 0;
+          effectiveFeeLoad = totalSales > 0 ? Math.min(Math.max(effectiveTotalFees, 0) / totalSales, 1) : 0;
           effectiveHasEstimatedFees = true;
         }
 
@@ -416,8 +416,8 @@ export default function InsightsDashboard() {
           fulfilmentUnknown,
           hasEstimatedFees: effectiveHasEstimatedFees,
           hasMissingFeeData,
-          hasFeeAnomaly,
-          hasNegativePayout,
+          hasFeeAnomaly: effectiveTotalFees > totalSales,
+          hasNegativePayout: effectiveNetPayout < 0 && totalSales > 0,
         });
       }
 

@@ -137,8 +137,9 @@ export function attributeFees(
     hasMissingFeeData = false;
   }
 
-  // Apply redistributed platform fees from siblings
-  if (redistributedPlatformFees > 0) {
+  // Apply redistributed platform fees (positive = fees added to this sibling,
+  // negative = excess fees removed from fee-heavy sibling)
+  if (redistributedPlatformFees !== 0) {
     effectiveTotalFees += redistributedPlatformFees;
     effectiveNetPayout -= redistributedPlatformFees;
     hasEstimatedFees = true;
@@ -221,7 +222,10 @@ export function redistributePlatformFees(
         0,
       );
       const ownFees = sales * 0.15;
-      totalExcessFees += Math.max(fees - ownFees, 0);
+      const excess = Math.max(fees - ownFees, 0);
+      totalExcessFees += excess;
+      // Subtract excess from fee-heavy sibling (negative = fee reduction)
+      result[fh] = (result[fh] || 0) - excess;
     }
 
     const siblingSales: Record<string, number> = {};

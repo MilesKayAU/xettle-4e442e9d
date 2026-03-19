@@ -151,19 +151,19 @@ export default function MarketplaceProfitComparison() {
           ? agg.margins.reduce((a, b) => a + b, 0) / agg.margins.length
           : 0;
 
-        // Deduct redistributed platform fees from profit
+        // Apply redistributed platform fees (positive = added to sales sibling, negative = removed from fee-heavy)
         const adjustedProfit = agg.profit - (redistFees[mp] || 0);
         const adjustedMargin = agg.revenue > 0
           ? Math.min((adjustedProfit / agg.revenue) * 100, 100)
           : avg_margin;
 
         const settRows = grouped[mp];
-        const hasEstimated = settRows?.some(r => (r.raw_payload as any)?.fees_estimated === true) || (redistFees[mp] || 0) > 0;
+        const hasEstimated = settRows?.some(r => (r.raw_payload as any)?.fees_estimated === true) || (redistFees[mp] != null && redistFees[mp] !== 0);
 
         results.push({
           marketplace_code: mp,
           marketplace_name: MARKETPLACE_LABELS[mp] || mp,
-          avg_margin: Math.round((redistFees[mp] ? adjustedMargin : avg_margin) * 10) / 10,
+          avg_margin: Math.round((redistFees[mp] != null && redistFees[mp] !== 0 ? adjustedMargin : avg_margin) * 10) / 10,
           total_revenue: Math.round(agg.revenue),
           total_profit: Math.round(adjustedProfit),
           periods: agg.count,
