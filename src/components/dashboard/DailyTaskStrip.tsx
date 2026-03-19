@@ -45,6 +45,53 @@ function SetupWarningList({ warnings, onNavigate }: { warnings: SetupWarning[]; 
     </div>
   );
 }
+const STAGES = [
+  {
+    key: 'setup',
+    label: 'Setup required',
+    icon: Settings,
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/10',
+    borderColor: 'border-destructive/30',
+    tooltip: 'Configuration steps blocking Xero posting — connect Xero, acknowledge scope, complete account mappings.',
+  },
+  {
+    key: 'review',
+    label: 'Needs review',
+    icon: FileText,
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-500/10',
+    borderColor: 'border-amber-500/30',
+    tooltip: 'Settlements ingested but not yet marked ready to push. Review data and confirm before posting.',
+  },
+  {
+    key: 'post',
+    label: 'Ready to post',
+    icon: Send,
+    color: 'text-primary',
+    bgColor: 'bg-primary/10',
+    borderColor: 'border-primary/30',
+    tooltip: 'Settlements verified and eligible to push to Xero. Open the Action Centre to review and send.',
+  },
+  {
+    key: 'recon',
+    label: 'Awaiting reconciliation',
+    icon: CheckCircle2,
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-500/10',
+    borderColor: 'border-blue-500/30',
+    tooltip: 'Settlements pushed to Xero — waiting for bank feed match and payment verification.',
+  },
+  {
+    key: 'alerts',
+    label: 'Alerts',
+    icon: AlertTriangle,
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/10',
+    borderColor: 'border-destructive/30',
+    tooltip: 'Reconciliation mismatches, missing settlements, or partial matches that need attention.',
+  },
+] as const;
 
 export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre, missingSettlementCount = 0, onUploadClick }: DailyTaskStripProps) {
   const {
