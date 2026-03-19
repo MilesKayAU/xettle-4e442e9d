@@ -294,14 +294,8 @@ export default function InsightsDashboard() {
           ? Math.max(Math.min((netPayout - adSpend - estimatedShippingCost) / totalSales, 1), -1)
           : null;
 
-        // Build fee breakdown for waterfall
-        const feeBreakdown: FeeBreakdown[] = [];
-        if (commissionTotal > 0) feeBreakdown.push({ label: 'Commission', amount: commissionTotal, pctOfSales: totalSales > 0 ? commissionTotal / totalSales : 0, color: 'bg-primary' });
-        if (fbaTotal > 0) feeBreakdown.push({ label: 'FBA Fulfilment', amount: fbaTotal, pctOfSales: totalSales > 0 ? fbaTotal / totalSales : 0, color: 'bg-destructive' });
-        if (storageTotal > 0) feeBreakdown.push({ label: 'Storage', amount: storageTotal, pctOfSales: totalSales > 0 ? storageTotal / totalSales : 0, color: 'bg-muted-foreground' });
-        if (totalRefunds > 0) feeBreakdown.push({ label: 'Refunds', amount: totalRefunds, pctOfSales: totalSales > 0 ? totalRefunds / totalSales : 0, color: 'bg-muted-foreground/60' });
-        if (otherFeesTotal > 0) feeBreakdown.push({ label: 'Other fees', amount: otherFeesTotal, pctOfSales: totalSales > 0 ? otherFeesTotal / totalSales : 0, color: 'bg-muted-foreground/40' });
-        feeBreakdown.sort((a, b) => b.amount - a.amount);
+        // Fee breakdown is built AFTER effective adjustments below
+        // (placeholder — real breakdown built before results.push)
 
         // ─── Universal Data Quality Guards ──────────────────────────────
         const hasEstimatedFees = rows.some(r => {
