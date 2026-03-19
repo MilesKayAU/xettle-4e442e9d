@@ -1,70 +1,51 @@
 project_id = "cegwclxbqvitkqxikpss"
 
-[functions.ai-file-interpreter]
-verify_jwt = false
-
-[functions.sync-xero-status]
-verify_jwt = false
-
-[functions.shopify-auth]
-verify_jwt = false
-
-[functions.fetch-shopify-orders]
-verify_jwt = false
-
-[functions.match-bank-deposits]
-verify_jwt = false
-
-[functions.run-validation-sweep]
-verify_jwt = false
-
-[functions.fetch-shopify-payouts]
-verify_jwt = false
-
-[functions.auto-push-xero]
-verify_jwt = false
-
-[functions.scheduled-sync]
-verify_jwt = false
-
-[functions.ai-bug-triage]
-verify_jwt = false
-
-[functions.ai-assistant]
-verify_jwt = false
-
-[functions.ai-account-mapper]
-verify_jwt = false
-
-[functions.generate-gst-audit-pack]
-verify_jwt = false
-
-[functions.fetch-xero-bank-transactions]
-verify_jwt = false
-
-[functions.auto-post-settlement]
-verify_jwt = false
-
-[functions.fetch-xero-invoice]
-verify_jwt = false
-
-[functions.rescan-xero-invoice-match]
-verify_jwt = false
-
-[functions.preview-xettle-invoice-payload]
-verify_jwt = false
-
-[functions.export-system-events-csv]
-verify_jwt = false
-
-[functions.backfill-fulfilment-channel]
-verify_jwt = false
-
-[functions.shopify-install]
-verify_jwt = false
-
-[functions.shopify-gdpr]
-verify_jwt = false
-
-[functions.shopify-uninstall]
-verify_jwt = false
+[functions]
+  [functions.ai-account-mapper]
+    verify_jwt = false
+  [functions.ai-assistant]
+    verify_jwt = false
+  [functions.ai-bug-triage]
+    verify_jwt = false
+  [functions.ai-file-interpreter]
+    verify_jwt = false
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.auto-post-settlement]
+    verify_jwt = false
+  [functions.auto-push-xero]
+    verify_jwt = false
+  [functions.backfill-fulfilment-channel]
+    verify_jwt = false
+  [functions.export-system-events-csv]
+    verify_jwt = false
+  [functions.fetch-shopify-orders]
+    verify_jwt = false
+  [functions.fetch-shopify-payouts]
+    verify_jwt = false
+  [functions.fetch-xero-bank-transactions]
+    verify_jwt = false
+  [functions.fetch-xero-invoice]
+    verify_jwt = false
+  [functions.generate-gst-audit-pack]
+    verify_jwt = false
+  [functions.match-bank-deposits]
+    verify_jwt = false
+  [functions.preview-xettle-invoice-payload]
+    verify_jwt = false
+  [functions.rescan-xero-invoice-match]
+    verify_jwt = false
+  [functions.run-validation-sweep]
+    verify_jwt = false
+  [functions.scheduled-sync]
+    verify_jwt = false
+  [functions.shopify-auth]
+    verify_jwt = false
+  [functions.shopify-gdpr]
+    verify_jwt = false
+  [functions.shopify-install]
+    verify_jwt = false
+  [functions.shopify-uninstall]
+    verify_jwt = false
+  [functions.sync-xero-status]
+    verify_jwt = false
