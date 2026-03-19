@@ -902,7 +902,7 @@ export default function Landing() {
         <div className="container-custom flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Xettle. Marketplace settlement engine for Xero.
+              © {new Date().getFullYear()} Xettle. Australian marketplace settlements → verified Xero invoices.
             </p>
             <div className="flex flex-wrap gap-6">
               <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
