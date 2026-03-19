@@ -608,21 +608,21 @@ export default function Landing() {
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
-              <p className="text-4xl font-bold text-primary mb-3">4+</p>
+              <p className="text-4xl font-bold text-primary mb-3">9+</p>
               <p className="text-sm text-muted-foreground">
-                The average Xettle user sells on 4+ marketplaces across Australia
+                Australian marketplaces supported — Amazon, Shopify, eBay, Bunnings, Kogan, Catch, BigW, MyDeal, Everyday Market
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
-              <p className="text-4xl font-bold text-primary mb-3">✓</p>
+              <p className="text-4xl font-bold text-primary mb-3">DRAFT</p>
               <p className="text-sm text-muted-foreground">
-                Fingerprint-based deduplication and idempotent syncing help guard against duplicate invoices
+                Every settlement posts as a DRAFT invoice — your accountant reviews before authorising. No surprise entries in Xero.
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
               <p className="text-4xl font-bold text-primary mb-3">100%</p>
               <p className="text-sm text-muted-foreground">
-                Australian — GST, ATO quarters, and Xero built in from day one
+                Australian — GST, ATO quarters, and Xero built in from day one. No US-centric assumptions.
               </p>
             </div>
           </div>
