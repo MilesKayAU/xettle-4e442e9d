@@ -102,6 +102,7 @@ export default function InsightsDashboard() {
     confidence: number;
   }>>([]);
   const [adUploadMode, setAdUploadMode] = useState<'manual' | 'upload'>('manual');
+  const [adPastedText, setAdPastedText] = useState('');
   const [shippingDialogOpen, setShippingDialogOpen] = useState(false);
   const [shippingDialogMarketplace, setShippingDialogMarketplace] = useState('');
   const [shippingCostPerOrder, setShippingCostPerOrder] = useState('');
