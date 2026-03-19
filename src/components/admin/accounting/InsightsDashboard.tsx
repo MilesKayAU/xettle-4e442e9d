@@ -549,9 +549,11 @@ export default function InsightsDashboard() {
     );
   }
 
-  // For "Best" badge, only consider marketplaces with real (non-estimated) fee data
-  const realFeeStatsForBest = stats.filter(s => !s.hasEstimatedFees);
-  const bestRatio = Math.max(...(realFeeStatsForBest.length > 0 ? realFeeStatsForBest : stats).map(s => s.returnRatio));
+  // Best performer = highest returnRatio across ALL marketplaces.
+  // Previously this excluded estimated-fee marketplaces, but that created contradictions
+  // (e.g. "Best Performer" at $0.44 while overall average was $0.53).
+  // Now we pick the true best and annotate if it uses estimated data.
+  const bestRatio = Math.max(...stats.map(s => s.returnRatio));
   const totalAllSales = stats.reduce((sum, s) => sum + s.totalSales, 0);
   const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout, 0);
   const totalAllFees = stats.reduce((sum, s) => sum + s.totalFees, 0);
