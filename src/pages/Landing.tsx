@@ -3,7 +3,7 @@ import XettleLogo from '@/components/shared/XettleLogo';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers, Users, ClipboardCheck, Ban, FileText, DollarSign, Scale, ShieldCheck, Search, Lock, Repeat, Building2, Briefcase, Receipt, Activity, Eye, ListChecks, Fingerprint, Clock, BadgeCheck } from 'lucide-react';
+import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers, Users, ClipboardCheck, Ban, FileText, DollarSign, Scale, ShieldCheck, Search, Lock, Repeat, Building2, Briefcase, Receipt, Activity, Eye, ListChecks, Fingerprint, Clock, BadgeCheck, Package, Truck, Split } from 'lucide-react';
 import profitLeakImg from '@/assets/profit-leak-preview.png';
 import feeAlertsImg from '@/assets/fee-alerts-preview.png';
 import PublicDemoUpload from '@/components/PublicDemoUpload';
@@ -51,7 +51,7 @@ export default function Landing() {
           <Link to="/" className="flex items-center gap-2">
             <XettleLogo height={32} />
             <span className="hidden sm:inline text-xs text-muted-foreground border-l border-border pl-2">
-              Marketplace settlement engine for Xero
+              Australian marketplace settlements → verified Xero invoices
             </span>
           </Link>
           <div className="flex items-center gap-3">
@@ -77,18 +77,18 @@ export default function Landing() {
         <div className="container-custom text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-bold mb-6 tracking-wide">
             <Zap className="h-4 w-4" />
-            SETTLEMENT ENGINE FOR AUSTRALIAN MARKETPLACES
+            BUILT FOR AUSTRALIAN SELLERS ON XERO
           </div>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
-            The reconciliation layer
+            Marketplace settlements
             <br />
-            <span className="text-primary">between marketplaces and Xero.</span>
+            <span className="text-primary">verified and posted to Xero.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Xettle turns marketplace settlements into Xero invoices — with reconciliation checks and mapping safeguards so you can verify totals before posting. Across Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
+            Xettle parses your marketplace settlements, reconciles them against your bank feed, and posts verified DRAFT invoices to Xero — with GST, account codes, and a full audit trail. Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
-            Not a file uploader. A settlement engine with duplicate prevention, audit trail, and bank verification built in.
+            Not a file uploader. A settlement engine with duplicate prevention, push-safety preview, and bank verification built in.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
@@ -320,14 +320,17 @@ export default function Landing() {
               Why Xettle is different.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Not another bank-feed tool. A purpose-built settlement engine for Australian marketplace sellers.
+              Not another bank-feed tool. A purpose-built settlement engine for Australian marketplace sellers on Xero.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { icon: FileText, title: 'Settlement-first accounting', desc: 'Every invoice is generated from the settlement — the only source of truth for marketplace payouts. The faster you upload settlements, the faster your books are done in Xero.' },
+              { icon: Split, title: 'Shopify sub-channel separation', desc: 'One Shopify store, multiple marketplaces. Xettle auto-detects Kogan, Catch, MyDeal, and other channels inside your Shopify payouts — and separates them for accounting.' },
+              { icon: Eye, title: 'Push safety preview', desc: 'See exactly what will post to Xero before it happens. Line items, account codes, GST — previewed and validated. No surprise journals.' },
               { icon: Shield, title: 'Deduplication safeguards', desc: 'Fingerprint-based deduplication and idempotent syncing guard against duplicate invoices from re-uploads, split-month overlaps, and tool migrations.' },
-              { icon: Repeat, title: 'Safe void and repost', desc: 'Need to correct an invoice? Void the original, repost with a full chain of custody. No orphaned entries.' },
+              { icon: BarChart3, title: 'Fee transparency', desc: 'Where fees are estimated, we badge it — and show the rate we used. Observed commission rates improve over time as more settlements are processed.' },
+              { icon: Truck, title: 'Fulfilment-aware profit', desc: 'FBA, FBM, MCF — each fulfilment method has different costs. Xettle tracks postage deductions by fulfilment channel so your profit view reflects reality.' },
               { icon: ShieldCheck, title: 'Accountant-safe posting', desc: 'Every invoice posts as DRAFT with audit CSV attached. Your accountant reviews before authorising. No surprises.' },
               { icon: Layers, title: 'Handles mixed files', desc: 'Woolworths MarketPlus covering BigW, MyDeal and Everyday Market? Automatically split into separate settlements.' },
               { icon: BarChart3, title: 'Built for Australia', desc: 'Australian GST, ATO reporting periods, and every marketplace Australian sellers actually use — built in from day one.' },
@@ -524,12 +527,12 @@ export default function Landing() {
               </p>
               <div className="space-y-4">
                 {[
-                  { mp: 'Amazon AU', detail: 'Fortnightly TSV settlements via API' },
-                  { mp: 'Shopify', detail: 'Daily payouts, multiple sub-channels' },
+                  { mp: 'Amazon AU', detail: 'Fortnightly TSV settlements via SP-API — FBA, FBM, MCF separated' },
+                  { mp: 'Shopify', detail: 'Daily payouts with sub-channel detection — Kogan, Catch, MyDeal orders separated automatically' },
                   { mp: 'eBay AU', detail: 'Managed payments, fortnightly cycles' },
                   { mp: 'Bunnings', detail: 'Monthly CSV remittance' },
-                  { mp: 'Kogan', detail: 'Monthly CSV with variable commission' },
-                  { mp: 'Catch / MyDeal / BigW', detail: 'Woolworths MarketPlus — auto-split' },
+                  { mp: 'Kogan', detail: 'Monthly CSV with variable commission — observed rates tracked' },
+                  { mp: 'Catch / MyDeal / BigW', detail: 'Woolworths MarketPlus — auto-split into separate settlements' },
                 ].map(({ mp, detail }) => (
                   <div key={mp} className="flex items-start gap-3">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-1" />
@@ -605,21 +608,21 @@ export default function Landing() {
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
-              <p className="text-4xl font-bold text-primary mb-3">4+</p>
+              <p className="text-4xl font-bold text-primary mb-3">9+</p>
               <p className="text-sm text-muted-foreground">
-                The average Xettle user sells on 4+ marketplaces across Australia
+                Australian marketplaces supported — Amazon, Shopify, eBay, Bunnings, Kogan, Catch, BigW, MyDeal, Everyday Market
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
-              <p className="text-4xl font-bold text-primary mb-3">✓</p>
+              <p className="text-4xl font-bold text-primary mb-3">DRAFT</p>
               <p className="text-sm text-muted-foreground">
-                Fingerprint-based deduplication and idempotent syncing help guard against duplicate invoices
+                Every settlement posts as a DRAFT invoice — your accountant reviews before authorising. No surprise entries in Xero.
               </p>
             </div>
             <div className="text-center p-6 rounded-2xl border border-border bg-background">
               <p className="text-4xl font-bold text-primary mb-3">100%</p>
               <p className="text-sm text-muted-foreground">
-                Australian — GST, ATO quarters, and Xero built in from day one
+                Australian — GST, ATO quarters, and Xero built in from day one. No US-centric assumptions.
               </p>
             </div>
           </div>
@@ -704,7 +707,16 @@ export default function Landing() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-foreground mb-1">Settlement fee breakdown</h3>
-                  <p className="text-muted-foreground text-sm">See exactly what the marketplace charged — commission, FBA fulfilment, refunds, and platform fees — verified from settlement data.</p>
+                  <p className="text-muted-foreground text-sm">See exactly what the marketplace charged — commission, FBA fulfilment, refunds, and platform fees — verified from settlement data. Where fees are estimated, we badge it and show the rate used.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Truck className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Fulfilment-aware costs</h3>
+                  <p className="text-muted-foreground text-sm">FBA, FBM, MCF — each has different postage and fulfilment costs. Xettle deducts the right amount per fulfilment channel so your profit reflects what you actually paid to ship.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
@@ -713,16 +725,7 @@ export default function Landing() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-foreground mb-1">Compare marketplaces</h3>
-                  <p className="text-muted-foreground text-sm">Instantly compare settlement margins from Bunnings vs Amazon vs Shopify — side by side.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">Track margin changes</h3>
-                  <p className="text-muted-foreground text-sm">See how settlement margins shift over time as marketplaces adjust their fee structures.</p>
+                  <p className="text-muted-foreground text-sm">Instantly compare settlement margins from Bunnings vs Amazon vs Shopify — side by side. Track how margins shift as marketplaces adjust their fee structures.</p>
                 </div>
               </div>
             </div>
@@ -899,7 +902,7 @@ export default function Landing() {
         <div className="container-custom flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Xettle. Marketplace settlement engine for Xero.
+              © {new Date().getFullYear()} Xettle. Australian marketplace settlements → verified Xero invoices.
             </p>
             <div className="flex flex-wrap gap-6">
               <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
