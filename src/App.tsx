@@ -63,6 +63,7 @@ function App() {
                   <Route path="/pricing" element={<Pricing />} />
                   <Route path="/amazon" element={<Amazon />} />
                   <Route path="/marketplaces" element={<Marketplaces />} />
+                  <Route path="/insights" element={<Insights />} />
                   {/* Authenticated routes — trial banner renders on all */}
                   <Route element={<AuthenticatedLayout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
