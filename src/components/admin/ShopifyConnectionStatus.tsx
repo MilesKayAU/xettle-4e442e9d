@@ -229,12 +229,24 @@ const ShopifyConnectionStatus = () => {
     return domain.trim().endsWith('.myshopify.com') && domain.trim().length > '.myshopify.com'.length;
   };
 
-  const handleConnect = async () => {
-    if (!isValidDomain(shopDomain)) {
+  const handleConnect = async (domainOverride?: string) => {
+    const domain = domainOverride || shopDomain.trim();
+    if (!isValidDomain(domain)) {
       toast.error('Please enter a valid .myshopify.com domain');
       return;
     }
 
+    // If already connected to a different store, show replacement warning
+    if (status?.connected && status.shops.length > 0 && status.shops[0].shop_domain !== domain) {
+      setPendingConnectDomain(domain);
+      setStoreReplaceOpen(true);
+      return;
+    }
+
+    await initiateOAuth(domain);
+  };
+
+  const initiateOAuth = async (domain: string) => {
     setConnecting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -245,7 +257,7 @@ const ShopifyConnectionStatus = () => {
       }
 
       const { data: result, error } = await supabase.functions.invoke('shopify-auth', {
-        body: { action: 'initiate', shop: shopDomain.trim(), userId: session.user.id },
+        body: { action: 'initiate', shop: domain, userId: session.user.id },
       });
 
       if (error) throw new Error(error.message || 'Failed to start authorization');
@@ -261,6 +273,11 @@ const ShopifyConnectionStatus = () => {
       toast.error(error.message || 'Failed to connect to Shopify');
       setConnecting(false);
     }
+  };
+
+  const handleConfirmReplace = async () => {
+    setStoreReplaceOpen(false);
+    await initiateOAuth(pendingConnectDomain);
   };
 
   const handleDisconnect = async () => {
