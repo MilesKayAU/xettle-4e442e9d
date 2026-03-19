@@ -16,6 +16,7 @@ import {
   FULFILMENT_LABELS,
   loadFulfilmentMethods,
   saveFulfilmentMethod,
+  savePostageCost,
   getEffectiveMethod,
   isAmazonCode,
 } from '@/utils/fulfilment-settings';
