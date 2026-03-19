@@ -36,6 +36,7 @@ interface AggregatedMarketplace {
   periods: number;
   has_cost_data: boolean;
   has_estimated_fees: boolean;
+  implied_commission_rate: number | null;
 }
 
 function formatAUD(amount: number): string {
