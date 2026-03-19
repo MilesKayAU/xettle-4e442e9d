@@ -544,6 +544,31 @@ export default function SetupStepConnectStores({
                       </div>
                     ))}
                   </RadioGroup>
+                  {showAmazonPostageInput && (
+                    <div className="pt-2 space-y-1">
+                      <Label htmlFor="onboard-amazon-postage" className="text-[11px] text-muted-foreground">
+                        Avg. postage cost per order
+                      </Label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                        <Input
+                          id="onboard-amazon-postage"
+                          type="number"
+                          min="0"
+                          step="0.50"
+                          placeholder="9.50"
+                          value={amazonPostageCost}
+                          onChange={(e) => setAmazonPostageCost(e.target.value)}
+                          className="pl-6 h-8 text-sm"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {amazonFulfilmentChoice === 'mixed_fba_fbm'
+                          ? 'Applied to FBM orders only — FBA orders use Amazon\'s fees from your settlements.'
+                          : 'Your shipping cost (e.g. AusPost, Sendle) — deducted per order for profit calculations.'}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <Button onClick={advanceFromAmazon} className="w-full">
                   Continue <ArrowRight className="h-4 w-4 ml-2" />
