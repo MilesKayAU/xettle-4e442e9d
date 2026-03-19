@@ -181,6 +181,13 @@ Deno.serve(async (req) => {
 
       logger.debug('Token exchange successful, storing in database...')
 
+      // Deactivate any existing tokens for this user before inserting
+      await supabaseAdmin
+        .from('shopify_tokens')
+        .update({ is_active: false })
+        .eq('user_id', userId)
+        .neq('shop_domain', shop)
+
       // Upsert shopify_tokens (supabaseAdmin already created above)
       const { error: tokenError } = await supabaseAdmin
         .from('shopify_tokens')
@@ -189,6 +196,7 @@ Deno.serve(async (req) => {
           shop_domain: shop,
           access_token,
           scope,
+          is_active: true,
         }, {
           onConflict: 'user_id,shop_domain',
         })
