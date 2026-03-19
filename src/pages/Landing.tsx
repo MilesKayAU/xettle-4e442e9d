@@ -51,7 +51,7 @@ export default function Landing() {
           <Link to="/" className="flex items-center gap-2">
             <XettleLogo height={32} />
             <span className="hidden sm:inline text-xs text-muted-foreground border-l border-border pl-2">
-              Marketplace settlement engine for Xero
+              Australian marketplace settlements → verified Xero invoices
             </span>
           </Link>
           <div className="flex items-center gap-3">
