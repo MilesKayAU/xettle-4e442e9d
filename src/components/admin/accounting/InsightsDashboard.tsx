@@ -366,21 +366,13 @@ export default function InsightsDashboard() {
         // Derive effectiveAvgCommission aligned with the estimated fee logic above
         let effectiveAvgCommission: number;
         if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
-          // Case 1: ALL api_sync zero-fee — use the estimated rate directly
-          effectiveAvgCommission = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
-        } else if (apiSyncZeroFeeRows.length > 0 && feeRelevantRows.length > 0) {
-          // Case 2: Mixed — derive rate from real CSV rows
-          const csvSales = feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
-          const csvFees = Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
-          effectiveAvgCommission = csvSales > 0 ? csvFees / csvSales : (COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE);
+          // All api_sync: use effective post-adjustment fee rate
+          effectiveAvgCommission = totalSales > 0 ? Math.min(Math.max(effectiveTotalFees, 0) / totalSales, 1) : 0;
         } else {
-          // Default: use raw commission calculation
-          effectiveAvgCommission = avgCommission;
+          // Real-fee marketplaces: commission must reflect redistribution too
+          const redistributedCommission = Math.max(adjustedCommissionTotal + redistributedPlatformFees, 0);
+          effectiveAvgCommission = totalSales > 0 ? Math.min(redistributedCommission / totalSales, 1) : 0;
         }
-
-        const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
-          ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
-          : commissionTotal;
 
         // ─── Build fee breakdown using EFFECTIVE values (after estimation & redistribution) ───
         // For fee-heavy siblings (negative redistribution), reduce commission by the excess removed.
@@ -425,7 +417,7 @@ export default function InsightsDashboard() {
           estimatedShippingCost,
           returnAfterShipping,
           returnAfterAdsAndShipping,
-          commissionTotal: adjustedCommissionTotal,
+          commissionTotal: finalCommission,
           fbaTotal,
           storageTotal,
           otherFeesTotal: finalOther,
