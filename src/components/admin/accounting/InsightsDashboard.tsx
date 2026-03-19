@@ -1581,19 +1581,19 @@ export default function InsightsDashboard() {
 
               <TabsContent value="upload" className="space-y-4 pt-2">
                 {adParsedEntries.length === 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Upload a PDF invoice or CSV/Excel ad spend report. We'll automatically detect the marketplace, period, and cost.
+                      Upload a file, or paste invoice text (e.g. from a web portal). We'll automatically detect the marketplace, period, and cost.
                     </p>
-                    <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+                    <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-5 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
                       {adUploadParsing ? (
                         <>
                           <LoadingSpinner />
-                          <span className="text-sm text-muted-foreground">Parsing invoice…</span>
+                          <span className="text-sm text-muted-foreground">Parsing…</span>
                         </>
                       ) : (
                         <>
-                          <Upload className="h-8 w-8 text-muted-foreground" />
+                          <Upload className="h-7 w-7 text-muted-foreground" />
                           <span className="text-sm font-medium text-foreground">Drop file or click to browse</span>
                           <span className="text-xs text-muted-foreground">PDF, CSV, or Excel</span>
                         </>
@@ -1610,6 +1610,32 @@ export default function InsightsDashboard() {
                         }}
                       />
                     </label>
+
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex-1 h-px bg-border" />
+                      <span>or paste text</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Textarea
+                        placeholder="Paste invoice text here (e.g. copy from Kogan Publisher Portal, eBay ad invoice page, etc.)"
+                        value={adPastedText}
+                        onChange={(e) => setAdPastedText(e.target.value)}
+                        rows={5}
+                        disabled={adUploadParsing}
+                        className="text-xs"
+                      />
+                      <Button
+                        onClick={() => handleAdSpendPastedText(adPastedText)}
+                        disabled={adUploadParsing || !adPastedText.trim()}
+                        size="sm"
+                        className="w-full gap-1.5"
+                      >
+                        <ClipboardPaste className="h-3.5 w-3.5" />
+                        {adUploadParsing ? 'Parsing…' : 'Parse Pasted Text'}
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
