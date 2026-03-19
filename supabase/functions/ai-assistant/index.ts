@@ -168,9 +168,16 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Detect if this is a QA/scan request (test mode)
+    const lastUserMsg = messages[messages.length - 1]?.content || '';
+    const isQAMode = lastUserMsg.includes('[PAGE SCAN REQUEST]') ||
+                     lastUserMsg.includes('[FAKE DATA CHECK]') ||
+                     lastUserMsg.includes('[CODE & UX REVIEW]');
+
+    const basePrompt = isQAMode ? QA_SYSTEM_PROMPT : SYSTEM_PROMPT;
     const systemPrompt = context
-      ? `${SYSTEM_PROMPT}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}`
-      : SYSTEM_PROMPT;
+      ? `${basePrompt}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}`
+      : basePrompt;
 
     // ─── Route-filtered tools ────────────────────────────────────────
     const routeId = context?.routeId ?? null;
