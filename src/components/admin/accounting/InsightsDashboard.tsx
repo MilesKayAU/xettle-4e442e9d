@@ -208,7 +208,10 @@ export default function InsightsDashboard() {
           const fees = rows.reduce((sum, r) => sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
           // Excess = fees beyond what's attributable to own sales (using 15% as normal commission)
           const ownFees = sales * 0.15;
-          totalExcessFees += Math.max(fees - ownFees, 0);
+          const excess = Math.max(fees - ownFees, 0);
+          totalExcessFees += excess;
+          // Subtract excess from fee-heavy sibling so its card shows only its own share
+          (grouped[fh] as any)._redistributedPlatformFees = -excess;
         }
 
         // Distribute proportionally to sales-producing siblings by their sales volume
@@ -225,8 +228,6 @@ export default function InsightsDashboard() {
           for (const s of salesSiblings) {
             const share = siblingSales[s] / totalSiblingSales;
             const feeShare = totalExcessFees * share;
-            // Add synthetic fee rows to represent redistributed platform fees
-            // We modify by adjusting the seller_fees on a virtual basis — tracked via _redistributedPlatformFees
             (grouped[s] as any)._redistributedPlatformFees = feeShare;
           }
         }
