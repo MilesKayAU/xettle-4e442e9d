@@ -91,28 +91,29 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Load all settlements for user
-    const { data: settlements, error: sErr } = await admin
-      .from("settlements")
-      .select("settlement_id, marketplace, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, other_fees, gst_on_income, gst_on_expenses, period_start, period_end")
-      .eq("user_id", userId)
-      .eq("is_hidden", false)
-      .is("duplicate_of_settlement_id", null);
+    // Load all settlements for user (paginated)
+    const settlements = await fetchAllRows(
+      admin
+        .from("settlements")
+        .select("settlement_id, marketplace, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, other_fees, gst_on_income, gst_on_expenses, period_start, period_end")
+        .eq("user_id", userId)
+        .eq("is_hidden", false)
+        .is("duplicate_of_settlement_id", null)
+    );
 
-    if (sErr) throw sErr;
-
-    // Load settlement lines (now including fulfilment_channel) and product costs
-    const [linesRes, costsRes] = await Promise.all([
-      admin.from("settlement_lines")
-        .select("settlement_id, sku, amount, order_id, transaction_type, fulfilment_channel")
-        .eq("user_id", userId),
-      admin.from("product_costs")
-        .select("sku, cost, currency, label")
-        .eq("user_id", userId),
+    // Load settlement lines (paginated) and product costs
+    const [allLines, productCosts] = await Promise.all([
+      fetchAllRows(
+        admin.from("settlement_lines")
+          .select("settlement_id, sku, amount, order_id, transaction_type, fulfilment_channel")
+          .eq("user_id", userId)
+      ),
+      fetchAllRows(
+        admin.from("product_costs")
+          .select("sku, cost, currency, label")
+          .eq("user_id", userId)
+      ),
     ]);
-
-    const allLines = linesRes.data || [];
-    const productCosts = costsRes.data || [];
 
     // Build cost lookup
     const costMap = new Map<string, number>();

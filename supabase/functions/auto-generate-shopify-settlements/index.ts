@@ -15,24 +15,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logger } from '../_shared/logger.ts';
-
-// ─── Estimated Commission Rates for Shopify Sub-Channels ────────────────────
-// These are applied to api_sync settlements so the Insights page shows realistic
-// fee data rather than 0% fees. Flagged as estimates in raw_payload metadata.
-// Configurable here — adjust rates as marketplace terms change.
-const COMMISSION_ESTIMATES: Record<string, number> = {
-  kogan:            0.12,  // ~12% commission
-  bigw:             0.08,  // ~8% commission
-  everyday_market:  0.10,  // ~10% commission
-  mydeal:           0.10,  // ~10% commission
-  bunnings:         0.10,  // ~10% Mirakl commission
-  catch:            0.12,  // ~12% commission
-  ebay_au:          0.13,  // ~13% final value fee
-  iconic:           0.15,  // ~15% commission
-  tradesquare:      0.10,  // ~10% commission
-  tiktok:           0.05,  // ~5% commission
-};
-const DEFAULT_COMMISSION_RATE = 0.10; // 10% fallback for unknown marketplaces
+import { COMMISSION_ESTIMATES, DEFAULT_COMMISSION_RATE, getCommissionRate } from "../_shared/commission-rates.ts";
 
 // ─── Hardcoded fallback registries (used only if DB query fails) ────────────
 
