@@ -59,3 +59,6 @@ verify_jwt = false
 
 [functions.backfill-fulfilment-channel]
 verify_jwt = false
+
+[functions.shopify-install]
+verify_jwt = false
