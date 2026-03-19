@@ -35,7 +35,12 @@ export default function SetupWizard({
   hasXero = false,
   justConnectedXero = false,
 }: SetupWizardProps) {
+  const [wizardSearchParams] = useSearchParams();
+  const shopifyConnected = wizardSearchParams.get('shopify_connected') === 'true';
+
   const [step, setStep] = useState(() => {
+    // If arriving from Shopify install flow, skip past Marketplaces step
+    if (shopifyConnected) return 3;
     if (initialStep > 1) return Math.min(initialStep, TOTAL_STEPS);
     const saved = sessionStorage.getItem(STORAGE_KEY);
     const parsed = saved ? parseInt(saved, 10) : 1;
