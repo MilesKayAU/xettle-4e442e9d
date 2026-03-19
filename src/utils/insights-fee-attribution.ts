@@ -154,6 +154,7 @@ export interface RedistributionResult {
  */
 export function redistributePlatformFees(
   grouped: Record<string, SettlementRow[]>,
+  observedRates: Record<string, number> = {},
 ): Record<string, number> {
   const result: Record<string, number> = {};
 
@@ -204,7 +205,9 @@ export function redistributePlatformFees(
           Math.abs(r.other_fees || 0),
         0,
       );
-      const ownFees = sales * 0.15;
+      // Use observed rate if available, fall back to 15%
+      const ownFeeRate = observedRates[fh] ?? 0.15;
+      const ownFees = sales * ownFeeRate;
       const excess = Math.max(fees - ownFees, 0);
       totalExcessFees += excess;
       // Subtract excess from fee-heavy sibling (negative = fee reduction)
