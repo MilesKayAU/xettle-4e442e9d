@@ -185,7 +185,8 @@ export default function MarketplaceProfitComparison() {
 
         const settRows = grouped[mp];
         const hasEstimated = settRows?.some(r => (r.raw_payload as any)?.fees_estimated === true) || (redistFees[mp] != null && redistFees[mp] !== 0);
-        const impliedRate = hasEstimated ? (COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE) : null;
+        // Check if redistribution used fallback rate
+        const redistUsedFallback = (redistFees[mp] != null && redistFees[mp] !== 0) && !observedRates[mp];
 
         results.push({
           marketplace_code: mp,
@@ -195,8 +196,8 @@ export default function MarketplaceProfitComparison() {
           total_profit: Math.round(adjustedProfit),
           periods: agg.count,
           has_cost_data: true,
-          has_estimated_fees: hasEstimated,
-          implied_commission_rate: impliedRate,
+          has_estimated_fees: hasEstimated || redistUsedFallback,
+          implied_commission_rate: null, // No fabricated rates
         });
       }
 
@@ -211,12 +212,13 @@ export default function MarketplaceProfitComparison() {
         const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
         const postageCost = postageCosts[mp] || 0;
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
-        const estimatedPostageDeduction = shouldDeductShipping ? postageCost * rows.length : 0;
-
-        // Use canonical fee attribution
+        
+        // Use canonical fee attribution — do NOT use rows.length as order count
         const attribution = attributeFees(mp, rows, redistFees[mp] || 0);
 
-        const adjustedPayout = attribution.effectiveNetPayout - estimatedPostageDeduction;
+        // Only deduct shipping if we have real order count data (not fabricated)
+        // For now, skip postage deduction here since we don't have order counts
+        const adjustedPayout = attribution.effectiveNetPayout;
         const margin = totalSales > 0 ? Math.min((adjustedPayout / totalSales) * 100, 100) : 0;
 
         results.push({
@@ -228,9 +230,7 @@ export default function MarketplaceProfitComparison() {
           periods: rows.length,
           has_cost_data: false,
           has_estimated_fees: attribution.hasEstimatedFees,
-          implied_commission_rate: attribution.hasEstimatedFees
-            ? (COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE)
-            : null,
+          implied_commission_rate: null, // No fabricated rates — show "payout margin" badge instead
         });
       }
 
