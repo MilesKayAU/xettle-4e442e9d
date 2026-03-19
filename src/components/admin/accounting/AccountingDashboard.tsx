@@ -1109,7 +1109,7 @@ export default function AccountingDashboard() {
 
             {/* HISTORY TAB */}
             <TabsContent value="history">
-              <SettlementHistory
+              <SettlementHistoryTab
                 settlements={settlements}
                 loading={loadingSettlements}
                 onDeleted={() => {
