@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
     const mp = s.marketplace || '';
     const salesPrincipal = Number(s.sales_principal) || 0;
     const gstOnIncome = Number(s.gst_on_income) || 0;
-    const commissionRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+    const commissionRate = getCommissionRate(mp, observedRates);
     const estimatedFees = -Math.round(salesPrincipal * commissionRate * 100) / 100;
     const adjustedBankDeposit = Math.round((salesPrincipal + gstOnIncome + estimatedFees) * 100) / 100;
 
