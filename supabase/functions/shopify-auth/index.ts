@@ -2,6 +2,46 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logger } from '../_shared/logger.ts'
 
+function getQueryPairKey(pair: string): string {
+  const separatorIndex = pair.indexOf('=')
+  return separatorIndex >= 0 ? pair.slice(0, separatorIndex) : pair
+}
+
+function getRawQueryString(input: string): string {
+  if (!input) return ''
+  const questionMarkIndex = input.indexOf('?')
+  return questionMarkIndex >= 0 ? input.slice(questionMarkIndex + 1) : input.replace(/^\?/, '')
+}
+
+function buildShopifyHmacMessage(rawInput: string, excludedKeys: string[] = ['hmac', 'signature']): string {
+  const excluded = new Set(excludedKeys)
+  return getRawQueryString(rawInput)
+    .split('&')
+    .filter(Boolean)
+    .filter((pair) => !excluded.has(getQueryPairKey(pair)))
+    .sort((a, b) => getQueryPairKey(a).localeCompare(getQueryPairKey(b)) || a.localeCompare(b))
+    .join('&')
+}
+
+async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  const encoder = new TextEncoder()
+  const aBytes = encoder.encode(a)
+  const bBytes = encoder.encode(b)
+  if (aBytes.byteLength !== bBytes.byteLength) return false
+
+  const rndKey = crypto.getRandomValues(new Uint8Array(32))
+  const cmpKey = await crypto.subtle.importKey('raw', rndKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const [sigA, sigB] = await Promise.all([
+    crypto.subtle.sign('HMAC', cmpKey, aBytes),
+    crypto.subtle.sign('HMAC', cmpKey, bBytes),
+  ])
+  const vA = new Uint8Array(sigA)
+  const vB = new Uint8Array(sigB)
+  let diff = 0
+  for (let i = 0; i < vA.length; i++) diff |= vA[i] ^ vB[i]
+  return diff === 0
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? ""
   const corsHeaders = getCorsHeaders(origin)
@@ -84,7 +124,7 @@ Deno.serve(async (req) => {
     // ACTION: callback — verify HMAC, exchange code, store token
     if (action === 'callback') {
       const body = parsedBody || await req.json()
-      const { code, shop, state, hmac, ...restParams } = body
+      const { code, shop, state, hmac, rawQuery, ...restParams } = body
 
       if (!code || !shop || !state || !hmac) {
         return new Response(
@@ -93,13 +133,13 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Verify HMAC signature using ALL params except hmac and action
       const params: Record<string, string> = { code, shop, state, ...restParams }
       delete params.action
       delete params.hmac
 
-      const sortedKeys = Object.keys(params).sort()
-      const message = sortedKeys.map(k => `${k}=${params[k]}`).join('&')
+      const message = typeof rawQuery === 'string' && rawQuery.trim().length > 0
+        ? buildShopifyHmacMessage(rawQuery)
+        : Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&')
 
       const encoder = new TextEncoder()
       const key = await crypto.subtle.importKey(
@@ -114,25 +154,7 @@ Deno.serve(async (req) => {
         .map(b => b.toString(16).padStart(2, '0'))
         .join('')
 
-      // Timing-safe comparison to prevent timing attacks
-      const hmacEncoder = new TextEncoder()
-      const aBytes = hmacEncoder.encode(computedHmac)
-      const bBytes = hmacEncoder.encode(hmac)
-      let hmacValid = aBytes.byteLength === bBytes.byteLength
-      if (hmacValid) {
-        const rndKey = crypto.getRandomValues(new Uint8Array(32))
-        const cmpKey = await crypto.subtle.importKey('raw', rndKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-        const [sigA, sigB] = await Promise.all([
-          crypto.subtle.sign('HMAC', cmpKey, aBytes),
-          crypto.subtle.sign('HMAC', cmpKey, bBytes),
-        ])
-        const vA = new Uint8Array(sigA)
-        const vB = new Uint8Array(sigB)
-        let diff = 0
-        for (let i = 0; i < vA.length; i++) diff |= vA[i] ^ vB[i]
-        hmacValid = diff === 0
-      }
-
+      const hmacValid = await timingSafeEqual(computedHmac.toLowerCase(), hmac.toLowerCase())
       if (!hmacValid) {
         console.error('HMAC verification failed')
         return new Response(
