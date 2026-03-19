@@ -235,6 +235,10 @@ export default function Admin() {
               <Mail className="h-3.5 w-3.5" />
               Emails
             </TabsTrigger>
+            <TabsTrigger value="overview" className="flex items-center gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              User Overview
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
