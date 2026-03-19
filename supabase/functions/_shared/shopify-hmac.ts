@@ -163,22 +163,9 @@ export async function verifyShopifyHmac({
 }: VerifyShopifyHmacInput): Promise<{ valid: boolean; matchedStrategy: string | null }> {
   const candidates = getShopifyHmacCandidates({ rawInput, params, excludedKeys })
 
-  // === DEBUG: log all candidate messages ===
-  console.log('DEBUG hmac candidates:', JSON.stringify(
-    candidates.map(c => ({ label: c.label, message: c.message }))
-  ))
-
   for (const candidate of candidates) {
     const computedHmac = await computeShopifyHmacHex(secret, candidate.message)
     const isValid = await timingSafeEqual(computedHmac.toLowerCase(), providedHmac.toLowerCase())
-
-    // === DEBUG: log each comparison ===
-    console.log('DEBUG hmac compare:', JSON.stringify({
-      strategy: candidate.label,
-      computed: computedHmac.slice(0, 12) + '...',
-      provided: providedHmac.slice(0, 12) + '...',
-      match: isValid,
-    }))
 
     if (isValid) {
       return { valid: true, matchedStrategy: candidate.label }

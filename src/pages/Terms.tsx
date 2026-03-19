@@ -29,7 +29,7 @@ export default function Terms() {
 
           <section>
             <h2 className="text-xl font-semibold text-foreground mt-8 mb-3">2. Description of Service</h2>
-            <p className="text-muted-foreground leading-relaxed">Xettle is a web-based tool that helps Amazon marketplace sellers parse settlement reports and synchronise the resulting accounting data with Xero. The Service is currently provided free of charge.</p>
+            <p className="text-muted-foreground leading-relaxed">Xettle is a web-based tool that helps marketplace sellers parse settlement and payout data from platforms including Amazon, Shopify, eBay, and others, and synchronise the resulting accounting data with Xero. The Service is currently provided free of charge.</p>
           </section>
 
           <section>
@@ -45,6 +45,23 @@ export default function Terms() {
           <section>
             <h2 className="text-xl font-semibold text-foreground mt-8 mb-3">4. Xero Integration</h2>
             <p className="text-muted-foreground leading-relaxed">By connecting your Xero account, you authorise Xettle to access your Xero organisation to create invoices and related accounting entries on your behalf. You can revoke this access at any time through your Xero account settings or by disconnecting within Xettle.</p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-foreground mt-8 mb-3">4a. Shopify Integration</h2>
+            <p className="text-muted-foreground leading-relaxed mb-3">By installing or connecting the Xettle app on your Shopify store, you authorise Xettle to:</p>
+            <ul className="list-disc pl-6 text-muted-foreground space-y-1">
+              <li>Access your store's order data (order amounts, taxes, discounts, gateways, and tags) for settlement reconciliation</li>
+              <li>Access your Shopify Payments payout data to generate settlement records</li>
+              <li>Read your store domain and basic store information for connection management</li>
+            </ul>
+            <p className="text-muted-foreground leading-relaxed mt-3 mb-3">You acknowledge that:</p>
+            <ul className="list-disc pl-6 text-muted-foreground space-y-1">
+              <li>Xettle does not modify your Shopify store, products, inventory, or customer data</li>
+              <li>You are responsible for reviewing all settlement and reconciliation data before syncing to Xero</li>
+              <li>You can disconnect your Shopify store or uninstall the Xettle app at any time</li>
+              <li>Upon uninstallation, Xettle will deactivate the stored OAuth token; you may also permanently delete stored data from your account settings</li>
+            </ul>
           </section>
 
           <section>
@@ -84,7 +101,7 @@ export default function Terms() {
 
           <section>
             <h2 className="text-xl font-semibold text-foreground mt-8 mb-3">11. Intellectual Property</h2>
-            <p className="text-muted-foreground leading-relaxed">Xettle and its original content, features, and functionality are owned by Xettle and are protected by international copyright, trademark, and other intellectual property laws. Xero is a trademark of Xero Limited. Amazon is a trademark of Amazon.com, Inc.</p>
+            <p className="text-muted-foreground leading-relaxed">Xettle and its original content, features, and functionality are owned by Xettle and are protected by international copyright, trademark, and other intellectual property laws. Xero is a trademark of Xero Limited. Amazon is a trademark of Amazon.com, Inc. Shopify is a trademark of Shopify Inc.</p>
           </section>
 
           <section>
@@ -96,7 +113,7 @@ export default function Terms() {
 
       <footer className="border-t border-border py-6 px-4">
         <div className="container-custom text-center">
-          <p className="text-xs text-muted-foreground/60">Xero is a trademark of Xero Limited. Xettle is not affiliated with Xero Limited.</p>
+          <p className="text-xs text-muted-foreground/60">Xero is a trademark of Xero Limited. Shopify is a trademark of Shopify Inc. Amazon is a trademark of Amazon.com, Inc. Xettle is not affiliated with these companies.</p>
         </div>
       </footer>
     </div>

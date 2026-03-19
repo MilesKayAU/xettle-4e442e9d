@@ -62,3 +62,9 @@ verify_jwt = false
 
 [functions.shopify-install]
 verify_jwt = false
+
+[functions.shopify-gdpr]
+verify_jwt = false
+
+[functions.shopify-uninstall]
+verify_jwt = false
