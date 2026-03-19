@@ -1129,7 +1129,19 @@ export default function Dashboard() {
           <ErrorBoundary>
             <div className="space-y-6">
               <ValidationSweep
-                onSwitchToUpload={() => setShowUploadSheet(true)}
+                onSwitchToUpload={(marketplaceCode, periodLabel) => {
+                  if (marketplaceCode && periodLabel) {
+                    const label = marketplaceCode.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+                    setMissingSettlements([{
+                      marketplace_code: marketplaceCode,
+                      marketplace_label: label,
+                      period_label: periodLabel,
+                      period_start: '',
+                      period_end: '',
+                    }]);
+                  }
+                  setShowUploadSheet(true);
+                }}
               />
             </div>
           </ErrorBoundary>
