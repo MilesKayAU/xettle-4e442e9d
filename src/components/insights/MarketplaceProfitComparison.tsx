@@ -163,7 +163,7 @@ export default function MarketplaceProfitComparison() {
         results.push({
           marketplace_code: mp,
           marketplace_name: MARKETPLACE_LABELS[mp] || mp,
-          avg_margin: Math.round((redistFees[mp] ? adjustedMargin : avg_margin) * 10) / 10,
+          avg_margin: Math.round((redistFees[mp] != null && redistFees[mp] !== 0 ? adjustedMargin : avg_margin) * 10) / 10,
           total_revenue: Math.round(agg.revenue),
           total_profit: Math.round(adjustedProfit),
           periods: agg.count,
