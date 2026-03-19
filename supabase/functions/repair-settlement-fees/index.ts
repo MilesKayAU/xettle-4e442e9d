@@ -8,13 +8,25 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { COMMISSION_ESTIMATES, DEFAULT_COMMISSION_RATE, getCommissionRate } from "../_shared/commission-rates.ts";
 
-const COMMISSION_ESTIMATES: Record<string, number> = {
-  kogan: 0.12, bigw: 0.08, everyday_market: 0.10, mydeal: 0.10,
-  bunnings: 0.10, catch: 0.12, ebay_au: 0.13, iconic: 0.15,
-  tradesquare: 0.10, tiktok: 0.05,
-};
-const DEFAULT_COMMISSION_RATE = 0.10;
+/** Paginated fetch helper — avoids the 1000-row default cap */
+async function fetchAllRows<T>(
+  query: any,
+  pageSize = 1000,
+): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
