@@ -340,9 +340,7 @@ export default function MarketplaceProfitComparison() {
                             </Badge>
                           </TooltipTrigger>
                           <TooltipContent className="text-xs max-w-xs">
-                            {mp.implied_commission_rate
-                              ? `Using ${(mp.implied_commission_rate * 100).toFixed(0)}% estimated commission rate. Upload CSV settlements for actual fees.`
-                              : 'Fee data includes estimates. Upload CSV settlements for actual fees.'}
+                            Fee data includes estimates from platform fee redistribution. Upload CSV settlements for actual fees.
                           </TooltipContent>
                         </Tooltip>
                       )}
