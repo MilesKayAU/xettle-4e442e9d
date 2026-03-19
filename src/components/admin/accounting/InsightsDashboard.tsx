@@ -752,12 +752,17 @@ export default function InsightsDashboard() {
             <CardContent className="pt-5 pb-4">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Best Performer</p>
+                  <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">
+                    {stats.length > 1 ? 'Highest Return' : 'Return Rate'}
+                  </p>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs max-w-xs">The marketplace returning the most profit per $1 sold — your efficiency engine.</TooltipContent>
+                <TooltipContent className="text-xs max-w-xs">The marketplace that retains the most per $1 sold after fees. Does not mean "profitable" — just the least fee-heavy.</TooltipContent>
               </Tooltip>
-              <p className="text-xl font-bold text-primary mt-1">{bestProfit.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">${bestProfit.returnRatio.toFixed(2)} per $1</p>
+              <p className={`text-xl font-bold mt-1 ${getRatioColor(bestProfit.returnRatio)}`}>{bestProfit.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ${bestProfit.returnRatio.toFixed(2)} per $1
+                {bestProfit.hasEstimatedFees && ' (est.)'}
+              </p>
             </CardContent>
           </Card>
         </div>
