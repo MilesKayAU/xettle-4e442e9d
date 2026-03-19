@@ -77,7 +77,7 @@ export function attributeFees(
   mp: string,
   rows: SettlementRow[],
   redistributedPlatformFees = 0,
-  observedRates: Record<string, number> = {},
+  _observedRates: Record<string, number> = {},
 ): FeeAttribution {
   const totalSalesExGst = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
   const totalGst = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
@@ -96,12 +96,9 @@ export function attributeFees(
   const commissionTotal = Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
   const rawAvgCommission = totalSales > 0 ? Math.min(commissionTotal / totalSales, 1) : 0;
 
-  // Identify api_sync zero-fee rows vs rows with real fee data
+  // Identify api_sync zero-fee rows
   const apiSyncZeroFeeRows = rows.filter(
     (r) => r.source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01,
-  );
-  const feeRelevantRows = rows.filter(
-    (r) => !(r.source === 'api_sync' && Math.abs(r.seller_fees || 0) < 0.01),
   );
 
   let effectiveTotalFees = rawTotalFees;
@@ -111,32 +108,17 @@ export function attributeFees(
   let hasMissingFeeData = rawTotalFees === 0 && totalSales > 500;
 
   if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
-    // Case 1: ALL rows are api_sync with zero fees
-    const estimatedRate = observedRates[mp] ?? COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE;
-    const estimatedFees = totalSalesExGst * estimatedRate;
-    effectiveTotalFees = estimatedFees;
-    effectiveNetPayout = totalSales - estimatedFees;
-    effectiveAvgCommission = estimatedRate;
-    hasEstimatedFees = true;
-    hasMissingFeeData = false;
-  } else if (apiSyncZeroFeeRows.length > 0 && feeRelevantRows.length > 0) {
-    // Case 2: MIXED — CSV rows with real fees + api_sync with zero fees
-    const csvSales = feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
-    const csvFees = Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
-    const realFeeRate =
-      csvSales > 0 ? csvFees / csvSales : observedRates[mp] ?? COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE;
-
-    const apiSyncSales = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
-    const estimatedApiSyncFees = apiSyncSales * realFeeRate;
-
-    effectiveTotalFees = csvFees + estimatedApiSyncFees;
-    const csvPayout = feeRelevantRows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
-    const apiSyncGst = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
-    effectiveNetPayout = csvPayout + (apiSyncSales + apiSyncGst - estimatedApiSyncFees);
-    effectiveAvgCommission = realFeeRate;
-    hasEstimatedFees = true;
-    hasMissingFeeData = false;
+    // Case 1: ALL rows are api_sync with zero fees — NO estimation.
+    // Show "Fee data unavailable" instead of fabricated numbers.
+    effectiveTotalFees = 0;
+    effectiveNetPayout = rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
+    effectiveAvgCommission = 0;
+    hasEstimatedFees = false;
+    hasMissingFeeData = true;
   }
+  // Case 2 (mixed CSV + api_sync) REMOVED — upstream code must filter
+  // api_sync rows when CSV data exists. If mixed rows reach here, only
+  // the real fee data from CSV rows contributes.
 
   // Apply redistributed platform fees (positive = fees added to this sibling,
   // negative = excess fees removed from fee-heavy sibling)
