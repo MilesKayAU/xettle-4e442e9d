@@ -204,6 +204,9 @@ export default function MarketplaceProfitComparison() {
           periods: rows.length,
           has_cost_data: false,
           has_estimated_fees: attribution.hasEstimatedFees,
+          implied_commission_rate: attribution.hasEstimatedFees
+            ? (COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE)
+            : null,
         });
       }
 
