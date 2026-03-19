@@ -466,6 +466,7 @@ export default function InsightsDashboard() {
     setAdCurrency('AUD');
     setAdNotes('');
     setAdParsedEntries([]);
+    setAdPastedText('');
     setAdUploadMode('manual');
     setAdDialogOpen(true);
   }
