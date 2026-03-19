@@ -189,12 +189,23 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
         <RailPostingSettings />
       </SettingsAccordion>
     ),
+    tax_profile: (
+      <SettingsAccordion title="Tax Profile" description="Set your organisation's GST registration status" defaultOpen={sortedSections[0] === 'tax_profile'} status={getStatus('tax_profile')} helpText="Your tax profile determines how GST is calculated on settlements. Set whether your organisation is GST registered or not.">
+        <AccountingBoundarySettings
+          xeroConnected={xeroConnected}
+          onConnectXero={onConnectXero}
+          onGoToUpload={onGoToUpload}
+          showTaxProfileOnly
+        />
+      </SettingsAccordion>
+    ),
     accounting_boundary: (
       <SettingsAccordion title="Accounting Boundary" description="Set the start date and backfill horizon for settlement processing" defaultOpen={sortedSections[0] === 'accounting_boundary'} status={getStatus('accounting_boundary')} helpText={SETTINGS_HELP.accounting_boundary}>
         <AccountingBoundarySettings
           xeroConnected={xeroConnected}
           onConnectXero={onConnectXero}
           onGoToUpload={onGoToUpload}
+          showBoundaryOnly
         />
       </SettingsAccordion>
     ),
