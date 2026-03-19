@@ -223,7 +223,9 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
             key: `fbm_mismatch_detected:${conn.marketplace_code}`,
             label: 'FBM orders detected on FBA-only account',
             severity: 'warning',
-            message: `We found merchant-fulfilled orders for ${conn.marketplace_name || conn.marketplace_code}. Update your fulfilment method to "Mixed FBA + FBM" in Settings → Fulfilment Methods for accurate profit.`,
+            message: `We found merchant-fulfilled orders for ${conn.marketplace_name || conn.marketplace_code}. Update your fulfilment method to "Mixed FBA + FBM" for accurate profit.`,
+            actionLabel: 'Update now',
+            actionTarget: 'settings:fulfilment',
           });
         }
       }
