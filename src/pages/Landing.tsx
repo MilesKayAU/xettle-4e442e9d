@@ -320,14 +320,17 @@ export default function Landing() {
               Why Xettle is different.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Not another bank-feed tool. A purpose-built settlement engine for Australian marketplace sellers.
+              Not another bank-feed tool. A purpose-built settlement engine for Australian marketplace sellers on Xero.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { icon: FileText, title: 'Settlement-first accounting', desc: 'Every invoice is generated from the settlement — the only source of truth for marketplace payouts. The faster you upload settlements, the faster your books are done in Xero.' },
+              { icon: Split, title: 'Shopify sub-channel separation', desc: 'One Shopify store, multiple marketplaces. Xettle auto-detects Kogan, Catch, MyDeal, and other channels inside your Shopify payouts — and separates them for accounting.' },
+              { icon: Eye, title: 'Push safety preview', desc: 'See exactly what will post to Xero before it happens. Line items, account codes, GST — previewed and validated. No surprise journals.' },
               { icon: Shield, title: 'Deduplication safeguards', desc: 'Fingerprint-based deduplication and idempotent syncing guard against duplicate invoices from re-uploads, split-month overlaps, and tool migrations.' },
-              { icon: Repeat, title: 'Safe void and repost', desc: 'Need to correct an invoice? Void the original, repost with a full chain of custody. No orphaned entries.' },
+              { icon: BarChart3, title: 'Fee transparency', desc: 'Where fees are estimated, we badge it — and show the rate we used. Observed commission rates improve over time as more settlements are processed.' },
+              { icon: Truck, title: 'Fulfilment-aware profit', desc: 'FBA, FBM, MCF — each fulfilment method has different costs. Xettle tracks postage deductions by fulfilment channel so your profit view reflects reality.' },
               { icon: ShieldCheck, title: 'Accountant-safe posting', desc: 'Every invoice posts as DRAFT with audit CSV attached. Your accountant reviews before authorising. No surprises.' },
               { icon: Layers, title: 'Handles mixed files', desc: 'Woolworths MarketPlus covering BigW, MyDeal and Everyday Market? Automatically split into separate settlements.' },
               { icon: BarChart3, title: 'Built for Australia', desc: 'Australian GST, ATO reporting periods, and every marketplace Australian sellers actually use — built in from day one.' },
