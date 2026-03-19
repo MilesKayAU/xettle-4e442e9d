@@ -178,17 +178,24 @@ export default function SetupStepConnectStores({
   };
 
   const [amazonFulfilmentChoice, setAmazonFulfilmentChoice] = useState<FulfilmentMethod>('marketplace_fulfilled');
+  const [amazonPostageCost, setAmazonPostageCost] = useState('');
+
+  const showAmazonPostageInput = ['self_ship', 'third_party_logistics', 'mixed_fba_fbm'].includes(amazonFulfilmentChoice);
 
   const advanceFromAmazon = () => {
     if (hasAmazon && onFireBackgroundScan) {
       onFireBackgroundScan('fetch-amazon-settlements');
     }
-    // Persist fulfilment choice for amazon_au
+    // Persist fulfilment choice + postage cost for amazon_au
     (async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           await saveFulfilmentMethod(user.id, 'amazon_au', amazonFulfilmentChoice);
+          const cost = parseFloat(amazonPostageCost);
+          if (showAmazonPostageInput && !isNaN(cost) && cost > 0) {
+            await savePostageCost(user.id, 'amazon_au', cost);
+          }
         }
       } catch { /* non-fatal */ }
     })();
