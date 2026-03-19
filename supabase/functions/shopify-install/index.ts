@@ -45,8 +45,6 @@ Deno.serve(async (req) => {
       rawInput: req.url,
     })
 
-    // === DEBUG: log verification result ===
-    console.log('DEBUG hmac result:', JSON.stringify(hmacVerification))
 
     if (!hmacVerification.valid) {
       console.error('HMAC verification failed for shop:', shop, {
