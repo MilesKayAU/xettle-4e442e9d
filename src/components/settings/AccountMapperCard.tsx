@@ -1085,6 +1085,7 @@ export default function AccountMapperCard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {renderTaxProfileSelector()}
           {renderCoaRefreshStrip()}
           {isAdmin && coaAccounts.length > 0 && <CoaAuditPanel />}
           {renderCloneBanner()}
