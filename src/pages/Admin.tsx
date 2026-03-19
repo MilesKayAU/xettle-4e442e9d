@@ -37,6 +37,7 @@ import DataIntegrityDashboard from '@/components/admin/DataIntegrityDashboard';
 import PreLaunchChecklist from '@/components/admin/PreLaunchChecklist';
 import KnowledgeBaseDashboard from '@/components/admin/KnowledgeBaseDashboard';
 import GrowthScoutDashboard from '@/components/admin/GrowthScoutDashboard';
+import EmailMonitoringDashboard from '@/components/admin/EmailMonitoringDashboard';
 
 interface UserRow {
   id: string;
