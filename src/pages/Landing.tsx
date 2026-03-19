@@ -85,10 +85,10 @@ export default function Landing() {
             <span className="text-primary">verified and posted to Xero.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Xettle parses your marketplace settlements, reconciles them against your bank feed, and posts verified DRAFT invoices to Xero — with GST, account codes, and a full audit trail. Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
+            Xettle parses your marketplace settlements, validates totals, and posts verified DRAFT invoices to Xero — with GST, account codes, and a full audit trail. Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
-            Not a file uploader. A settlement engine with duplicate prevention, push-safety preview, and bank verification built in.
+            Not a file uploader. A settlement engine with duplicate prevention, push-safety preview, and Xero deposit verification built in.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
@@ -247,7 +247,7 @@ export default function Landing() {
             {[
               { step: '01', icon: Store, title: 'Connect marketplace', desc: 'API for Amazon & Shopify. File upload for Bunnings, eBay, Kogan, BigW, Catch, MyDeal and more.' },
               { step: '02', icon: Search, title: 'Parse & verify settlement', desc: 'Auto-detect format, split mixed files, validate every line item. Sales + fees + refunds must balance.' },
-              { step: '03', icon: DollarSign, title: 'Reconcile bank deposit', desc: 'Match the settlement payout to a real bank transaction. Tolerance-based matching handles rounding.' },
+              { step: '03', icon: DollarSign, title: 'Verify deposit in Xero', desc: 'Optionally match the settlement payout against a deposit already in Xero. Tolerance-based matching handles rounding.' },
               { step: '04', icon: AlertTriangle, title: 'Surface exceptions', desc: 'Missing contacts, duplicate settlements, fee changes, locked periods — caught and surfaced before posting.' },
             ].map((item) => {
               const Icon = item.icon;
@@ -377,9 +377,9 @@ export default function Landing() {
                 {[
                   'One DRAFT invoice per settlement period',
                   'Line items for sales, fees, refunds, and GST',
-                  'Invoice total matches the bank deposit',
+                  'Invoice total matches the marketplace payout',
                   'Your accountant reviews and authorises',
-                  'Reconciles directly against the bank feed',
+                  'Reconciles directly against Xero bank transactions',
                   'Full audit CSV attached to every invoice',
                 ].map(item => (
                   <li key={item} className="flex items-start gap-2.5 text-sm">
@@ -401,7 +401,7 @@ export default function Landing() {
                 {[
                   'Journal entries split across multiple accounts',
                   'No single document to review or approve',
-                  'Harder to match against bank feed deposits',
+                  'Harder to match against deposits in Xero',
                   'Requires clearing accounts and manual journals',
                   'Difficult to audit — no attached evidence',
                   'Accountants often redo the work manually',
@@ -444,7 +444,7 @@ export default function Landing() {
                 { icon: Eye, title: 'Audit trail', desc: 'Every posting is logged with the raw settlement payload, Xero response, and timestamp. Your accountant can verify any invoice.' },
                 { icon: AlertTriangle, title: 'Exception inbox', desc: 'Missing contacts, attachment failures, posting blocks — all caught and surfaced. Nothing silently fails.' },
                 { icon: Lock, title: 'Period lock safety', desc: 'Locked months stay locked. Xettle blocks postings into finalised periods automatically.' },
-                { icon: Activity, title: 'Bank verification', desc: 'Optionally require the bank deposit to match before posting. Configurable per marketplace rail.' },
+                { icon: Activity, title: 'Xero deposit verification', desc: 'Optionally verify the settlement payout against a matching deposit already in Xero. Configurable per marketplace rail.' },
               ].map(({ icon: Icon, title, desc }) => (
                 <div key={title} className="p-4 rounded-xl border border-border bg-background">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
@@ -470,10 +470,10 @@ export default function Landing() {
               Reconciliation engine
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Reconcile each settlement before creating a Xero invoice.
+              Verify each settlement before posting to Xero.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Most tools push invoices and hope for the best. Xettle reconciles the settlement against your bank feed first — so you know the numbers are right before anything reaches Xero.
+              Most tools push invoices and hope for the best. Xettle validates settlement totals, optionally checks deposits already in Xero, and surfaces exceptions — so you know the numbers are right before anything posts.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -490,9 +490,9 @@ export default function Landing() {
               <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <DollarSign className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="text-base font-semibold text-foreground mb-2">Bank deposit matching</h3>
+              <h3 className="text-base font-semibold text-foreground mb-2">Xero deposit verification</h3>
               <p className="text-sm text-muted-foreground">
-                Match the settlement payout to a real bank transaction in Xero. Tolerance-based matching handles rounding differences.
+                Optionally match the settlement payout to a deposit already in Xero. Tolerance-based matching handles rounding — you confirm before it's linked.
               </p>
             </div>
             <div className="p-6 rounded-2xl border border-border bg-card text-center">
@@ -551,7 +551,7 @@ export default function Landing() {
                   { problem: 'Mixed settlement files', solution: 'Auto-split into separate marketplace settlements' },
                   { problem: 'Different payout schedules', solution: 'Coverage map shows gaps across all channels' },
                   { problem: 'Commission rate changes', solution: 'Fee observation engine detects and alerts' },
-                  { problem: 'Bank deposits that don\'t match', solution: 'Tolerance-based matching with manual override' },
+                  { problem: 'Bank deposits that don\'t match', solution: 'Tolerance-based verification against Xero deposits with manual override' },
                   { problem: 'CSV formats keep changing', solution: 'Fingerprint learning adapts to new layouts' },
                 ].map(({ problem, solution }) => (
                   <div key={problem}>
@@ -579,8 +579,8 @@ export default function Landing() {
           <div className="grid md:grid-cols-4 gap-4 text-left">
             {[
               { label: 'Settlement tracking', desc: 'Every payout period, every marketplace, one view' },
-              { label: 'Payout verification', desc: 'Totals validated before anything posts' },
-              { label: 'Bank matching', desc: 'Deposits reconciled against settlements' },
+              { label: 'Payout verification', desc: 'Totals validated and optionally checked against Xero deposits' },
+              { label: 'Deposit matching', desc: 'Settlements verified against transactions already in Xero' },
               { label: 'Exception handling', desc: 'Problems surfaced, never hidden' },
               { label: 'Duplicate guard', desc: 'Fingerprint dedup prevents double-posting' },
               { label: 'Safe repost', desc: 'Void and replace with full audit chain' },
