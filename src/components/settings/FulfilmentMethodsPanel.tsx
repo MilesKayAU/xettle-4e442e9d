@@ -276,14 +276,13 @@ export default function FulfilmentMethodsPanel() {
           Set how orders are fulfilled per marketplace. This affects postage cost deductions in Profit Analysis.
         </p>
         <Button
-          variant="outline"
           size="sm"
-          onClick={handleManualRecalc}
-          disabled={recalculating}
-          className="shrink-0 ml-4"
+          onClick={handleSaveAllAndRecalc}
+          disabled={savingAll}
+          className="shrink-0 ml-4 gap-1.5"
         >
-          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${recalculating ? 'animate-spin' : ''}`} />
-          {recalculating ? 'Recalculating…' : 'Recalculate Profit'}
+          <RefreshCw className={`h-3.5 w-3.5 ${savingAll ? 'animate-spin' : ''}`} />
+          {savingAll ? 'Saving…' : 'Save & Recalculate'}
         </Button>
       </div>
 
