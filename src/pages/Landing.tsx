@@ -444,7 +444,7 @@ export default function Landing() {
                 { icon: Eye, title: 'Audit trail', desc: 'Every posting is logged with the raw settlement payload, Xero response, and timestamp. Your accountant can verify any invoice.' },
                 { icon: AlertTriangle, title: 'Exception inbox', desc: 'Missing contacts, attachment failures, posting blocks — all caught and surfaced. Nothing silently fails.' },
                 { icon: Lock, title: 'Period lock safety', desc: 'Locked months stay locked. Xettle blocks postings into finalised periods automatically.' },
-                { icon: Activity, title: 'Bank verification', desc: 'Optionally require the bank deposit to match before posting. Configurable per marketplace rail.' },
+                { icon: Activity, title: 'Xero deposit verification', desc: 'Optionally verify the settlement payout against a matching deposit already in Xero. Configurable per marketplace rail.' },
               ].map(({ icon: Icon, title, desc }) => (
                 <div key={title} className="p-4 rounded-xl border border-border bg-background">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
