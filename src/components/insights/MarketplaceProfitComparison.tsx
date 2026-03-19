@@ -341,5 +341,6 @@ export default function MarketplaceProfitComparison() {
         )}
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 }
