@@ -173,10 +173,21 @@ export default function SetupStepConnectStores({
     setStep(2);
   };
 
+  const [amazonFulfilmentChoice, setAmazonFulfilmentChoice] = useState<FulfilmentMethod>('marketplace_fulfilled');
+
   const advanceFromAmazon = () => {
     if (hasAmazon && onFireBackgroundScan) {
       onFireBackgroundScan('fetch-amazon-settlements');
     }
+    // Persist fulfilment choice for amazon_au
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await saveFulfilmentMethod(user.id, 'amazon_au', amazonFulfilmentChoice);
+        }
+      } catch { /* non-fatal */ }
+    })();
     setStep(3);
   };
 
