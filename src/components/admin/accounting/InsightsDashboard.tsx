@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet, Truck, AlertTriangle, Upload, FileText, Check } from 'lucide-react';
+import { Info, TrendingUp, DollarSign, BarChart3, Store, Clock, Receipt, Plus, Megaphone, Wallet, Truck, AlertTriangle, Upload, FileText, Check, ClipboardPaste } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
@@ -102,6 +102,7 @@ export default function InsightsDashboard() {
     confidence: number;
   }>>([]);
   const [adUploadMode, setAdUploadMode] = useState<'manual' | 'upload'>('manual');
+  const [adPastedText, setAdPastedText] = useState('');
   const [shippingDialogOpen, setShippingDialogOpen] = useState(false);
   const [shippingDialogMarketplace, setShippingDialogMarketplace] = useState('');
   const [shippingCostPerOrder, setShippingCostPerOrder] = useState('');
@@ -465,8 +466,47 @@ export default function InsightsDashboard() {
     setAdCurrency('AUD');
     setAdNotes('');
     setAdParsedEntries([]);
+    setAdPastedText('');
     setAdUploadMode('manual');
     setAdDialogOpen(true);
+  }
+
+  async function handleAdSpendPastedText(text: string) {
+    if (!text.trim()) return;
+    setAdUploadParsing(true);
+    setAdParsedEntries([]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const res = await supabase.functions.invoke('parse-ad-spend-invoice', {
+        body: {
+          file_content: text.substring(0, 50000),
+          file_name: 'pasted-text.txt',
+          file_type: 'text/plain',
+        },
+      });
+
+      if (res.error) throw new Error(res.error.message || 'Parse failed');
+      const parsed = res.data;
+
+      if (parsed.error) {
+        toast({ title: 'Could not parse text', description: parsed.error, variant: 'destructive' });
+        return;
+      }
+
+      if (!parsed.entries || parsed.entries.length === 0) {
+        toast({ title: 'No ad spend data found', description: parsed.raw_summary || 'The text did not contain recognisable ad spend data.', variant: 'destructive' });
+        return;
+      }
+
+      setAdParsedEntries(parsed.entries);
+      toast({ title: `Found ${parsed.entries.length} ad spend ${parsed.entries.length === 1 ? 'entry' : 'entries'}` });
+    } catch (err: any) {
+      toast({ title: 'Parse failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setAdUploadParsing(false);
+    }
   }
 
   async function handleAdSpendFileUpload(file: File) {
@@ -475,7 +515,6 @@ export default function InsightsDashboard() {
     try {
       let textContent = '';
       if (file.type === 'application/pdf') {
-        // For PDFs, read as base64 and send text extraction to AI
         const arrayBuffer = await file.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
         let binary = '';
@@ -484,7 +523,6 @@ export default function InsightsDashboard() {
         }
         textContent = `[PDF file - base64 encoded]\n${btoa(binary).substring(0, 50000)}`;
       } else {
-        // CSV/text-based files
         textContent = await file.text();
         if (textContent.length > 50000) textContent = textContent.substring(0, 50000);
       }
@@ -1544,19 +1582,19 @@ export default function InsightsDashboard() {
 
               <TabsContent value="upload" className="space-y-4 pt-2">
                 {adParsedEntries.length === 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Upload a PDF invoice or CSV/Excel ad spend report. We'll automatically detect the marketplace, period, and cost.
+                      Upload a file, or paste invoice text (e.g. from a web portal). We'll automatically detect the marketplace, period, and cost.
                     </p>
-                    <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+                    <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-5 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
                       {adUploadParsing ? (
                         <>
                           <LoadingSpinner />
-                          <span className="text-sm text-muted-foreground">Parsing invoice…</span>
+                          <span className="text-sm text-muted-foreground">Parsing…</span>
                         </>
                       ) : (
                         <>
-                          <Upload className="h-8 w-8 text-muted-foreground" />
+                          <Upload className="h-7 w-7 text-muted-foreground" />
                           <span className="text-sm font-medium text-foreground">Drop file or click to browse</span>
                           <span className="text-xs text-muted-foreground">PDF, CSV, or Excel</span>
                         </>
@@ -1573,6 +1611,32 @@ export default function InsightsDashboard() {
                         }}
                       />
                     </label>
+
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex-1 h-px bg-border" />
+                      <span>or paste text</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Textarea
+                        placeholder="Paste invoice text here (e.g. copy from Kogan Publisher Portal, eBay ad invoice page, etc.)"
+                        value={adPastedText}
+                        onChange={(e) => setAdPastedText(e.target.value)}
+                        rows={5}
+                        disabled={adUploadParsing}
+                        className="text-xs"
+                      />
+                      <Button
+                        onClick={() => handleAdSpendPastedText(adPastedText)}
+                        disabled={adUploadParsing || !adPastedText.trim()}
+                        size="sm"
+                        className="w-full gap-1.5"
+                      >
+                        <ClipboardPaste className="h-3.5 w-3.5" />
+                        {adUploadParsing ? 'Parsing…' : 'Parse Pasted Text'}
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
