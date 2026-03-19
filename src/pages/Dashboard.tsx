@@ -144,7 +144,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     return 'warning';
   };
 
-  const sectionOrder = ['api_connections', 'destination_accounts', 'account_mapper', 'account_mapper_tax', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'data_quality'] as const;
+  const sectionOrder = ['api_connections', 'destination_accounts', 'account_mapper', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'data_quality'] as const;
   const statusPriority: Record<'incomplete' | 'warning' | 'none' | 'complete', number> = {
     incomplete: 0,
     warning: 1,
