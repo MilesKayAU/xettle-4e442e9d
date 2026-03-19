@@ -101,11 +101,11 @@ function SetupInProgressBanner({ show: showProp }: { show?: boolean }) {
 
 const SETTINGS_HELP: Record<string, string> = {
   api_connections: 'This is where you connect your marketplace accounts (Amazon, eBay, Shopify) and your Xero accounting software. Xettle needs these connections to automatically pull settlement data and push entries into your books. Start by connecting Xero, then add your marketplace(s).',
-  destination_accounts: 'Map each type of settlement line item (sales, fees, refunds, etc.) to the correct account in your Xero chart of accounts. This tells Xettle exactly where each dollar should land when we create your invoices or journals. You need at least sales, fees, and refund accounts mapped.',
-  account_mapper: 'Our AI analyses your Xero chart of accounts and suggests the best mappings automatically. You can review, accept, or override each suggestion. This saves time if you have a large chart of accounts and aren\'t sure which codes to use.',
-  posting_mode: 'Choose whether each marketplace rail posts as an Invoice or a Manual Journal in Xero, and set the default tax treatment. Most users start with "Invoice" mode — it\'s simpler and works well for GST-registered businesses.',
-  accounting_boundary: 'Set the earliest date Xettle should process settlements from. Any settlement before this date will be ignored. This is useful if you\'ve already reconciled older periods manually and only want Xettle handling new ones going forward.',
-  payment_verification: 'Configure how Xettle matches marketplace payouts to your actual bank deposits. When enabled, we\'ll cross-check settlement amounts against your Xero bank feed to confirm the money actually arrived. This adds a verification layer before marking settlements as fully reconciled.',
+  destination_accounts: 'Choose which Xero bank, PayPal, or clearing account each payout rail lands in. This controls reconciliation destinations for Amazon, Shopify, PayPal and other payout sources.',
+  account_mapper: 'Map each settlement line item (sales, fees, refunds, shipping, etc.) to the correct account in your Xero chart of accounts. This tells Xettle exactly where each dollar should land when invoices or journals are created.',
+  posting_mode: 'Choose whether each marketplace rail posts as an Invoice or a Manual Journal in Xero, and set the default tax treatment. Most users start with "Invoice" mode — it’s simpler and works well for GST-registered businesses.',
+  accounting_boundary: 'Set the earliest date Xettle should process settlements from. Any settlement before this date will be ignored. This is useful if you’ve already reconciled older periods manually and only want Xettle handling new ones going forward.',
+  payment_verification: 'Configure how Xettle matches marketplace payouts to your actual bank deposits. When enabled, we’ll cross-check settlement amounts against your Xero bank feed to confirm the money actually arrived. This adds a verification layer before marking settlements as fully reconciled.',
   fulfilment_methods: 'Tell Xettle how each marketplace fulfils orders — FBA (marketplace ships it), self-ship, or mixed. This affects profit calculations because shipping costs differ. If you self-ship, you can also enter your average postage cost per order.',
   data_quality: 'Tools to fix historical data issues — re-sync marketplace labels, correct misclassified settlements, and clean up any data that was imported incorrectly. Use this if you notice wrong marketplace names or categories on older records.',
 };
@@ -116,18 +116,18 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
   // Derive per-section status from warnings
   const warningKeys = new Set(setupWarnings.map(w => w.key));
 
-  const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
-    const sectionWarningMap: Record<string, string[]> = {
-      api_connections: ['xero_not_connected'],
-      destination_accounts: ['coa_mapping_incomplete'],
-      account_mapper: [],
-      posting_mode: ['scope_not_acknowledged'],
-      accounting_boundary: ['tax_profile_missing'],
-      payment_verification: [],
-      fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing'],
-      data_quality: [],
-    };
+  const sectionWarningMap: Record<string, string[]> = {
+    api_connections: ['xero_not_connected'],
+    destination_accounts: [],
+    account_mapper: ['coa_mapping_incomplete'],
+    posting_mode: ['scope_not_acknowledged'],
+    accounting_boundary: ['tax_profile_missing'],
+    payment_verification: [],
+    fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing'],
+    data_quality: [],
+  };
 
+  const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
     const relevantWarnings = sectionWarningMap[sectionKey] || [];
     if (relevantWarnings.length === 0) return 'none';
 
@@ -139,8 +139,75 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     return 'complete';
   };
 
-  const incompleteCount = ['api_connections', 'destination_accounts', 'posting_mode', 'accounting_boundary', 'fulfilment_methods']
+  const sectionOrder = ['api_connections', 'destination_accounts', 'account_mapper', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'data_quality'] as const;
+  const statusPriority: Record<'incomplete' | 'warning' | 'none' | 'complete', number> = {
+    incomplete: 0,
+    warning: 1,
+    none: 2,
+    complete: 3,
+  };
+  const sortedSections = [...sectionOrder].sort((a, b) => {
+    const byStatus = statusPriority[getStatus(a)] - statusPriority[getStatus(b)];
+    return byStatus !== 0 ? byStatus : sectionOrder.indexOf(a) - sectionOrder.indexOf(b);
+  });
+
+  const incompleteCount = sectionOrder
     .filter(k => getStatus(k) === 'incomplete' || getStatus(k) === 'warning').length;
+
+  const sectionContent: Record<typeof sectionOrder[number], React.ReactNode> = {
+    api_connections: (
+      <SettingsAccordion title="API Connections" description="Connect marketplaces and accounting integrations" defaultOpen={sortedSections[0] === 'api_connections'} status={getStatus('api_connections')} helpText={SETTINGS_HELP.api_connections}>
+        <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+          <ApiConnectionsPanel
+            isPaid={true}
+            syncCutoffDate={undefined}
+            onSettlementsAutoFetched={async () => {}}
+            onRequestSettings={() => {}}
+            onFetchStateChange={() => {}}
+          />
+        </Suspense>
+      </SettingsAccordion>
+    ),
+    destination_accounts: (
+      <SettingsAccordion id="destination-accounts" title="Destination Accounts" description="Choose where each payout rail lands in Xero" defaultOpen={sortedSections[0] === 'destination_accounts'} status={getStatus('destination_accounts')} helpText={SETTINGS_HELP.destination_accounts}>
+        <DestinationAccountMapper />
+      </SettingsAccordion>
+    ),
+    account_mapper: (
+      <SettingsAccordion id="account-mapper" title="Account Mapper" description="Map sales, fees, refunds, and shipping to your Xero chart" defaultOpen={sortedSections[0] === 'account_mapper'} status={getStatus('account_mapper')} helpText={SETTINGS_HELP.account_mapper}>
+        <AccountMapperCard />
+      </SettingsAccordion>
+    ),
+    posting_mode: (
+      <SettingsAccordion title="Destination Posting Mode" description="Configure how each marketplace rail posts to Xero" defaultOpen={sortedSections[0] === 'posting_mode'} status={getStatus('posting_mode')} helpText={SETTINGS_HELP.posting_mode}>
+        <RailPostingSettings />
+      </SettingsAccordion>
+    ),
+    accounting_boundary: (
+      <SettingsAccordion title="Accounting Boundary" description="Set the start date and backfill horizon for settlement processing" defaultOpen={sortedSections[0] === 'accounting_boundary'} status={getStatus('accounting_boundary')} helpText={SETTINGS_HELP.accounting_boundary}>
+        <AccountingBoundarySettings
+          xeroConnected={xeroConnected}
+          onConnectXero={onConnectXero}
+          onGoToUpload={onGoToUpload}
+        />
+      </SettingsAccordion>
+    ),
+    payment_verification: (
+      <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules" defaultOpen={sortedSections[0] === 'payment_verification'} status={getStatus('payment_verification')} helpText={SETTINGS_HELP.payment_verification}>
+        <PaymentVerificationSettings />
+      </SettingsAccordion>
+    ),
+    fulfilment_methods: (
+      <SettingsAccordion id="fulfilment" title="Fulfilment Methods" description="Set how orders are fulfilled per marketplace — affects profit calculations" defaultOpen={sortedSections[0] === 'fulfilment_methods'} status={getStatus('fulfilment_methods')} helpText={SETTINGS_HELP.fulfilment_methods}>
+        <FulfilmentMethodsPanel />
+      </SettingsAccordion>
+    ),
+    data_quality: (
+      <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications" defaultOpen={sortedSections[0] === 'data_quality'} status={getStatus('data_quality')} helpText={SETTINGS_HELP.data_quality}>
+        <DataQualityPanel />
+      </SettingsAccordion>
+    ),
+  };
 
   return (
     <div className="space-y-4">
@@ -159,49 +226,9 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
         )}
       </div>
 
-      <SettingsAccordion title="API Connections" description="Connect marketplaces and accounting integrations" defaultOpen status={getStatus('api_connections')} helpText={SETTINGS_HELP.api_connections}>
-        <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-          <ApiConnectionsPanel
-            isPaid={true}
-            syncCutoffDate={undefined}
-            onSettlementsAutoFetched={async () => {}}
-            onRequestSettings={() => {}}
-            onFetchStateChange={() => {}}
-          />
-        </Suspense>
-      </SettingsAccordion>
-
-      <SettingsAccordion id="destination-accounts" title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts" status={getStatus('destination_accounts')} helpText={SETTINGS_HELP.destination_accounts}>
-        <DestinationAccountMapper />
-      </SettingsAccordion>
-
-      <SettingsAccordion id="account-mapper" title="Account Mapper" description="AI-assisted account code suggestions and overrides" status={getStatus('account_mapper')} helpText={SETTINGS_HELP.account_mapper}>
-        <AccountMapperCard />
-      </SettingsAccordion>
-
-      <SettingsAccordion title="Destination Posting Mode" description="Configure how each marketplace rail posts to Xero" status={getStatus('posting_mode')} helpText={SETTINGS_HELP.posting_mode}>
-        <RailPostingSettings />
-      </SettingsAccordion>
-
-      <SettingsAccordion title="Accounting Boundary" description="Set the start date and backfill horizon for settlement processing" status={getStatus('accounting_boundary')} helpText={SETTINGS_HELP.accounting_boundary}>
-        <AccountingBoundarySettings
-          xeroConnected={xeroConnected}
-          onConnectXero={onConnectXero}
-          onGoToUpload={onGoToUpload}
-        />
-      </SettingsAccordion>
-
-      <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules" status={getStatus('payment_verification')} helpText={SETTINGS_HELP.payment_verification}>
-        <PaymentVerificationSettings />
-      </SettingsAccordion>
-
-      <SettingsAccordion id="fulfilment" title="Fulfilment Methods" description="Set how orders are fulfilled per marketplace — affects profit calculations" status={getStatus('fulfilment_methods')} helpText={SETTINGS_HELP.fulfilment_methods}>
-        <FulfilmentMethodsPanel />
-      </SettingsAccordion>
-
-      <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications" status={getStatus('data_quality')} helpText={SETTINGS_HELP.data_quality}>
-        <DataQualityPanel />
-      </SettingsAccordion>
+      {sortedSections.map((sectionKey) => (
+        <React.Fragment key={sectionKey}>{sectionContent[sectionKey]}</React.Fragment>
+      ))}
     </div>
   );
 }
