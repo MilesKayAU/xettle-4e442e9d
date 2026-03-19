@@ -363,6 +363,10 @@ export default function InsightsDashboard() {
           effectiveHasEstimatedFees = true;
         }
 
+        const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
+          ? Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0))
+          : commissionTotal;
+
         // Derive effectiveAvgCommission aligned with the estimated fee logic above
         let effectiveAvgCommission: number;
         if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
