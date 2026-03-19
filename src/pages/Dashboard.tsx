@@ -195,7 +195,6 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
           xeroConnected={xeroConnected}
           onConnectXero={onConnectXero}
           onGoToUpload={onGoToUpload}
-          showTaxProfileOnly
         />
       </SettingsAccordion>
     ),
@@ -205,7 +204,6 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
           xeroConnected={xeroConnected}
           onConnectXero={onConnectXero}
           onGoToUpload={onGoToUpload}
-          showBoundaryOnly
         />
       </SettingsAccordion>
     ),
