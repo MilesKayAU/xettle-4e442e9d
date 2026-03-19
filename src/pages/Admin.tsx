@@ -375,6 +375,10 @@ export default function Admin() {
           <TabsContent value="growth">
             <GrowthScoutDashboard />
           </TabsContent>
+
+          <TabsContent value="emails">
+            <EmailMonitoringDashboard />
+          </TabsContent>
         </Tabs>
       </div>
 
