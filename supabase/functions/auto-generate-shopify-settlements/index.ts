@@ -391,7 +391,7 @@ Deno.serve(async (req) => {
     const bankDeposit = groupOrders.reduce((sum, o) => sum + o.total_price, 0);
 
     // Apply estimated commission for this marketplace
-    const commissionRate = COMMISSION_ESTIMATES[mpCode] || DEFAULT_COMMISSION_RATE;
+    const commissionRate = getCommissionRate(mpCode, observedRates);
     const estimatedSellerFees = -Math.round(salesPrincipal * commissionRate * 100) / 100;
     // Adjusted bank deposit = gross sales - estimated fees
     const adjustedBankDeposit = Math.round((bankDeposit + estimatedSellerFees) * 100) / 100;
