@@ -53,6 +53,8 @@ Deno.serve(async (req) => {
       { data: ebayTokens },
       { data: profitData },
       { data: settingsData },
+      { data: aiUsageData },
+      { data: systemEventsData },
     ] = await Promise.all([
       admin.auth.admin.listUsers({ perPage: 1000 }),
       admin.from('settlements')
@@ -69,6 +71,10 @@ Deno.serve(async (req) => {
       admin.from('app_settings')
         .select('user_id, key, value')
         .in('key', ['tax_profile', 'accounting_boundary_date', 'trial_started_at']),
+      admin.from('ai_usage')
+        .select('user_id, month, question_count'),
+      admin.from('system_events')
+        .select('user_id, event_type'),
     ])
 
     const xeroSet = new Set((xeroTokens || []).map(t => t.user_id))
