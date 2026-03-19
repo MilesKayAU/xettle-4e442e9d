@@ -331,10 +331,10 @@ export default function InsightsDashboard() {
         })();
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;
-        const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 
+        const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 && estimatedOrderCount > 0
           ? Math.max(Math.min((netPayout - estimatedShippingCost) / totalSales, 1), -1) 
           : null;
-        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || (shouldDeductShipping && shippingCostPerOrder > 0))
+        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || (shouldDeductShipping && shippingCostPerOrder > 0 && estimatedOrderCount > 0))
           ? Math.max(Math.min((netPayout - adSpend - estimatedShippingCost) / totalSales, 1), -1)
           : null;
 
