@@ -527,12 +527,12 @@ export default function Landing() {
               </p>
               <div className="space-y-4">
                 {[
-                  { mp: 'Amazon AU', detail: 'Fortnightly TSV settlements via API' },
-                  { mp: 'Shopify', detail: 'Daily payouts, multiple sub-channels' },
+                  { mp: 'Amazon AU', detail: 'Fortnightly TSV settlements via SP-API — FBA, FBM, MCF separated' },
+                  { mp: 'Shopify', detail: 'Daily payouts with sub-channel detection — Kogan, Catch, MyDeal orders separated automatically' },
                   { mp: 'eBay AU', detail: 'Managed payments, fortnightly cycles' },
                   { mp: 'Bunnings', detail: 'Monthly CSV remittance' },
-                  { mp: 'Kogan', detail: 'Monthly CSV with variable commission' },
-                  { mp: 'Catch / MyDeal / BigW', detail: 'Woolworths MarketPlus — auto-split' },
+                  { mp: 'Kogan', detail: 'Monthly CSV with variable commission — observed rates tracked' },
+                  { mp: 'Catch / MyDeal / BigW', detail: 'Woolworths MarketPlus — auto-split into separate settlements' },
                 ].map(({ mp, detail }) => (
                   <div key={mp} className="flex items-start gap-3">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-1" />
