@@ -203,6 +203,7 @@ export default function FulfilmentMethodsPanel() {
       await savePostageCost(user.id, code, num);
       toast.success(`Postage cost saved for ${code}`);
       recalcInBackground();
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch {
       toast.error('Failed to save postage cost');
     }
