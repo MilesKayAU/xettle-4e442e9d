@@ -980,3 +980,41 @@ Two blockers identified by Copilot audit and fixed before backfill execution:
 - Xero push / accounting / invoice logic
 - RLS policies
 - Database schema (no migrations required — `fulfilment_channel` column already existed)
+
+---
+
+# PRE-RELEASE HARDENING — 19 March 2026
+
+## Changes Implemented
+
+### 1. Commission Rate Calibration ✅
+- `attributeFees()` now accepts `observedRates` parameter, falling back to `COMMISSION_ESTIMATES`
+- Edge functions load `observed_commission_rate:*` from `app_settings` before hardcoded rates
+- Shared source: `supabase/functions/_shared/commission-rates.ts`
+
+### 2. Pagination Fix ✅
+- `recalculate-profit` and `repair-settlement-fees` use `fetchAllRows()` with 1000-row pages
+- No more silent data truncation on large accounts
+
+### 3. RLS Policy Inventory ✅
+- DB function `get_rls_inventory()` provides verifiable table-by-table RLS checklist
+- `rls-audit` edge function (admin-only) + `DataQualityPanel` UI
+
+### 4. Commission Parity Test ✅
+- `commission-parity.test.ts` verifies frontend rates match canonical fixture (3/3 passing)
+- Edge functions share `_shared/commission-rates.ts`
+
+### 5. Implied Rate Visibility ✅
+- "Estimated" badge tooltip shows actual rate used (e.g. "Using 12% estimated commission")
+
+### 6. Data Quality Warnings ✅
+- InsightsDashboard shows amber alert strip for estimated fees, missing fees, unknown fulfilment
+
+## Qualified Claims
+
+| Original | Revised |
+|---|---|
+| "Every table has RLS" | Verifiable via `get_rls_inventory()` checklist |
+| "No privilege escalation" | No obvious vectors; security-definer + service-role edge functions flagged for separate pass |
+| "Byte-identical parity" | `commission-parity.test.ts` + shared module reduces drift surface |
+| "New marketplaces = data only" | CSV-based often data-only; fee estimates/rails/families may need code |
