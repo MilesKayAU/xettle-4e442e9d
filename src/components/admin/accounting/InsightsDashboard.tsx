@@ -1222,11 +1222,21 @@ export default function InsightsDashboard() {
                           {s.returnRatio === bestRatio && stats.length > 1 && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-primary/30 text-primary px-1">Best</Badge>
                           )}
+                          {s.hasMissingFeeData && (
+                            <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 px-1">
+                              <Upload className="h-2 w-2 mr-0.5" />
+                              No fee data
+                            </Badge>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{formatCurrency(s.totalSales)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalFees)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.avgCommission)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.hasMissingFeeData ? <span className="text-amber-600 dark:text-amber-400 text-[10px]">N/A</span> : formatCurrency(s.totalFees)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.hasMissingFeeData ? <span className="text-amber-600 dark:text-amber-400 text-[10px]">N/A</span> : formatPct(s.avgCommission)}
+                      </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalRefunds)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                         {s.adSpend > 0 ? formatCurrency(s.adSpend) : (
