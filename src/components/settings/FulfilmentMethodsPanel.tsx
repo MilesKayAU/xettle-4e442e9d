@@ -302,7 +302,8 @@ export default function FulfilmentMethodsPanel() {
         const isAmazon = isAmazonCode(mp.marketplace_code);
         const methodOptions = isAmazon ? AMAZON_METHOD_OPTIONS : BASE_METHOD_OPTIONS;
         const showPostageInput = effective === 'self_ship' || effective === 'third_party_logistics' || effective === 'mixed_fba_fbm';
-        const showMcfInput = isAmazon && effective === 'mixed_fba_fbm';
+        const showMcfInput = (isAmazon && effective === 'mixed_fba_fbm') || mcfDetected[mp.marketplace_code];
+        const showMfnBanner = mfnDetected[mp.marketplace_code] && effective === 'marketplace_fulfilled';
         return (
           <div key={mp.marketplace_code} className="rounded-lg border border-border p-4 space-y-3">
             <div className="flex items-center gap-2">
