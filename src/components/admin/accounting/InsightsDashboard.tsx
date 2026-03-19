@@ -386,7 +386,11 @@ export default function InsightsDashboard() {
           effectiveNetPayout -= redistributedPlatformFees;
           effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
           effectiveFeeLoad = totalSales > 0 ? Math.min(Math.max(effectiveTotalFees, 0) / totalSales, 1) : 0;
-          // Redistribution is NOT estimation — it's reallocating real fees between siblings
+          // Flag as estimated if any sibling used the 0.15 fallback (no observed rate)
+          const usedFallback = Object.keys(PLATFORM_FAMILIES).some(family =>
+            PLATFORM_FAMILIES[family].some(s => grouped[s] && !observedRates[s])
+          );
+          if (usedFallback) effectiveHasEstimatedFees = true;
         }
 
         const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
