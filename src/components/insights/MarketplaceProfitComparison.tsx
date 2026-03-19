@@ -307,10 +307,19 @@ export default function MarketplaceProfitComparison() {
                         <Badge variant="outline" className="text-[9px] px-1 py-0 border-muted-foreground/30 text-muted-foreground">payout margin</Badge>
                       )}
                       {mp.has_estimated_fees && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400/50 text-amber-600 dark:text-amber-400">
-                          <AlertTriangle className="h-2 w-2 mr-0.5" />
-                          Estimated
-                        </Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400/50 text-amber-600 dark:text-amber-400 cursor-help">
+                              <AlertTriangle className="h-2 w-2 mr-0.5" />
+                              Estimated
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs max-w-xs">
+                            {mp.implied_commission_rate
+                              ? `Using ${(mp.implied_commission_rate * 100).toFixed(0)}% estimated commission rate. Upload CSV settlements for actual fees.`
+                              : 'Fee data includes estimates. Upload CSV settlements for actual fees.'}
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </TableCell>
                     <TableCell className={`text-xs text-right font-semibold ${getMarginColor(mp.avg_margin)}`}>
