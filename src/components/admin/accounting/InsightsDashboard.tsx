@@ -249,8 +249,9 @@ export default function InsightsDashboard() {
           const rows = grouped[fh];
           const sales = rows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0);
           const fees = rows.reduce((sum, r) => sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
-          // Excess = fees beyond what's attributable to own sales (using 15% as normal commission)
-          const ownFees = sales * 0.15;
+          // Use observed rate if available, fall back to 15% with estimation flag
+          const ownFeeRate = observedRates[fh] ?? 0.15;
+          const ownFees = sales * ownFeeRate;
           const excess = Math.max(fees - ownFees, 0);
           totalExcessFees += excess;
           // Subtract excess from fee-heavy sibling so its card shows only its own share
