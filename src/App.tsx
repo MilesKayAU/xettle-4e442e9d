@@ -24,6 +24,7 @@ const EbayCallback = lazy(() => import("@/pages/EbayCallback"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const Amazon = lazy(() => import("@/pages/Amazon"));
 const Marketplaces = lazy(() => import("@/pages/Marketplaces"));
+const Insights = lazy(() => import("@/pages/Insights"));
 const Setup = lazy(() => import("@/pages/Setup"));
 const XeroPostingAudit = lazy(() => import("@/pages/XeroPostingAudit"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
@@ -62,6 +63,7 @@ function App() {
                   <Route path="/pricing" element={<Pricing />} />
                   <Route path="/amazon" element={<Amazon />} />
                   <Route path="/marketplaces" element={<Marketplaces />} />
+                  <Route path="/insights" element={<Insights />} />
                   {/* Authenticated routes — trial banner renders on all */}
                   <Route element={<AuthenticatedLayout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
