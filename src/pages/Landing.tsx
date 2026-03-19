@@ -77,18 +77,18 @@ export default function Landing() {
         <div className="container-custom text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-bold mb-6 tracking-wide">
             <Zap className="h-4 w-4" />
-            SETTLEMENT ENGINE FOR AUSTRALIAN MARKETPLACES
+            BUILT FOR AUSTRALIAN SELLERS ON XERO
           </div>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
-            The reconciliation layer
+            Marketplace settlements
             <br />
-            <span className="text-primary">between marketplaces and Xero.</span>
+            <span className="text-primary">verified and posted to Xero.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-2">
-            Xettle turns marketplace settlements into Xero invoices — with reconciliation checks and mapping safeguards so you can verify totals before posting. Across Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
+            Xettle parses your marketplace settlements, reconciles them against your bank feed, and posts verified DRAFT invoices to Xero — with GST, account codes, and a full audit trail. Amazon, Shopify, eBay, Bunnings, Kogan, Catch, MyDeal and more.
           </p>
           <p className="text-sm text-muted-foreground/80 mb-10">
-            Not a file uploader. A settlement engine with duplicate prevention, audit trail, and bank verification built in.
+            Not a file uploader. A settlement engine with duplicate prevention, push-safety preview, and bank verification built in.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
