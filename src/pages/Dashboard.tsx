@@ -116,6 +116,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
   // Derive per-section status from warnings
   const warningKeys = new Set(setupWarnings.map(w => w.key));
 
+  // Maps each section to the warning keys it owns (exact match or prefix match with ':')
   const sectionWarningMap: Record<string, string[]> = {
     api_connections: ['xero_not_connected'],
     destination_accounts: [],
@@ -123,7 +124,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     posting_mode: ['scope_not_acknowledged'],
     accounting_boundary: ['tax_profile_missing'],
     payment_verification: [],
-    fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing'],
+    fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing', 'fbm_mismatch_detected:'],
     data_quality: [],
   };
 
