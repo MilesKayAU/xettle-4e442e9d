@@ -758,6 +758,7 @@ function RowAction({
   row: ValidationRow; pushing: boolean; syncing?: boolean; isApiSynced?: boolean;
   onUpload: () => void; onPush: () => void; onSync?: () => void;
 }) {
+  const marketplaceLabel = MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code;
   if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
     if (isApiSynced && onSync) {
       return (
@@ -768,9 +769,18 @@ function RowAction({
       );
     }
     return (
-      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onUpload}>
-        <Upload className="h-3 w-3" /> Upload
-      </Button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30" onClick={onUpload}>
+              <Upload className="h-3 w-3" /> Upload
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs max-w-[200px]">
+            Upload a settlement file for <strong>{marketplaceLabel}</strong> covering <strong>{row.period_label}</strong>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
   if (row.overall_status === 'ready_to_push') {
