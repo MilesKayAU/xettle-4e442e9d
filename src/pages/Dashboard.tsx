@@ -1046,14 +1046,26 @@ export default function Dashboard() {
             <div className="fixed inset-x-0 top-0 bottom-0 z-50 overflow-y-auto bg-background">
               <div className="container-custom py-8">
                 <div className="flex items-center justify-between mb-6">
-                  <div className="text-center flex-1 space-y-2">
+                <div className="text-center flex-1 space-y-2">
                     <h2 className="text-2xl font-bold text-foreground">
                       Upload any settlement file — Xettle handles the rest
                     </h2>
-                    <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-                      Drop a CSV, XLSX, or PDF from any marketplace. Xettle automatically detects the platform,
-                      extracts fees, refunds, sales & GST, and prepares it for Xero.
-                    </p>
+                    {missingSettlements.length > 0 ? (
+                      <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 max-w-xl mx-auto text-left">
+                        <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-1">📤 Upload needed for:</p>
+                        <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
+                          {missingSettlements.map((m, i) => (
+                            <li key={i}>• <strong>{m.marketplace_label}</strong> — {m.period_label}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+                        Drop a CSV, XLSX, or PDF from any marketplace. Xettle automatically detects the platform,
+                        extracts fees, refunds, sales & GST, and prepares it for Xero.
+                      </p>
+                    )}
+                  </div>
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => { setShowUploadSheet(false); setMissingSettlements([]); }} className="shrink-0 ml-4">
                     ✕ Close
