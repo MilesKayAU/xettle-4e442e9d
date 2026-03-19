@@ -37,6 +37,7 @@ import DataIntegrityDashboard from '@/components/admin/DataIntegrityDashboard';
 import PreLaunchChecklist from '@/components/admin/PreLaunchChecklist';
 import KnowledgeBaseDashboard from '@/components/admin/KnowledgeBaseDashboard';
 import GrowthScoutDashboard from '@/components/admin/GrowthScoutDashboard';
+import EmailMonitoringDashboard from '@/components/admin/EmailMonitoringDashboard';
 
 interface UserRow {
   id: string;
@@ -229,6 +230,10 @@ export default function Admin() {
               <Crosshair className="h-3.5 w-3.5" />
               Growth
             </TabsTrigger>
+            <TabsTrigger value="emails" className="flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5" />
+              Emails
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -369,6 +374,10 @@ export default function Admin() {
 
           <TabsContent value="growth">
             <GrowthScoutDashboard />
+          </TabsContent>
+
+          <TabsContent value="emails">
+            <EmailMonitoringDashboard />
           </TabsContent>
         </Tabs>
       </div>
