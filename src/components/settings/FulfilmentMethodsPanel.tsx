@@ -31,6 +31,11 @@ interface MarketplaceRow {
   marketplace_name: string;
 }
 
+/** Marketplace codes that have MCF-tagged settlement lines */
+type McfDetectionMap = Record<string, boolean>;
+/** Marketplace codes that have MFN lines but are set to marketplace_fulfilled */
+type MfnDetectionMap = Record<string, boolean>;
+
 const BASE_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'not_sure'];
 const AMAZON_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'mixed_fba_fbm', 'not_sure'];
 
