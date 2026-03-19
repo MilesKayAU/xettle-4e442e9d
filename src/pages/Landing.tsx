@@ -401,7 +401,7 @@ export default function Landing() {
                 {[
                   'Journal entries split across multiple accounts',
                   'No single document to review or approve',
-                  'Harder to match against bank feed deposits',
+                  'Harder to match against deposits in Xero',
                   'Requires clearing accounts and manual journals',
                   'Difficult to audit — no attached evidence',
                   'Accountants often redo the work manually',
