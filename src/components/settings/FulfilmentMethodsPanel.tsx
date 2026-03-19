@@ -239,6 +239,57 @@ export default function FulfilmentMethodsPanel() {
     }
   };
 
+  const handleSaveAllAndRecalc = async () => {
+    setSavingAll(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Save all fulfilment methods
+      for (const mp of marketplaces) {
+        const method = methods[mp.marketplace_code];
+        if (method) {
+          await saveFulfilmentMethod(user.id, mp.marketplace_code, method);
+        }
+      }
+
+      // Save all postage costs
+      for (const mp of marketplaces) {
+        const val = postageCosts[mp.marketplace_code];
+        const num = parseFloat(val || '');
+        if (!isNaN(num) && num >= 0) {
+          await savePostageCost(user.id, mp.marketplace_code, num);
+        }
+      }
+
+      // Save MCF costs
+      for (const mp of marketplaces) {
+        const val = mcfCosts[mp.marketplace_code];
+        const num = parseFloat(val || '');
+        if (!isNaN(num) && num >= 0) {
+          await saveMcfCost(user.id, mp.marketplace_code, num);
+        }
+      }
+
+      // Recalculate profit
+      const result = await triggerProfitRecalc();
+
+      // Invalidate dashboard task counts so health panel updates
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
+
+      if (result) {
+        toast.success(`✅ Settings saved & profit recalculated for ${result.updated} settlement${result.updated !== 1 ? 's' : ''}`);
+      } else {
+        toast.success('Settings saved');
+      }
+    } catch (err) {
+      toast.error('Failed to save — check console');
+      console.error('[handleSaveAllAndRecalc]', err);
+    } finally {
+      setSavingAll(false);
+    }
+  };
+
   const handleDismissPrompt = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
