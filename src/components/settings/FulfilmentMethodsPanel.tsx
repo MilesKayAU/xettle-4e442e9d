@@ -62,6 +62,7 @@ export default function FulfilmentMethodsPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
+  const [savingAll, setSavingAll] = useState(false);
   const [mixedModePromptDismissed, setMixedModePromptDismissed] = useState(true);
   const [mcfDetected, setMcfDetected] = useState<McfDetectionMap>({});
   const [mfnDetected, setMfnDetected] = useState<MfnDetectionMap>({});
