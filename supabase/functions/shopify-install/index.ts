@@ -38,11 +38,24 @@ Deno.serve(async (req) => {
       return new Response('Server configuration error', { status: 500 })
     }
 
+    // === DEBUG: log secret prefix and full request URL for diagnosis ===
+    console.log('DEBUG shopify-install:', JSON.stringify({
+      secretPrefix: SHOPIFY_CLIENT_SECRET.slice(0, 4),
+      secretLength: SHOPIFY_CLIENT_SECRET.length,
+      isDev,
+      rawUrl: req.url,
+      providedHmac: hmac,
+      queryKeys: Array.from(url.searchParams.keys()).sort(),
+    }))
+
     const hmacVerification = await verifyShopifyHmac({
       providedHmac: hmac,
       secret: SHOPIFY_CLIENT_SECRET,
       rawInput: req.url,
     })
+
+    // === DEBUG: log verification result ===
+    console.log('DEBUG hmac result:', JSON.stringify(hmacVerification))
 
     if (!hmacVerification.valid) {
       console.error('HMAC verification failed for shop:', shop, {
