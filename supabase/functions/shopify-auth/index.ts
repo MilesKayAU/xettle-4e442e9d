@@ -259,11 +259,12 @@ Deno.serve(async (req) => {
 
       const userId = user.id
 
+      // Return all stores — active and inactive
       const { data: tokens, error } = await supabase
         .from('shopify_tokens')
         .select('shop_domain, scope, installed_at, is_active')
         .eq('user_id', userId)
-        .eq('is_active', true)
+        .order('is_active', { ascending: false })
 
       if (error) {
         console.error('Failed to fetch Shopify status:', error)
@@ -273,10 +274,13 @@ Deno.serve(async (req) => {
         )
       }
 
+      const activeShops = (tokens || []).filter((t: any) => t.is_active)
+
       return new Response(
         JSON.stringify({
-          connected: tokens && tokens.length > 0,
-          shops: tokens || [],
+          connected: activeShops.length > 0,
+          shops: activeShops,
+          inactive_shops: (tokens || []).filter((t: any) => !t.is_active),
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
