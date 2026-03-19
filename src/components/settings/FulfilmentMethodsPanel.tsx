@@ -185,6 +185,7 @@ export default function FulfilmentMethodsPanel() {
       setMethods(prev => ({ ...prev, [code]: method }));
       toast.success(`Fulfilment method updated for ${code}`);
       recalcInBackground();
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch {
       toast.error('Failed to save fulfilment method');
     } finally {
