@@ -109,7 +109,7 @@ export default function ReconciliationHealthPanel() {
         status: hasTaxWarning ? 'warn' : 'pass',
         detail: hasTaxWarning ? 'Set your organisation tax profile (GST registered / not registered)' : 'Tax profile configured',
         actionLabel: hasTaxWarning ? 'Set profile' : undefined,
-        actionSection: hasTaxWarning ? 'accounting_boundary' : undefined,
+        actionSection: hasTaxWarning ? 'account-mapper' : undefined,
       });
 
       // 3. Destination accounts mapped
