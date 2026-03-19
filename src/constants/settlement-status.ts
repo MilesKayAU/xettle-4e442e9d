@@ -27,6 +27,7 @@
  *
  * Error path:
  *   ready_to_push → push_failed → push_failed_permanent
+ *   ready_to_push → mapping_error → ready_to_push (after user fixes mapping)
  *
  * Rollback:
  *   pushed_to_xero → ready_to_push
