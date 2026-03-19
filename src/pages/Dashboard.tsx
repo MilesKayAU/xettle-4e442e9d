@@ -742,8 +742,6 @@ export default function Dashboard() {
   const insightsSubTabs: { key: InsightsSubTab; label: string; pro?: boolean }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'reconciliation', label: 'Reconciliation Health' },
-    { key: 'profit', label: 'Profit Analysis', pro: true },
-    { key: 'sku', label: 'SKU Comparison', pro: true },
   ];
 
   return (
@@ -1136,35 +1134,6 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
 
-        {/* ─── Insights → Profit Analysis ────────────────────────────── */}
-        {activeView === 'insights' && insightsSubTab === 'profit' && (
-          <ErrorBoundary>
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Profit Analysis</h2>
-                <p className="text-muted-foreground mt-1">
-                  Cross-marketplace profit ranking and margin comparison.
-                </p>
-              </div>
-              <MarketplaceProfitComparison />
-            </div>
-          </ErrorBoundary>
-        )}
-
-        {/* ─── Insights → SKU Comparison ─────────────────────────────── */}
-        {activeView === 'insights' && insightsSubTab === 'sku' && (
-          <ErrorBoundary>
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">SKU Comparison</h2>
-                <p className="text-muted-foreground mt-1">
-                  Compare SKU-level profitability across marketplaces.
-                </p>
-              </div>
-              <SkuComparisonView />
-            </div>
-          </ErrorBoundary>
-        )}
 
         {/* ─── Settings ──────────────────────────────────────────────── */}
         {activeView === 'settings' && (
