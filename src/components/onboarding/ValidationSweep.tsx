@@ -55,7 +55,7 @@ interface ValidationRow {
 }
 
 interface ValidationSweepProps {
-  onSwitchToUpload?: () => void;
+  onSwitchToUpload?: (marketplaceCode?: string, periodLabel?: string) => void;
   onPushToXero?: (settlementId: string, marketplace: string) => void;
   showSweepAnimation?: boolean;
   /** When set, limits visible rows and shows a "View all" link */
