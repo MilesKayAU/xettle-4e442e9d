@@ -107,7 +107,7 @@ export default function Pricing() {
             </Label>
             {isYearly && (
               <Badge variant="secondary" className="ml-1 text-xs bg-primary/10 text-primary border-primary/20">
-                Save ~28%
+                Save ~17%
               </Badge>
             )}
           </div>
