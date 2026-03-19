@@ -129,14 +129,15 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
 
   const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
     const relevantWarnings = sectionWarningMap[sectionKey] || [];
+    // Sections with no tracked warnings are always 'none' (neutral) — no badge
     if (relevantWarnings.length === 0) return 'none';
 
-    const hasBlocking = relevantWarnings.some(k => warningKeys.has(k) && setupWarnings.find(w => w.key === k)?.severity === 'blocking');
-    const hasWarning = relevantWarnings.some(k => warningKeys.has(k));
+    const activeWarnings = relevantWarnings.filter(k => warningKeys.has(k));
+    if (activeWarnings.length === 0) return 'complete'; // all resolved → green
 
+    const hasBlocking = activeWarnings.some(k => setupWarnings.find(w => w.key === k)?.severity === 'blocking');
     if (hasBlocking) return 'incomplete';
-    if (hasWarning) return 'warning';
-    return 'complete';
+    return 'warning';
   };
 
   const sectionOrder = ['api_connections', 'destination_accounts', 'account_mapper', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'data_quality'] as const;
