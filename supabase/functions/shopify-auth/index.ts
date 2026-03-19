@@ -98,26 +98,19 @@ Deno.serve(async (req) => {
       delete params.action
       delete params.hmac
 
-      const message = typeof rawQuery === 'string' && rawQuery.trim().length > 0
-        ? buildShopifyHmacMessage(rawQuery)
-        : Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&')
+      const hmacVerification = await verifyShopifyHmac({
+        providedHmac: hmac,
+        secret: SHOPIFY_CLIENT_SECRET,
+        rawInput: typeof rawQuery === 'string' ? rawQuery : undefined,
+        params,
+      })
 
-      const encoder = new TextEncoder()
-      const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(SHOPIFY_CLIENT_SECRET),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      )
-      const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message))
-      const computedHmac = Array.from(new Uint8Array(signature))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('')
-
-      const hmacValid = await timingSafeEqual(computedHmac.toLowerCase(), hmac.toLowerCase())
-      if (!hmacValid) {
-        console.error('HMAC verification failed')
+      if (!hmacVerification.valid) {
+        console.error('HMAC verification failed', {
+          shop,
+          hasRawQuery: typeof rawQuery === 'string' && rawQuery.trim().length > 0,
+          paramKeys: Object.keys(params).sort(),
+        })
         return new Response(
           JSON.stringify({ error: 'Invalid signature' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
