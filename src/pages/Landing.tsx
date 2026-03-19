@@ -470,10 +470,10 @@ export default function Landing() {
               Reconciliation engine
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Reconcile each settlement before creating a Xero invoice.
+              Verify each settlement before posting to Xero.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Most tools push invoices and hope for the best. Xettle reconciles the settlement against your bank feed first — so you know the numbers are right before anything reaches Xero.
+              Most tools push invoices and hope for the best. Xettle validates settlement totals, optionally checks deposits already in Xero, and surfaces exceptions — so you know the numbers are right before anything posts.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
