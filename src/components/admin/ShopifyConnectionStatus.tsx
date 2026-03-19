@@ -17,7 +17,7 @@ import MarketplaceDiscovery from '@/components/shopify/MarketplaceDiscovery';
 
 interface ShopifyStatus {
   connected: boolean;
-  shops: Array<{ shop_domain: string; scope: string; installed_at: string }>;
+  shops: Array<{ shop_domain: string; scope: string; installed_at: string; is_active?: boolean }>;
 }
 
 
