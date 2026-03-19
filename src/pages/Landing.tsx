@@ -3,7 +3,7 @@ import XettleLogo from '@/components/shared/XettleLogo';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers, Users, ClipboardCheck, Ban, FileText, DollarSign, Scale, ShieldCheck, Search, Lock, Repeat, Building2, Briefcase, Receipt, Activity, Eye, ListChecks, Fingerprint, Clock, BadgeCheck } from 'lucide-react';
+import { ArrowRight, Shield, Zap, FileSpreadsheet, RefreshCw, CheckCircle, Upload, Bot, Crown, Store, BarChart3, AlertTriangle, ScanSearch, FolderUp, Table, Settings2, Layers, Users, ClipboardCheck, Ban, FileText, DollarSign, Scale, ShieldCheck, Search, Lock, Repeat, Building2, Briefcase, Receipt, Activity, Eye, ListChecks, Fingerprint, Clock, BadgeCheck, Package, Truck, Split } from 'lucide-react';
 import profitLeakImg from '@/assets/profit-leak-preview.png';
 import feeAlertsImg from '@/assets/fee-alerts-preview.png';
 import PublicDemoUpload from '@/components/PublicDemoUpload';
