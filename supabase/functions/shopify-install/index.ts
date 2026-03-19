@@ -8,12 +8,33 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 
 const APP_URL = 'https://xettle.app'
 
+function getQueryPairKey(pair: string): string {
+  const separatorIndex = pair.indexOf('=')
+  return separatorIndex >= 0 ? pair.slice(0, separatorIndex) : pair
+}
+
+function getRawQueryString(input: string): string {
+  if (!input) return ''
+  const questionMarkIndex = input.indexOf('?')
+  return questionMarkIndex >= 0 ? input.slice(questionMarkIndex + 1) : input.replace(/^\?/, '')
+}
+
+function buildShopifyHmacMessage(rawInput: string, excludedKeys: string[] = ['hmac', 'signature']): string {
+  const excluded = new Set(excludedKeys)
+  return getRawQueryString(rawInput)
+    .split('&')
+    .filter(Boolean)
+    .filter((pair) => !excluded.has(getQueryPairKey(pair)))
+    .sort((a, b) => getQueryPairKey(a).localeCompare(getQueryPairKey(b)) || a.localeCompare(b))
+    .join('&')
+}
+
 async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const encoder = new TextEncoder()
   const aBytes = encoder.encode(a)
   const bBytes = encoder.encode(b)
   if (aBytes.byteLength !== bBytes.byteLength) return false
-  // Re-sign both with a random key so comparison time doesn't leak info
+
   const keyData = crypto.getRandomValues(new Uint8Array(32))
   const cryptoKey = await crypto.subtle.importKey(
     'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
@@ -32,7 +53,6 @@ async function timingSafeEqual(a: string, b: string): Promise<boolean> {
 }
 
 Deno.serve(async (req) => {
-  // Only accept GET (Shopify sends GET for install redirects)
   if (req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 })
   }
@@ -47,7 +67,6 @@ Deno.serve(async (req) => {
       return new Response('Missing required parameters', { status: 400 })
     }
 
-    // Validate shop domain format
     if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop)) {
       return new Response('Invalid shop domain', { status: 400 })
     }
@@ -62,21 +81,7 @@ Deno.serve(async (req) => {
       return new Response('Server configuration error', { status: 500 })
     }
 
-    // Standard Shopify HMAC validation:
-    // 1. Remove hmac from params
-    // 2. Sort remaining params alphabetically
-    // 3. Join as key=value&key=value
-    // 4. HMAC-SHA256 with client secret
-    // 5. Timing-safe comparison
-    const params: Record<string, string> = {}
-    url.searchParams.forEach((value, key) => {
-      if (key !== 'hmac') {
-        params[key] = value
-      }
-    })
-
-    const sortedKeys = Object.keys(params).sort()
-    const message = sortedKeys.map(k => `${k}=${params[k]}`).join('&')
+    const message = buildShopifyHmacMessage(req.url)
 
     const encoder = new TextEncoder()
     const key = await crypto.subtle.importKey(
@@ -91,13 +96,12 @@ Deno.serve(async (req) => {
       .map(b => b.toString(16).padStart(2, '0'))
       .join('')
 
-    const isValid = await timingSafeEqual(computedHmac, hmac)
+    const isValid = await timingSafeEqual(computedHmac.toLowerCase(), hmac.toLowerCase())
     if (!isValid) {
       console.error('HMAC verification failed for shop:', shop)
       return new Response('Invalid signature', { status: 401 })
     }
 
-    // Check if this shop is already linked to a user
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -111,7 +115,6 @@ Deno.serve(async (req) => {
 
     const shopExists = existingTokens && existingTokens.length > 0
 
-    // Log the install attempt
     try {
       await supabaseAdmin.from('system_events').insert({
         user_id: shopExists ? existingTokens[0].user_id : '00000000-0000-0000-0000-000000000000',
@@ -124,7 +127,6 @@ Deno.serve(async (req) => {
       console.warn('Failed to log install event:', logErr)
     }
 
-    // Redirect to auth page with appropriate tab
     const tab = shopExists ? 'signin' : 'signup'
     const redirectUrl = `${APP_URL}/auth?tab=${tab}&shop=${encodeURIComponent(shop)}&source=shopify_install`
 
