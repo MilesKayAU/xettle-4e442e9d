@@ -231,6 +231,37 @@ export async function saveSettlementCanonical(
   const { error } = await supabase.from('settlements').insert(row as any);
   if (error) return { success: false, error: error.message };
 
+  // Step 1b: Auto-set accounting boundary if not already configured
+  try {
+    const { data: existingBoundary } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('user_id', row.user_id)
+      .eq('key', 'accounting_boundary_date')
+      .maybeSingle();
+
+    if (!existingBoundary?.value && periodStart) {
+      // Set boundary to 1 day before earliest settlement period_start
+      const boundaryDate = new Date(periodStart);
+      boundaryDate.setDate(boundaryDate.getDate() - 1);
+      const boundaryStr = boundaryDate.toISOString().split('T')[0];
+
+      // Clamp to not be in the future
+      const today = new Date().toISOString().split('T')[0];
+      const safeBoundary = boundaryStr > today ? today : boundaryStr;
+
+      const boundarySettings = [
+        { user_id: row.user_id, key: 'accounting_boundary_date', value: safeBoundary },
+        { user_id: row.user_id, key: 'accounting_boundary_source', value: 'auto_first_upload' },
+      ];
+      await supabase.from('app_settings').upsert(boundarySettings as any, { onConflict: 'user_id,key' });
+      console.log(`[saveSettlementCanonical] Auto-set boundary to ${safeBoundary} from first upload`);
+    }
+  } catch (boundaryErr) {
+    // Non-blocking — boundary auto-set is advisory
+    console.warn('[saveSettlementCanonical] Auto-boundary failed:', boundaryErr);
+  }
+
   // Step 2: Apply source priority synchronously
   let sourcePriority: SourcePriorityResult | undefined;
   try {
