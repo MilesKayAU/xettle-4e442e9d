@@ -15,9 +15,17 @@ import { type ShopifyApiOrder } from '@/utils/shopify-api-adapter';
 import { detectAllMarketplaces, classifyUnknownTag, type BatchDetectionResult } from '@/utils/shopify-order-detector';
 import MarketplaceDiscovery from '@/components/shopify/MarketplaceDiscovery';
 
+interface ShopifyShop {
+  shop_domain: string;
+  scope: string;
+  installed_at: string;
+  is_active?: boolean;
+}
+
 interface ShopifyStatus {
   connected: boolean;
-  shops: Array<{ shop_domain: string; scope: string; installed_at: string; is_active?: boolean }>;
+  shops: ShopifyShop[];
+  inactive_shops?: ShopifyShop[];
 }
 
 
@@ -495,6 +503,68 @@ const ShopifyConnectionStatus = () => {
                   </p>
                 )}
               </div>
+
+              {/* Inactive stores section */}
+              {status.inactive_shops && status.inactive_shops.length > 0 && (
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full text-muted-foreground text-xs gap-1">
+                      <ChevronDown className="h-3 w-3" />
+                      {status.inactive_shops.length} inactive store{status.inactive_shops.length > 1 ? 's' : ''}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-2 pt-1">
+                    {status.inactive_shops.map((shop) => (
+                      <div key={shop.shop_domain} className="flex items-center justify-between bg-muted/30 rounded-md px-3 py-2">
+                        <span className="text-xs text-muted-foreground">{shop.shop_domain}</span>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs px-2"
+                            onClick={async () => {
+                              try {
+                                const { error } = await supabase.functions.invoke('shopify-auth', {
+                                  body: { action: 'switch_store', shop_domain: shop.shop_domain },
+                                });
+                                if (error) throw error;
+                                toast.success(`Switched to ${shop.shop_domain}`);
+                                await fetchStatus();
+                              } catch (err: any) {
+                                toast.error(err.message || 'Failed to switch store');
+                              }
+                            }}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Switch to
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs px-2 text-destructive hover:text-destructive"
+                            onClick={async () => {
+                              if (!confirm(`Permanently delete the connection to ${shop.shop_domain}? This cannot be undone.`)) return;
+                              try {
+                                const { error } = await supabase.functions.invoke('shopify-auth', {
+                                  body: { action: 'delete_store', shop_domain: shop.shop_domain },
+                                });
+                                if (error) throw error;
+                                toast.success(`Deleted ${shop.shop_domain}`);
+                                await fetchStatus();
+                              } catch (err: any) {
+                                toast.error(err.message || 'Failed to delete store');
+                              }
+                            }}
+                          >
+                            <Unlink className="h-3 w-3 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
             </>
           )}
 

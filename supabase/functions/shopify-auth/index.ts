@@ -259,11 +259,12 @@ Deno.serve(async (req) => {
 
       const userId = user.id
 
+      // Return all stores — active and inactive
       const { data: tokens, error } = await supabase
         .from('shopify_tokens')
         .select('shop_domain, scope, installed_at, is_active')
         .eq('user_id', userId)
-        .eq('is_active', true)
+        .order('is_active', { ascending: false })
 
       if (error) {
         console.error('Failed to fetch Shopify status:', error)
@@ -273,10 +274,13 @@ Deno.serve(async (req) => {
         )
       }
 
+      const activeShops = (tokens || []).filter((t: any) => t.is_active)
+
       return new Response(
         JSON.stringify({
-          connected: tokens && tokens.length > 0,
-          shops: tokens || [],
+          connected: activeShops.length > 0,
+          shops: activeShops,
+          inactive_shops: (tokens || []).filter((t: any) => !t.is_active),
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -319,6 +323,123 @@ Deno.serve(async (req) => {
         console.error('Failed to disconnect Shopify:', error)
         return new Response(
           JSON.stringify({ error: 'Failed to disconnect' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ACTION: switch_store — reactivate an inactive store and deactivate the current one
+    if (action === 'switch_store') {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const body = parsedBody || await req.json()
+      const { shop_domain } = body
+
+      if (!shop_domain) {
+        return new Response(
+          JSON.stringify({ error: 'shop_domain is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Deactivate all, then activate the target
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+      await supabaseAdmin.from('shopify_tokens').update({ is_active: false }).eq('user_id', user.id)
+      const { error } = await supabaseAdmin.from('shopify_tokens').update({ is_active: true }).eq('user_id', user.id).eq('shop_domain', shop_domain)
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to switch store' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Update app_settings
+      await supabaseAdmin.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'shopify_shop_domain',
+        value: shop_domain,
+      }, { onConflict: 'user_id,key' })
+
+      return new Response(
+        JSON.stringify({ success: true, active_shop: shop_domain }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ACTION: delete_store — permanently delete an inactive store token
+    if (action === 'delete_store') {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const body = parsedBody || await req.json()
+      const { shop_domain } = body
+
+      if (!shop_domain) {
+        return new Response(
+          JSON.stringify({ error: 'shop_domain is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Only allow deleting inactive stores
+      const { error } = await supabase
+        .from('shopify_tokens')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('shop_domain', shop_domain)
+        .eq('is_active', false)
+
+      if (error) {
+        return new Response(
+          JSON.stringify({ error: 'Failed to delete store' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
