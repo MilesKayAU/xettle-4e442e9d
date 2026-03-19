@@ -464,7 +464,101 @@ export default function InsightsDashboard() {
     setAdAmount('');
     setAdCurrency('AUD');
     setAdNotes('');
+    setAdParsedEntries([]);
+    setAdUploadMode('manual');
     setAdDialogOpen(true);
+  }
+
+  async function handleAdSpendFileUpload(file: File) {
+    setAdUploadParsing(true);
+    setAdParsedEntries([]);
+    try {
+      let textContent = '';
+      if (file.type === 'application/pdf') {
+        // For PDFs, read as base64 and send text extraction to AI
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        textContent = `[PDF file - base64 encoded]\n${btoa(binary).substring(0, 50000)}`;
+      } else {
+        // CSV/text-based files
+        textContent = await file.text();
+        if (textContent.length > 50000) textContent = textContent.substring(0, 50000);
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const res = await supabase.functions.invoke('parse-ad-spend-invoice', {
+        body: {
+          file_content: textContent,
+          file_name: file.name,
+          file_type: file.type,
+        },
+      });
+
+      if (res.error) throw new Error(res.error.message || 'Parse failed');
+      const parsed = res.data;
+
+      if (parsed.error) {
+        toast({ title: 'Could not parse invoice', description: parsed.error, variant: 'destructive' });
+        return;
+      }
+
+      if (!parsed.entries || parsed.entries.length === 0) {
+        toast({ title: 'No ad spend data found', description: parsed.raw_summary || 'The file did not contain recognisable ad spend data.', variant: 'destructive' });
+        return;
+      }
+
+      setAdParsedEntries(parsed.entries);
+      toast({ title: `Found ${parsed.entries.length} ad spend ${parsed.entries.length === 1 ? 'entry' : 'entries'}` });
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setAdUploadParsing(false);
+    }
+  }
+
+  async function saveAllParsedAdSpend() {
+    setAdSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      let saved = 0;
+      for (const entry of adParsedEntries) {
+        const amount = entry.includes_gst && entry.gst_amount
+          ? entry.spend_amount - entry.gst_amount
+          : entry.spend_amount;
+
+        const { error } = await supabase
+          .from('marketplace_ad_spend')
+          .upsert({
+            user_id: user.id,
+            marketplace_code: entry.marketplace_code,
+            period_start: entry.period_start,
+            period_end: entry.period_end,
+            spend_amount: Math.round(amount * 100) / 100,
+            currency: entry.currency,
+            source: 'invoice_upload',
+            notes: entry.invoice_number ? `Invoice: ${entry.invoice_number}` : null,
+          }, { onConflict: 'user_id,marketplace_code,period_start' });
+
+        if (error) throw error;
+        saved++;
+      }
+
+      toast({ title: `${saved} ad spend ${saved === 1 ? 'entry' : 'entries'} saved` });
+      setAdDialogOpen(false);
+      await loadStats();
+    } catch (err: any) {
+      toast({ title: 'Failed to save', description: err.message, variant: 'destructive' });
+    } finally {
+      setAdSaving(false);
+    }
   }
 
   async function saveAdSpend() {
