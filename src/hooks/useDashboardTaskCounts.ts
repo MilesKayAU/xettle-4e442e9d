@@ -24,6 +24,8 @@ export interface SetupWarning {
   label: string;
   severity: 'blocking' | 'warning';
   message: string;
+  actionLabel?: string;
+  actionTarget?: string;
 }
 
 export interface DashboardTaskCounts {
