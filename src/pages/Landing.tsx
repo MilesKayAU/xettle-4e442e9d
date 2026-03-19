@@ -707,7 +707,16 @@ export default function Landing() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-foreground mb-1">Settlement fee breakdown</h3>
-                  <p className="text-muted-foreground text-sm">See exactly what the marketplace charged — commission, FBA fulfilment, refunds, and platform fees — verified from settlement data.</p>
+                  <p className="text-muted-foreground text-sm">See exactly what the marketplace charged — commission, FBA fulfilment, refunds, and platform fees — verified from settlement data. Where fees are estimated, we badge it and show the rate used.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Truck className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Fulfilment-aware costs</h3>
+                  <p className="text-muted-foreground text-sm">FBA, FBM, MCF — each has different postage and fulfilment costs. Xettle deducts the right amount per fulfilment channel so your profit reflects what you actually paid to ship.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
@@ -716,16 +725,7 @@ export default function Landing() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-foreground mb-1">Compare marketplaces</h3>
-                  <p className="text-muted-foreground text-sm">Instantly compare settlement margins from Bunnings vs Amazon vs Shopify — side by side.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">Track margin changes</h3>
-                  <p className="text-muted-foreground text-sm">See how settlement margins shift over time as marketplaces adjust their fee structures.</p>
+                  <p className="text-muted-foreground text-sm">Instantly compare settlement margins from Bunnings vs Amazon vs Shopify — side by side. Track how margins shift as marketplaces adjust their fee structures.</p>
                 </div>
               </div>
             </div>
