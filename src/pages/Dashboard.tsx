@@ -97,8 +97,9 @@ function SetupInProgressBanner({ show: showProp }: { show?: boolean }) {
   );
 }
 
-function SettingsAccordion({ id, title, description, defaultOpen = false, children }: { id?: string; title: string; description: string; defaultOpen?: boolean; children: React.ReactNode }) {
+function SettingsAccordion({ id, title, description, defaultOpen = false, children, status, helpText }: { id?: string; title: string; description: string; defaultOpen?: boolean; children: React.ReactNode; status?: 'complete' | 'incomplete' | 'warning' | 'none'; helpText?: string }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [showHelp, setShowHelp] = useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -114,18 +115,67 @@ function SettingsAccordion({ id, title, description, defaultOpen = false, childr
     return () => window.removeEventListener('open-settings-section', handler);
   }, [id]);
 
+  const statusIcon = status === 'complete'
+    ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+    : status === 'incomplete'
+    ? <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+    : status === 'warning'
+    ? <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+    : null;
+
+  const borderClass = status === 'incomplete'
+    ? 'border-destructive/40'
+    : status === 'warning'
+    ? 'border-amber-500/40'
+    : status === 'complete'
+    ? 'border-green-500/30'
+    : 'border-border';
+
   return (
-    <div ref={ref} className="rounded-xl border border-border bg-card overflow-hidden">
+    <div ref={ref} className={`rounded-xl border ${borderClass} bg-card overflow-hidden transition-colors`}>
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-muted/30 transition-colors"
       >
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+        <div className="flex items-center gap-3 min-w-0">
+          {statusIcon}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+              {status === 'incomplete' && (
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Action needed</Badge>
+              )}
+              {status === 'warning' && (
+                <Badge className="bg-amber-500/15 text-amber-700 border-amber-500/20 text-[10px] px-1.5 py-0">Review</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+          </div>
         </div>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+        <div className="flex items-center gap-2 shrink-0">
+          {helpText && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setShowHelp(!showHelp); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setShowHelp(!showHelp); } }}
+              className="flex items-center justify-center h-6 w-6 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+              title="What is this?"
+            >
+              <Info className="h-3.5 w-3.5 text-muted-foreground" />
+            </span>
+          )}
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
       </button>
+      {showHelp && helpText && (
+        <div className="mx-5 mb-2 rounded-lg bg-primary/5 border border-primary/20 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <p className="text-xs text-foreground/80 leading-relaxed">{helpText}</p>
+          </div>
+        </div>
+      )}
       {open && <div className="px-5 pb-5 pt-1">{children}</div>}
     </div>
   );
