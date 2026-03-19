@@ -205,7 +205,6 @@ Deno.serve(async (req) => {
         .ilike("marketplace_name", "%amazon%");
       q = applyChannelFilter(q);
       await q;
-        .ilike("marketplace_name", "%amazon%");
     }
 
     return new Response(
