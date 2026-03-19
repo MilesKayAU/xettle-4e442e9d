@@ -188,6 +188,20 @@ export default function InsightsDashboard() {
         grouped[mp].push(row);
       }
 
+      // ─── Exclude api_sync zero-fee rows when real settlements exist ───
+      // api_sync rows (from Shopify order syncs) carry $0 fees by design.
+      // They're reconciliation aids, not accounting records. When we have
+      // real CSV/direct settlements for the same marketplace, drop them
+      // so Insights shows only actual fee data — no estimates needed.
+      for (const [mp, rows] of Object.entries(grouped)) {
+        const realRows = rows.filter(r => (r as any).source !== 'api_sync');
+        const apiSyncRows = rows.filter(r => (r as any).source === 'api_sync');
+        if (realRows.length > 0 && apiSyncRows.length > 0) {
+          // We have real settlement data — drop the api_sync rows entirely
+          grouped[mp] = realRows;
+        }
+      }
+
       // ─── Platform Family Fee Redistribution ───────────────────────────
       // MyDeal, BigW, and Everyday Market all share the Woolworths MarketPlus platform.
       // The Woolworths CSV allocates platform-level fees (subscriptions, etc.) to MyDeal
