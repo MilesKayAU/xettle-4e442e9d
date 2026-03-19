@@ -389,7 +389,7 @@ export default function InsightsDashboard() {
           effectiveNetPayout -= redistributedPlatformFees;
           effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
           effectiveFeeLoad = totalSales > 0 ? Math.min(Math.max(effectiveTotalFees, 0) / totalSales, 1) : 0;
-          effectiveHasEstimatedFees = true;
+          // Redistribution is NOT estimation — it's reallocating real fees between siblings
         }
 
         const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
