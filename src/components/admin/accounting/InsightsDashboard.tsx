@@ -336,7 +336,7 @@ export default function InsightsDashboard() {
         );
         let hasMissingFeeData = totalFees === 0 && totalSales > 500;
 
-        // Include redistributed platform fees from sibling marketplaces
+        // Include redistributed platform fees from sibling marketplaces (these are REAL fees, just reallocated)
         const redistributedPlatformFees = (grouped[mp] as any)?._redistributedPlatformFees || 0;
 
         let effectiveReturnRatio = returnRatio;
