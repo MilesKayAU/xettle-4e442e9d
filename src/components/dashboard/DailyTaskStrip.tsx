@@ -1,4 +1,4 @@
-import { useDashboardTaskCounts, type SetupWarning } from '@/hooks/useDashboardTaskCounts';
+import { useDashboardTaskCounts } from '@/hooks/useDashboardTaskCounts';
 import { Settings, FileText, Send, CheckCircle2, AlertTriangle, ArrowRight, Info, Upload } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
@@ -10,41 +10,6 @@ interface DailyTaskStripProps {
   onUploadClick?: () => void;
 }
 
-function SetupWarningList({ warnings, onNavigate }: { warnings: SetupWarning[]; onNavigate: (view: string, subTab?: string) => void }) {
-  if (warnings.length === 0) return null;
-
-  const handleAction = (target: string) => {
-    const [view, section] = target.split(':');
-    if (section) {
-      window.dispatchEvent(new CustomEvent('open-settings-tab'));
-      setTimeout(() => window.dispatchEvent(new CustomEvent('open-settings-section', { detail: section })), 150);
-    } else {
-      onNavigate(view);
-    }
-  };
-
-  return (
-    <div className="col-span-full rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
-      <p className="text-xs font-semibold text-destructive mb-1.5">Setup issues blocking posting:</p>
-      <ul className="space-y-1">
-        {warnings.map(w => (
-          <li key={w.key} className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <span className={w.severity === 'blocking' ? 'text-destructive' : 'text-amber-500'}>•</span>
-            <span className="flex-1">{w.message}</span>
-            {w.actionLabel && w.actionTarget && (
-              <button
-                onClick={() => handleAction(w.actionTarget!)}
-                className="shrink-0 text-xs font-medium text-primary hover:text-primary/80 underline underline-offset-2 transition-colors"
-              >
-                {w.actionLabel} →
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 const STAGES = [
   {
     key: 'setup',
@@ -172,7 +137,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre, mis
             );
           })}
         </div>
-        {setupWarnings.length > 0 && <SetupWarningList warnings={setupWarnings} onNavigate={onNavigate} />}
+        
         {missingSettlementCount > 0 && (
           <button
             onClick={onUploadClick}
