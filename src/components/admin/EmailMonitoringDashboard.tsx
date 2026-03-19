@@ -69,21 +69,11 @@ export default function EmailMonitoringDashboard() {
     setLoading(true);
     try {
       const start = getTimeRangeStart(timeRange);
-      const { data, error } = await supabase.functions.invoke('export-system-events-csv', {
-        body: { 
-          action: 'email_log',
-          start_date: start,
-        },
+      const { data, error } = await supabase.functions.invoke('admin-email-log', {
+        body: { start_date: start },
       });
-      
-      // Fallback: query directly if edge function doesn't support this
-      // The email_send_log table has service_role-only RLS, so we need an edge function
-      if (error || !data?.rows) {
-        // Try direct RPC or just show empty
-        setRawRows([]);
-        return;
-      }
-      setRawRows(data.rows);
+      if (error) throw error;
+      setRawRows(data?.rows || []);
     } catch {
       setRawRows([]);
     } finally {
