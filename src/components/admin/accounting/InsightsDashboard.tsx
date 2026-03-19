@@ -21,8 +21,6 @@ import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import { toast } from '@/hooks/use-toast';
 
 import {
-  COMMISSION_ESTIMATES,
-  DEFAULT_COMMISSION_RATE,
   normalizeMarketplace as canonicalNormalizeMarketplace,
   PLATFORM_FAMILIES,
 } from '@/utils/insights-fee-attribution';
@@ -119,7 +117,7 @@ export default function InsightsDashboard() {
       // Insights is an analytics view — include pre-boundary (historical) settlements
       // so that all marketplace sales data contributes to trends and totals.
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes, observedRatesRes] = await Promise.all([
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
@@ -138,6 +136,10 @@ export default function InsightsDashboard() {
         supabase
           .from('settlement_profit')
           .select('marketplace_code, orders_count'),
+        supabase
+          .from('app_settings')
+          .select('key, value')
+          .like('key', 'observed_commission_rate_%'),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
@@ -173,6 +175,18 @@ export default function InsightsDashboard() {
         for (const row of profitOrdersRes.data as any[]) {
           const mp = row.marketplace_code;
           profitOrderCounts[mp] = (profitOrderCounts[mp] || 0) + (Number(row.orders_count) || 0);
+        }
+      }
+
+      // Build observed commission rates from app_settings
+      const observedRates: Record<string, number> = {};
+      if (observedRatesRes.data) {
+        for (const row of observedRatesRes.data as any[]) {
+          const mpCode = (row.key as string).replace('observed_commission_rate_', '');
+          const rate = parseFloat(row.value);
+          if (!isNaN(rate) && rate > 0 && rate < 1) {
+            observedRates[mpCode] = rate;
+          }
         }
       }
 
@@ -235,8 +249,9 @@ export default function InsightsDashboard() {
           const rows = grouped[fh];
           const sales = rows.reduce((sum, r) => sum + (r.sales_principal || 0) + (r.gst_on_income || 0), 0);
           const fees = rows.reduce((sum, r) => sum + Math.abs(r.seller_fees || 0) + Math.abs(r.fba_fees || 0) + Math.abs(r.storage_fees || 0) + Math.abs(r.other_fees || 0), 0);
-          // Excess = fees beyond what's attributable to own sales (using 15% as normal commission)
-          const ownFees = sales * 0.15;
+          // Use observed rate if available, fall back to 15% with estimation flag
+          const ownFeeRate = observedRates[fh] ?? 0.15;
+          const ownFees = sales * ownFeeRate;
           const excess = Math.max(fees - ownFees, 0);
           totalExcessFees += excess;
           // Subtract excess from fee-heavy sibling so its card shows only its own share
@@ -308,18 +323,18 @@ export default function InsightsDashboard() {
         // Shipping cost estimation — only applied for self_ship / third_party_logistics
         // Use marketplace_shipping_costs table first, fall back to app_settings postage_cost
         const shippingCostPerOrder = shippingCostByMp[mp] || postageCosts[mp] || 0;
-        // Use real order counts from settlement_profit when available
+        // Use real order counts from settlement_profit — do NOT fall back to rows.length
         const estimatedOrderCount = (() => {
           const profitOrderCount = profitOrderCounts[mp];
           if (profitOrderCount && profitOrderCount > 0) return profitOrderCount;
-          return rows.length > 0 ? rows.length : 1;
+          return 0; // No real order count available — don't fabricate
         })();
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;
-        const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 
+        const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 && estimatedOrderCount > 0
           ? Math.max(Math.min((netPayout - estimatedShippingCost) / totalSales, 1), -1) 
           : null;
-        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || (shouldDeductShipping && shippingCostPerOrder > 0))
+        const returnAfterAdsAndShipping = totalSales > 0 && (adSpend > 0 || (shouldDeductShipping && shippingCostPerOrder > 0 && estimatedOrderCount > 0))
           ? Math.max(Math.min((netPayout - adSpend - estimatedShippingCost) / totalSales, 1), -1)
           : null;
 
@@ -352,35 +367,17 @@ export default function InsightsDashboard() {
         });
 
         if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
-          // Case 1: ALL rows are api_sync with zero fees — apply estimated commission
-          const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
-          const estimatedFees = totalSalesExGst * estimatedRate;
-          effectiveTotalFees = estimatedFees;
-          effectiveNetPayout = totalSales - estimatedFees;
-          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
-          effectiveFeeLoad = totalSales > 0 ? Math.min(estimatedFees / totalSales, 1) : 0;
-          effectiveHasEstimatedFees = true;
-          hasMissingFeeData = false;
-        } else if (apiSyncZeroFeeRows.length > 0 && feeRelevantRows.length > 0) {
-          // Case 2: MIXED — some CSV (with real fees) + some api_sync (zero fees)
-          // Extrapolate the REAL fee rate from CSV rows onto the api_sync sales
-          const csvSales = feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
-          const csvFees = Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
-          const realFeeRate = csvSales > 0 ? csvFees / csvSales : (COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE);
-          
-          const apiSyncSales = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
-          const estimatedApiSyncFees = apiSyncSales * realFeeRate;
-          
-          effectiveTotalFees = csvFees + estimatedApiSyncFees;
-          // Recalculate net payout: real CSV payouts + (api_sync sales - estimated fees)
-          const csvPayout = feeRelevantRows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
-          const apiSyncGst = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
-          effectiveNetPayout = csvPayout + (apiSyncSales + apiSyncGst - estimatedApiSyncFees);
-          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
-          effectiveFeeLoad = totalSales > 0 ? Math.min(effectiveTotalFees / totalSales, 1) : 0;
-          effectiveHasEstimatedFees = true;
-          hasMissingFeeData = false;
+          // Case 1: ALL rows are api_sync with zero fees — NO estimation.
+          // Show "Fee data unavailable" instead of fabricated numbers.
+          effectiveTotalFees = 0;
+          effectiveNetPayout = netPayout; // keep raw payout
+          effectiveReturnRatio = returnRatio;
+          effectiveFeeLoad = 0;
+          effectiveHasEstimatedFees = false;
+          hasMissingFeeData = true;
         }
+        // Case 2 (mixed) REMOVED — upstream filter at lines 196-203 already
+        // excludes api_sync rows when real CSV data exists.
 
         // After api_sync estimation, apply redistributed platform fees from siblings
         // Positive = fees added to sales sibling, Negative = excess removed from fee-heavy sibling
@@ -389,7 +386,11 @@ export default function InsightsDashboard() {
           effectiveNetPayout -= redistributedPlatformFees;
           effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
           effectiveFeeLoad = totalSales > 0 ? Math.min(Math.max(effectiveTotalFees, 0) / totalSales, 1) : 0;
-          // Redistribution is NOT estimation — it's reallocating real fees between siblings
+          // Flag as estimated if any sibling used the 0.15 fallback (no observed rate)
+          const usedFallback = Object.keys(PLATFORM_FAMILIES).some(family =>
+            PLATFORM_FAMILIES[family].some(s => grouped[s] && !observedRates[s])
+          );
+          if (usedFallback) effectiveHasEstimatedFees = true;
         }
 
         const adjustedCommissionTotal = feeRelevantRows.length > 0 && feeRelevantRows.length < rows.length
@@ -399,8 +400,8 @@ export default function InsightsDashboard() {
         // Derive effectiveAvgCommission aligned with the estimated fee logic above
         let effectiveAvgCommission: number;
         if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
-          // All api_sync: use effective post-adjustment fee rate
-          effectiveAvgCommission = totalSales > 0 ? Math.min(Math.max(effectiveTotalFees, 0) / totalSales, 1) : 0;
+          // All api_sync: no fee data available
+          effectiveAvgCommission = 0;
         } else {
           // Real-fee marketplaces: commission must reflect redistribution too
           const redistributedCommission = Math.max(adjustedCommissionTotal + redistributedPlatformFees, 0);
@@ -994,9 +995,10 @@ export default function InsightsDashboard() {
                             Estimated
                           </Badge>
                         )}
-                        {s.hasMissingFeeData && !s.hasEstimatedFees && (
+                        {s.hasMissingFeeData && (
                           <Badge variant="outline" className="text-[10px] h-4 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20">
-                            Fee data missing
+                            <Upload className="h-2.5 w-2.5 mr-0.5" />
+                            Fee data unavailable
                           </Badge>
                         )}
                         {s.hasFeeAnomaly && (
@@ -1221,11 +1223,21 @@ export default function InsightsDashboard() {
                           {s.returnRatio === bestRatio && stats.length > 1 && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-primary/30 text-primary px-1">Best</Badge>
                           )}
+                          {s.hasMissingFeeData && (
+                            <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 px-1">
+                              <Upload className="h-2 w-2 mr-0.5" />
+                              No fee data
+                            </Badge>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{formatCurrency(s.totalSales)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalFees)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatPct(s.avgCommission)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.hasMissingFeeData ? <span className="text-amber-600 dark:text-amber-400 text-[10px]">N/A</span> : formatCurrency(s.totalFees)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.hasMissingFeeData ? <span className="text-amber-600 dark:text-amber-400 text-[10px]">N/A</span> : formatPct(s.avgCommission)}
+                      </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatCurrency(s.totalRefunds)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                         {s.adSpend > 0 ? formatCurrency(s.adSpend) : (

@@ -18,8 +18,6 @@ import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } from '@/utils/fulfilment-settings';
 import type { FulfilmentMethod } from '@/utils/fulfilment-settings';
 import {
-  COMMISSION_ESTIMATES,
-  DEFAULT_COMMISSION_RATE,
   normalizeMarketplace,
   attributeFees,
   redistributePlatformFees,
@@ -122,8 +120,34 @@ export default function MarketplaceProfitComparison() {
         grouped[mp].push(row as unknown as SettlementRow);
       }
 
+      // ─── Exclude api_sync rows when real CSV data exists ───
+      for (const [mp, rows] of Object.entries(grouped)) {
+        const realRows = rows.filter(r => r.source !== 'api_sync');
+        const apiSyncRows = rows.filter(r => r.source === 'api_sync');
+        if (realRows.length > 0 && apiSyncRows.length > 0) {
+          grouped[mp] = realRows;
+        }
+      }
+
+      // Load observed rates for redistribution
+      const { data: observedRatesData } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .like('key', 'observed_commission_rate_%');
+      
+      const observedRates: Record<string, number> = {};
+      if (observedRatesData) {
+        for (const row of observedRatesData as any[]) {
+          const mpCode = (row.key as string).replace('observed_commission_rate_', '');
+          const rate = parseFloat(row.value);
+          if (!isNaN(rate) && rate > 0 && rate < 1) {
+            observedRates[mpCode] = rate;
+          }
+        }
+      }
+
       // Calculate redistributed platform fees
-      const redistFees = redistributePlatformFees(grouped);
+      const redistFees = redistributePlatformFees(grouped, observedRates);
 
       // Aggregate profit data by marketplace, filtering out stale/malformed rows
       const mpMap = new Map<string, { revenue: number; profit: number; margins: number[]; count: number }>();
@@ -161,7 +185,8 @@ export default function MarketplaceProfitComparison() {
 
         const settRows = grouped[mp];
         const hasEstimated = settRows?.some(r => (r.raw_payload as any)?.fees_estimated === true) || (redistFees[mp] != null && redistFees[mp] !== 0);
-        const impliedRate = hasEstimated ? (COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE) : null;
+        // Check if redistribution used fallback rate
+        const redistUsedFallback = (redistFees[mp] != null && redistFees[mp] !== 0) && !observedRates[mp];
 
         results.push({
           marketplace_code: mp,
@@ -171,8 +196,8 @@ export default function MarketplaceProfitComparison() {
           total_profit: Math.round(adjustedProfit),
           periods: agg.count,
           has_cost_data: true,
-          has_estimated_fees: hasEstimated,
-          implied_commission_rate: impliedRate,
+          has_estimated_fees: hasEstimated || redistUsedFallback,
+          implied_commission_rate: null, // No fabricated rates
         });
       }
 
@@ -187,12 +212,13 @@ export default function MarketplaceProfitComparison() {
         const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
         const postageCost = postageCosts[mp] || 0;
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
-        const estimatedPostageDeduction = shouldDeductShipping ? postageCost * rows.length : 0;
-
-        // Use canonical fee attribution
+        
+        // Use canonical fee attribution — do NOT use rows.length as order count
         const attribution = attributeFees(mp, rows, redistFees[mp] || 0);
 
-        const adjustedPayout = attribution.effectiveNetPayout - estimatedPostageDeduction;
+        // Only deduct shipping if we have real order count data (not fabricated)
+        // For now, skip postage deduction here since we don't have order counts
+        const adjustedPayout = attribution.effectiveNetPayout;
         const margin = totalSales > 0 ? Math.min((adjustedPayout / totalSales) * 100, 100) : 0;
 
         results.push({
@@ -204,9 +230,7 @@ export default function MarketplaceProfitComparison() {
           periods: rows.length,
           has_cost_data: false,
           has_estimated_fees: attribution.hasEstimatedFees,
-          implied_commission_rate: attribution.hasEstimatedFees
-            ? (COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE)
-            : null,
+          implied_commission_rate: null, // No fabricated rates — show "payout margin" badge instead
         });
       }
 
@@ -316,9 +340,7 @@ export default function MarketplaceProfitComparison() {
                             </Badge>
                           </TooltipTrigger>
                           <TooltipContent className="text-xs max-w-xs">
-                            {mp.implied_commission_rate
-                              ? `Using ${(mp.implied_commission_rate * 100).toFixed(0)}% estimated commission rate. Upload CSV settlements for actual fees.`
-                              : 'Fee data includes estimates. Upload CSV settlements for actual fees.'}
+                            Fee data includes estimates from platform fee redistribution. Upload CSV settlements for actual fees.
                           </TooltipContent>
                         </Tooltip>
                       )}
