@@ -742,8 +742,6 @@ export default function Dashboard() {
   const insightsSubTabs: { key: InsightsSubTab; label: string; pro?: boolean }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'reconciliation', label: 'Reconciliation Health' },
-    { key: 'profit', label: 'Profit Analysis', pro: true },
-    { key: 'sku', label: 'SKU Comparison', pro: true },
   ];
 
   return (
