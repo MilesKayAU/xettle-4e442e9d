@@ -361,12 +361,13 @@ export default function InsightsDashboard() {
           hasMissingFeeData = false;
         }
 
-        // After api_sync estimation, add redistributed platform fees from siblings
-        if (redistributedPlatformFees > 0) {
+        // After api_sync estimation, apply redistributed platform fees from siblings
+        // Positive = fees added to sales sibling, Negative = excess removed from fee-heavy sibling
+        if (redistributedPlatformFees !== 0) {
           effectiveTotalFees += redistributedPlatformFees;
           effectiveNetPayout -= redistributedPlatformFees;
           effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
-          effectiveFeeLoad = totalSales > 0 ? Math.min(effectiveTotalFees / totalSales, 1) : 0;
+          effectiveFeeLoad = totalSales > 0 ? Math.min(Math.max(effectiveTotalFees, 0) / totalSales, 1) : 0;
           effectiveHasEstimatedFees = true;
         }
 
