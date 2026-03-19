@@ -28,7 +28,7 @@ async function fetchStatuses(): Promise<ConnectionStatus[]> {
   const [xeroRes, amazonRes, shopifyRes, ebayRes, flagsRes] = await Promise.all([
     supabase.from('xero_tokens').select('tenant_name, updated_at').limit(1),
     supabase.from('amazon_tokens').select('selling_partner_id, updated_at').limit(1),
-    supabase.from('shopify_tokens').select('shop_domain, updated_at').limit(1),
+    supabase.from('shopify_tokens').select('shop_domain, updated_at').eq('is_active', true).limit(1),
     supabase.from('ebay_tokens').select('ebay_username, updated_at').limit(1),
     supabase.from('app_settings').select('key, value, updated_at').in('key', [
       'setup_phase1_xero', 'setup_phase1_shopify', 'setup_phase1_amazon',

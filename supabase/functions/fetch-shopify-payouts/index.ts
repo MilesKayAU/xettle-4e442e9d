@@ -487,10 +487,11 @@ Deno.serve(async (req) => {
         serviceRoleKey
       );
 
-      // Get all Shopify tokens
+      // Get all active Shopify tokens
       const { data: allTokens, error: tokensError } = await adminClient
         .from("shopify_tokens")
-        .select("user_id, access_token, shop_domain");
+        .select("user_id, access_token, shop_domain")
+        .eq("is_active", true);
 
       if (tokensError || !allTokens || allTokens.length === 0) {
         return new Response(
@@ -587,6 +588,7 @@ Deno.serve(async (req) => {
       .from("shopify_tokens")
       .select("access_token, shop_domain")
       .eq("user_id", userId)
+      .eq("is_active", true)
       .limit(1)
       .single();
 

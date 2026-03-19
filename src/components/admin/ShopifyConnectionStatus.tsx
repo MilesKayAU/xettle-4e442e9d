@@ -17,7 +17,7 @@ import MarketplaceDiscovery from '@/components/shopify/MarketplaceDiscovery';
 
 interface ShopifyStatus {
   connected: boolean;
-  shops: Array<{ shop_domain: string; scope: string; installed_at: string }>;
+  shops: Array<{ shop_domain: string; scope: string; installed_at: string; is_active?: boolean }>;
 }
 
 
@@ -32,6 +32,8 @@ const ShopifyConnectionStatus = () => {
   const [manualDomain, setManualDomain] = useState('');
   const [savingToken, setSavingToken] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
+  const [storeReplaceOpen, setStoreReplaceOpen] = useState(false);
+  const [pendingConnectDomain, setPendingConnectDomain] = useState('');
 
   // Discovery modal state
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
@@ -227,12 +229,24 @@ const ShopifyConnectionStatus = () => {
     return domain.trim().endsWith('.myshopify.com') && domain.trim().length > '.myshopify.com'.length;
   };
 
-  const handleConnect = async () => {
-    if (!isValidDomain(shopDomain)) {
+  const handleConnect = async (domainOverride?: string) => {
+    const domain = domainOverride || shopDomain.trim();
+    if (!isValidDomain(domain)) {
       toast.error('Please enter a valid .myshopify.com domain');
       return;
     }
 
+    // If already connected to a different store, show replacement warning
+    if (status?.connected && status.shops.length > 0 && status.shops[0].shop_domain !== domain) {
+      setPendingConnectDomain(domain);
+      setStoreReplaceOpen(true);
+      return;
+    }
+
+    await initiateOAuth(domain);
+  };
+
+  const initiateOAuth = async (domain: string) => {
     setConnecting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -243,7 +257,7 @@ const ShopifyConnectionStatus = () => {
       }
 
       const { data: result, error } = await supabase.functions.invoke('shopify-auth', {
-        body: { action: 'initiate', shop: shopDomain.trim(), userId: session.user.id },
+        body: { action: 'initiate', shop: domain, userId: session.user.id },
       });
 
       if (error) throw new Error(error.message || 'Failed to start authorization');
@@ -259,6 +273,11 @@ const ShopifyConnectionStatus = () => {
       toast.error(error.message || 'Failed to connect to Shopify');
       setConnecting(false);
     }
+  };
+
+  const handleConfirmReplace = async () => {
+    setStoreReplaceOpen(false);
+    await initiateOAuth(pendingConnectDomain);
   };
 
   const handleDisconnect = async () => {
@@ -323,6 +342,18 @@ const ShopifyConnectionStatus = () => {
       return;
     }
 
+    // If already connected to a different store, show replacement warning
+    if (status?.connected && status.shops.length > 0 && status.shops[0].shop_domain !== domain) {
+      setPendingConnectDomain(domain);
+      setStoreReplaceOpen(true);
+      return;
+    }
+
+    await saveManualToken(domain, token);
+  };
+
+  const saveManualToken = async (domain: string, token?: string) => {
+    const accessToken = token || manualToken.trim();
     setSavingToken(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -332,12 +363,18 @@ const ShopifyConnectionStatus = () => {
         return;
       }
 
+      // Deactivate other tokens first
+      await supabase.from('shopify_tokens' as any).update({ is_active: false } as any)
+        .eq('user_id', session.user.id)
+        .neq('shop_domain', domain);
+
       const { error } = await supabase.from('shopify_tokens').upsert({
         user_id: session.user.id,
         shop_domain: domain,
-        access_token: token,
+        access_token: accessToken,
         scope: 'custom_app',
-      }, { onConflict: 'user_id,shop_domain' } as any);
+        is_active: true,
+      } as any, { onConflict: 'user_id,shop_domain' } as any);
 
       if (error) throw error;
 
@@ -471,7 +508,7 @@ const ShopifyConnectionStatus = () => {
                 autoComplete="off"
               />
               <Button
-                onClick={handleConnect}
+                onClick={() => handleConnect()}
                 disabled={connecting || !isValidDomain(shopDomain)}
                 className="w-full"
               >
@@ -617,6 +654,34 @@ const ShopifyConnectionStatus = () => {
               onClassifyUnknown={handleClassifyUnknown}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Store Replacement Warning */}
+      <Dialog open={storeReplaceOpen} onOpenChange={setStoreReplaceOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Replace Shopify Store?
+            </DialogTitle>
+            <DialogDescription className="text-left space-y-3 pt-2">
+              <p>
+                You already have a connected Shopify store: <strong>{status?.shops?.[0]?.shop_domain}</strong>
+              </p>
+              <p>
+                Connecting <strong>{pendingConnectDomain}</strong> will replace it. Your existing Shopify data will be preserved but the new store will be used for future syncs.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setStoreReplaceOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmReplace}>
+              Replace Store
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
