@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
         )
       }
 
-      logger.debug('HMAC verified, validating OAuth state nonce...')
+      logger.debug(`HMAC verified using ${hmacVerification.matchedStrategy}, validating OAuth state nonce...`)
 
       // SECURITY: Validate state nonce to prevent CSRF attacks
       // State format: "{nonce}:{userId}"

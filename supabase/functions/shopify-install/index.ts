@@ -38,24 +38,17 @@ Deno.serve(async (req) => {
       return new Response('Server configuration error', { status: 500 })
     }
 
-    const message = buildShopifyHmacMessage(req.url)
+    const hmacVerification = await verifyShopifyHmac({
+      providedHmac: hmac,
+      secret: SHOPIFY_CLIENT_SECRET,
+      rawInput: req.url,
+    })
 
-    const encoder = new TextEncoder()
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(SHOPIFY_CLIENT_SECRET),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    )
-    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message))
-    const computedHmac = Array.from(new Uint8Array(signature))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    const isValid = await timingSafeEqual(computedHmac.toLowerCase(), hmac.toLowerCase())
-    if (!isValid) {
-      console.error('HMAC verification failed for shop:', shop)
+    if (!hmacVerification.valid) {
+      console.error('HMAC verification failed for shop:', shop, {
+        matchedStrategy: hmacVerification.matchedStrategy,
+        queryKeys: Array.from(url.searchParams.keys()).sort(),
+      })
       return new Response('Invalid signature', { status: 401 })
     }
 
