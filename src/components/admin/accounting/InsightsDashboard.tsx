@@ -400,8 +400,8 @@ export default function InsightsDashboard() {
         // Derive effectiveAvgCommission aligned with the estimated fee logic above
         let effectiveAvgCommission: number;
         if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
-          // All api_sync: use effective post-adjustment fee rate
-          effectiveAvgCommission = totalSales > 0 ? Math.min(Math.max(effectiveTotalFees, 0) / totalSales, 1) : 0;
+          // All api_sync: no fee data available
+          effectiveAvgCommission = 0;
         } else {
           // Real-fee marketplaces: commission must reflect redistribution too
           const redistributedCommission = Math.max(adjustedCommissionTotal + redistributedPlatformFees, 0);
