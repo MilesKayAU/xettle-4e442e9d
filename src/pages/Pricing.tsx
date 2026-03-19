@@ -90,7 +90,7 @@ export default function Pricing() {
             Simple, honest pricing
           </h1>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            Free is genuinely useful — not a crippled trial. Upgrade when you're ready to automate.
+            Free is genuinely useful — not a crippled trial. Upgrade when you're ready to scale.
           </p>
 
           <div className="flex items-center justify-center gap-3 mt-6">
