@@ -161,6 +161,7 @@ export default function MarketplaceProfitComparison() {
 
         const settRows = grouped[mp];
         const hasEstimated = settRows?.some(r => (r.raw_payload as any)?.fees_estimated === true) || (redistFees[mp] != null && redistFees[mp] !== 0);
+        const impliedRate = hasEstimated ? (COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE) : null;
 
         results.push({
           marketplace_code: mp,
@@ -171,6 +172,7 @@ export default function MarketplaceProfitComparison() {
           periods: agg.count,
           has_cost_data: true,
           has_estimated_fees: hasEstimated,
+          implied_commission_rate: impliedRate,
         });
       }
 
