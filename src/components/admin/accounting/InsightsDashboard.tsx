@@ -367,35 +367,17 @@ export default function InsightsDashboard() {
         });
 
         if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
-          // Case 1: ALL rows are api_sync with zero fees — apply estimated commission
-          const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
-          const estimatedFees = totalSalesExGst * estimatedRate;
-          effectiveTotalFees = estimatedFees;
-          effectiveNetPayout = totalSales - estimatedFees;
-          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
-          effectiveFeeLoad = totalSales > 0 ? Math.min(estimatedFees / totalSales, 1) : 0;
-          effectiveHasEstimatedFees = true;
-          hasMissingFeeData = false;
-        } else if (apiSyncZeroFeeRows.length > 0 && feeRelevantRows.length > 0) {
-          // Case 2: MIXED — some CSV (with real fees) + some api_sync (zero fees)
-          // Extrapolate the REAL fee rate from CSV rows onto the api_sync sales
-          const csvSales = feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
-          const csvFees = Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
-          const realFeeRate = csvSales > 0 ? csvFees / csvSales : (COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE);
-          
-          const apiSyncSales = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
-          const estimatedApiSyncFees = apiSyncSales * realFeeRate;
-          
-          effectiveTotalFees = csvFees + estimatedApiSyncFees;
-          // Recalculate net payout: real CSV payouts + (api_sync sales - estimated fees)
-          const csvPayout = feeRelevantRows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
-          const apiSyncGst = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
-          effectiveNetPayout = csvPayout + (apiSyncSales + apiSyncGst - estimatedApiSyncFees);
-          effectiveReturnRatio = totalSales > 0 ? Math.min(effectiveNetPayout / totalSales, 1) : 0;
-          effectiveFeeLoad = totalSales > 0 ? Math.min(effectiveTotalFees / totalSales, 1) : 0;
-          effectiveHasEstimatedFees = true;
-          hasMissingFeeData = false;
+          // Case 1: ALL rows are api_sync with zero fees — NO estimation.
+          // Show "Fee data unavailable" instead of fabricated numbers.
+          effectiveTotalFees = 0;
+          effectiveNetPayout = netPayout; // keep raw payout
+          effectiveReturnRatio = returnRatio;
+          effectiveFeeLoad = 0;
+          effectiveHasEstimatedFees = false;
+          hasMissingFeeData = true;
         }
+        // Case 2 (mixed) REMOVED — upstream filter at lines 196-203 already
+        // excludes api_sync rows when real CSV data exists.
 
         // After api_sync estimation, apply redistributed platform fees from siblings
         // Positive = fees added to sales sibling, Negative = excess removed from fee-heavy sibling
