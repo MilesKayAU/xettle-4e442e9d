@@ -48,7 +48,9 @@ const ShopifyCallback = () => {
         triggerValidationSweep();
 
         // If coming from Shopify App Store install flow, redirect to setup
-        const redirectTo = state?.includes('shopify_install') || sessionStorage.getItem('shopify_install_flow')
+        const isInstallFlow = sessionStorage.getItem('shopify_install_flow') === 'true';
+        sessionStorage.removeItem('shopify_install_flow');
+        const redirectTo = isInstallFlow
           ? '/setup?shopify_connected=true'
           : '/dashboard?connected=shopify';
         setTimeout(() => navigate(redirectTo), 2000);

@@ -45,6 +45,8 @@ export default function Auth() {
     if (!shopifyShop || shopifyOAuthTriggered.current) return;
     shopifyOAuthTriggered.current = true;
     try {
+      // Set flag so ShopifyCallback knows to redirect to setup
+      sessionStorage.setItem('shopify_install_flow', 'true');
       const { data, error } = await supabase.functions.invoke('shopify-auth', {
         body: { action: 'initiate', shop: shopifyShop, userId },
       });
@@ -56,6 +58,7 @@ export default function Auth() {
       throw new Error('No auth URL returned');
     } catch (err: any) {
       console.error('Failed to initiate Shopify OAuth:', err);
+      sessionStorage.removeItem('shopify_install_flow');
       shopifyOAuthTriggered.current = false;
       toast({ title: "Shopify Connection", description: "Failed to initiate Shopify connection. You can connect from the dashboard.", variant: "destructive" });
       navigate('/dashboard');
