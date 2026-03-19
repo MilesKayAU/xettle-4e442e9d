@@ -343,7 +343,7 @@ export default function InsightsDashboard() {
         let effectiveFeeLoad = feeLoad;
         let effectiveNetPayout = netPayout;
         let effectiveTotalFees = totalFees + redistributedPlatformFees;
-        let effectiveHasEstimatedFees = hasEstimatedFees || redistributedPlatformFees !== 0;
+        let effectiveHasEstimatedFees = hasEstimatedFees;
 
         // For fee/commission calculations, identify rows with real fee data
         const feeRelevantRows = rows.filter(r => {
