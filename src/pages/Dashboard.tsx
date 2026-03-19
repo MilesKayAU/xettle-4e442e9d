@@ -120,9 +120,9 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
   const sectionWarningMap: Record<string, string[]> = {
     api_connections: ['xero_not_connected'],
     destination_accounts: [],
-    account_mapper: ['coa_mapping_incomplete'],
+    account_mapper: ['coa_mapping_incomplete', 'tax_profile_missing'],
     posting_mode: ['scope_not_acknowledged'],
-    accounting_boundary: ['tax_profile_missing'],
+    accounting_boundary: [], // Boundary auto-sets on first upload — no longer a blocker
     payment_verification: [],
     fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing', 'fbm_mismatch_detected:'],
     data_quality: [],
