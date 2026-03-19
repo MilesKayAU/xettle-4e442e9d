@@ -469,13 +469,50 @@ export default function InsightsDashboard() {
     setAdDialogOpen(true);
   }
 
+  async function handleAdSpendPastedText(text: string) {
+    if (!text.trim()) return;
+    setAdUploadParsing(true);
+    setAdParsedEntries([]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const res = await supabase.functions.invoke('parse-ad-spend-invoice', {
+        body: {
+          file_content: text.substring(0, 50000),
+          file_name: 'pasted-text.txt',
+          file_type: 'text/plain',
+        },
+      });
+
+      if (res.error) throw new Error(res.error.message || 'Parse failed');
+      const parsed = res.data;
+
+      if (parsed.error) {
+        toast({ title: 'Could not parse text', description: parsed.error, variant: 'destructive' });
+        return;
+      }
+
+      if (!parsed.entries || parsed.entries.length === 0) {
+        toast({ title: 'No ad spend data found', description: parsed.raw_summary || 'The text did not contain recognisable ad spend data.', variant: 'destructive' });
+        return;
+      }
+
+      setAdParsedEntries(parsed.entries);
+      toast({ title: `Found ${parsed.entries.length} ad spend ${parsed.entries.length === 1 ? 'entry' : 'entries'}` });
+    } catch (err: any) {
+      toast({ title: 'Parse failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setAdUploadParsing(false);
+    }
+  }
+
   async function handleAdSpendFileUpload(file: File) {
     setAdUploadParsing(true);
     setAdParsedEntries([]);
     try {
       let textContent = '';
       if (file.type === 'application/pdf') {
-        // For PDFs, read as base64 and send text extraction to AI
         const arrayBuffer = await file.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
         let binary = '';
@@ -484,7 +521,6 @@ export default function InsightsDashboard() {
         }
         textContent = `[PDF file - base64 encoded]\n${btoa(binary).substring(0, 50000)}`;
       } else {
-        // CSV/text-based files
         textContent = await file.text();
         if (textContent.length > 50000) textContent = textContent.substring(0, 50000);
       }
