@@ -1,4 +1,4 @@
-import { useDashboardTaskCounts, type SetupWarning } from '@/hooks/useDashboardTaskCounts';
+import { useDashboardTaskCounts } from '@/hooks/useDashboardTaskCounts';
 import { Settings, FileText, Send, CheckCircle2, AlertTriangle, ArrowRight, Info, Upload } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
