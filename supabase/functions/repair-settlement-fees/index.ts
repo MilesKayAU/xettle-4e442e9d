@@ -68,13 +68,36 @@ Deno.serve(async (req) => {
   let profitRowsRemoved = 0;
 
   // ─── Step 1: Fix zero-fee api_sync settlements ────────────────────
-  const { data: zeroFeeSettlements, error: fetchErr } = await admin
-    .from("settlements")
-    .select("id, settlement_id, marketplace, sales_principal, gst_on_income, bank_deposit, raw_payload, source")
+  // Load observed commission rates from app_settings
+  const { data: rateSettings } = await admin
+    .from("app_settings")
+    .select("key, value")
     .eq("user_id", userId)
-    .eq("source", "api_sync")
-    .eq("is_hidden", false)
-    .is("duplicate_of_settlement_id", null);
+    .like("key", "observed_commission_rate:%");
+
+  const observedRates: Record<string, number> = {};
+  for (const r of rateSettings || []) {
+    const code = r.key.replace("observed_commission_rate:", "");
+    const num = parseFloat(r.value || "");
+    if (code && !isNaN(num) && num > 0 && num < 1) observedRates[code] = num;
+  }
+
+  let zeroFeeSettlements: any[];
+  try {
+    zeroFeeSettlements = await fetchAllRows(
+      admin
+        .from("settlements")
+        .select("id, settlement_id, marketplace, sales_principal, gst_on_income, bank_deposit, raw_payload, source")
+        .eq("user_id", userId)
+        .eq("source", "api_sync")
+        .eq("is_hidden", false)
+        .is("duplicate_of_settlement_id", null)
+    );
+  } catch (fetchErr: any) {
+    return new Response(JSON.stringify({ error: fetchErr.message }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   if (fetchErr) {
     return new Response(JSON.stringify({ error: fetchErr.message }), {
