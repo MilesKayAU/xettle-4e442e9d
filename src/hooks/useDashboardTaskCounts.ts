@@ -51,6 +51,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     settingsRes,
     alertsRes,
     xeroTokensRes,
+    mfnLinesRes,
   ] = await Promise.all([
     // Settlements with status breakdowns (non-hidden, non-pre-boundary)
     supabase
@@ -83,6 +84,13 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     supabase
       .from('xero_tokens')
       .select('id', { count: 'exact', head: true }),
+
+    // MFN/FBM lines — detect fulfilment mismatch for FBA-only accounts
+    supabase
+      .from('settlement_lines')
+      .select('settlement_id, fulfilment_channel')
+      .in('fulfilment_channel', ['MFN', 'MFN_inferred'])
+      .limit(100),
   ]);
 
   const settlements = settlementsRes.data || [];
