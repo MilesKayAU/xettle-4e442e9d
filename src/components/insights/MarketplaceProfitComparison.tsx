@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +36,7 @@ interface AggregatedMarketplace {
   periods: number;
   has_cost_data: boolean;
   has_estimated_fees: boolean;
+  implied_commission_rate: number | null;
 }
 
 function formatAUD(amount: number): string {
@@ -159,6 +161,7 @@ export default function MarketplaceProfitComparison() {
 
         const settRows = grouped[mp];
         const hasEstimated = settRows?.some(r => (r.raw_payload as any)?.fees_estimated === true) || (redistFees[mp] != null && redistFees[mp] !== 0);
+        const impliedRate = hasEstimated ? (COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE) : null;
 
         results.push({
           marketplace_code: mp,
@@ -169,6 +172,7 @@ export default function MarketplaceProfitComparison() {
           periods: agg.count,
           has_cost_data: true,
           has_estimated_fees: hasEstimated,
+          implied_commission_rate: impliedRate,
         });
       }
 
@@ -200,6 +204,9 @@ export default function MarketplaceProfitComparison() {
           periods: rows.length,
           has_cost_data: false,
           has_estimated_fees: attribution.hasEstimatedFees,
+          implied_commission_rate: attribution.hasEstimatedFees
+            ? (COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE)
+            : null,
         });
       }
 
@@ -263,6 +270,7 @@ export default function MarketplaceProfitComparison() {
   const worst = data[data.length - 1];
 
   return (
+    <TooltipProvider>
     <Card className="border-border">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -300,10 +308,19 @@ export default function MarketplaceProfitComparison() {
                         <Badge variant="outline" className="text-[9px] px-1 py-0 border-muted-foreground/30 text-muted-foreground">payout margin</Badge>
                       )}
                       {mp.has_estimated_fees && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400/50 text-amber-600 dark:text-amber-400">
-                          <AlertTriangle className="h-2 w-2 mr-0.5" />
-                          Estimated
-                        </Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400/50 text-amber-600 dark:text-amber-400 cursor-help">
+                              <AlertTriangle className="h-2 w-2 mr-0.5" />
+                              Estimated
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs max-w-xs">
+                            {mp.implied_commission_rate
+                              ? `Using ${(mp.implied_commission_rate * 100).toFixed(0)}% estimated commission rate. Upload CSV settlements for actual fees.`
+                              : 'Fee data includes estimates. Upload CSV settlements for actual fees.'}
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </TableCell>
                     <TableCell className={`text-xs text-right font-semibold ${getMarginColor(mp.avg_margin)}`}>
@@ -325,5 +342,6 @@ export default function MarketplaceProfitComparison() {
         )}
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 }

@@ -77,6 +77,7 @@ export function attributeFees(
   mp: string,
   rows: SettlementRow[],
   redistributedPlatformFees = 0,
+  observedRates: Record<string, number> = {},
 ): FeeAttribution {
   const totalSalesExGst = rows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
   const totalGst = rows.reduce((sum, r) => sum + (r.gst_on_income || 0), 0);
@@ -111,7 +112,7 @@ export function attributeFees(
 
   if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
     // Case 1: ALL rows are api_sync with zero fees
-    const estimatedRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+    const estimatedRate = observedRates[mp] ?? COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE;
     const estimatedFees = totalSalesExGst * estimatedRate;
     effectiveTotalFees = estimatedFees;
     effectiveNetPayout = totalSales - estimatedFees;
@@ -123,7 +124,7 @@ export function attributeFees(
     const csvSales = feeRelevantRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
     const csvFees = Math.abs(feeRelevantRows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
     const realFeeRate =
-      csvSales > 0 ? csvFees / csvSales : COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+      csvSales > 0 ? csvFees / csvSales : observedRates[mp] ?? COMMISSION_ESTIMATES[mp] ?? DEFAULT_COMMISSION_RATE;
 
     const apiSyncSales = apiSyncZeroFeeRows.reduce((sum, r) => sum + (r.sales_principal || 0), 0);
     const estimatedApiSyncFees = apiSyncSales * realFeeRate;

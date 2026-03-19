@@ -8,13 +8,25 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { COMMISSION_ESTIMATES, DEFAULT_COMMISSION_RATE, getCommissionRate } from "../_shared/commission-rates.ts";
 
-const COMMISSION_ESTIMATES: Record<string, number> = {
-  kogan: 0.12, bigw: 0.08, everyday_market: 0.10, mydeal: 0.10,
-  bunnings: 0.10, catch: 0.12, ebay_au: 0.13, iconic: 0.15,
-  tradesquare: 0.10, tiktok: 0.05,
-};
-const DEFAULT_COMMISSION_RATE = 0.10;
+/** Paginated fetch helper — avoids the 1000-row default cap */
+async function fetchAllRows<T>(
+  query: any,
+  pageSize = 1000,
+): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
@@ -56,21 +68,38 @@ Deno.serve(async (req) => {
   let profitRowsRemoved = 0;
 
   // ─── Step 1: Fix zero-fee api_sync settlements ────────────────────
-  const { data: zeroFeeSettlements, error: fetchErr } = await admin
-    .from("settlements")
-    .select("id, settlement_id, marketplace, sales_principal, gst_on_income, bank_deposit, raw_payload, source")
+  // Load observed commission rates from app_settings
+  const { data: rateSettings } = await admin
+    .from("app_settings")
+    .select("key, value")
     .eq("user_id", userId)
-    .eq("source", "api_sync")
-    .eq("is_hidden", false)
-    .is("duplicate_of_settlement_id", null);
+    .like("key", "observed_commission_rate:%");
 
-  if (fetchErr) {
+  const observedRates: Record<string, number> = {};
+  for (const r of rateSettings || []) {
+    const code = r.key.replace("observed_commission_rate:", "");
+    const num = parseFloat(r.value || "");
+    if (code && !isNaN(num) && num > 0 && num < 1) observedRates[code] = num;
+  }
+
+  let zeroFeeSettlements: any[];
+  try {
+    zeroFeeSettlements = await fetchAllRows(
+      admin
+        .from("settlements")
+        .select("id, settlement_id, marketplace, sales_principal, gst_on_income, bank_deposit, raw_payload, source")
+        .eq("user_id", userId)
+        .eq("source", "api_sync")
+        .eq("is_hidden", false)
+        .is("duplicate_of_settlement_id", null)
+    );
+  } catch (fetchErr: any) {
     return new Response(JSON.stringify({ error: fetchErr.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  for (const s of (zeroFeeSettlements || [])) {
+  for (const s of zeroFeeSettlements) {
     const sellerFees = Number(s.sales_principal) || 0;
     const existingPayload = (s.raw_payload || {}) as Record<string, unknown>;
     
@@ -82,7 +111,7 @@ Deno.serve(async (req) => {
     const mp = s.marketplace || '';
     const salesPrincipal = Number(s.sales_principal) || 0;
     const gstOnIncome = Number(s.gst_on_income) || 0;
-    const commissionRate = COMMISSION_ESTIMATES[mp] || DEFAULT_COMMISSION_RATE;
+    const commissionRate = getCommissionRate(mp, observedRates);
     const estimatedFees = -Math.round(salesPrincipal * commissionRate * 100) / 100;
     const adjustedBankDeposit = Math.round((salesPrincipal + gstOnIncome + estimatedFees) * 100) / 100;
 
@@ -109,22 +138,26 @@ Deno.serve(async (req) => {
   }
 
   // ─── Step 2: Remove stale settlement_profit rows ──────────────────
-  // Get all active settlement IDs for this user
-  const { data: activeSettlements } = await admin
-    .from("settlements")
-    .select("settlement_id")
-    .eq("user_id", userId)
-    .eq("is_hidden", false)
-    .is("duplicate_of_settlement_id", null)
-    .not("status", "in", '("push_failed_permanent","duplicate_suppressed")');
+  // Get all active settlement IDs for this user (paginated)
+  const activeSettlements = await fetchAllRows<{ settlement_id: string }>(
+    admin
+      .from("settlements")
+      .select("settlement_id")
+      .eq("user_id", userId)
+      .eq("is_hidden", false)
+      .is("duplicate_of_settlement_id", null)
+      .not("status", "in", '("push_failed_permanent","duplicate_suppressed")')
+  );
 
-  const activeIds = new Set((activeSettlements || []).map(s => s.settlement_id));
+  const activeIds = new Set(activeSettlements.map(s => s.settlement_id));
 
-  // Get all profit rows
-  const { data: profitRows } = await admin
-    .from("settlement_profit")
-    .select("id, settlement_id, marketplace_code, margin_percent, gross_revenue")
-    .eq("user_id", userId);
+  // Get all profit rows (paginated)
+  const profitRows = await fetchAllRows<{ id: string; settlement_id: string; marketplace_code: string; margin_percent: number; gross_revenue: number }>(
+    admin
+      .from("settlement_profit")
+      .select("id, settlement_id, marketplace_code, margin_percent, gross_revenue")
+      .eq("user_id", userId)
+  );
 
   const toDelete: string[] = [];
   for (const pr of (profitRows || [])) {
