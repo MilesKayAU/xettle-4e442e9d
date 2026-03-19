@@ -16,6 +16,7 @@ import {
   FULFILMENT_LABELS,
   loadFulfilmentMethods,
   saveFulfilmentMethod,
+  savePostageCost,
   getEffectiveMethod,
   isAmazonCode,
 } from '@/utils/fulfilment-settings';
@@ -177,17 +178,24 @@ export default function SetupStepConnectStores({
   };
 
   const [amazonFulfilmentChoice, setAmazonFulfilmentChoice] = useState<FulfilmentMethod>('marketplace_fulfilled');
+  const [amazonPostageCost, setAmazonPostageCost] = useState('');
+
+  const showAmazonPostageInput = ['self_ship', 'third_party_logistics', 'mixed_fba_fbm'].includes(amazonFulfilmentChoice);
 
   const advanceFromAmazon = () => {
     if (hasAmazon && onFireBackgroundScan) {
       onFireBackgroundScan('fetch-amazon-settlements');
     }
-    // Persist fulfilment choice for amazon_au
+    // Persist fulfilment choice + postage cost for amazon_au
     (async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           await saveFulfilmentMethod(user.id, 'amazon_au', amazonFulfilmentChoice);
+          const cost = parseFloat(amazonPostageCost);
+          if (showAmazonPostageInput && !isNaN(cost) && cost > 0) {
+            await savePostageCost(user.id, 'amazon_au', cost);
+          }
         }
       } catch { /* non-fatal */ }
     })();
@@ -536,6 +544,31 @@ export default function SetupStepConnectStores({
                       </div>
                     ))}
                   </RadioGroup>
+                  {showAmazonPostageInput && (
+                    <div className="pt-2 space-y-1">
+                      <Label htmlFor="onboard-amazon-postage" className="text-[11px] text-muted-foreground">
+                        Avg. postage cost per order
+                      </Label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                        <Input
+                          id="onboard-amazon-postage"
+                          type="number"
+                          min="0"
+                          step="0.50"
+                          placeholder="9.50"
+                          value={amazonPostageCost}
+                          onChange={(e) => setAmazonPostageCost(e.target.value)}
+                          className="pl-6 h-8 text-sm"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {amazonFulfilmentChoice === 'mixed_fba_fbm'
+                          ? 'Applied to FBM orders only — FBA orders use Amazon\'s fees from your settlements.'
+                          : 'Your shipping cost (e.g. AusPost, Sendle) — deducted per order for profit calculations.'}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <Button onClick={advanceFromAmazon} className="w-full">
                   Continue <ArrowRight className="h-4 w-4 ml-2" />
