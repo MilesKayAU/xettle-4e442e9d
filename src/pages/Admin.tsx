@@ -230,6 +230,10 @@ export default function Admin() {
               <Crosshair className="h-3.5 w-3.5" />
               Growth
             </TabsTrigger>
+            <TabsTrigger value="emails" className="flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5" />
+              Emails
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
