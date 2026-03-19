@@ -137,6 +137,7 @@ export function normaliseStatus(raw: string | null | undefined): SettlementStatu
     verified_payout: SETTLEMENT_STATUS.BANK_VERIFIED,
     hidden: SETTLEMENT_STATUS.INGESTED,
     duplicate_suppressed: SETTLEMENT_STATUS.INGESTED,
+    mapping_error: SETTLEMENT_STATUS.MAPPING_ERROR,
   };
   return LEGACY_MAP[raw] ?? (raw as SettlementStatus);
 }
