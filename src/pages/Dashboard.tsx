@@ -8,6 +8,7 @@ import AccountingDashboard from '@/components/admin/accounting/AccountingDashboa
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
+import { useDashboardTaskCounts } from '@/hooks/useDashboardTaskCounts';
 import { toast } from 'sonner';
 
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
