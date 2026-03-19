@@ -162,6 +162,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         label: 'Account mapping incomplete',
         severity: 'blocking',
         message: 'Some marketplaces are missing required Xero account mappings.',
+        actionLabel: 'Open mapper',
+        actionTarget: 'settings:account-mapper',
       });
     }
   }
