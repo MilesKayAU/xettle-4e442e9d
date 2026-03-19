@@ -222,7 +222,10 @@ export function redistributePlatformFees(
         0,
       );
       const ownFees = sales * 0.15;
-      totalExcessFees += Math.max(fees - ownFees, 0);
+      const excess = Math.max(fees - ownFees, 0);
+      totalExcessFees += excess;
+      // Subtract excess from fee-heavy sibling (negative = fee reduction)
+      result[fh] = (result[fh] || 0) - excess;
     }
 
     const siblingSales: Record<string, number> = {};
