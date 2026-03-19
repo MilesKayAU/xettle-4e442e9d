@@ -154,42 +154,42 @@ Deno.serve(async (req) => {
 
       // AFN_inferred: orders with FBA fee lines
       if (fbaOrderIds.length > 0) {
-        const { error: fbaErr } = await admin
+        let q = admin
           .from("settlement_lines")
           .update({ fulfilment_channel: "AFN_inferred" })
           .eq("user_id", userId)
-          .is("fulfilment_channel", null)
           .ilike("marketplace_name", "%amazon%")
           .in("order_id", fbaOrderIds);
-
+        q = applyChannelFilter(q);
+        const { error: fbaErr } = await q;
         if (fbaErr) console.error("FBA batch error:", fbaErr);
         classifiedFba += fbaOrderIds.length;
       }
 
       // AFN_inferred: refund-only orders (conservative default — original order was likely FBA)
       if (refundOnlyOrderIds.length > 0) {
-        const { error: refundErr } = await admin
+        let q = admin
           .from("settlement_lines")
           .update({ fulfilment_channel: "AFN_inferred" })
           .eq("user_id", userId)
-          .is("fulfilment_channel", null)
           .ilike("marketplace_name", "%amazon%")
           .in("order_id", refundOnlyOrderIds);
-
+        q = applyChannelFilter(q);
+        const { error: refundErr } = await q;
         if (refundErr) console.error("Refund-only batch error:", refundErr);
         classifiedFba += refundOnlyOrderIds.length;
       }
 
       // MFN_inferred: orders without FBA fees and with non-refund lines
       if (fbmOrderIds.length > 0) {
-        const { error: fbmErr } = await admin
+        let q = admin
           .from("settlement_lines")
           .update({ fulfilment_channel: "MFN_inferred" })
           .eq("user_id", userId)
-          .is("fulfilment_channel", null)
           .ilike("marketplace_name", "%amazon%")
           .in("order_id", fbmOrderIds);
-
+        q = applyChannelFilter(q);
+        const { error: fbmErr } = await q;
         if (fbmErr) console.error("FBM batch error:", fbmErr);
         classifiedFbm += fbmOrderIds.length;
       }
@@ -197,12 +197,14 @@ Deno.serve(async (req) => {
 
     // Handle null order_id lines (storage fees, subscription fees, etc.) → AFN_inferred
     if (nullOrderLineCount > 0) {
-      await admin
+      let q = admin
         .from("settlement_lines")
         .update({ fulfilment_channel: "AFN_inferred" })
         .eq("user_id", userId)
-        .is("fulfilment_channel", null)
         .is("order_id", null)
+        .ilike("marketplace_name", "%amazon%");
+      q = applyChannelFilter(q);
+      await q;
         .ilike("marketplace_name", "%amazon%");
     }
 
