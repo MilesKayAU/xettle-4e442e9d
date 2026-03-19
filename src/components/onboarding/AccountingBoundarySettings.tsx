@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -21,6 +22,7 @@ export default function AccountingBoundarySettings({
   onConnectXero,
   onGoToUpload,
 }: AccountingBoundarySettingsProps) {
+  const queryClient = useQueryClient();
   const [boundaryDate, setBoundaryDate] = useState<string | null>(null);
   const [boundarySource, setBoundarySource] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,6 +109,7 @@ export default function AccountingBoundarySettings({
       setBoundarySource('manual');
       setShowDatePicker(false);
       toast.success(`Boundary updated to ${format(date, 'dd MMM yyyy')}`);
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch {
       toast.error('Failed to update boundary');
     }

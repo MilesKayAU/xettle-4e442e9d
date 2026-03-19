@@ -116,6 +116,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
   // Derive per-section status from warnings
   const warningKeys = new Set(setupWarnings.map(w => w.key));
 
+  // Maps each section to the warning keys it owns (exact match or prefix match with ':')
   const sectionWarningMap: Record<string, string[]> = {
     api_connections: ['xero_not_connected'],
     destination_accounts: [],
@@ -123,20 +124,24 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     posting_mode: ['scope_not_acknowledged'],
     accounting_boundary: ['tax_profile_missing'],
     payment_verification: [],
-    fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing'],
+    fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing', 'fbm_mismatch_detected:'],
     data_quality: [],
   };
 
   const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
-    const relevantWarnings = sectionWarningMap[sectionKey] || [];
-    if (relevantWarnings.length === 0) return 'none';
+    const relevantPatterns = sectionWarningMap[sectionKey] || [];
+    if (relevantPatterns.length === 0) return 'none';
 
-    const hasBlocking = relevantWarnings.some(k => warningKeys.has(k) && setupWarnings.find(w => w.key === k)?.severity === 'blocking');
-    const hasWarning = relevantWarnings.some(k => warningKeys.has(k));
+    // Match exact keys or prefix patterns (ending with ':')
+    const matchesPattern = (warnKey: string) =>
+      relevantPatterns.some(p => p.endsWith(':') ? warnKey.startsWith(p) : warnKey === p);
 
+    const activeWarnings = setupWarnings.filter(w => matchesPattern(w.key));
+    if (activeWarnings.length === 0) return 'complete'; // all resolved → green
+
+    const hasBlocking = activeWarnings.some(w => w.severity === 'blocking');
     if (hasBlocking) return 'incomplete';
-    if (hasWarning) return 'warning';
-    return 'complete';
+    return 'warning';
   };
 
   const sectionOrder = ['api_connections', 'destination_accounts', 'account_mapper', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'data_quality'] as const;

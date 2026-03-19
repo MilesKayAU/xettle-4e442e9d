@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Store, DollarSign, RefreshCw, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   type FulfilmentMethod,
   FULFILMENT_LABELS,
@@ -53,6 +54,7 @@ async function triggerProfitRecalc(): Promise<{ updated: number; skipped: number
 }
 
 export default function FulfilmentMethodsPanel() {
+  const queryClient = useQueryClient();
   const [marketplaces, setMarketplaces] = useState<MarketplaceRow[]>([]);
   const [methods, setMethods] = useState<Record<string, FulfilmentMethod>>({});
   const [postageCosts, setPostageCosts] = useState<Record<string, string>>({});
@@ -183,6 +185,7 @@ export default function FulfilmentMethodsPanel() {
       setMethods(prev => ({ ...prev, [code]: method }));
       toast.success(`Fulfilment method updated for ${code}`);
       recalcInBackground();
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch {
       toast.error('Failed to save fulfilment method');
     } finally {
@@ -200,6 +203,7 @@ export default function FulfilmentMethodsPanel() {
       await savePostageCost(user.id, code, num);
       toast.success(`Postage cost saved for ${code}`);
       recalcInBackground();
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch {
       toast.error('Failed to save postage cost');
     }

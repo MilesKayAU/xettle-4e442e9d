@@ -4,6 +4,7 @@
 // xero-mapping-readiness.ts, bookkeeper-readiness.ts
 // ══════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { analyseCoA, type RegistryEntry, type ProcessorEntry, type CoaAccount as CoaIntelAccount } from '@/utils/coa-intelligence';
 import { Button } from '@/components/ui/button';
@@ -77,6 +78,7 @@ const REVENUE_ACCOUNT_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIREC
 const EXPENSE_ACCOUNT_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
 
 export default function AccountMapperCard() {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<MapperState>('unmapped');
   const [mapping, setMapping] = useState<Record<string, MappingEntry>>({});
   const [editableMapping, setEditableMapping] = useState<Record<string, string>>({});
@@ -716,6 +718,7 @@ export default function AccountMapperCard() {
       setConfirmedCodes(finalCodes);
       setState('confirmed');
       toast.success('Account mapping confirmed — all Xero pushes will use these codes');
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch (err: any) {
       toast.error(`Failed to save mapping: ${err.message}`);
     }

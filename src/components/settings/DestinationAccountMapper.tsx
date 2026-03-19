@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,7 @@ function getAccountTypeBadge(acc: XeroBankAccount): { label: string; className: 
 }
 
 export default function DestinationAccountMapper() {
+  const queryClient = useQueryClient();
   const [accounts, setAccounts] = useState<XeroBankAccount[]>([]);
   const [rails, setRails] = useState<Array<{ code: string; label: string }>>([]);
   const [defaultAccountId, setDefaultAccountId] = useState<string>('');
@@ -279,6 +281,7 @@ export default function DestinationAccountMapper() {
       }
 
       toast.success('Destination account mappings saved');
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
 
       // Trigger bank feed sync in the background
       try {
