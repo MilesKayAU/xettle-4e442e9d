@@ -17,7 +17,10 @@ import {
   loadFulfilmentMethods,
   saveFulfilmentMethod,
   getEffectiveMethod,
+  isAmazonCode,
 } from '@/utils/fulfilment-settings';
+
+const AMAZON_METHOD_OPTIONS: FulfilmentMethod[] = ['self_ship', 'third_party_logistics', 'marketplace_fulfilled', 'mixed_fba_fbm', 'not_sure'];
 
 interface Props {
   onNext: () => void;

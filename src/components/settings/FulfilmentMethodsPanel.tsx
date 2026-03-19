@@ -353,6 +353,13 @@ export default function FulfilmentMethodsPanel() {
                 </div>
               </div>
             )}
+            {showMfnBanner && (
+              <Alert className="border-amber-300/30 bg-amber-50/50 dark:border-amber-800/30 dark:bg-amber-900/10">
+                <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
+                  We detected merchant-fulfilled (FBM) orders for {mp.marketplace_name}. Consider switching to <strong>Mixed FBA + FBM</strong> for accurate postage deductions.
+                </AlertDescription>
+              </Alert>
+            )}
             {showMcfInput && (
               <div className="pt-1 space-y-1">
                 <Label htmlFor={`mcf-${mp.marketplace_code}`} className="text-xs text-muted-foreground flex items-center gap-1">
