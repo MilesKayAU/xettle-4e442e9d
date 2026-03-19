@@ -10,55 +10,57 @@ import { Label } from '@/components/ui/label';
 
 const tiers = [
   {
-    name: 'Free',
+    name: 'Free Forever',
     icon: Zap,
     yearlyPrice: 0,
     monthlyPrice: 0,
-    description: 'Replace the spreadsheet. Full manual control.',
+    description: 'Get started. Prove the value. No time limit.',
     features: [
-      'Manual TSV/CSV upload',
-      'Full settlement parsing & categorisation',
-      'Manual push to Xero',
-      'Unlimited settlements',
-      'Full history & dashboard',
-      'AU marketplace support',
+      '1 marketplace',
+      'Manual CSV upload only',
+      'Up to 50 settlements stored',
+      'Full Xero push capability',
+      'GST handling included',
+      'Dashboard & history',
     ],
-    cta: 'Current Plan',
+    cta: 'Get Started Free',
     highlighted: false,
     upgradeNudge: null,
   },
   {
     name: 'Starter',
     icon: Rocket,
-    yearlyPrice: 129,
-    monthlyPrice: 14.99,
-    description: 'Connect Amazon. Stop downloading files manually.',
+    yearlyPrice: 190,
+    monthlyPrice: 19,
+    description: 'Connect your first API. Stop downloading files.',
     features: [
+      'Up to 3 marketplaces',
+      '1 API connection (Amazon or Shopify)',
+      'Auto-fetch settlements',
+      'Full reconciliation engine',
+      'Email notifications',
       'Everything in Free',
-      'Amazon SP-API connection',
-      'Auto-fetch new settlements',
-      'Manual push to Xero',
-      'Settlement notifications',
     ],
-    cta: 'Coming Soon',
-    highlighted: true,
+    cta: 'Start Starter',
+    highlighted: false,
     upgradeNudge: '"I\'m sick of downloading files every few days"',
   },
   {
-    name: 'Pro',
+    name: 'Growth',
     icon: Crown,
-    yearlyPrice: 229,
-    monthlyPrice: 26.99,
-    description: 'Fully hands-off. Open your laptop, books are done.',
+    yearlyPrice: 490,
+    monthlyPrice: 49,
+    description: 'Fully hands-off. Books done before you open your laptop.',
     features: [
-      'Everything in Starter',
-      'Daily auto-push to Xero',
-      'Email notifications & digests',
+      'Unlimited marketplaces',
+      'All API connections',
+      'Auto-push to Xero',
+      'Profit analysis & insights',
       'Priority support',
-      'Early access to new features',
+      'Everything in Starter',
     ],
-    cta: 'Coming Soon',
-    highlighted: false,
+    cta: 'Start Growth',
+    highlighted: true,
     upgradeNudge: '"I want it to just appear in Xero automatically"',
   },
 ];
@@ -88,7 +90,7 @@ export default function Pricing() {
             Simple, honest pricing
           </h1>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            Free is genuinely useful — not a crippled trial. Upgrade when you're ready to automate.
+            Free is genuinely useful — not a crippled trial. Upgrade when you're ready to scale.
           </p>
 
           <div className="flex items-center justify-center gap-3 mt-6">
@@ -105,7 +107,7 @@ export default function Pricing() {
             </Label>
             {isYearly && (
               <Badge variant="secondary" className="ml-1 text-xs bg-primary/10 text-primary border-primary/20">
-                Save ~28%
+                Save ~17%
               </Badge>
             )}
           </div>
