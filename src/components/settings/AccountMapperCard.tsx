@@ -718,6 +718,7 @@ export default function AccountMapperCard() {
       setConfirmedCodes(finalCodes);
       setState('confirmed');
       toast.success('Account mapping confirmed — all Xero pushes will use these codes');
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch (err: any) {
       toast.error(`Failed to save mapping: ${err.message}`);
     }

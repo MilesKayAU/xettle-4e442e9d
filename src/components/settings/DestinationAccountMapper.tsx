@@ -281,6 +281,7 @@ export default function DestinationAccountMapper() {
       }
 
       toast.success('Destination account mappings saved');
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
 
       // Trigger bank feed sync in the background
       try {

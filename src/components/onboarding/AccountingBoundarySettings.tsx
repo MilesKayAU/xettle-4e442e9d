@@ -109,6 +109,7 @@ export default function AccountingBoundarySettings({
       setBoundarySource('manual');
       setShowDatePicker(false);
       toast.success(`Boundary updated to ${format(date, 'dd MMM yyyy')}`);
+      queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch {
       toast.error('Failed to update boundary');
     }
