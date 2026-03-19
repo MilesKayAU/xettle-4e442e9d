@@ -2652,6 +2652,15 @@ export type Database = {
               total_fees: number
             }[]
           }
+      get_rls_inventory: {
+        Args: never
+        Returns: {
+          policy_count: number
+          policy_names: string[]
+          rls_enabled: boolean
+          table_name: string
+        }[]
+      }
       get_rolling_12_month_trend:
         | {
             Args: { p_user_id: string }
