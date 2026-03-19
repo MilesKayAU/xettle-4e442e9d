@@ -384,6 +384,10 @@ export default function Admin() {
           <TabsContent value="emails">
             <EmailMonitoringDashboard />
           </TabsContent>
+
+          <TabsContent value="overview">
+            <UserOverviewDashboard />
+          </TabsContent>
         </Tabs>
       </div>
 
