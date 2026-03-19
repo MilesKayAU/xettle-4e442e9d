@@ -551,7 +551,7 @@ export default function Landing() {
                   { problem: 'Mixed settlement files', solution: 'Auto-split into separate marketplace settlements' },
                   { problem: 'Different payout schedules', solution: 'Coverage map shows gaps across all channels' },
                   { problem: 'Commission rate changes', solution: 'Fee observation engine detects and alerts' },
-                  { problem: 'Bank deposits that don\'t match', solution: 'Tolerance-based matching with manual override' },
+                  { problem: 'Bank deposits that don\'t match', solution: 'Tolerance-based verification against Xero deposits with manual override' },
                   { problem: 'CSV formats keep changing', solution: 'Fingerprint learning adapts to new layouts' },
                 ].map(({ problem, solution }) => (
                   <div key={problem}>
