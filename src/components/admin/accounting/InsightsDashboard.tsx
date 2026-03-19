@@ -178,6 +178,18 @@ export default function InsightsDashboard() {
         }
       }
 
+      // Build observed commission rates from app_settings
+      const observedRates: Record<string, number> = {};
+      if (observedRatesRes.data) {
+        for (const row of observedRatesRes.data as any[]) {
+          const mpCode = (row.key as string).replace('observed_commission_rate_', '');
+          const rate = parseFloat(row.value);
+          if (!isNaN(rate) && rate > 0 && rate < 1) {
+            observedRates[mpCode] = rate;
+          }
+        }
+      }
+
       // e.g. 'woolworths_marketplus_bigw' → 'bigw', 'shopify_orders_kogan' → 'kogan'
       const normalizeMarketplace = canonicalNormalizeMarketplace;
 
