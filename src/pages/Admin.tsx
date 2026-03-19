@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3 } from 'lucide-react';
 import AccountResetButton from '@/components/admin/AccountResetButton';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
@@ -38,6 +38,7 @@ import PreLaunchChecklist from '@/components/admin/PreLaunchChecklist';
 import KnowledgeBaseDashboard from '@/components/admin/KnowledgeBaseDashboard';
 import GrowthScoutDashboard from '@/components/admin/GrowthScoutDashboard';
 import EmailMonitoringDashboard from '@/components/admin/EmailMonitoringDashboard';
+import UserOverviewDashboard from '@/components/admin/UserOverviewDashboard';
 
 interface UserRow {
   id: string;
@@ -234,6 +235,10 @@ export default function Admin() {
               <Mail className="h-3.5 w-3.5" />
               Emails
             </TabsTrigger>
+            <TabsTrigger value="overview" className="flex items-center gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              User Overview
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -378,6 +383,10 @@ export default function Admin() {
 
           <TabsContent value="emails">
             <EmailMonitoringDashboard />
+          </TabsContent>
+
+          <TabsContent value="overview">
+            <UserOverviewDashboard />
           </TabsContent>
         </Tabs>
       </div>
