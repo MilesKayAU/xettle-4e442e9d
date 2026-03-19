@@ -88,7 +88,20 @@ export default function InsightsDashboard() {
   const [adCurrency, setAdCurrency] = useState('AUD');
   const [adNotes, setAdNotes] = useState('');
   const [adSaving, setAdSaving] = useState(false);
-  
+  const [adUploadParsing, setAdUploadParsing] = useState(false);
+  const [adParsedEntries, setAdParsedEntries] = useState<Array<{
+    marketplace_code: string;
+    marketplace_label: string;
+    period_start: string;
+    period_end: string;
+    spend_amount: number;
+    currency: string;
+    includes_gst: boolean;
+    gst_amount: number | null;
+    invoice_number: string | null;
+    confidence: number;
+  }>>([]);
+  const [adUploadMode, setAdUploadMode] = useState<'manual' | 'upload'>('manual');
   const [shippingDialogOpen, setShippingDialogOpen] = useState(false);
   const [shippingDialogMarketplace, setShippingDialogMarketplace] = useState('');
   const [shippingCostPerOrder, setShippingCostPerOrder] = useState('');
