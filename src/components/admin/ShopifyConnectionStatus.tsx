@@ -490,7 +490,7 @@ const ShopifyConnectionStatus = () => {
                 autoComplete="off"
               />
               <Button
-                onClick={handleConnect}
+                onClick={() => handleConnect()}
                 disabled={connecting || !isValidDomain(shopDomain)}
                 className="w-full"
               >
