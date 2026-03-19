@@ -103,6 +103,59 @@ export default function FulfilmentMethodsPanel() {
           .maybeSingle();
         setMixedModePromptDismissed(dismissed?.value === 'true');
 
+        // Detect MCF and MFN lines across all marketplaces
+        try {
+          const codes = (connRes.data || []).map(m => m.marketplace_code);
+          if (codes.length > 0) {
+            // Check for MCF lines
+            const { data: mcfLines } = await supabase
+              .from('settlement_lines')
+              .select('settlement_id')
+              .eq('user_id', user.id)
+              .in('fulfilment_channel', ['MCF', 'MCF_inferred'])
+              .limit(100);
+            
+            if (mcfLines && mcfLines.length > 0) {
+              // Get marketplace codes for these settlements
+              const settlementIds = [...new Set(mcfLines.map(l => l.settlement_id))];
+              const { data: settlements } = await supabase
+                .from('settlements')
+                .select('settlement_id, marketplace')
+                .in('settlement_id', settlementIds)
+                .eq('user_id', user.id);
+              const mcfMap: McfDetectionMap = {};
+              for (const s of settlements || []) {
+                if (s.marketplace) mcfMap[s.marketplace] = true;
+              }
+              setMcfDetected(mcfMap);
+            }
+
+            // Check for MFN lines
+            const { data: mfnLines } = await supabase
+              .from('settlement_lines')
+              .select('settlement_id')
+              .eq('user_id', user.id)
+              .in('fulfilment_channel', ['MFN', 'MFN_inferred'])
+              .limit(100);
+            
+            if (mfnLines && mfnLines.length > 0) {
+              const settlementIds = [...new Set(mfnLines.map(l => l.settlement_id))];
+              const { data: settlements } = await supabase
+                .from('settlements')
+                .select('settlement_id, marketplace')
+                .in('settlement_id', settlementIds)
+                .eq('user_id', user.id);
+              const mfnMap: MfnDetectionMap = {};
+              for (const s of settlements || []) {
+                if (s.marketplace) mfnMap[s.marketplace] = true;
+              }
+              setMfnDetected(mfnMap);
+            }
+          }
+        } catch {
+          // Non-fatal — detection is advisory
+        }
+
       } catch {
         // silent
       } finally {
