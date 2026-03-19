@@ -890,4 +890,107 @@ Tables with no write protection needed (non-financial, user-scoped):
 
 ---
 
+## 18. Pre-Release Audit — March 2026 (Post-Hardening)
+
+**Last updated**: 2026-03-19
+**Scope**: Full codebase re-audit following the 6-item Pre-Release Hardening Plan.
+
+### 18.1 Hardening Items — Status
+
+| # | Item | Status | Evidence |
+|---|------|--------|----------|
+| 1 | Commission rate calibration | ✅ Landed | `_shared/commission-rates.ts` is canonical edge-function source; `attributeFees()` accepts `observedRates` param; `repair-settlement-fees` reads `observed_commission_rate:*` from `app_settings` |
+| 2 | Pagination fix (1000-row cap) | ✅ Landed | `fetchAllRows<T>()` helper in `recalculate-profit` and `repair-settlement-fees`; paginated query loops with `pageSize=1000` |
+| 3 | RLS policy inventory | ✅ Landed | `rls-audit` edge function calls `get_rls_inventory()` RPC; `DataQualityPanel` renders table-by-table coverage with gap highlighting |
+| 4 | Commission parity test | ✅ Landed | `commission-parity.test.ts` — 3 assertions verify frontend `COMMISSION_ESTIMATES` matches canonical fixture; fails on any drift |
+| 5 | Show implied commission rate | ✅ Landed | `MarketplaceProfitComparison` tooltip: "Using 12% estimated commission rate" when `has_estimated_fees` is true |
+| 6 | Data quality warnings | ✅ Landed | `InsightsDashboard` shows amber alert strip for estimated fees, missing fee data, or unknown fulfilment methods |
+
+### 18.2 Strengths (Confirmed)
+
+| Strength | Evidence | Confidence |
+|----------|----------|------------|
+| **Canonical Actions Layer** | 12 modules in `src/actions/`, 25 grep-based guardrail tests block direct writes to settlements, xero_invoice_cache, COA tables, and 7 edge function invocations | High — automated enforcement |
+| **Support Policy Tiering** | `SUPPORTED` / `EXPERIMENTAL` / `UNSUPPORTED` tiers computed from rail + tax profile + currency; `AUTHORISED` invoice status restricted to `SUPPORTED` tier only | High — unit-tested |
+| **Settlement-centric accounting (Rule #11)** | `accounting-rules.ts` constants + hardcoded comment blocks in every edge function; orders and payments never create accounting entries | High — structural |
+| **Idempotent writes** | Upsert with `UNIQUE(user_id, marketplace, settlement_id)` on settlements; `safeUpsertXam` on xero_accounting_matches with `INVOICE_ALREADY_LINKED` error handling | High — constraint-enforced |
+| **Push Safety Preview** | 5-point validation suite; confirm button disabled on red errors; all pushes create DRAFT invoices | High — user-facing gate |
+| **Commission rate parity** | Canonical `_shared/commission-rates.ts` for edge functions + parity test for frontend copy; `getCommissionRate()` checks observed rates first | High — test-enforced |
+| **Pagination protection** | `fetchAllRows()` in both profit-critical edge functions prevents silent 1000-row truncation | High — structural |
+| **RLS coverage** | RLS appears consistently applied across user-owned tables; spot-checks confirm `auth.uid() = user_id` scoping. RLS audit edge function provides on-demand inventory. Full policy inventory should be reviewed before each release. | Medium — tooling exists, periodic verification needed |
+| **Multi-tenant isolation** | JWT-based userId derivation (never from request body in accounting paths); database unique constraints; RLS policies | High — layered enforcement |
+
+### 18.3 Qualified Claims (Previously Absolute)
+
+| Original Claim | Qualified Assessment | Action Needed |
+|----------------|---------------------|---------------|
+| "Every user-facing table has RLS" | RLS appears consistently applied; `rls-audit` edge function generates on-demand inventory. Some tables (e.g. `marketplace_registry`, `marketplaces`, `community_contact_classifications`) intentionally use read-all policies. | Run `rls-audit` before each release; review any table with 0 policies |
+| "No privilege escalation vectors found" | No obvious escalation vectors identified in reviewed flows. Security-definer functions (`has_role`), service-role edge functions, and storage bucket policies should be reviewed as a separate security pass. | Dedicated security review of all `SECURITY DEFINER` functions and service-role usage |
+| "Commission parity is byte-identical" | Parity is test-enforced via `commission-parity.test.ts`. Frontend and edge functions maintain separate copies with a shared fixture test. True single-source would require a build step. | Parity test catches drift; acceptable for current scale |
+| "New marketplaces are data-only" | New CSV-based marketplaces can often be enabled as data rows, but fee estimates, rails, platform families, and bespoke parsing quirks may still require code updates. | Document per-marketplace code touchpoints |
+
+### 18.4 Remaining Gaps (Post-Hardening)
+
+#### Architecture
+
+| Gap | Risk | Severity | Recommendation |
+|-----|------|----------|----------------|
+| **InsightsDashboard duplicates fee attribution logic** | Lines 331–370 compute estimated fees inline instead of calling `attributeFees()` from the canonical utility | Data inconsistency between Insights cards and Profit Ranking table | Medium — Refactor to use `attributeFees()` for all marketplace stats |
+| **`fetchAllRows` duplicated in 2 edge functions** | Same pagination helper copy-pasted in `recalculate-profit` and `repair-settlement-fees` | Maintenance burden, potential divergence | Low — Extract to `_shared/pagination.ts` |
+| **InsightsDashboard doesn't load observed rates** | `attributeFees()` accepts `observedRates` but dashboard passes `{}` implicitly; only `repair-settlement-fees` reads `observed_commission_rate:*` | Calibrated rates not reflected in dashboard UI | Medium — Load from `app_settings` in `loadStats()` |
+| **AccountingDashboard.tsx is 4200+ lines** | Difficult to maintain, test, or review | Increased regression risk | Medium — Decompose into sub-components |
+| **Parser duplication (browser vs Deno)** | `settlement-parser.ts` exists in both `src/utils/` and embedded in `fetch-amazon-settlements` | Version drift could produce different totals | Medium — `PARSER_VERSION` check exists but no automated CI comparison |
+
+#### Security
+
+| Gap | Risk | Severity | Recommendation |
+|-----|------|----------|----------------|
+| **`repair-settlement-fees` accepts userId from body** | Line 46: `userId = body.userId` before JWT fallback; service-role client then operates on that userId | Low — function is admin-triggered, but pattern enables spoofing | Low — Remove body.userId path; always derive from JWT |
+| **CORS headers** | `getCorsHeaders()` returns origin-specific headers but some functions may still be permissive | Potential CSRF on state-changing endpoints | Low — Audit all edge functions for origin validation |
+| **No application-level rate limiting** | Xero 429 handling exists; no rate limiting on edge function invocations from the client | Abuse potential on AI or sync endpoints | Medium — Add per-user rate limits on expensive operations |
+| **Input sanitization not universally applied** | `input-sanitization.ts` exists but not imported in all user-input paths | XSS risk on non-sanitized fields | Low — Audit all text input paths |
+
+#### Scalability
+
+| Gap | Risk | Severity | Recommendation |
+|-----|------|----------|----------------|
+| **Edge function timeouts on large accounts** | `recalculate-profit` processes all settlements sequentially; 10K+ settlement_lines could approach Deno timeout | Silent failure for power users | Medium — Add progress logging and chunked processing |
+| **No pagination on settlements query in InsightsDashboard** | Client-side `loadStats()` fetches all settlements without `.range()` | 1000-row cap applies; large accounts see incomplete insights | Medium — Add paginated fetch or server-side aggregation |
+| **Settlement_profit re-calculation is full-replace** | `recalculate-profit` upserts ALL profit rows on every run | Expensive for incremental changes | Low — Add incremental mode (only recalc settlements modified since last run) |
+
+### 18.5 Competitive Positioning
+
+| Capability | Xettle | LinkMyBooks | A2X | Connector by Synder |
+|-----------|--------|------------|-----|---------------------|
+| Settlement-centric model | ✅ | ✅ | ✅ | ❌ (transaction-level) |
+| Multi-marketplace from single Shopify | ✅ (sub-channel detection) | ❌ | ❌ | ❌ |
+| AU GST handling | ✅ (validated) | ✅ | ✅ | ⚠️ (generic) |
+| Push Safety Preview | ✅ (5-point validation) | ❌ | ❌ | ❌ |
+| Bank deposit matching | ✅ (two-pass heuristic) | ❌ | ✅ | ⚠️ |
+| CSV + API hybrid ingestion | ✅ | ❌ (API only) | ❌ (API only) | ❌ (API only) |
+| AI file interpreter | ✅ | ❌ | ❌ | ❌ |
+| QuickBooks support | ❌ | ✅ | ✅ | ✅ |
+| Multi-currency | ❌ (AUD only) | ✅ | ✅ | ✅ |
+| Automated ad spend ingestion | ❌ (manual) | ❌ | ❌ | ✅ |
+| SKU-level profit analysis | ✅ | ❌ | ❌ | ❌ |
+| Fee observation & alerts | ✅ | ❌ | ❌ | ❌ |
+
+**Key differentiators**: Sub-channel detection, AI file interpretation, push safety gates, and CSV+API hybrid model.
+**Key gaps**: Multi-currency and QuickBooks support limit international expansion.
+
+### 18.6 Release Readiness Assessment
+
+| Area | Verdict | Notes |
+|------|---------|-------|
+| **Core accounting pipeline** | ✅ Release-ready | Settlement → Xero → Bank Verified flow is robust with multiple safety gates |
+| **Data integrity** | ✅ Release-ready | Idempotent writes, canonical actions, guardrail tests, source priority |
+| **Security** | ⚠️ Conditional | RLS broadly applied; `repair-settlement-fees` body.userId should be removed; CORS and rate limiting need review |
+| **Scalability** | ⚠️ Conditional | Pagination fix landed for edge functions; InsightsDashboard still has 1000-row client limit |
+| **Profit reporting** | ⚠️ Labelled correctly | Estimates are clearly badged; implied rates shown; data quality strip warns on missing inputs. Commission accuracy risk is contained but not eliminated. |
+| **Multi-marketplace** | ✅ Release-ready | Registry-based detection, fingerprinting, generic CSV parser handle new marketplaces as data |
+
+**Bottom line**: Release-ready for AU/Xero with known estimate areas clearly signposted. Pre-release checklist should include: run `rls-audit`, verify pagination in InsightsDashboard for largest test account, and remove `body.userId` from `repair-settlement-fees`.
+
+---
+
 *This document is the single source of truth for Xettle's architecture. Update it when systems change.*
