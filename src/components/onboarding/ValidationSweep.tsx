@@ -610,7 +610,7 @@ export default function ValidationSweep({
                           pushing={pushing === row.id}
                           syncing={syncingRow === row.id}
                           isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
-                          onUpload={() => onSwitchToUpload?.()}
+                          onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
                           onPush={() => handlePush(row)}
                           onSync={() => handleSyncRow(row)}
                         />
