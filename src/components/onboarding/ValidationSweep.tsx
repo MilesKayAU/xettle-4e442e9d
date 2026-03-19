@@ -419,12 +419,30 @@ export default function ValidationSweep({
     <div className="space-y-4">
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        <SummaryCard label="All Periods" count={statusCounts.all} emoji="📋" active={filter === 'all'} onClick={() => setFilter('all')} bgClass="bg-muted/50" borderClass="border-border" />
-        <SummaryCard label="Complete" count={statusCounts.complete} emoji="✅" active={filter === 'complete'} onClick={() => setFilter('complete')} bgClass="bg-emerald-50 dark:bg-emerald-900/20" borderClass="border-emerald-200 dark:border-emerald-800" />
-        <SummaryCard label="Ready to Push" count={statusCounts.ready_to_push} emoji="🚀" active={filter === 'ready_to_push'} onClick={() => setFilter('ready_to_push')} bgClass="bg-blue-50 dark:bg-blue-900/20" borderClass="border-blue-200 dark:border-blue-800" />
-        <SummaryCard label="Upload Needed" count={statusCounts.settlement_needed} emoji="📤" active={filter === 'settlement_needed'} onClick={() => setFilter('settlement_needed')} bgClass="bg-amber-50 dark:bg-amber-900/20" borderClass="border-amber-200 dark:border-amber-800" />
-        <SummaryCard label="Gaps" count={statusCounts.gap_detected} emoji="⚠️" active={filter === 'gap_detected'} onClick={() => setFilter('gap_detected')} bgClass="bg-red-50 dark:bg-red-900/20" borderClass="border-red-200 dark:border-red-800" />
+        <SummaryCard label="All Periods" count={statusCounts.all} emoji="📋" active={filter === 'all'} onClick={() => { setFilter('all'); }} bgClass="bg-muted/50" borderClass="border-border" />
+        <SummaryCard label="Complete" count={statusCounts.complete} emoji="✅" active={filter === 'complete'} onClick={() => { setFilter('complete'); }} bgClass="bg-emerald-50 dark:bg-emerald-900/20" borderClass="border-emerald-200 dark:border-emerald-800" />
+        <SummaryCard label="Ready to Push" count={statusCounts.ready_to_push} emoji="🚀" active={filter === 'ready_to_push'} onClick={() => { setFilter('ready_to_push'); }} bgClass="bg-blue-50 dark:bg-blue-900/20" borderClass="border-blue-200 dark:border-blue-800" />
+        <SummaryCard label="Upload Needed" count={statusCounts.settlement_needed} emoji="📤" active={filter === 'settlement_needed'} onClick={() => { setFilter('settlement_needed'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-amber-50 dark:bg-amber-900/20" borderClass="border-amber-200 dark:border-amber-800" />
+        <SummaryCard label="Gaps" count={statusCounts.gap_detected} emoji="⚠️" active={filter === 'gap_detected'} onClick={() => { setFilter('gap_detected'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-red-50 dark:bg-red-900/20" borderClass="border-red-200 dark:border-red-800" />
       </div>
+
+      {/* Upload Needed guidance banner */}
+      {filter === 'settlement_needed' && filteredRows.length > 0 && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-1">📤 {filteredRows.length} period{filteredRows.length !== 1 ? 's' : ''} need a settlement file</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Each row below shows the marketplace and month that's missing. Click <strong>Upload</strong> on any row to go straight to the upload page for that marketplace.
+          </p>
+        </div>
+      )}
+      {filter === 'settlement_needed' && filteredRows.length === 0 && rows.some(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing') && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No results — your date or marketplace filter may be hiding them.</p>
+          <Button variant="ghost" size="sm" className="mt-1 text-xs text-amber-700 dark:text-amber-400 h-7 px-2" onClick={() => { setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }}>
+            Clear filters
+          </Button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
