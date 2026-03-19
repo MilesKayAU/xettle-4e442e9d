@@ -1032,6 +1032,7 @@ export default function AccountMapperCard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {renderTaxProfileSelector()}
           {renderCoaRefreshStrip()}
           <Button onClick={runMapper} className="gap-2">
             <Sparkles className="h-4 w-4" />
