@@ -8,6 +8,7 @@ import AccountingDashboard from '@/components/admin/accounting/AccountingDashboa
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
+import { useDashboardTaskCounts } from '@/hooks/useDashboardTaskCounts';
 import { toast } from 'sonner';
 
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
@@ -31,7 +32,8 @@ import SyncStatusCard from '@/components/dashboard/SyncStatusCard';
 import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
 
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
 import DailyTaskStrip from '@/components/dashboard/DailyTaskStrip';
@@ -97,8 +99,116 @@ function SetupInProgressBanner({ show: showProp }: { show?: boolean }) {
   );
 }
 
-function SettingsAccordion({ id, title, description, defaultOpen = false, children }: { id?: string; title: string; description: string; defaultOpen?: boolean; children: React.ReactNode }) {
+const SETTINGS_HELP: Record<string, string> = {
+  api_connections: 'This is where you connect your marketplace accounts (Amazon, eBay, Shopify) and your Xero accounting software. Xettle needs these connections to automatically pull settlement data and push entries into your books. Start by connecting Xero, then add your marketplace(s).',
+  destination_accounts: 'Map each type of settlement line item (sales, fees, refunds, etc.) to the correct account in your Xero chart of accounts. This tells Xettle exactly where each dollar should land when we create your invoices or journals. You need at least sales, fees, and refund accounts mapped.',
+  account_mapper: 'Our AI analyses your Xero chart of accounts and suggests the best mappings automatically. You can review, accept, or override each suggestion. This saves time if you have a large chart of accounts and aren\'t sure which codes to use.',
+  posting_mode: 'Choose whether each marketplace rail posts as an Invoice or a Manual Journal in Xero, and set the default tax treatment. Most users start with "Invoice" mode — it\'s simpler and works well for GST-registered businesses.',
+  accounting_boundary: 'Set the earliest date Xettle should process settlements from. Any settlement before this date will be ignored. This is useful if you\'ve already reconciled older periods manually and only want Xettle handling new ones going forward.',
+  payment_verification: 'Configure how Xettle matches marketplace payouts to your actual bank deposits. When enabled, we\'ll cross-check settlement amounts against your Xero bank feed to confirm the money actually arrived. This adds a verification layer before marking settlements as fully reconciled.',
+  fulfilment_methods: 'Tell Xettle how each marketplace fulfils orders — FBA (marketplace ships it), self-ship, or mixed. This affects profit calculations because shipping costs differ. If you self-ship, you can also enter your average postage cost per order.',
+  data_quality: 'Tools to fix historical data issues — re-sync marketplace labels, correct misclassified settlements, and clean up any data that was imported incorrectly. Use this if you notice wrong marketplace names or categories on older records.',
+};
+
+function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConnected: boolean; onConnectXero: () => void; onGoToUpload: () => void }) {
+  const { setupWarnings } = useDashboardTaskCounts();
+
+  // Derive per-section status from warnings
+  const warningKeys = new Set(setupWarnings.map(w => w.key));
+
+  const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
+    const sectionWarningMap: Record<string, string[]> = {
+      api_connections: ['xero_not_connected'],
+      destination_accounts: ['coa_mapping_incomplete'],
+      account_mapper: [],
+      posting_mode: ['scope_not_acknowledged'],
+      accounting_boundary: ['tax_profile_missing'],
+      payment_verification: [],
+      fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing'],
+      data_quality: [],
+    };
+
+    const relevantWarnings = sectionWarningMap[sectionKey] || [];
+    if (relevantWarnings.length === 0) return 'none';
+
+    const hasBlocking = relevantWarnings.some(k => warningKeys.has(k) && setupWarnings.find(w => w.key === k)?.severity === 'blocking');
+    const hasWarning = relevantWarnings.some(k => warningKeys.has(k));
+
+    if (hasBlocking) return 'incomplete';
+    if (hasWarning) return 'warning';
+    return 'complete';
+  };
+
+  const incompleteCount = ['api_connections', 'destination_accounts', 'posting_mode', 'accounting_boundary', 'fulfilment_methods']
+    .filter(k => getStatus(k) === 'incomplete' || getStatus(k) === 'warning').length;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold text-foreground">Settings</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Manage connections, account mappings, posting rules, and reconciliation preferences.
+        </p>
+        {incompleteCount > 0 && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <p className="text-sm text-foreground">
+              <strong>{incompleteCount} section{incompleteCount !== 1 ? 's' : ''}</strong> need{incompleteCount === 1 ? 's' : ''} your attention before settlements can post to Xero. Look for highlighted sections below.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <SettingsAccordion title="API Connections" description="Connect marketplaces and accounting integrations" defaultOpen status={getStatus('api_connections')} helpText={SETTINGS_HELP.api_connections}>
+        <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
+          <ApiConnectionsPanel
+            isPaid={true}
+            syncCutoffDate={undefined}
+            onSettlementsAutoFetched={async () => {}}
+            onRequestSettings={() => {}}
+            onFetchStateChange={() => {}}
+          />
+        </Suspense>
+      </SettingsAccordion>
+
+      <SettingsAccordion id="destination-accounts" title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts" status={getStatus('destination_accounts')} helpText={SETTINGS_HELP.destination_accounts}>
+        <DestinationAccountMapper />
+      </SettingsAccordion>
+
+      <SettingsAccordion id="account-mapper" title="Account Mapper" description="AI-assisted account code suggestions and overrides" status={getStatus('account_mapper')} helpText={SETTINGS_HELP.account_mapper}>
+        <AccountMapperCard />
+      </SettingsAccordion>
+
+      <SettingsAccordion title="Destination Posting Mode" description="Configure how each marketplace rail posts to Xero" status={getStatus('posting_mode')} helpText={SETTINGS_HELP.posting_mode}>
+        <RailPostingSettings />
+      </SettingsAccordion>
+
+      <SettingsAccordion title="Accounting Boundary" description="Set the start date and backfill horizon for settlement processing" status={getStatus('accounting_boundary')} helpText={SETTINGS_HELP.accounting_boundary}>
+        <AccountingBoundarySettings
+          xeroConnected={xeroConnected}
+          onConnectXero={onConnectXero}
+          onGoToUpload={onGoToUpload}
+        />
+      </SettingsAccordion>
+
+      <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules" status={getStatus('payment_verification')} helpText={SETTINGS_HELP.payment_verification}>
+        <PaymentVerificationSettings />
+      </SettingsAccordion>
+
+      <SettingsAccordion id="fulfilment" title="Fulfilment Methods" description="Set how orders are fulfilled per marketplace — affects profit calculations" status={getStatus('fulfilment_methods')} helpText={SETTINGS_HELP.fulfilment_methods}>
+        <FulfilmentMethodsPanel />
+      </SettingsAccordion>
+
+      <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications" status={getStatus('data_quality')} helpText={SETTINGS_HELP.data_quality}>
+        <DataQualityPanel />
+      </SettingsAccordion>
+    </div>
+  );
+}
+
+function SettingsAccordion({ id, title, description, defaultOpen = false, children, status, helpText }: { id?: string; title: string; description: string; defaultOpen?: boolean; children: React.ReactNode; status?: 'complete' | 'incomplete' | 'warning' | 'none'; helpText?: string }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [showHelp, setShowHelp] = useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -114,18 +224,67 @@ function SettingsAccordion({ id, title, description, defaultOpen = false, childr
     return () => window.removeEventListener('open-settings-section', handler);
   }, [id]);
 
+  const statusIcon = status === 'complete'
+    ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+    : status === 'incomplete'
+    ? <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+    : status === 'warning'
+    ? <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+    : null;
+
+  const borderClass = status === 'incomplete'
+    ? 'border-destructive/40'
+    : status === 'warning'
+    ? 'border-amber-500/40'
+    : status === 'complete'
+    ? 'border-green-500/30'
+    : 'border-border';
+
   return (
-    <div ref={ref} className="rounded-xl border border-border bg-card overflow-hidden">
+    <div ref={ref} className={`rounded-xl border ${borderClass} bg-card overflow-hidden transition-colors`}>
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-muted/30 transition-colors"
       >
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+        <div className="flex items-center gap-3 min-w-0">
+          {statusIcon}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+              {status === 'incomplete' && (
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Action needed</Badge>
+              )}
+              {status === 'warning' && (
+                <Badge className="bg-amber-500/15 text-amber-700 border-amber-500/20 text-[10px] px-1.5 py-0">Review</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+          </div>
         </div>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+        <div className="flex items-center gap-2 shrink-0">
+          {helpText && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setShowHelp(!showHelp); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setShowHelp(!showHelp); } }}
+              className="flex items-center justify-center h-6 w-6 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+              title="What is this?"
+            >
+              <Info className="h-3.5 w-3.5 text-muted-foreground" />
+            </span>
+          )}
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
       </button>
+      {showHelp && helpText && (
+        <div className="mx-5 mb-2 rounded-lg bg-primary/5 border border-primary/20 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <p className="text-xs text-foreground/80 leading-relaxed">{helpText}</p>
+          </div>
+        </div>
+      )}
       {open && <div className="px-5 pb-5 pt-1">{children}</div>}
     </div>
   );
@@ -1010,61 +1169,11 @@ export default function Dashboard() {
         {/* ─── Settings ──────────────────────────────────────────────── */}
         {activeView === 'settings' && (
           <ErrorBoundary>
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Settings</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Manage connections, account mappings, posting rules, and reconciliation preferences.
-                </p>
-              </div>
-
-              <SettingsAccordion title="API Connections" description="Connect marketplaces and accounting integrations" defaultOpen>
-                <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
-                  <ApiConnectionsPanel
-                    isPaid={true}
-                    syncCutoffDate={undefined}
-                    onSettlementsAutoFetched={async () => {}}
-                    onRequestSettings={() => {}}
-                    onFetchStateChange={() => {}}
-                  />
-                </Suspense>
-              </SettingsAccordion>
-
-              <SettingsAccordion id="destination-accounts" title="Destination Accounts" description="Map settlement line items to your Xero chart of accounts">
-                <DestinationAccountMapper />
-              </SettingsAccordion>
-
-              <SettingsAccordion id="account-mapper" title="Account Mapper" description="AI-assisted account code suggestions and overrides">
-                <AccountMapperCard />
-              </SettingsAccordion>
-
-              <SettingsAccordion title="Destination Posting Mode" description="Configure how each marketplace rail posts to Xero">
-                <RailPostingSettings />
-              </SettingsAccordion>
-
-              <SettingsAccordion title="Accounting Boundary" description="Set the start date and backfill horizon for settlement processing">
-                <AccountingBoundarySettings
-                  xeroConnected={xeroConnected}
-                  onConnectXero={() => {
-                    setWizardInitialStep(2);
-                    setShowWizard(true);
-                  }}
-                  onGoToUpload={() => setShowUploadSheet(true)}
-                />
-              </SettingsAccordion>
-
-              <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules">
-                <PaymentVerificationSettings />
-              </SettingsAccordion>
-
-              <SettingsAccordion title="Fulfilment Methods" description="Set how orders are fulfilled per marketplace — affects profit calculations">
-                <FulfilmentMethodsPanel />
-              </SettingsAccordion>
-
-              <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications">
-                <DataQualityPanel />
-              </SettingsAccordion>
-            </div>
+            <SettingsView
+              xeroConnected={xeroConnected}
+              onConnectXero={() => { setWizardInitialStep(2); setShowWizard(true); }}
+              onGoToUpload={() => setShowUploadSheet(true)}
+            />
           </ErrorBoundary>
         )}
       </div>
