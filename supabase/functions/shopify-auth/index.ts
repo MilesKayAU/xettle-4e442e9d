@@ -1,46 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logger } from '../_shared/logger.ts'
-
-function getQueryPairKey(pair: string): string {
-  const separatorIndex = pair.indexOf('=')
-  return separatorIndex >= 0 ? pair.slice(0, separatorIndex) : pair
-}
-
-function getRawQueryString(input: string): string {
-  if (!input) return ''
-  const questionMarkIndex = input.indexOf('?')
-  return questionMarkIndex >= 0 ? input.slice(questionMarkIndex + 1) : input.replace(/^\?/, '')
-}
-
-function buildShopifyHmacMessage(rawInput: string, excludedKeys: string[] = ['hmac', 'signature']): string {
-  const excluded = new Set(excludedKeys)
-  return getRawQueryString(rawInput)
-    .split('&')
-    .filter(Boolean)
-    .filter((pair) => !excluded.has(getQueryPairKey(pair)))
-    .sort((a, b) => getQueryPairKey(a).localeCompare(getQueryPairKey(b)) || a.localeCompare(b))
-    .join('&')
-}
-
-async function timingSafeEqual(a: string, b: string): Promise<boolean> {
-  const encoder = new TextEncoder()
-  const aBytes = encoder.encode(a)
-  const bBytes = encoder.encode(b)
-  if (aBytes.byteLength !== bBytes.byteLength) return false
-
-  const rndKey = crypto.getRandomValues(new Uint8Array(32))
-  const cmpKey = await crypto.subtle.importKey('raw', rndKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const [sigA, sigB] = await Promise.all([
-    crypto.subtle.sign('HMAC', cmpKey, aBytes),
-    crypto.subtle.sign('HMAC', cmpKey, bBytes),
-  ])
-  const vA = new Uint8Array(sigA)
-  const vB = new Uint8Array(sigB)
-  let diff = 0
-  for (let i = 0; i < vA.length; i++) diff |= vA[i] ^ vB[i]
-  return diff === 0
-}
+import { verifyShopifyHmac } from '../_shared/shopify-hmac.ts'
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? ""
