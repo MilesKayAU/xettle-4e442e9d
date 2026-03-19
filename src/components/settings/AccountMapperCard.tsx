@@ -380,14 +380,17 @@ export default function AccountMapperCard() {
         .maybeSingle();
       setIsAdmin(!!roleRow);
 
-      // Load tax profile
+      // Load tax profile (check both keys for backward compat)
       const { data: taxSetting } = await supabase
         .from('app_settings')
-        .select('value')
+        .select('value, key')
         .eq('user_id', user.id)
-        .eq('key', 'org_tax_profile')
-        .maybeSingle();
-      setTaxProfile(taxSetting?.value || 'AU_GST');
+        .in('key', ['tax_profile', 'org_tax_profile'])
+        .order('key', { ascending: true });
+      const taxVal = taxSetting?.find(s => s.key === 'tax_profile')?.value
+        || taxSetting?.find(s => s.key === 'org_tax_profile')?.value
+        || null;
+      setTaxProfile(taxVal);
       // Load cached COA + last sync in parallel
       const [accounts, lastSynced, { data: registryRows }, { data: processorRows }] = await Promise.all([
         getCachedXeroAccounts(),
