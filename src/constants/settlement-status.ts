@@ -27,6 +27,7 @@
  *
  * Error path:
  *   ready_to_push → push_failed → push_failed_permanent
+ *   ready_to_push → mapping_error → ready_to_push (after user fixes mapping)
  *
  * Rollback:
  *   pushed_to_xero → ready_to_push
@@ -57,6 +58,8 @@ export const SETTLEMENT_STATUS = {
   PUSH_FAILED: 'push_failed',
   /** Exhausted retries */
   PUSH_FAILED_PERMANENT: 'push_failed_permanent',
+  /** Account mapping references invalid/inactive Xero accounts */
+  MAPPING_ERROR: 'mapping_error',
 } as const;
 
 export type SettlementStatus = typeof SETTLEMENT_STATUS[keyof typeof SETTLEMENT_STATUS];
@@ -79,6 +82,7 @@ export const VALID_TRANSITIONS: Record<SettlementStatus, readonly SettlementStat
   [SETTLEMENT_STATUS.READY_TO_PUSH]: [
     SETTLEMENT_STATUS.PUSHED_TO_XERO,
     SETTLEMENT_STATUS.PUSH_FAILED,
+    SETTLEMENT_STATUS.MAPPING_ERROR,
   ],
   [SETTLEMENT_STATUS.PUSHED_TO_XERO]: [
     SETTLEMENT_STATUS.RECONCILED_IN_XERO,
@@ -94,6 +98,9 @@ export const VALID_TRANSITIONS: Record<SettlementStatus, readonly SettlementStat
   ],
   [SETTLEMENT_STATUS.PUSH_FAILED_PERMANENT]: [
     SETTLEMENT_STATUS.READY_TO_PUSH, // Manual reset
+  ],
+  [SETTLEMENT_STATUS.MAPPING_ERROR]: [
+    SETTLEMENT_STATUS.READY_TO_PUSH, // After user fixes mapping
   ],
 };
 
@@ -131,6 +138,7 @@ export function normaliseStatus(raw: string | null | undefined): SettlementStatu
     verified_payout: SETTLEMENT_STATUS.BANK_VERIFIED,
     hidden: SETTLEMENT_STATUS.INGESTED,
     duplicate_suppressed: SETTLEMENT_STATUS.INGESTED,
+    mapping_error: SETTLEMENT_STATUS.MAPPING_ERROR,
   };
   return LEGACY_MAP[raw] ?? (raw as SettlementStatus);
 }
@@ -153,6 +161,7 @@ export const ATTENTION_STATUSES: readonly SettlementStatus[] = [
   SETTLEMENT_STATUS.INGESTED,
   SETTLEMENT_STATUS.PUSH_FAILED,
   SETTLEMENT_STATUS.PUSH_FAILED_PERMANENT,
+  SETTLEMENT_STATUS.MAPPING_ERROR,
 ];
 
 /**
