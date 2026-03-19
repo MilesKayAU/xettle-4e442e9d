@@ -129,14 +129,17 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
   };
 
   const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
-    const relevantWarnings = sectionWarningMap[sectionKey] || [];
-    // Sections with no tracked warnings are always 'none' (neutral) — no badge
-    if (relevantWarnings.length === 0) return 'none';
+    const relevantPatterns = sectionWarningMap[sectionKey] || [];
+    if (relevantPatterns.length === 0) return 'none';
 
-    const activeWarnings = relevantWarnings.filter(k => warningKeys.has(k));
+    // Match exact keys or prefix patterns (ending with ':')
+    const matchesPattern = (warnKey: string) =>
+      relevantPatterns.some(p => p.endsWith(':') ? warnKey.startsWith(p) : warnKey === p);
+
+    const activeWarnings = setupWarnings.filter(w => matchesPattern(w.key));
     if (activeWarnings.length === 0) return 'complete'; // all resolved → green
 
-    const hasBlocking = activeWarnings.some(k => setupWarnings.find(w => w.key === k)?.severity === 'blocking');
+    const hasBlocking = activeWarnings.some(w => w.severity === 'blocking');
     if (hasBlocking) return 'incomplete';
     return 'warning';
   };
