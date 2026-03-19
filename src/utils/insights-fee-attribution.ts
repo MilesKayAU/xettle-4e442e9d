@@ -137,8 +137,9 @@ export function attributeFees(
     hasMissingFeeData = false;
   }
 
-  // Apply redistributed platform fees from siblings
-  if (redistributedPlatformFees > 0) {
+  // Apply redistributed platform fees (positive = fees added to this sibling,
+  // negative = excess fees removed from fee-heavy sibling)
+  if (redistributedPlatformFees !== 0) {
     effectiveTotalFees += redistributedPlatformFees;
     effectiveNetPayout -= redistributedPlatformFees;
     hasEstimatedFees = true;
