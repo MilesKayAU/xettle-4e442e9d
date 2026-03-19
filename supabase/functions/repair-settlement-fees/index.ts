@@ -99,13 +99,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  if (fetchErr) {
-    return new Response(JSON.stringify({ error: fetchErr.message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  for (const s of (zeroFeeSettlements || [])) {
+  for (const s of zeroFeeSettlements) {
     const sellerFees = Number(s.sales_principal) || 0;
     const existingPayload = (s.raw_payload || {}) as Record<string, unknown>;
     
