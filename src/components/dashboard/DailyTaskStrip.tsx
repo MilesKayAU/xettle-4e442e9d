@@ -172,7 +172,7 @@ export default function DailyTaskStrip({ onNavigate, onScrollToActionCentre, mis
             );
           })}
         </div>
-        {setupWarnings.length > 0 && <SetupWarningList warnings={setupWarnings} />}
+        {setupWarnings.length > 0 && <SetupWarningList warnings={setupWarnings} onNavigate={onNavigate} />}
         {missingSettlementCount > 0 && (
           <button
             onClick={onUploadClick}
