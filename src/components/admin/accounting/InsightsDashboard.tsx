@@ -383,13 +383,16 @@ export default function InsightsDashboard() {
           : commissionTotal;
 
         // ─── Build fee breakdown using EFFECTIVE values (after estimation & redistribution) ───
-        const effectiveCommission = adjustedCommissionTotal + (redistributedPlatformFees > 0 ? redistributedPlatformFees : 0);
-        // For all-api_sync case, commission IS the effective total fees (no FBA/storage/other)
-        const finalCommission = (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length)
-          ? effectiveTotalFees
-          : effectiveCommission;
-        const effectiveOther = otherFeesTotal + (redistributedPlatformFees < 0 ? redistributedPlatformFees : 0);
-        const finalOther = Math.max(effectiveOther, 0);
+        // For fee-heavy siblings (negative redistribution), reduce commission by the excess removed.
+        // For sales siblings (positive redistribution), add their share to commission.
+        let finalCommission: number;
+        if (apiSyncZeroFeeRows.length > 0 && apiSyncZeroFeeRows.length === rows.length) {
+          // All api_sync: commission IS the entire effective fee total
+          finalCommission = Math.max(effectiveTotalFees, 0);
+        } else {
+          finalCommission = Math.max(adjustedCommissionTotal + redistributedPlatformFees, 0);
+        }
+        const finalOther = otherFeesTotal;
 
         const feeBreakdown: FeeBreakdown[] = [];
         if (finalCommission > 0) feeBreakdown.push({ label: 'Commission', amount: finalCommission, pctOfSales: totalSales > 0 ? finalCommission / totalSales : 0, color: 'bg-primary' });
