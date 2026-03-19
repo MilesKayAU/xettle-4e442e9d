@@ -579,8 +579,8 @@ export default function Landing() {
           <div className="grid md:grid-cols-4 gap-4 text-left">
             {[
               { label: 'Settlement tracking', desc: 'Every payout period, every marketplace, one view' },
-              { label: 'Payout verification', desc: 'Totals validated before anything posts' },
-              { label: 'Bank matching', desc: 'Deposits reconciled against settlements' },
+              { label: 'Payout verification', desc: 'Totals validated and optionally checked against Xero deposits' },
+              { label: 'Deposit matching', desc: 'Settlements verified against transactions already in Xero' },
               { label: 'Exception handling', desc: 'Problems surfaced, never hidden' },
               { label: 'Duplicate guard', desc: 'Fingerprint dedup prevents double-posting' },
               { label: 'Safe repost', desc: 'Void and replace with full audit chain' },
