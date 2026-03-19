@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
+import { verifyShopifyHmac } from '../_shared/shopify-hmac.ts'
 
 /**
  * Shopify App Store install entry point.
@@ -7,50 +8,6 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
  */
 
 const APP_URL = 'https://xettle.app'
-
-function getQueryPairKey(pair: string): string {
-  const separatorIndex = pair.indexOf('=')
-  return separatorIndex >= 0 ? pair.slice(0, separatorIndex) : pair
-}
-
-function getRawQueryString(input: string): string {
-  if (!input) return ''
-  const questionMarkIndex = input.indexOf('?')
-  return questionMarkIndex >= 0 ? input.slice(questionMarkIndex + 1) : input.replace(/^\?/, '')
-}
-
-function buildShopifyHmacMessage(rawInput: string, excludedKeys: string[] = ['hmac', 'signature']): string {
-  const excluded = new Set(excludedKeys)
-  return getRawQueryString(rawInput)
-    .split('&')
-    .filter(Boolean)
-    .filter((pair) => !excluded.has(getQueryPairKey(pair)))
-    .sort((a, b) => getQueryPairKey(a).localeCompare(getQueryPairKey(b)) || a.localeCompare(b))
-    .join('&')
-}
-
-async function timingSafeEqual(a: string, b: string): Promise<boolean> {
-  const encoder = new TextEncoder()
-  const aBytes = encoder.encode(a)
-  const bBytes = encoder.encode(b)
-  if (aBytes.byteLength !== bBytes.byteLength) return false
-
-  const keyData = crypto.getRandomValues(new Uint8Array(32))
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
-  )
-  const [sigA, sigB] = await Promise.all([
-    crypto.subtle.sign('HMAC', cryptoKey, aBytes),
-    crypto.subtle.sign('HMAC', cryptoKey, bBytes),
-  ])
-  const viewA = new Uint8Array(sigA)
-  const viewB = new Uint8Array(sigB)
-  let result = 0
-  for (let i = 0; i < viewA.length; i++) {
-    result |= viewA[i] ^ viewB[i]
-  }
-  return result === 0
-}
 
 Deno.serve(async (req) => {
   if (req.method !== 'GET') {
@@ -81,24 +38,17 @@ Deno.serve(async (req) => {
       return new Response('Server configuration error', { status: 500 })
     }
 
-    const message = buildShopifyHmacMessage(req.url)
+    const hmacVerification = await verifyShopifyHmac({
+      providedHmac: hmac,
+      secret: SHOPIFY_CLIENT_SECRET,
+      rawInput: req.url,
+    })
 
-    const encoder = new TextEncoder()
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(SHOPIFY_CLIENT_SECRET),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    )
-    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message))
-    const computedHmac = Array.from(new Uint8Array(signature))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    const isValid = await timingSafeEqual(computedHmac.toLowerCase(), hmac.toLowerCase())
-    if (!isValid) {
-      console.error('HMAC verification failed for shop:', shop)
+    if (!hmacVerification.valid) {
+      console.error('HMAC verification failed for shop:', shop, {
+        matchedStrategy: hmacVerification.matchedStrategy,
+        queryKeys: Array.from(url.searchParams.keys()).sort(),
+      })
       return new Response('Invalid signature', { status: 401 })
     }
 
