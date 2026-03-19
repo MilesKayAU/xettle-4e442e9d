@@ -247,7 +247,7 @@ export default function Landing() {
             {[
               { step: '01', icon: Store, title: 'Connect marketplace', desc: 'API for Amazon & Shopify. File upload for Bunnings, eBay, Kogan, BigW, Catch, MyDeal and more.' },
               { step: '02', icon: Search, title: 'Parse & verify settlement', desc: 'Auto-detect format, split mixed files, validate every line item. Sales + fees + refunds must balance.' },
-              { step: '03', icon: DollarSign, title: 'Reconcile bank deposit', desc: 'Match the settlement payout to a real bank transaction. Tolerance-based matching handles rounding.' },
+              { step: '03', icon: DollarSign, title: 'Verify deposit in Xero', desc: 'Optionally match the settlement payout against a deposit already in Xero. Tolerance-based matching handles rounding.' },
               { step: '04', icon: AlertTriangle, title: 'Surface exceptions', desc: 'Missing contacts, duplicate settlements, fee changes, locked periods — caught and surfaced before posting.' },
             ].map((item) => {
               const Icon = item.icon;
