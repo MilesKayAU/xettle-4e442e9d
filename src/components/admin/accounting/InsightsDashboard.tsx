@@ -1039,7 +1039,7 @@ export default function InsightsDashboard() {
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="font-medium text-foreground">{s.label}</span>
-                          {s.returnRatio === bestRatio && stats.length > 1 && !s.hasEstimatedFees && (
+                          {s.returnRatio === bestRatio && stats.length > 1 && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-primary/30 text-primary px-1">Best</Badge>
                           )}
                         </div>
