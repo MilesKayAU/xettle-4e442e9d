@@ -172,43 +172,126 @@ Deno.serve(async (req) => {
         dt.setMinutes(dt.getMinutes() - 2) // 2 minute buffer
         lastUpdatedAfter = dt.toISOString()
       } else {
-        lastUpdatedAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        lastUpdatedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       }
 
-      // ─── Get Amazon token via amazon-auth helper ─────────────
-      const { data: authData, error: tokenError } = await supabase.functions.invoke('amazon-auth', {
-        headers: { 'x-action': 'refresh' },
-      })
+      // ─── Get Amazon token via direct DB read + inline refresh ──
+      console.log('fbm_sync_user', userId)
 
-      if (tokenError || !authData?.access_token) {
-        throw new Error(`Amazon auth failed: ${authData?.error || tokenError?.message || 'no token'}`)
+      const AMAZON_CLIENT_ID = Deno.env.get('AMAZON_SP_CLIENT_ID')
+      const AMAZON_CLIENT_SECRET = Deno.env.get('AMAZON_SP_CLIENT_SECRET')
+      if (!AMAZON_CLIENT_ID || !AMAZON_CLIENT_SECRET) {
+        throw new Error('SP-API not configured: missing AMAZON_SP_CLIENT_ID or AMAZON_SP_CLIENT_SECRET')
       }
 
-      const { access_token: accessToken, marketplace_id, region } = authData
+      const { data: tokenRow, error: tokenFetchErr } = await supabase
+        .from('amazon_tokens')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      // Safeguard 9: tokenRow null check
+      if (tokenFetchErr || !tokenRow) {
+        throw new Error(`No Amazon token found for user: ${tokenFetchErr?.message || 'no row'}`)
+      }
+
+      let accessToken = tokenRow.access_token
+      const marketplace_id = tokenRow.marketplace_id
+      const region = tokenRow.region || 'fe'
+
+      // Safeguard 3: marketplace_id guard
+      if (!marketplace_id) {
+        throw new Error('Missing marketplace_id in amazon_tokens row')
+      }
+
+      console.log('fbm_marketplace', marketplace_id)
+
+      // Check if current token is still valid (with 60s buffer) — safeguard 8: Date comparison
+      const tokenStillValid = accessToken && tokenRow.expires_at &&
+        new Date(tokenRow.expires_at) > new Date(Date.now() + 60000)
+
+      if (!tokenStillValid) {
+        // Refresh the token — mirrors amazon-auth refresh logic exactly
+        const refreshResponse = await fetch('https://api.amazon.com/auth/o2/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: tokenRow.refresh_token,
+            client_id: AMAZON_CLIENT_ID,
+            client_secret: AMAZON_CLIENT_SECRET,
+          }),
+        })
+
+        const refreshData = await refreshResponse.json()
+        if (!refreshResponse.ok || !refreshData.access_token) {
+          console.error('fbm_token_refresh_failed', refreshData)
+          throw new Error('Amazon token refresh failed')
+        }
+
+        const newExpiresAt = new Date(Date.now() + (refreshData.expires_in || 3600) * 1000).toISOString()
+
+        // Safeguard 2: preserve existing refresh_token if not returned
+        await supabase
+          .from('amazon_tokens')
+          .update({
+            access_token: refreshData.access_token,
+            refresh_token: refreshData.refresh_token || tokenRow.refresh_token,
+            expires_at: newExpiresAt,
+          })
+          .eq('id', tokenRow.id)
+
+        accessToken = refreshData.access_token
+      }
+
+      // Safeguard 10: access_token check after refresh
+      if (!accessToken) {
+        throw new Error('Amazon access_token missing after refresh')
+      }
+
       const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe
 
       // ─── Poll Amazon Orders API ────────────────────────────────
       const ordersParams = new URLSearchParams({
         MarketplaceIds: marketplace_id,
         FulfillmentChannels: 'MFN',
-        OrderStatuses: 'Unshipped',
+        OrderStatuses: 'Unshipped,PartiallyShipped,Shipped',
         LastUpdatedAfter: lastUpdatedAfter,
       })
 
       const ordersUrl = `${baseUrl}/orders/v0/orders?${ordersParams.toString()}`
-      logger.debug(`[sync-amazon-fbm] Fetching orders: ${ordersUrl}`)
+      console.log('fbm_orders_url', ordersUrl)
+      console.log('fbm_orders_request', { marketplace_id, region, lastUpdatedAfter })
 
-      const ordersResponse = await fetch(ordersUrl, {
-        headers: { 'x-amz-access-token': accessToken, 'Content-Type': 'application/json' },
-      })
+      let ordersResponse: Response
+      try {
+        ordersResponse = await fetch(ordersUrl, {
+          headers: { 'x-amz-access-token': accessToken, 'Content-Type': 'application/json' },
+        })
+      } catch (fetchErr) {
+        console.error('fbm_orders_fetch_failed', fetchErr)
+        throw fetchErr
+      }
 
       if (!ordersResponse.ok) {
         const errText = await ordersResponse.text()
+        console.error('fbm_orders_api_error', { status: ordersResponse.status, body: errText })
         throw new Error(`Amazon Orders API failed: ${ordersResponse.status} ${errText}`)
       }
 
       const ordersData = await ordersResponse.json()
       const orders = ordersData?.payload?.Orders || []
+
+      // Return success for zero orders — do not throw
+      if (orders.length === 0) {
+        await logEvent(supabase, userId, 'fbm_poll_completed', { total_orders: 0, dry_run: dryRun }, storeKey)
+        await upsertSetting(supabase, userId, `fbm:${storeKey}:last_poll_at`, new Date().toISOString())
+        // Release lock
+        await supabase.rpc('release_sync_lock', { p_user_id: userId, p_lock_key: lockKey })
+        return new Response(JSON.stringify({ status: 'completed', total_orders: 0, dry_run: dryRun }), { status: 200, headers })
+      }
 
       // ─── Process each order ────────────────────────────────────
       let createdCount = 0, manualReviewCount = 0, failedCount = 0, skippedCount = 0
