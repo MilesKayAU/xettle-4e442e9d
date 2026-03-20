@@ -562,13 +562,14 @@ Deno.serve(async (req) => {
       // Log PII access status from first order (to detect role-based access)
       if (orders.length > 0) {
         const sampleOrder = orders[0]
-        const hasBuyer = !!sampleOrder?.buyer?.buyerName
-        const hasRecipient = !!sampleOrder?.recipient?.shippingAddress?.name
+        const samplePii = extractPiiFromOrder(sampleOrder)
+        const hasBuyer = !!samplePii.buyerName
+        const hasRecipient = !!samplePii.recipientName
         console.log('fbm_pii_role_check', {
           api_version: '2026-01-01',
           buyer_info_present: hasBuyer,
           shipping_address_present: hasRecipient,
-          sample_order_id: sampleOrder?.amazonOrderId,
+          sample_order_id: getAmazonOrderId(sampleOrder),
         })
         if (!hasBuyer && !hasRecipient) {
           await logEvent(supabase, userId, 'fbm_pii_access_missing', {
