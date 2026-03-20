@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
           fields:
             "id,name,created_at,processed_at,financial_status,gateway,note_attributes,tags,subtotal_price,total_shipping_price_set,total_tax,total_price,total_discounts,line_items,payment_gateway_names,source_name",
         });
-        return `https://${shopDomain}/admin/api/2026-01/orders.json?${params.toString()}`;
+        return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?${params.toString()}`;
       }
 
       const params = new URLSearchParams({
