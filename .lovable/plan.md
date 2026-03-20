@@ -45,3 +45,44 @@
 - `estimate-shipping-cost`
 - `historical-audit`
 - `shopify-auth` (scopes)
+
+## Xero API Policy (`_shared/xero-api-policy.ts`)
+
+- `XERO_API_BASE = 'https://api.xero.com/api.xro/2.0'` — single source of truth
+- `XERO_AUTH_URL`, `XERO_TOKEN_URL`, `XERO_CONNECTIONS_URL`
+- Token config (1800s expiry, 5-min refresh buffer)
+- Rate limits (60/min per tenant, 5000/day per tenant)
+- `XERO_REQUIRED_SCOPES` — confirmed scopes (journals.read rejected post-March 2026)
+- Pagination rules (page-based, 100 per page)
+- Deprecation tracking
+- Helper functions:
+  - `getXeroHeaders(accessToken, tenantId)`
+  - `buildXeroUrl(resource, params?)`
+  - `isXeroTokenExpired(expiresAt, bufferMs?)`
+  - `buildXeroBasicAuth(clientId, clientSecret)`
+  - `parseXeroRetryAfter(header)`
+  - `getXeroRateLimit()`
+
+### Functions using this policy
+- `xero-auth`
+- `sync-settlement-to-xero`
+- `refresh-xero-coa`
+- `fetch-xero-invoice`
+- `fetch-xero-bank-accounts`
+- `fetch-xero-bank-transactions`
+- `fetch-outstanding`
+- `sync-xero-status`
+- `scan-xero-history`
+- `run-validation-sweep`
+- `apply-xero-payment`
+- `sync-amazon-journal`
+- `ai-account-mapper`
+- `create-xero-accounts`
+
+## Master API Policy Registry (`_shared/api-policy-registry.ts`)
+
+- Imports and wraps all three API policies
+- `API_REGISTRY` object with amazon, shopify, xero sections
+- `getApiHealth()` — returns health summary for each API
+- `getAllDeprecationWarnings()` — aggregates deprecation warnings across all APIs
+- Enables future scheduled weekly audit scans
