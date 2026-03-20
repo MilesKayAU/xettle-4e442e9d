@@ -718,6 +718,24 @@ Deno.serve(async (req) => {
 
         // ─── Safety gate: block live sync if shipping PII missing ──
         if (missingRequiredFields.length > 0) {
+          // Distinguish Amazon Pending orders (payment verification) from genuine PII access issues
+          const amazonOrderStatus = order.orderStatus || order.OrderStatus || ''
+          const isPendingPayment = amazonOrderStatus === 'Pending'
+
+          if (isPendingPayment) {
+            await supabase.from('amazon_fbm_orders').update({
+              status: 'pending_payment',
+              error_detail: 'Order is still in Pending status on Amazon — PII will be available once payment clears',
+            } as any).eq('id', insertedOrder.id)
+            await logEvent(supabase, userId, 'fbm_order_pending_payment', {
+              amazon_status: amazonOrderStatus,
+              missing_required: missingRequiredFields,
+              api_version: '2026-01-01',
+            }, storeKey, amazonOrderId)
+            skippedCount++
+            continue
+          }
+
           const blockReason = `Blocked (v2026-01-01): Required shipping fields missing: ${missingRequiredFields.join(', ')}. SP-API role "Direct-to-Consumer Delivery" may not be granted.`
           await supabase.from('amazon_fbm_orders').update({
             status: 'blocked_missing_pii',

@@ -554,6 +554,17 @@ function OrderMonitorTab() {
                           <TableCell colSpan={6} className="bg-muted/50 p-4">
                             <div className="space-y-3">
                               {/* Duplicate Detection Info */}
+                              {order.status === 'pending_payment' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800">
+                                  <Clock className="h-4 w-4 mt-0.5 shrink-0" />
+                                  <div className="text-sm">
+                                    <p className="font-medium">Awaiting Amazon payment verification</p>
+                                    <p className="text-xs mt-1 text-amber-600">
+                                      This order is still in Pending status on Amazon. Shipping details will become available once payment clears — the next sync will automatically pick it up.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                               {order.status === 'duplicate_detected' && (
                                 <div className="flex items-start gap-2 p-3 rounded-md bg-violet-50 border border-violet-200 text-violet-800">
                                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
