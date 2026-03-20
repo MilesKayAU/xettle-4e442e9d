@@ -10,32 +10,7 @@ const SP_API_ENDPOINTS: Record<string, string> = {
 
 const SHOPIFY_API_VERSION = '2026-01' // matches repo standard
 
-// ═══════════════════════════════════════════════════════════════
-// Helper: refresh Amazon SP-API access token
-// ═══════════════════════════════════════════════════════════════
-async function refreshAccessToken(amazonToken: any): Promise<string> {
-  const clientId = Deno.env.get('AMAZON_SP_CLIENT_ID')!
-  const clientSecret = Deno.env.get('AMAZON_SP_CLIENT_SECRET')!
-
-  const tokenResponse = await fetch('https://api.amazon.com/auth/o2/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: amazonToken.refresh_token,
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
-  })
-
-  if (!tokenResponse.ok) {
-    const errText = await tokenResponse.text()
-    throw new Error(`Token refresh failed: ${tokenResponse.status} ${errText}`)
-  }
-
-  const tokenData = await tokenResponse.json()
-  return tokenData.access_token
-}
+// (Token refresh is handled by amazon-auth edge function)
 
 // ═══════════════════════════════════════════════════════════════
 // Helper: upsert app_settings
