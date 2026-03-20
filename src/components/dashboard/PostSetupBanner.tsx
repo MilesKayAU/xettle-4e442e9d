@@ -168,7 +168,7 @@ export default function PostSetupBanner({
             const { count } = await supabase
               .from('settlements')
               .select('id', { count: 'exact', head: true })
-              .eq('marketplace', 'amazon_au');
+              .like('marketplace', 'amazon_%');
             const found = count ?? 0;
             setAmazonFound(found);
             setAmazonMessage(found > 0 ? `${found} settlement${found > 1 ? 's' : ''} imported` : 'No settlements found yet');
