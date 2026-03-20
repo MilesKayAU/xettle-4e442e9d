@@ -2323,6 +2323,7 @@ export type Database = {
           is_active: boolean
           scope: string | null
           shop_domain: string
+          token_type: string
           updated_at: string | null
           user_id: string
         }
@@ -2333,6 +2334,7 @@ export type Database = {
           is_active?: boolean
           scope?: string | null
           shop_domain: string
+          token_type?: string
           updated_at?: string | null
           user_id: string
         }
@@ -2343,6 +2345,7 @@ export type Database = {
           is_active?: boolean
           scope?: string | null
           shop_domain?: string
+          token_type?: string
           updated_at?: string | null
           user_id?: string
         }

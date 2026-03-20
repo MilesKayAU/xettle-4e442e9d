@@ -703,11 +703,41 @@ function EventLogTab() {
 // Main Component
 // ═══════════════════════════════════════════════════════════════
 export default function FulfillmentBridge() {
+  const [connectingInternal, setConnectingInternal] = useState(false);
+
+  const handleConnectInternal = async () => {
+    setConnectingInternal(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-auth', {
+        body: { action: 'internal_initiate', shop: 'mileskayaustralia.myshopify.com' },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      if (data?.authUrl) {
+        window.location.href = data.authUrl;
+      }
+    } catch (err: any) {
+      toast({ title: 'Failed to start internal OAuth', description: err.message, variant: 'destructive' });
+      setConnectingInternal(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">Fulfillment Bridge</h2>
-        <p className="text-sm text-muted-foreground">Amazon FBM → Shopify order sync (Store: {STORE_KEY})</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">Fulfillment Bridge</h2>
+          <p className="text-sm text-muted-foreground">Amazon FBM → Shopify order sync (Store: {STORE_KEY})</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleConnectInternal}
+          disabled={connectingInternal}
+        >
+          {connectingInternal ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+          Connect XettleInternal
+        </Button>
       </div>
 
       <Tabs defaultValue="links" className="space-y-4">

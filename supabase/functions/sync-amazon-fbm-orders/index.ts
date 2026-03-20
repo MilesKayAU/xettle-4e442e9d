@@ -43,7 +43,7 @@ async function readSetting(supabase: any, userId: string, key: string): Promise<
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Helper: Shopify client_credentials token — fixed store, no DB lookup
+// Helper: Read Shopify token from DB (permanent shpca_ token)
 // ═══════════════════════════════════════════════════════════════
 const SHOPIFY_FBM_STORE = 'mileskayaustralia.myshopify.com'
 
@@ -53,30 +53,32 @@ interface ShopifyInternalToken {
 }
 
 async function getShopifyInternalToken(): Promise<ShopifyInternalToken> {
-  const clientId = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_ID')
-  const clientSecret = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_SECRET')
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Missing SHOPIFY_INTERNAL_CLIENT_ID or SHOPIFY_INTERNAL_CLIENT_SECRET')
-  }
-
-  const response = await fetch(
-    `https://${SHOPIFY_FBM_STORE}/admin/oauth/access_token`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}`,
-    }
+  const supabaseAdmin = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  if (!response.ok) {
-    const errText = await response.text()
-    throw new Error(`Shopify client_credentials grant failed: ${response.status} ${errText}`)
+  // Look for active token for the FBM store
+  const { data: token, error } = await supabaseAdmin
+    .from('shopify_tokens')
+    .select('access_token, shop_domain')
+    .eq('shop_domain', SHOPIFY_FBM_STORE)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to query shopify_tokens: ${error.message}`)
   }
 
-  const data = await response.json()
-  logger.info('fbm_shopify_cc_grant_success', { shop: SHOPIFY_FBM_STORE })
-  return { access_token: data.access_token, shop_domain: SHOPIFY_FBM_STORE }
+  if (!token?.access_token) {
+    throw new Error(
+      `No active Shopify token found for ${SHOPIFY_FBM_STORE}. ` +
+      `Please run the internal OAuth flow first (Admin → FBM Bridge → Connect XettleInternal).`
+    )
+  }
+
+  logger.info('fbm_shopify_token_loaded', { shop: SHOPIFY_FBM_STORE, tokenPrefix: token.access_token.substring(0, 6) })
+  return { access_token: token.access_token, shop_domain: token.shop_domain }
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -451,6 +451,186 @@ Deno.serve(async (req) => {
       )
     }
 
+    // ACTION: internal_initiate — OAuth flow for XettleInternal (Dev Dashboard app)
+    if (action === 'internal_initiate') {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      )
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const INTERNAL_CLIENT_ID = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_ID')
+      if (!INTERNAL_CLIENT_ID) {
+        return new Response(
+          JSON.stringify({ error: 'SHOPIFY_INTERNAL_CLIENT_ID not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const body = parsedBody || await req.json()
+      const shop = body?.shop || 'mileskayaustralia.myshopify.com'
+
+      const nonce = crypto.randomUUID()
+      const stateValue = `internal:${nonce}:${user.id}`
+
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+      await supabaseAdmin.from('app_settings').upsert({
+        user_id: user.id,
+        key: 'shopify_internal_oauth_state',
+        value: stateValue,
+      }, { onConflict: 'user_id,key' })
+
+      // Use same scopes as main app — XettleInternal needs write_orders for FBM
+      const scopes = 'read_orders,write_orders,read_products,read_inventory'
+      const redirectUri = 'https://xettle.app/shopify/callback'
+
+      const authUrl = `https://${shop}/admin/oauth/authorize?` +
+        `client_id=${INTERNAL_CLIENT_ID}&` +
+        `scope=${scopes}&` +
+        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+        `state=${encodeURIComponent(stateValue)}`
+
+      logger.debug('Generated internal Shopify auth URL for shop:', shop)
+
+      return new Response(
+        JSON.stringify({ authUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ACTION: internal_callback — exchange code for token using INTERNAL credentials
+    if (action === 'internal_callback') {
+      const body = parsedBody || await req.json()
+      const { code, shop, state } = body
+
+      if (!code || !shop || !state) {
+        return new Response(
+          JSON.stringify({ error: 'code, shop, and state are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Validate state starts with "internal:"
+      if (!state.startsWith('internal:')) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid state prefix for internal callback' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const stateParts = state.split(':')
+      if (stateParts.length < 3) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid internal state format' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      const userId = stateParts.slice(2).join(':')
+
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+
+      // Verify nonce
+      const { data: storedState } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', userId)
+        .eq('key', 'shopify_internal_oauth_state')
+        .maybeSingle()
+
+      if (!storedState?.value || storedState.value !== state) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid or expired internal OAuth state' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Clean up nonce
+      await supabaseAdmin.from('app_settings').delete().eq('user_id', userId).eq('key', 'shopify_internal_oauth_state')
+
+      const INTERNAL_CLIENT_ID = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_ID')
+      const INTERNAL_CLIENT_SECRET = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_SECRET')
+      if (!INTERNAL_CLIENT_ID || !INTERNAL_CLIENT_SECRET) {
+        return new Response(
+          JSON.stringify({ error: 'Internal Shopify credentials not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Exchange code for permanent token
+      const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: INTERNAL_CLIENT_ID,
+          client_secret: INTERNAL_CLIENT_SECRET,
+          code,
+        }),
+      })
+
+      if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text()
+        console.error('Internal Shopify token exchange failed:', errorText)
+        return new Response(
+          JSON.stringify({ error: 'Failed to exchange code for internal token', details: errorText }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const tokenData = await tokenResponse.json()
+      const { access_token, scope } = tokenData
+
+      logger.info('Internal Shopify token obtained', { shop, scope, tokenPrefix: access_token?.substring(0, 6) })
+
+      // Store in shopify_tokens with a special marker — use connection_type 'internal'
+      // We store alongside existing tokens; the FBM bridge will look for internal tokens
+      const { error: tokenError } = await supabaseAdmin
+        .from('shopify_tokens')
+        .upsert({
+          user_id: userId,
+          shop_domain: shop,
+          access_token,
+          scope,
+          is_active: true,
+          token_type: 'internal',
+        }, {
+          onConflict: 'user_id,shop_domain',
+        })
+
+      if (tokenError) {
+        console.error('Failed to store internal Shopify token:', tokenError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to store internal token', details: tokenError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, shop, scope, type: 'internal' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     return new Response(
       JSON.stringify({ error: `Unknown action: ${action}` }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
