@@ -478,7 +478,7 @@ Deno.serve(async (req) => {
         fulfillmentChannels: 'MFN',
         orderStatuses: 'Unshipped,PartiallyShipped,Shipped',
         lastUpdatedAfter: lastUpdatedAfter,
-        includedData: 'BUYER_INFO,SHIPPING_ADDRESS',
+        includedData: 'BUYER,RECIPIENT',
       })
 
       const ordersUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders?${ordersParams.toString()}`
@@ -595,7 +595,7 @@ Deno.serve(async (req) => {
 
         // ─── Fetch order detail (includes items) via v2026-01-01 ──
         // getOrder with includedData returns items inline
-        const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER_INFO,SHIPPING_ADDRESS,ORDER_ITEMS`
+        const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER,RECIPIENT`
         const detailResponse = await fetch(detailUrl, {
           headers: getSpApiHeaders(accessToken),
         })
