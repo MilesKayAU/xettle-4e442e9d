@@ -175,23 +175,21 @@ Deno.serve(async (req) => {
         lastUpdatedAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       }
 
-      // ─── Get Amazon token ──────────────────────────────────────
-      const { data: amazonToken, error: tokenError } = await supabase
-        .from('amazon_tokens')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle()
+      // ─── Get Amazon token via amazon-auth helper ─────────────
+      const { data: authData, error: tokenError } = await supabase.functions.invoke('amazon-auth', {
+        headers: { 'x-action': 'refresh' },
+      })
 
-      if (tokenError || !amazonToken) {
-        throw new Error(`No Amazon token found: ${tokenError?.message || 'not found'}`)
+      if (tokenError || !authData?.access_token) {
+        throw new Error(`Amazon auth failed: ${authData?.error || tokenError?.message || 'no token'}`)
       }
 
-      const region = amazonToken.region || 'fe'
+      const { access_token: accessToken, marketplace_id, region } = authData
       const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe
-      const accessToken = await refreshAccessToken(amazonToken)
 
       // ─── Poll Amazon Orders API ────────────────────────────────
       const ordersParams = new URLSearchParams({
+        MarketplaceIds: marketplace_id,
         FulfillmentChannels: 'MFN',
         OrderStatuses: 'Unshipped',
         LastUpdatedAfter: lastUpdatedAfter,
