@@ -1156,6 +1156,25 @@ export default function InsightsDashboard() {
                     </div>
                   ) : null}
 
+                  {/* PAC Shipping Estimate row */}
+                  {s.pacShippingAvg60 !== null && s.pacShippingSample > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <Truck className="h-3 w-3" />
+                        Avg Shipping (est.)
+                        <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1">
+                          PAC estimate
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">
+                          Sample: {s.pacShippingSample}
+                        </span>
+                      </span>
+                      <span className="font-semibold tabular-nums text-foreground">
+                        ${s.pacShippingAvg60.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Impact insight text */}
                   {impactText && (
                     <p className="text-[11px] text-muted-foreground italic">{impactText}</p>
