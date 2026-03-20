@@ -607,6 +607,17 @@ Deno.serve(async (req) => {
         // Set status to creating
         await supabase.from('amazon_fbm_orders').update({ status: 'creating' } as any).eq('id', insertedOrder.id)
 
+        // ─── Fetch PII (shipping address, buyer name) via RDT ────
+        const piiOrder = await fetchOrderWithPii(baseUrl, accessToken, amazonOrderId)
+        const orderWithPii = piiOrder || order // fallback to original if RDT fails
+
+        console.log('fbm_pii_fetch', {
+          amazonOrderId,
+          has_rdt_data: !!piiOrder,
+          has_shipping_address: !!orderWithPii.ShippingAddress,
+          buyer_name: orderWithPii.ShippingAddress?.Name || orderWithPii.BuyerInfo?.BuyerName || 'none',
+        })
+
         // Build Shopify order payload
         const lineItems = orderItems.map((item: any) => {
           const mapping = mappingMap.get(item.SellerSKU)
@@ -618,23 +629,34 @@ Deno.serve(async (req) => {
           }
         })
 
-        // Map shipping address from Amazon
-        const shippingAddress = order.ShippingAddress ? {
-          first_name: order.ShippingAddress.Name?.split(' ')[0] || '',
-          last_name: order.ShippingAddress.Name?.split(' ').slice(1).join(' ') || '',
-          address1: order.ShippingAddress.AddressLine1 || '',
-          address2: order.ShippingAddress.AddressLine2 || '',
-          city: order.ShippingAddress.City || '',
-          province: order.ShippingAddress.StateOrRegion || '',
-          zip: order.ShippingAddress.PostalCode || '',
-          country: order.ShippingAddress.CountryCode || 'AU',
-          phone: order.ShippingAddress.Phone || '',
+        // Map shipping address from Amazon (now using PII-enriched data)
+        const addr = orderWithPii.ShippingAddress
+        const shippingAddress = addr ? {
+          first_name: addr.Name?.split(' ')[0] || '',
+          last_name: addr.Name?.split(' ').slice(1).join(' ') || '',
+          address1: addr.AddressLine1 || '',
+          address2: addr.AddressLine2 || '',
+          city: addr.City || '',
+          province: addr.StateOrRegion || '',
+          zip: addr.PostalCode || '',
+          country: addr.CountryCode || 'AU',
+          phone: addr.Phone || '',
+        } : undefined
+
+        // Extract customer info
+        const buyerName = addr?.Name || orderWithPii.BuyerInfo?.BuyerName || ''
+        const buyerEmail = orderWithPii.BuyerInfo?.BuyerEmail || null
+        const customer = buyerName ? {
+          first_name: buyerName.split(' ')[0] || '',
+          last_name: buyerName.split(' ').slice(1).join(' ') || '',
+          ...(buyerEmail ? { email: buyerEmail } : {}),
         } : undefined
 
         const shopifyPayload = {
           order: {
             line_items: lineItems,
-            ...(shippingAddress ? { shipping_address: shippingAddress } : {}),
+            ...(shippingAddress ? { shipping_address: shippingAddress, billing_address: shippingAddress } : {}),
+            ...(customer ? { customer } : {}),
             financial_status: financialStatus,
             fulfillment_status: 'unfulfilled',
             tags: 'amazon-fbm,xettle-bridge',
