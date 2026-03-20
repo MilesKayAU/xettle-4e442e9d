@@ -17,12 +17,12 @@ const UPLOAD_COUNT_KEY = 'xettle_manual_upload_count';
 const NUDGE_EVERY = 5;
 
 export function getManualUploadCount(): number {
-  return parseInt(localStorage.getItem(UPLOAD_COUNT_KEY) || '0', 10);
+  try { return parseInt(localStorage.getItem(UPLOAD_COUNT_KEY) || '0', 10); } catch { return 0; }
 }
 
 export function incrementManualUploadCount(): number {
   const count = getManualUploadCount() + 1;
-  localStorage.setItem(UPLOAD_COUNT_KEY, String(count));
+  try { localStorage.setItem(UPLOAD_COUNT_KEY, String(count)); } catch {}
   return count;
 }
 

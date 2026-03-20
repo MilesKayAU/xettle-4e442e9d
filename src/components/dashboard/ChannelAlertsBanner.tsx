@@ -185,12 +185,11 @@ export default function ChannelAlertsBanner({ onAlertCountChange }: ChannelAlert
         .order('order_count', { ascending: false });
 
       if (error) throw error;
-      const rawAlerts = ((data || []) as any[]).map((a: any) => ({
-        ...a,
-        candidate_tags: typeof a.candidate_tags === 'string'
-          ? JSON.parse(a.candidate_tags)
-          : a.candidate_tags || [],
-      })) as ChannelAlert[];
+      const rawAlerts = ((data || []) as any[]).map((a: any) => {
+        let tags = a.candidate_tags || [];
+        if (typeof tags === 'string') { try { tags = JSON.parse(tags); } catch { tags = []; } }
+        return { ...a, candidate_tags: tags };
+      }) as ChannelAlert[];
 
       // Auto-resolve stale Xero contact alerts for marketplaces already configured by user
       const staleConfiguredXeroAlerts = rawAlerts.filter(a =>

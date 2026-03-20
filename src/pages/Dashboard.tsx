@@ -710,7 +710,7 @@ export default function Dashboard() {
 
   function switchSettlementsSubTab(tab: SettlementsSubTab) {
     setSettlementsSubTab(tab);
-    localStorage.setItem('xettle_settlements_subtab', tab);
+    try { localStorage.setItem('xettle_settlements_subtab', tab); } catch {}
   }
 
   function switchInsightsSubTab(tab: InsightsSubTab) {
