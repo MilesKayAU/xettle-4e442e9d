@@ -519,11 +519,13 @@ Deno.serve(async (req) => {
       const baseUrl = getEndpointForRegion(region)
 
       // ─── Poll Amazon Orders API v2026-01-01 ──────────────────
-      // Uses searchOrders with includedData for PII (role-based, no RDT)
+      // Only fetch actionable statuses: Unshipped and PartiallyShipped.
+      // Shipped orders need no FBM action. Pending orders have no item data
+      // accessible via SP-API until payment clears.
       const ordersParamsBase = new URLSearchParams({
         marketplaceIds: marketplace_id,
         fulfillmentChannels: 'MFN',
-        orderStatuses: 'Unshipped,PartiallyShipped,Shipped,Pending',
+        orderStatuses: 'Unshipped,PartiallyShipped',
         lastUpdatedAfter: lastUpdatedAfter,
         includedData: 'BUYER,RECIPIENT',
         maxResultsPerPage: '100',
@@ -535,6 +537,7 @@ Deno.serve(async (req) => {
         lastUpdatedAfter,
         api_version: API_VERSIONS.orders.current,
         max_results_per_page: 100,
+        statuses: 'Unshipped,PartiallyShipped',
       })
 
       const allOrders: any[] = []
@@ -635,6 +638,17 @@ Deno.serve(async (req) => {
       // ─── Process each order ────────────────────────────────────
       let createdCount = 0, manualReviewCount = 0, failedCount = 0, skippedCount = 0
 
+      // ─── Batch pre-load all product_links for this user ─────────
+      // This eliminates per-order DB lookups and enables early filtering
+      const { data: allLinks } = await supabase
+        .from('product_links')
+        .select('amazon_sku, shopify_variant_id, shopify_sku')
+        .eq('user_id', userId)
+        .eq('enabled', true)
+
+      const globalSkuMap = new Map((allLinks || []).map((m: any) => [m.amazon_sku, m]))
+      console.log('fbm_sku_map_preloaded', { total_linked_skus: globalSkuMap.size })
+
       // Get Shopify token via client_credentials flow (Dev Dashboard app)
       let shopifyToken: ShopifyInternalToken | null = null
       try {
@@ -650,6 +664,19 @@ Deno.serve(async (req) => {
       for (const order of orders) {
         const amazonOrderId = getAmazonOrderId(order)
         if (!amazonOrderId) continue
+
+        // ─── Early SKU pre-filter: skip orders with no mapped SKUs BEFORE any DB writes ──
+        // If order has inline items, check them against the pre-loaded map immediately
+        const inlineItems = Array.isArray(order?.orderItems) ? order.orderItems : []
+        if (inlineItems.length > 0) {
+          const inlineSkus = inlineItems.map((item: any) => getOrderItemSku(item)).filter(Boolean)
+          const hasAnyMapped = inlineSkus.some((sku: string) => globalSkuMap.has(sku))
+          if (!hasAnyMapped) {
+            // Pure FBA order — skip entirely without DB insert or API call
+            skippedCount++
+            continue
+          }
+        }
 
         // Check if already exists — allow re-processing of unsynced orders
         const { data: existing } = await supabase
@@ -787,18 +814,11 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // Map SKUs via product_links
+        // Map SKUs via pre-loaded product_links (no per-order DB query)
         const skus = orderItems.map((item: any) => getOrderItemSku(item)).filter(Boolean)
         console.log('fbm_sku_lookup', { amazonOrderId, skus_to_match: skus })
 
-        const { data: mappings } = await supabase
-          .from('product_links')
-          .select('amazon_sku, shopify_variant_id, shopify_sku')
-          .eq('user_id', userId)
-          .eq('enabled', true)
-          .in('amazon_sku', skus)
-
-        const mappingMap = new Map((mappings || []).map((m: any) => [m.amazon_sku, m]))
+        const mappingMap = globalSkuMap
         const unmappedSkus = skus.filter((sku: string) => !mappingMap.has(sku))
         const matchedSkus = skus.filter((sku: string) => mappingMap.has(sku)).map((sku: string) => ({
           amazon_sku: sku,
@@ -1113,12 +1133,16 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({
         status: 'completed',
+        orders_found: orders.length,
+        matched: createdCount + manualReviewCount,
+        unmatched: skippedCount,
         total_orders: orders.length,
         pages_fetched: pagesFetched,
         created_count: createdCount,
         manual_review_count: manualReviewCount,
         failed_count: failedCount,
         skipped_count: skippedCount,
+        dry_run: dryRun,
       }), { status: 200, headers })
 
     } finally {
