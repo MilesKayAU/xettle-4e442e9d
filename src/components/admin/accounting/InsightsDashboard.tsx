@@ -213,6 +213,26 @@ export default function InsightsDashboard() {
         }
       }
 
+      // Build dominant estimate quality per marketplace from order_shipping_estimates
+      const pacQualityByMp: Record<string, string> = {};
+      if (pacQualityRes.data) {
+        const qualityCounts: Record<string, Record<string, number>> = {};
+        for (const row of pacQualityRes.data as any[]) {
+          const mp = row.marketplace_code;
+          if (!mp) continue;
+          if (!qualityCounts[mp]) qualityCounts[mp] = {};
+          qualityCounts[mp][row.estimate_quality] = (qualityCounts[mp][row.estimate_quality] || 0) + 1;
+        }
+        for (const [mp, counts] of Object.entries(qualityCounts)) {
+          let dominant = 'low';
+          let maxCount = 0;
+          for (const [quality, count] of Object.entries(counts)) {
+            if (count > maxCount) { dominant = quality; maxCount = count; }
+          }
+          pacQualityByMp[mp] = dominant;
+        }
+      }
+
       // e.g. 'woolworths_marketplus_bigw' → 'bigw', 'shopify_orders_kogan' → 'kogan'
       const normalizeMarketplace = canonicalNormalizeMarketplace;
 
