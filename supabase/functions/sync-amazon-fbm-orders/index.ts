@@ -1,11 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
-
-const SP_API_ENDPOINTS: Record<string, string> = {
-  na: 'https://sellingpartnerapi-na.amazon.com',
-  eu: 'https://sellingpartnerapi-eu.amazon.com',
-  fe: 'https://sellingpartnerapi-fe.amazon.com',
-}
+import {
+  getEndpointForRegion,
+  getSpApiHeaders,
+  isTokenExpired,
+  LWA,
+  warnIfDeprecated,
+} from '../_shared/amazon-sp-api-policy.ts'
 
 const SHOPIFY_API_VERSION = '2026-01' // matches repo standard
 
