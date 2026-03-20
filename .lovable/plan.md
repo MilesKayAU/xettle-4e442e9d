@@ -1,88 +1,69 @@
 
-# API Policy Files — COMPLETE
+# API Policy System — Complete Architecture
 
-## Amazon SP-API Policy (`_shared/amazon-sp-api-policy.ts`)
+## Policy Files (Single Source of Truth)
 
-- Regional endpoints (NA, EU, FE)
-- Marketplace registry (16 marketplaces with IDs, regions, domains)
-- LWA auth constants (token URL, expiry buffer, grant types)
-- API version registry — Orders v0 and Finances v0 marked as **legacy but still supported** (not hard-blocked)
-- Rate limits per operation (token bucket)
-- Required headers + user-agent builder
-- RDT-required operations list
-- Order history limits (AU/SG/JP from 2016)
-- **SigV4 signing constants** (SIGNING_SERVICE, SIGNING_REGIONS per region)
-- **`assertMarketplaceSupported()`** helper to prevent invalid marketplace bugs
+| File | Purpose |
+|------|---------|
+| `_shared/amazon-sp-api-policy.ts` | Amazon SP-API endpoints, LWA auth, marketplace registry, SigV4, rate limits |
+| `_shared/shopify-api-policy.ts` | Shopify version, scopes, rate limits, URL builders, pagination |
+| `_shared/xero-api-policy.ts` | Xero base URL, OAuth URLs, token config, rate limits, scopes |
+| `_shared/api-policy-registry.ts` | Master registry wrapping all 3 APIs, health checks, deprecation aggregation |
+| `_shared/api-policy-guard.ts` | **Enforcement layer**: assertApiPolicy(), safe mode, violation logging |
 
-### Functions using this policy
-- `sync-amazon-fbm-orders`
-- `fetch-amazon-settlements`
-- `amazon-auth`
-- `historical-audit`
+## Enforcement & Monitoring
 
-## Shopify API Policy (`_shared/shopify-api-policy.ts`)
+| File | Purpose |
+|------|---------|
+| `api-policy-audit/index.ts` | Weekly cron (Monday 4am) — scans for violations, logs to system_events, activates safe mode on critical |
+| `api-health/index.ts` | REST endpoint — returns live status for all 3 APIs, safe mode state, recent warnings |
 
-- `SHOPIFY_API_VERSION = '2026-01'` — single source of truth
-- `SHOPIFY_REQUIRED_SCOPES` array + comma-joined string
-- REST rate limits (leaky bucket: 40 burst, 2/s leak)
-- GraphQL rate limits (100 points/s)
-- Pagination constants (250 max per page, 25K total)
-- REST deprecation note (legacy but supported)
-- Helper functions:
-  - `getShopifyHeaders(accessToken)`
-  - `buildShopifyUrl(shopDomain, resource, params?)`
-  - `buildShopifyGraphqlUrl(shopDomain)`
-  - `parseRateLimitHeader(header)`
-  - `isApproachingRateLimit(header, threshold?)`
-  - `getNextPageUrl(linkHeader)`
-  - `warnIfRestLegacy()`
+## How It Works
 
-### Functions using this policy
-- `sync-amazon-fbm-orders` (Shopify order creation)
-- `fetch-shopify-payouts`
-- `fetch-shopify-orders`
-- `resolve-shopify-handle`
-- `estimate-shipping-cost`
-- `historical-audit`
-- `shopify-auth` (scopes)
+1. **Policy files** define constants, helpers, and deprecation tracking for each API
+2. **Registry** wraps all three into a single `API_REGISTRY` with `getApiHealth()` and `getAllDeprecationWarnings()`
+3. **Guard** provides `assertApiPolicy(api)` — called at function entry to validate API health
+4. **Safe Mode** — if audit finds critical issues, all syncs are blocked via `api_safe_mode` in app_settings
+5. **Weekly Audit** — cron runs `api-policy-audit`, logs `api_policy_warning` events to system_events
+6. **Health Endpoint** — `api-health` returns real-time status for admin dashboard
 
-## Xero API Policy (`_shared/xero-api-policy.ts`)
+## Safe Mode Flow
 
-- `XERO_API_BASE = 'https://api.xero.com/api.xro/2.0'` — single source of truth
-- `XERO_AUTH_URL`, `XERO_TOKEN_URL`, `XERO_CONNECTIONS_URL`
-- Token config (1800s expiry, 5-min refresh buffer)
-- Rate limits (60/min per tenant, 5000/day per tenant)
-- `XERO_REQUIRED_SCOPES` — confirmed scopes (journals.read rejected post-March 2026)
-- Pagination rules (page-based, 100 per page)
-- Deprecation tracking
-- Helper functions:
-  - `getXeroHeaders(accessToken, tenantId)`
-  - `buildXeroUrl(resource, params?)`
-  - `isXeroTokenExpired(expiresAt, bufferMs?)`
-  - `buildXeroBasicAuth(clientId, clientSecret)`
-  - `parseXeroRetryAfter(header)`
-  - `getXeroRateLimit()`
+```
+Weekly Audit → finds critical violation
+  → activateSafeMode(userId, reason)
+  → sets app_settings.api_safe_mode = 'true'
+  → logs api_safe_mode_activated to system_events
 
-### Functions using this policy
-- `xero-auth`
-- `sync-settlement-to-xero`
-- `refresh-xero-coa`
-- `fetch-xero-invoice`
-- `fetch-xero-bank-accounts`
-- `fetch-xero-bank-transactions`
-- `fetch-outstanding`
-- `sync-xero-status`
-- `scan-xero-history`
-- `run-validation-sweep`
-- `apply-xero-payment`
-- `sync-amazon-journal`
-- `ai-account-mapper`
-- `create-xero-accounts`
+Sync functions → call checkSafeMode()
+  → throws Error if safe mode active
+  → sync blocked until resolved
 
-## Master API Policy Registry (`_shared/api-policy-registry.ts`)
+Admin → reviews warnings → fixes issue
+  → deactivateSafeMode(userId, resolvedBy)
+  → syncs resume
+```
 
-- Imports and wraps all three API policies
-- `API_REGISTRY` object with amazon, shopify, xero sections
-- `getApiHealth()` — returns health summary for each API
-- `getAllDeprecationWarnings()` — aggregates deprecation warnings across all APIs
-- Enables future scheduled weekly audit scans
+## Functions Using Each Policy
+
+### Amazon SP-API Policy
+- `sync-amazon-fbm-orders`, `fetch-amazon-settlements`, `amazon-auth`, `historical-audit`
+
+### Shopify API Policy
+- `sync-amazon-fbm-orders`, `fetch-shopify-payouts`, `fetch-shopify-orders`, `resolve-shopify-handle`
+- `estimate-shipping-cost`, `historical-audit`, `shopify-auth`, `scan-shopify-channels`
+
+### Xero API Policy
+- `xero-auth`, `sync-settlement-to-xero`, `refresh-xero-coa`, `fetch-xero-invoice`
+- `fetch-xero-bank-accounts`, `fetch-xero-bank-transactions`, `fetch-outstanding`
+- `sync-xero-status`, `scan-xero-history`, `run-validation-sweep`, `apply-xero-payment`
+- `sync-amazon-journal`, `ai-account-mapper`, `create-xero-accounts`
+
+## system_events Types
+
+| event_type | severity | When |
+|-----------|----------|------|
+| `api_policy_warning` | warning/critical | Violation detected by audit |
+| `api_audit_completed` | info/critical | Weekly audit finished |
+| `api_safe_mode_activated` | critical | Safe mode turned on |
+| `api_safe_mode_deactivated` | info | Safe mode turned off |
