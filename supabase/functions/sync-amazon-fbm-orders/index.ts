@@ -416,14 +416,14 @@ Deno.serve(async (req) => {
       // ─── Process each order ────────────────────────────────────
       let createdCount = 0, manualReviewCount = 0, failedCount = 0, skippedCount = 0
 
-      // Get Shopify token
-      const { data: shopifyToken } = await supabase
-        .from('shopify_tokens')
-        .select('access_token, shop_domain')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle()
+      // Get Shopify token via client_credentials flow (Dev Dashboard app)
+      let shopifyToken: ShopifyInternalToken | null = null
+      try {
+        shopifyToken = await getShopifyInternalToken(supabase, userId, storeKey)
+      } catch (tokenErr: any) {
+        logger.error('fbm_shopify_token_error', tokenErr.message)
+        // Will be checked per-order below
+      }
 
       // Get financial status setting
       const financialStatus = (await readSetting(supabase, userId, `fbm:${storeKey}:shopify_financial_status`)) || 'paid'
