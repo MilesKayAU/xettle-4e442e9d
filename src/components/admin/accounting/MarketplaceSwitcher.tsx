@@ -169,12 +169,39 @@ export default function MarketplaceSwitcher({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addingCode, setAddingCode] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [registryEntries, setRegistryEntries] = useState<MarketplaceDefinition[]>([]);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState('');
   const [deleteSettlementCount, setDeleteSettlementCount] = useState(0);
   const [deleting, setDeleting] = useState(false);
+
+  // Fetch marketplace_registry entries to supplement the static catalog
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('marketplace_registry')
+        .select('marketplace_code, marketplace_name, country, type, is_active')
+        .eq('is_active', true);
+      if (!data) return;
+
+      const staticCodes = new Set(MARKETPLACE_CATALOG.map(m => m.code));
+      const extras: MarketplaceDefinition[] = data
+        .filter(r => !staticCodes.has(r.marketplace_code))
+        .map(r => ({
+          code: r.marketplace_code,
+          name: r.marketplace_name,
+          icon: '📋',
+          country: r.country || 'AU',
+          countryFlag: r.country === 'US' ? '🇺🇸' : r.country === 'UK' ? '🇬🇧' : r.country === 'NZ' ? '🇳🇿' : '🇦🇺',
+          connectionMethods: ['manual_csv'] as Array<'sp_api' | 'manual_csv' | 'api_key'>,
+          phase: 'csv_ready' as const,
+          description: `${r.marketplace_name} — manual CSV upload.`,
+        }));
+      setRegistryEntries(extras);
+    })();
+  }, []);
 
   const connectedCodes = new Set(userMarketplaces.map(m => m.marketplace_code));
 
