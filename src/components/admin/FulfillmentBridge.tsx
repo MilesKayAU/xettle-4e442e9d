@@ -21,6 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
   creating: 'bg-yellow-100 text-yellow-800 border-yellow-300',
   created: 'bg-blue-100 text-blue-800 border-blue-300',
   dry_run: 'bg-purple-100 text-purple-800 border-purple-300',
+  duplicate_detected: 'bg-violet-100 text-violet-800 border-violet-300',
   manual_review: 'bg-orange-100 text-orange-800 border-orange-300',
   blocked_missing_pii: 'bg-red-100 text-red-700 border-red-300',
   failed: 'bg-red-100 text-red-800 border-red-300',
@@ -551,6 +552,19 @@ function OrderMonitorTab() {
                         <TableRow>
                           <TableCell colSpan={6} className="bg-muted/50 p-4">
                             <div className="space-y-3">
+                              {/* Duplicate Detection Info */}
+                              {order.status === 'duplicate_detected' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-violet-50 border border-violet-200 text-violet-800">
+                                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                                  <div className="text-sm">
+                                    <p className="font-medium">Duplicate Shopify order detected</p>
+                                    <p className="text-xs mt-1 text-violet-600">
+                                      A Shopify order for this Amazon order already exists — likely created by another app (CedCommerce, etc.). Review before proceeding.
+                                      {order.shopify_order_id && <span className="block mt-1 font-mono">Shopify ID: {order.shopify_order_id}</span>}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                               {/* PII Access Diagnostic Card */}
                               {order.raw_amazon_payload?.pii_access && (
                                 <PiiAccessCard payload={order.raw_amazon_payload} />
@@ -600,6 +614,7 @@ function SettingsTab() {
   const [pollingEnabled, setPollingEnabled] = useState(false);
   const [alertEmail, setAlertEmail] = useState('');
   const [financialStatus, setFinancialStatus] = useState('paid');
+  const [dedupCheckEnabled, setDedupCheckEnabled] = useState(true);
   const [lastPollAt, setLastPollAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -618,12 +633,14 @@ function SettingsTab() {
         `fbm:${STORE_KEY}:alert_email`,
         `fbm:${STORE_KEY}:shopify_financial_status`,
         `fbm:${STORE_KEY}:last_poll_at`,
+        `fbm:${STORE_KEY}:dedup_check_enabled`,
       ]);
 
     const settings = new Map((data || []).map((s: any) => [s.key, s.value]));
     setPollingEnabled(settings.get(`fbm:${STORE_KEY}:polling_enabled`) === 'true');
     setAlertEmail(settings.get(`fbm:${STORE_KEY}:alert_email`) || '');
     setFinancialStatus(settings.get(`fbm:${STORE_KEY}:shopify_financial_status`) || 'paid');
+    setDedupCheckEnabled(settings.get(`fbm:${STORE_KEY}:dedup_check_enabled`) !== 'false'); // default ON
     setLastPollAt(settings.get(`fbm:${STORE_KEY}:last_poll_at`) || null);
     setLoading(false);
   }, []);
@@ -679,6 +696,21 @@ function SettingsTab() {
               onCheckedChange={async (checked) => {
                 setPollingEnabled(checked);
                 await saveSetting('polling_enabled', checked ? 'true' : 'false');
+              }}
+              disabled={saving}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Check for existing Shopify orders</Label>
+              <p className="text-xs text-muted-foreground">Search Shopify for duplicate orders created by other apps (CedCommerce, etc.) before creating new ones</p>
+            </div>
+            <Switch
+              checked={dedupCheckEnabled}
+              onCheckedChange={async (checked) => {
+                setDedupCheckEnabled(checked);
+                await saveSetting('dedup_check_enabled', checked ? 'true' : 'false');
               }}
               disabled={saving}
             />
