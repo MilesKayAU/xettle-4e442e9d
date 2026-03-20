@@ -900,13 +900,13 @@ Deno.serve(async (req) => {
 
         // Build Shopify order payload — v2026-01-01 field mapping
         const lineItems = orderItems.map((item: any) => {
-          const sku = item.sellerSku || item.SellerSKU
-          const mapping = mappingMap.get(sku)
+          const sku = getOrderItemSku(item)
+          const mapping = sku ? mappingMap.get(sku) : null
           return {
             variant_id: mapping!.shopify_variant_id,
-            quantity: item.quantityOrdered || item.QuantityOrdered || 1,
-            price: item.itemPrice?.amount || item.ItemPrice?.Amount || '0',
-            title: item.title || item.Title || sku,
+            quantity: getOrderItemQuantity(item),
+            price: getOrderItemPrice(item),
+            title: getOrderItemTitle(item),
           }
         })
 
