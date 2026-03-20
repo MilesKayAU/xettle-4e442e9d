@@ -9,6 +9,8 @@ import {
 } from '../_shared/amazon-sp-api-policy.ts'
 import { logger } from '../_shared/logger.ts'
 
+const SHOPIFY_API_VERSION = '2026-01'
+
 // (Token refresh is handled by amazon-auth edge function)
 
 // ═══════════════════════════════════════════════════════════════
