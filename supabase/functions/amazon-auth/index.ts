@@ -166,7 +166,7 @@ serve(async (req) => {
       }
 
       // Check if current token is still valid (with 60s buffer)
-      if (tokenRow.access_token && new Date(tokenRow.expires_at) > new Date(Date.now() + 60000)) {
+      if (tokenRow.access_token && !isTokenExpired(tokenRow.expires_at)) {
         return new Response(JSON.stringify({
           access_token: tokenRow.access_token,
           selling_partner_id: tokenRow.selling_partner_id,
