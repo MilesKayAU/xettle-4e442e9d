@@ -307,7 +307,7 @@ export default function MarketplaceSwitcher({
       <div className="flex items-center gap-2 flex-wrap">
         {/* Connected marketplace pills */}
         {userMarketplaces.map((um) => {
-          const def = MARKETPLACE_CATALOG.find(m => m.code === um.marketplace_code);
+          const def = fullCatalog.find(m => m.code === um.marketplace_code);
           const isActive = um.marketplace_code === selectedMarketplace;
           return (
             <div key={um.id} className="group relative flex items-center">
