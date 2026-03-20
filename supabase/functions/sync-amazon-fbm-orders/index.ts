@@ -729,7 +729,7 @@ Deno.serve(async (req) => {
           items: itemSkus,
         }, storeKey, amazonOrderId)
 
-        // Safety: empty order items
+        // Safety: empty order items even after fallback detail fetch
         if (orderItems.length === 0) {
           await supabase.from('amazon_fbm_orders').update({
             status: 'manual_review',
