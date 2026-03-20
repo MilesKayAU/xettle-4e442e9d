@@ -556,6 +556,13 @@ Deno.serve(async (req) => {
             await logEvent(supabase, userId, 'fbm_order_created', {
               shopify_order_id: shopifyOrderId,
             }, storeKey, amazonOrderId)
+
+            // Explicit shopify_order_created event for dashboard visibility
+            await logEvent(supabase, userId, 'shopify_order_created', {
+              shopify_order_id: shopifyOrderId,
+              source: 'fbm_sync',
+            }, storeKey, amazonOrderId)
+
             createdCount++
           } else {
             const errText = await shopifyResponse.text()
