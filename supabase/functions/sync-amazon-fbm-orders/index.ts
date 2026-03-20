@@ -346,7 +346,7 @@ Deno.serve(async (req) => {
 
         if (insertError) {
           // Likely duplicate from race condition
-          logger.warn(`[sync-amazon-fbm] Insert failed for ${amazonOrderId}: ${insertError.message}`)
+          console.warn(`[sync-amazon-fbm] Insert failed for ${amazonOrderId}: ${insertError.message}`)
           skippedCount++
           continue
         }
