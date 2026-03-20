@@ -552,6 +552,19 @@ function OrderMonitorTab() {
                         <TableRow>
                           <TableCell colSpan={6} className="bg-muted/50 p-4">
                             <div className="space-y-3">
+                              {/* Duplicate Detection Info */}
+                              {order.status === 'duplicate_detected' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-violet-50 border border-violet-200 text-violet-800">
+                                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                                  <div className="text-sm">
+                                    <p className="font-medium">Duplicate Shopify order detected</p>
+                                    <p className="text-xs mt-1 text-violet-600">
+                                      A Shopify order for this Amazon order already exists — likely created by another app (CedCommerce, etc.). Review before proceeding.
+                                      {order.shopify_order_id && <span className="block mt-1 font-mono">Shopify ID: {order.shopify_order_id}</span>}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                               {/* PII Access Diagnostic Card */}
                               {order.raw_amazon_payload?.pii_access && (
                                 <PiiAccessCard payload={order.raw_amazon_payload} />
