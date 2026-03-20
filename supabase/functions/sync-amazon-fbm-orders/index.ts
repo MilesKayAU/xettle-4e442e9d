@@ -1009,8 +1009,8 @@ Deno.serve(async (req) => {
 
         // Map shipping address from v2026-01-01 PII extraction
         const shippingAddress = pii.addressLine1 ? {
-          first_name: pii.recipientName?.split(' ')[0] || '',
-          last_name: pii.recipientName?.split(' ').slice(1).join(' ') || '',
+          first_name: pii.recipientName?.split(' ')[0] || 'Amazon',
+          last_name: pii.recipientName?.split(' ').slice(1).join(' ') || 'FBM Customer',
           address1: pii.addressLine1 || '',
           address2: pii.addressLine2 || '',
           city: pii.city || '',
@@ -1018,16 +1018,28 @@ Deno.serve(async (req) => {
           zip: pii.postalCode || '',
           country: pii.countryCode || 'AU',
           phone: pii.phone || '',
-        } : undefined
+        } : {
+          // Placeholder address when PII not available
+          first_name: 'Amazon',
+          last_name: 'FBM Customer',
+          address1: 'See Amazon Seller Central',
+          city: 'N/A',
+          province: '',
+          zip: '0000',
+          country: 'AU',
+        }
 
-        // Extract customer info from v2026-01-01 fields
+        // Extract customer info — use placeholder if PII unavailable
         const buyerName = pii.recipientName || pii.buyerName || ''
         const buyerEmail = pii.buyerEmail || null
         const customer = buyerName ? {
           first_name: buyerName.split(' ')[0] || '',
           last_name: buyerName.split(' ').slice(1).join(' ') || '',
           ...(buyerEmail ? { email: buyerEmail } : {}),
-        } : undefined
+        } : {
+          first_name: 'Amazon',
+          last_name: 'FBM Customer',
+        }
 
         const shopifyPayload = {
           order: {
