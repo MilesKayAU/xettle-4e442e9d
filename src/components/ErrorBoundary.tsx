@@ -3,6 +3,7 @@ import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { logErrorToSystem } from '@/utils/global-error-capture';
 
 interface ErrorBoundaryState {
   hasError: boolean;
