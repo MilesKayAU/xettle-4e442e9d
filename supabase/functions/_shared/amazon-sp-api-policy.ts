@@ -203,20 +203,23 @@ export function getSpApiHeaders(accessToken: string): Record<string, string> {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 7. PII / Restricted Data Token (RDT) Rules
-// https://developer-docs.amazon.com/sp-api/docs/tokens-api-use-case-guide
+// 7. PII Access — Orders v2026-01-01 (Role-Based, No RDT)
+// https://developer-docs.amazon.com/sp-api/docs/orders-api-v2026-reference
 // ═══════════════════════════════════════════════════════════════
 
-/** Operations that require a Restricted Data Token for PII access */
-export const RDT_REQUIRED_OPERATIONS = [
-  'getOrderAddress',
-  'getOrderBuyerInfo',
-  'getOrderItemsBuyerInfo',
-] as const;
+/**
+ * With Orders v2026-01-01, PII access is role-based (not RDT-based).
+ * Use `includedData=BUYER_INFO,SHIPPING_ADDRESS` in searchOrders.
+ * Required SP-API roles: "Direct-to-Consumer Delivery" for address,
+ * "Tax Invoicing" or "Tax Remittance" for buyer info.
+ *
+ * @deprecated RDTs are no longer needed for Orders v2026-01-01.
+ */
+export const RDT_REQUIRED_OPERATIONS = [] as const;
 
-/** Check if an operation requires an RDT */
-export function requiresRdt(operation: string): boolean {
-  return (RDT_REQUIRED_OPERATIONS as readonly string[]).includes(operation);
+/** @deprecated RDTs not needed with v2026-01-01. Kept for backward compat. */
+export function requiresRdt(_operation: string): boolean {
+  return false;
 }
 
 // ═══════════════════════════════════════════════════════════════
