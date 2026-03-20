@@ -7,13 +7,6 @@ import {
   LWA,
   warnIfDeprecated,
 } from '../_shared/amazon-sp-api-policy.ts'
-import {
-  SHOPIFY_API_VERSION,
-  SHOPIFY_AUTH,
-  getShopifyHeaders,
-  buildShopifyUrl,
-  requestClientCredentialsToken,
-} from '../_shared/shopify-api-policy.ts'
 import { logger } from '../_shared/logger.ts'
 
 // (Token refresh is handled by amazon-auth edge function)
