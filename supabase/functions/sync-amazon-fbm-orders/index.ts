@@ -1044,13 +1044,14 @@ Deno.serve(async (req) => {
         const shopifyPayload = {
           order: {
             line_items: lineItems,
-            ...(shippingAddress ? { shipping_address: shippingAddress, billing_address: shippingAddress } : {}),
-            ...(customer ? { customer } : {}),
+            shipping_address: shippingAddress,
+            billing_address: shippingAddress,
+            customer,
             financial_status: financialStatus,
             fulfillment_status: 'unfulfilled',
-            tags: 'amazon-fbm,xettle-bridge',
+            tags: `amazon-fbm,xettle-bridge${pii.piiPresent ? '' : ',placeholder-customer'}`,
             source_name: 'amazon',
-            note: `Amazon FBM Order: ${amazonOrderId}`,
+            note: `Amazon FBM Order: ${amazonOrderId}${pii.piiPresent ? '' : ' (placeholder customer — see Amazon Seller Central for buyer details)'}`,
           },
         }
 
