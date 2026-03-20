@@ -690,28 +690,31 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // ─── Fetch order detail (includes items) via v2026-01-01 ──
-        // getOrder with includedData returns items inline
-        const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER,RECIPIENT`
-        const detailResponse = await fetch(detailUrl, {
-          headers: getSpApiHeaders(accessToken),
-        })
+        // ─── Use inline order payload first; fall back to detail fetch only if needed ──
+        let orderDetail = order
+        let orderItems = Array.isArray(order?.orderItems) ? order.orderItems : []
 
-        if (!detailResponse.ok) {
-          const errText = await detailResponse.text()
-          await supabase.from('amazon_fbm_orders').update({
-            status: 'failed',
-            error_detail: `Order detail fetch failed (v2026-01-01): ${detailResponse.status} ${errText}`,
-          } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_order_failed', { error: errText, api_version: '2026-01-01' }, storeKey, amazonOrderId, 'error')
-          failedCount++
-          continue
+        if (orderItems.length === 0) {
+          const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER,RECIPIENT`
+          const detailResponse = await fetch(detailUrl, {
+            headers: getSpApiHeaders(accessToken),
+          })
+
+          if (!detailResponse.ok) {
+            const errText = await detailResponse.text()
+            await supabase.from('amazon_fbm_orders').update({
+              status: 'failed',
+              error_detail: `Order detail fetch failed (v2026-01-01): ${detailResponse.status} ${errText}`,
+            } as any).eq('id', insertedOrder.id)
+            await logEvent(supabase, userId, 'fbm_order_failed', { error: errText, api_version: '2026-01-01' }, storeKey, amazonOrderId, 'error')
+            failedCount++
+            continue
+          }
+
+          const detailData = await detailResponse.json()
+          orderDetail = detailData || orderDetail
+          orderItems = Array.isArray(orderDetail?.orderItems) ? orderDetail.orderItems : []
         }
-
-        const detailData = await detailResponse.json()
-        // v2026-01-01: items are in order.orderItems (array)
-        const orderDetail = detailData || {}
-        const orderItems = orderDetail?.orderItems || []
 
         // ─── OrderItems debug logging ────────────────────────────
         const itemSkus = orderItems.map((item: any) => ({
