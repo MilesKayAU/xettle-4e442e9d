@@ -41,6 +41,7 @@ import EmailMonitoringDashboard from '@/components/admin/EmailMonitoringDashboar
 import UserOverviewDashboard from '@/components/admin/UserOverviewDashboard';
 import FulfillmentBridge from '@/components/admin/FulfillmentBridge';
 import HealthScannerDashboard from '@/components/admin/HealthScannerDashboard';
+import ShippingEstimateSettings from '@/components/settings/ShippingEstimateSettings';
 
 interface UserRow {
   id: string;
