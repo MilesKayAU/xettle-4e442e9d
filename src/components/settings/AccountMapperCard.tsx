@@ -76,6 +76,32 @@ const KNOWN_MARKETPLACES = [
 const REVENUE_CATEGORIES_SET = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
 const REVENUE_ACCOUNT_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS']);
 const EXPENSE_ACCOUNT_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
+const SUPPORTED_TAX_PROFILES = ['AU_GST', 'EXPORT_NO_GST'] as const;
+
+function normalizeTaxProfileValue(value: string | null | undefined): (typeof SUPPORTED_TAX_PROFILES)[number] | null {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  const legacyMap: Record<string, (typeof SUPPORTED_TAX_PROFILES)[number]> = {
+    AU_GST: 'AU_GST',
+    GST_REGISTERED: 'AU_GST',
+    AU_GST_STANDARD: 'AU_GST',
+    EXPORT_NO_GST: 'EXPORT_NO_GST',
+    NO_GST: 'EXPORT_NO_GST',
+    NOT_GST_REGISTERED: 'EXPORT_NO_GST',
+  };
+
+  return legacyMap[trimmed] ?? null;
+}
+
+function formatLastSyncedLabel(value: string | null): string | null {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return `${parsed.toLocaleDateString()} ${parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 export default function AccountMapperCard() {
   const queryClient = useQueryClient();
@@ -390,7 +416,7 @@ export default function AccountMapperCard() {
       const taxVal = taxSetting?.find(s => s.key === 'tax_profile')?.value
         || taxSetting?.find(s => s.key === 'org_tax_profile')?.value
         || null;
-      setTaxProfile(taxVal);
+      setTaxProfile(normalizeTaxProfileValue(taxVal));
       // Load cached COA + last sync in parallel
       const [accounts, lastSynced, { data: registryRows }, { data: processorRows }] = await Promise.all([
         getCachedXeroAccounts(),
@@ -965,56 +991,70 @@ export default function AccountMapperCard() {
 
   // ─── Tax profile selector ────────────────────────────────────────
   const handleSaveTaxProfile = useCallback(async (value: string) => {
+    const normalizedValue = normalizeTaxProfileValue(value);
+    if (!normalizedValue) {
+      toast.error('Unsupported tax profile');
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    setTaxProfile(value);
+    setTaxProfile(normalizedValue);
     await supabase.from('app_settings').upsert(
-      { user_id: user.id, key: 'tax_profile', value },
+      { user_id: user.id, key: 'tax_profile', value: normalizedValue },
       { onConflict: 'user_id,key' }
     );
     queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
-    toast.success(`Tax profile set to ${value === 'AU_GST' ? 'GST Registered' : 'Not GST Registered'}`);
+    toast.success(`Tax profile set to ${normalizedValue === 'AU_GST' ? 'GST Registered' : 'Not GST Registered'}`);
   }, [queryClient]);
 
-  const renderTaxProfileSelector = () => (
-    <div id="tax-profile-selector" className="flex items-center gap-3 bg-muted/30 rounded-md px-3 py-2.5 border border-border/50">
-      <div className="flex-1">
-        <div className="text-sm font-medium">Tax profile</div>
-        <div className="text-xs text-muted-foreground">Set your organisation's GST registration status</div>
+  const renderTaxProfileSelector = () => {
+    const selectedTaxProfile = normalizeTaxProfileValue(taxProfile);
+
+    return (
+      <div id="tax-profile-selector" className="flex items-center gap-3 bg-muted/30 rounded-md px-3 py-2.5 border border-border/50">
+        <div className="flex-1">
+          <div className="text-sm font-medium">Tax profile</div>
+          <div className="text-xs text-muted-foreground">Set your organisation's GST registration status</div>
+        </div>
+        <Select value={selectedTaxProfile ?? undefined} onValueChange={handleSaveTaxProfile}>
+          <SelectTrigger className="w-[200px] h-8 text-xs">
+            <SelectValue placeholder="Select tax profile…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="AU_GST">GST Registered (AU)</SelectItem>
+            <SelectItem value="EXPORT_NO_GST">Not GST Registered</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-      <Select value={taxProfile || ''} onValueChange={handleSaveTaxProfile}>
-        <SelectTrigger className="w-[200px] h-8 text-xs">
-          <SelectValue placeholder="Select tax profile…" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="AU_GST">GST Registered (AU)</SelectItem>
-          <SelectItem value="EXPORT_NO_GST">Not GST Registered</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  );
+    );
+  };
 
   // ─── Shared COA refresh strip ──────────────────────────────────────
-  const renderCoaRefreshStrip = () => (
-    <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span>
-          {coaAccounts.length > 0
-            ? `${coaAccounts.length} Xero accounts cached`
-            : 'No Xero accounts cached'}
-        </span>
-        {coaLastSynced && (
-          <span className="text-[10px]">
-            · Last refreshed {new Date(coaLastSynced).toLocaleDateString()} {new Date(coaLastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+  const renderCoaRefreshStrip = () => {
+    const lastSyncedLabel = formatLastSyncedLabel(coaLastSynced);
+
+    return (
+      <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span>
+            {coaAccounts.length > 0
+              ? `${coaAccounts.length} Xero accounts cached`
+              : 'No Xero accounts cached'}
           </span>
-        )}
+          {lastSyncedLabel && (
+            <span className="text-[10px]">
+              · Last refreshed {lastSyncedLabel}
+            </span>
+          )}
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleRefreshCoa} disabled={refreshingCoa} className="h-6 text-xs gap-1">
+          {refreshingCoa ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          Refresh from Xero
+        </Button>
       </div>
-      <Button variant="ghost" size="sm" onClick={handleRefreshCoa} disabled={refreshingCoa} className="h-6 text-xs gap-1">
-        {refreshingCoa ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-        Refresh from Xero
-      </Button>
-    </div>
-  );
+    );
+  };
 
   // ─── UNMAPPED STATE ──────────────────────────────────────────────
   if (state === 'unmapped') {
