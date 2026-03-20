@@ -556,7 +556,7 @@ Deno.serve(async (req) => {
         // Check if already exists — allow re-processing of unsynced orders
         const { data: existing } = await supabase
           .from('amazon_fbm_orders')
-          .select('id, shopify_order_id, status')
+          .select('id, shopify_order_id, status, created_at')
           .eq('user_id', userId)
           .eq('amazon_order_id', amazonOrderId)
           .maybeSingle()
