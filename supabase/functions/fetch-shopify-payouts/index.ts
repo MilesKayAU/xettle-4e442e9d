@@ -94,10 +94,7 @@ async function syncPayoutsForUser(
 
   do {
     const res = await fetch(url, {
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
+      headers: getShopifyHeaders(accessToken),
     });
 
     if (res.status === 401) {
