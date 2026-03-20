@@ -41,6 +41,7 @@ interface SubChannelPref {
   code: string;
   name: string;
   preference: 'csv' | 'api';
+  apiAvailable: boolean;
 }
 
 export default function ApiConnectionsPanel({
@@ -92,24 +93,28 @@ export default function ApiConnectionsPanel({
         .eq('ignored', false);
 
       if (channels && channels.length > 0) {
-        // Load preferences
+        // Load preferences and API-enabled flags
         const codes = channels.map(c => c.marketplace_code || c.source_name).filter(Boolean);
         const prefKeys = codes.map(c => `source_preference:${c}`);
+        const apiEnabledKeys = codes.map(c => `api_enabled:${c}`);
+        const allKeys = [...prefKeys, ...apiEnabledKeys];
         const { data: prefs } = await supabase
           .from('app_settings')
           .select('key, value')
           .eq('user_id', user.id)
-          .in('key', prefKeys);
+          .in('key', allKeys);
 
         const prefMap = new Map((prefs || []).map(p => [p.key, p.value]));
 
         setSubChannels(channels.map(c => {
           const code = c.marketplace_code || c.source_name;
           const pref = prefMap.get(`source_preference:${code}`);
+          const apiEnabled = prefMap.get(`api_enabled:${code}`) === 'true';
           return {
             code,
             name: c.marketplace_label,
             preference: pref === 'api' ? 'api' : 'csv', // Default to CSV
+            apiAvailable: apiEnabled,
           };
         }));
       }
@@ -230,23 +235,21 @@ export default function ApiConnectionsPanel({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-foreground">{ch.name}</span>
                     <Badge variant="outline" className="text-[9px]">
-                      {ch.preference === 'csv' ? (
-                        <><FileText className="h-2.5 w-2.5 mr-0.5" /> CSV</>
-                      ) : (
-                        <><ShoppingBag className="h-2.5 w-2.5 mr-0.5" /> API</>
-                      )}
+                      <FileText className="h-2.5 w-2.5 mr-0.5" /> CSV
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={`pref-${ch.code}`} className="text-xs text-muted-foreground">
-                      Use API
-                    </Label>
-                    <Switch
-                      id={`pref-${ch.code}`}
-                      checked={ch.preference === 'api'}
-                      onCheckedChange={(checked) => handlePreferenceChange(ch.code, checked)}
-                    />
-                  </div>
+                  {ch.apiAvailable ? (
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`pref-${ch.code}`} className="text-xs text-muted-foreground">
+                        Use API
+                      </Label>
+                      <Switch
+                        id={`pref-${ch.code}`}
+                        checked={ch.preference === 'api'}
+                        onCheckedChange={(checked) => handlePreferenceChange(ch.code, checked)}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
