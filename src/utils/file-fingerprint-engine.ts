@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { MARKETPLACE_LABELS, getMarketplaceLabel } from '@/utils/marketplace-labels';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
