@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { DEFAULT_AMAZON_REGION, getAmazonRegionByMarketplaceId, getAmazonRegionLabel } from '@/constants/amazon-regions';
 
 export default function AmazonCallback() {
   const [searchParams] = useSearchParams();
