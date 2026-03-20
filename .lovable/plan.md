@@ -1,63 +1,65 @@
 
 
-# Fix: FBM Sync Not Creating Shopify Orders + Add OrderItems Logging
+# Create Amazon SP-API Policy & Rules Reference
 
-## Root Cause Found
+## Goal
 
-Two issues preventing Shopify order creation:
+Create a canonical `amazon-sp-api-policy.ts` shared file that all Amazon-related edge functions can import and reference. This ensures every function uses correct endpoints, rate limits, marketplace IDs, auth patterns, and API versions — and serves as a living reference that gets checked when building or modifying Amazon API code.
 
-### Issue 1: Dry run creates a "pending" row, then real sync skips it as duplicate
+## What the docs revealed
 
-The flow today:
-1. **Dry Run** → inserts order into `amazon_fbm_orders` with status `pending` and error_detail `dry_run` → skips Shopify create (line 403)
-2. **Real Sync** → finds the existing row (line 315-326) → skips it as "duplicate" → **never creates Shopify order**
+Key findings from the official SP-API documentation:
 
-The duplicate check on line 322 does `if (existing) { skip }` — it doesn't check whether the order was actually synced to Shopify. A dry-run row or a failed/pending row should be re-processable.
-
-### Issue 2: `logger` references on lines 342 and 574 are broken
-
-The `logger` import was removed in the last fix but two references remain, causing runtime crashes when those code paths are hit.
+- **Orders API v0 is deprecated** — new version is `v2026-01-01` with `searchOrders` replacing `getOrders`
+- **Finances API v0 is legacy** — new version is `v2024-06-19` with `listTransactions`
+- **Rate limits** use token bucket algorithm; e.g. `getOrders` = 0.0167 req/s (burst 20), `getOrderItems` = 0.5 req/s (burst 30)
+- **RDT (Restricted Data Token)** required for PII operations like `getOrderAddress`, `getOrderBuyerInfo`
+- **LWA token** expires in 3600s, refresh via `POST https://api.amazon.com/auth/o2/token`
+- **Three regional endpoints**: NA, EU, FE — Australia is in FE region
+- **user-agent header** is mandatory on every SP-API call (max 500 chars)
+- **AU/SG/JP marketplaces** support orders from 2016 onward (not just 2 years)
 
 ## Changes
 
+### File: `supabase/functions/_shared/amazon-sp-api-policy.ts` (NEW)
+
+A single shared policy file containing:
+
+1. **Regional endpoints** — `SP_API_ENDPOINTS` map (na, eu, fe) with the correct URLs
+2. **Marketplace IDs** — Complete map of marketplace codes to Amazon marketplace IDs and their regions (AU = `A39IBJ37TRP1C6` / fe, US = `ATVPDKIKX0DER` / na, etc.)
+3. **LWA auth constants** — Token URL, grant types, token expiry buffer (60s)
+4. **Rate limits** — Per-operation rate limits and burst values for Orders API v0, Orders API v2026-01-01, and Finances API
+5. **API version registry** — Current vs deprecated versions for each API Xettle uses (Orders, Finances, Tokens)
+6. **Required headers** — `x-amz-access-token`, `x-amz-date`, `user-agent` template
+7. **Migration warnings** — Constants flagging that Orders v0 is deprecated, with target migration version
+8. **Helper functions**:
+   - `getEndpointForRegion(region)` — returns correct base URL
+   - `getMarketplaceRegion(marketplaceId)` — returns region from marketplace ID
+   - `buildUserAgent()` — generates compliant user-agent string
+   - `isTokenExpired(expiresAt, bufferMs)` — standardized token expiry check
+   - `getRateLimit(operation)` — returns `{ rate, burst }` for an operation
+9. **PII/RDT rules** — List of operations requiring Restricted Data Tokens
+10. **Order history limits** — AU/SG/JP from 2016, others 2 years
+
 ### File: `supabase/functions/sync-amazon-fbm-orders/index.ts`
 
-**1. Fix duplicate check to allow re-processing of unsynced orders (lines 314-326)**
+- Replace inline `SP_API_ENDPOINTS` with import from shared policy
+- Use `buildUserAgent()` for the `user-agent` header
+- Use `isTokenExpired()` for token refresh check
+- Add rate limit awareness comment referencing `getOrderItems` burst limit
 
-Replace the simple "skip if exists" with smarter logic:
-- If existing row has `shopify_order_id` → skip (truly synced)
-- If existing row has status `created` → skip
-- Otherwise (pending, failed, manual_review, dry_run) → delete the old row and re-process
+### File: `supabase/functions/fetch-amazon-settlements/index.ts`
 
-**2. Add OrderItems logging after fetch (after line 367)**
+- Replace inline `SP_API_ENDPOINTS` with import from shared policy
+- Use shared `buildUserAgent()` helper
 
-Log to console AND store on the order record + system events:
-- `order_items_count`
-- Each `SellerSKU` and `ASIN`
-- The SKU used for product_links lookup
-- Whether mapping was found
+### File: `supabase/functions/amazon-auth/index.ts`
 
-**3. Add debug details to the order record (line 329-338)**
+- Import LWA constants from shared policy instead of hardcoding
 
-Store `raw_order_items` and `matched_skus` in the `raw_amazon_payload` or a dedicated field so they're visible in the Order Monitor UI.
+### No database changes required
 
-**4. Fix broken `logger` references (lines 342, 574)**
+## Technical Details
 
-Replace `logger.warn(...)` and `logger.error(...)` with `console.warn(...)` and `console.error(...)`.
-
-**5. Log Shopify create attempt (before line 477)**
-
-Add `console.log('fbm_shopify_create', { amazonOrderId, shopifyUrl, lineItemCount })` so we can confirm the Shopify API is actually called.
-
-**6. Log Shopify response on success (after line 487)**
-
-Add `console.log('fbm_shopify_created', { shopifyOrderId })`.
-
-### No other files changed
-
-## Expected Result After Fix
-
-- **Dry Run** → inserts order, logs OrderItems details, skips Shopify create (same as now)
-- **Real Sync after Dry Run** → re-processes the order instead of skipping, calls OrderItems API, matches SKU, creates Shopify order
-- All debug info visible in: edge function logs, Event Log tab, and Order Monitor payload
+The policy file acts as a single source of truth. Each constant includes a doc comment with the source URL from `developer-docs.amazon.com/sp-api/docs/...` so future developers (and AI) can verify against the latest docs. The deprecated API version flags will log warnings when used, encouraging migration to new versions.
 
