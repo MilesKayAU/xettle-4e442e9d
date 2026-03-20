@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logger } from '../_shared/logger.ts'
 import { verifyShopifyHmac } from '../_shared/shopify-hmac.ts'
+import { SHOPIFY_SCOPES_STRING } from '../_shared/shopify-api-policy.ts'
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? ""
