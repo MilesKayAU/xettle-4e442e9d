@@ -5,181 +5,90 @@ import {
   getSpApiHeaders,
   isTokenExpired,
   LWA,
-  warnIfDeprecated,
   API_VERSIONS,
 } from '../_shared/amazon-sp-api-policy.ts'
 import { logger } from '../_shared/logger.ts'
 
 // ═══════════════════════════════════════════════════════════════
-// Helper: Request a Restricted Data Token for a SINGLE data element
-// Split approach: buyerInfo and shippingAddress requested independently
-// so partial access still succeeds when Amazon denies one element.
-// https://developer-docs.amazon.com/sp-api/docs/tokens-api-use-case-guide
+// Orders API v2026-01-01 — PII via role-based permissions (no RDT)
 // ═══════════════════════════════════════════════════════════════
-interface RdtElementResult {
-  attempted: boolean
-  granted: boolean
-  reason_code?: string
-  amazon_code?: string
-  message?: string
-}
-
-async function getRestrictedDataTokenForElement(
-  baseUrl: string,
-  accessToken: string,
-  amazonOrderId: string,
-  dataElement: string,
-): Promise<{ token: string | null; result: RdtElementResult }> {
-  const rdtPayload = {
-    restrictedResources: [
-      {
-        method: 'GET',
-        path: `/orders/v0/orders/${amazonOrderId}`,
-        dataElements: [dataElement],
-      },
-    ],
-  };
-
-  try {
-    const res = await fetch(`${baseUrl}/tokens/${API_VERSIONS.tokens.current}/restrictedDataToken`, {
-      method: 'POST',
-      headers: getSpApiHeaders(accessToken),
-      body: JSON.stringify(rdtPayload),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      let amazonCode = 'unknown';
-      let message = errText;
-      try {
-        const parsed = JSON.parse(errText);
-        amazonCode = parsed?.errors?.[0]?.code || 'unknown';
-        message = parsed?.errors?.[0]?.message || errText;
-      } catch { /* use raw text */ }
-
-      console.error(`rdt_request_failed [${dataElement}]`, { status: res.status, body: errText });
-      return {
-        token: null,
-        result: { attempted: true, granted: false, reason_code: 'rdt_request_failed', amazon_code: amazonCode, message },
-      };
-    }
-
-    const data = await res.json();
-    const token = data.restrictedDataToken || null;
-    return {
-      token,
-      result: { attempted: true, granted: !!token },
-    };
-  } catch (err: any) {
-    console.error(`rdt_request_error [${dataElement}]`, err);
-    return {
-      token: null,
-      result: { attempted: true, granted: false, reason_code: 'rdt_exception', message: err.message },
-    };
-  }
-}
+// MIGRATION NOTE (2026-03-20):
+// - Rows in amazon_fbm_orders created BEFORE this migration have v0 payload
+//   structure (PascalCase flat: ShippingAddress.Name, BuyerInfo.BuyerName, etc.)
+// - Rows created AFTER this migration have v2026-01-01 payload structure
+//   (nested camelCase: recipient.shippingAddress.name, buyer.buyerName, etc.)
+// - The raw_amazon_payload.api_version field distinguishes them.
+// ═══════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
-// Helper: Fetch order with a specific RDT to get PII fields
+// Helper: Extract PII fields from v2026-01-01 order response
+// Role-based access means fields are either present or absent —
+// no per-request token dance, no RDT.
 // ═══════════════════════════════════════════════════════════════
-async function fetchOrderWithRdt(
-  baseUrl: string,
-  rdt: string,
-  amazonOrderId: string,
-): Promise<any | null> {
-  try {
-    const res = await fetch(`${baseUrl}/orders/v0/orders/${amazonOrderId}`, {
-      headers: getSpApiHeaders(rdt),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('pii_order_fetch_failed', { status: res.status, body: errText });
-      return null;
-    }
-    const data = await res.json();
-    return data?.payload || null;
-  } catch (err) {
-    console.error('pii_order_fetch_error', err);
-    return null;
-  }
-}
 
-// ═══════════════════════════════════════════════════════════════
 // Hard-block fields required for Shopify order creation
-// ═══════════════════════════════════════════════════════════════
 const HARD_BLOCK_FIELDS = ['recipient_name', 'address_line_1', 'city', 'postal_code', 'country_code'] as const
 const SOFT_WARN_FIELDS = ['buyer_name', 'buyer_email', 'phone'] as const
 
-interface PiiAccessStatus {
-  buyer_info: RdtElementResult
-  shipping_address: RdtElementResult
-}
-
-interface PiiFetchResult {
-  mergedOrder: any
-  piiAccess: PiiAccessStatus
+interface PiiExtractResult {
+  recipientName: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+  city: string | null
+  stateOrRegion: string | null
+  postalCode: string | null
+  countryCode: string | null
+  phone: string | null
+  buyerName: string | null
+  buyerEmail: string | null
   missingRequiredFields: string[]
   missingWarningFields: string[]
+  piiPresent: boolean
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Helper: Split PII fetch — buyerInfo and shippingAddress independently
-// ═══════════════════════════════════════════════════════════════
-async function fetchOrderPiiSplit(
-  baseUrl: string,
-  accessToken: string,
-  amazonOrderId: string,
-  baseOrder: any,
-): Promise<PiiFetchResult> {
-  // Attempt each protected element independently
-  const [buyerRdt, shippingRdt] = await Promise.all([
-    getRestrictedDataTokenForElement(baseUrl, accessToken, amazonOrderId, 'buyerInfo'),
-    getRestrictedDataTokenForElement(baseUrl, accessToken, amazonOrderId, 'shippingAddress'),
-  ]);
+/**
+ * Extract PII from a v2026-01-01 order object.
+ * Fields come directly in the order if SP-API role is granted.
+ * If the role isn't granted, fields are simply absent (no error, no RDT needed).
+ */
+function extractPiiFromOrder(order: any): PiiExtractResult {
+  // v2026-01-01 structure: order.recipient.shippingAddress.*, order.buyer.*
+  const recipient = order?.recipient || {}
+  const addr = recipient?.shippingAddress || {}
+  const buyer = order?.buyer || {}
 
-  // Start with base order data
-  let mergedOrder = { ...baseOrder };
-
-  // Fetch with buyer RDT if granted
-  if (buyerRdt.token) {
-    const buyerOrder = await fetchOrderWithRdt(baseUrl, buyerRdt.token, amazonOrderId);
-    if (buyerOrder?.BuyerInfo) {
-      mergedOrder.BuyerInfo = { ...mergedOrder.BuyerInfo, ...buyerOrder.BuyerInfo };
-    }
+  const result: PiiExtractResult = {
+    recipientName: addr.name || null,
+    addressLine1: addr.addressLine1 || null,
+    addressLine2: addr.addressLine2 || null,
+    city: addr.city || null,
+    stateOrRegion: addr.stateOrRegion || null,
+    postalCode: addr.postalCode || null,
+    countryCode: addr.countryCode || null,
+    phone: addr.phone || null,
+    buyerName: buyer.buyerName || null,
+    buyerEmail: buyer.buyerEmail || null,
+    missingRequiredFields: [],
+    missingWarningFields: [],
+    piiPresent: false,
   }
-
-  // Fetch with shipping RDT if granted
-  if (shippingRdt.token) {
-    const shippingOrder = await fetchOrderWithRdt(baseUrl, shippingRdt.token, amazonOrderId);
-    if (shippingOrder?.ShippingAddress) {
-      mergedOrder.ShippingAddress = { ...mergedOrder.ShippingAddress, ...shippingOrder.ShippingAddress };
-    }
-  }
-
-  const piiAccess: PiiAccessStatus = {
-    buyer_info: buyerRdt.result,
-    shipping_address: shippingRdt.result,
-  };
-
-  // Evaluate missing fields
-  const addr = mergedOrder.ShippingAddress || {};
-  const buyer = mergedOrder.BuyerInfo || {};
 
   const fieldPresence: Record<string, boolean> = {
-    recipient_name: !!(addr.Name),
-    address_line_1: !!(addr.AddressLine1),
-    city: !!(addr.City),
-    postal_code: !!(addr.PostalCode),
-    country_code: !!(addr.CountryCode),
-    buyer_name: !!(buyer.BuyerName || addr.Name),
-    buyer_email: !!(buyer.BuyerEmail),
-    phone: !!(addr.Phone || buyer.BuyerPhone),
-  };
+    recipient_name: !!result.recipientName,
+    address_line_1: !!result.addressLine1,
+    city: !!result.city,
+    postal_code: !!result.postalCode,
+    country_code: !!result.countryCode,
+    buyer_name: !!(result.buyerName || result.recipientName),
+    buyer_email: !!result.buyerEmail,
+    phone: !!result.phone,
+  }
 
-  const missingRequiredFields = HARD_BLOCK_FIELDS.filter(f => !fieldPresence[f]);
-  const missingWarningFields = SOFT_WARN_FIELDS.filter(f => !fieldPresence[f]);
+  result.missingRequiredFields = HARD_BLOCK_FIELDS.filter(f => !fieldPresence[f])
+  result.missingWarningFields = SOFT_WARN_FIELDS.filter(f => !fieldPresence[f])
+  result.piiPresent = result.missingRequiredFields.length === 0
 
-  return { mergedOrder, piiAccess, missingRequiredFields, missingWarningFields };
+  return result
 }
 
 const SHOPIFY_API_VERSION = '2026-01'
