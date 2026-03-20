@@ -175,41 +175,41 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     ),
     destination_accounts: (
       <SettingsAccordion id="destination-accounts" title="Destination Accounts" description="Choose where each payout rail lands in Xero" defaultOpen={sortedSections[0] === 'destination_accounts'} status={getStatus('destination_accounts')} helpText={SETTINGS_HELP.destination_accounts}>
-        <DestinationAccountMapper />
+        <ErrorBoundary><DestinationAccountMapper /></ErrorBoundary>
       </SettingsAccordion>
     ),
     account_mapper: (
       <SettingsAccordion id="account-mapper" title="Account Mapper" description="Map sales, fees, refunds, and shipping to your Xero chart" defaultOpen={sortedSections[0] === 'account_mapper'} status={getStatus('account_mapper')} helpText={SETTINGS_HELP.account_mapper}>
-        <AccountMapperCard />
+        <ErrorBoundary><AccountMapperCard /></ErrorBoundary>
       </SettingsAccordion>
     ),
     posting_mode: (
       <SettingsAccordion title="Destination Posting Mode" description="Configure how each marketplace rail posts to Xero" defaultOpen={sortedSections[0] === 'posting_mode'} status={getStatus('posting_mode')} helpText={SETTINGS_HELP.posting_mode}>
-        <RailPostingSettings />
+        <ErrorBoundary><RailPostingSettings /></ErrorBoundary>
       </SettingsAccordion>
     ),
     accounting_boundary: (
       <SettingsAccordion title="Accounting Boundary" description="Set the start date and backfill horizon for settlement processing" defaultOpen={sortedSections[0] === 'accounting_boundary'} status={getStatus('accounting_boundary')} helpText={SETTINGS_HELP.accounting_boundary}>
-        <AccountingBoundarySettings
+        <ErrorBoundary><AccountingBoundarySettings
           xeroConnected={xeroConnected}
           onConnectXero={onConnectXero}
           onGoToUpload={onGoToUpload}
-        />
+        /></ErrorBoundary>
       </SettingsAccordion>
     ),
     payment_verification: (
       <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules" defaultOpen={sortedSections[0] === 'payment_verification'} status={getStatus('payment_verification')} helpText={SETTINGS_HELP.payment_verification}>
-        <PaymentVerificationSettings />
+        <ErrorBoundary><PaymentVerificationSettings /></ErrorBoundary>
       </SettingsAccordion>
     ),
     fulfilment_methods: (
       <SettingsAccordion id="fulfilment" title="Fulfilment Methods" description="Set how orders are fulfilled per marketplace — affects profit calculations" defaultOpen={sortedSections[0] === 'fulfilment_methods'} status={getStatus('fulfilment_methods')} helpText={SETTINGS_HELP.fulfilment_methods}>
-        <FulfilmentMethodsPanel />
+        <ErrorBoundary><FulfilmentMethodsPanel /></ErrorBoundary>
       </SettingsAccordion>
     ),
     data_quality: (
       <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications" defaultOpen={sortedSections[0] === 'data_quality'} status={getStatus('data_quality')} helpText={SETTINGS_HELP.data_quality}>
-        <DataQualityPanel />
+        <ErrorBoundary><DataQualityPanel /></ErrorBoundary>
       </SettingsAccordion>
     ),
   };
