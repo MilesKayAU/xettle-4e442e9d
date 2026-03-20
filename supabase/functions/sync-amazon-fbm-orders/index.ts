@@ -549,15 +549,13 @@ Deno.serve(async (req) => {
       }
 
       const ordersData = await ordersResponse.json()
-      // v2026-01-01 drops the `payload` wrapper — orders are at top level
-      // Debug: log actual response structure to discover field names
-      const topLevelKeys = Object.keys(ordersData || {})
-      console.log('fbm_response_structure', { top_level_keys: topLevelKeys })
-      let orders = ordersData?.orders || ordersData?.Orders || ordersData?.payload?.Orders || []
-      if (orders.length > 0) {
-        const sampleKeys = Object.keys(orders[0])
-        console.log('fbm_order_keys', { sample_order_keys: sampleKeys, first_order_preview: JSON.stringify(orders[0]).slice(0, 500) })
-      }
+      // Orders API returns inline order payloads; process newest updates first
+      let orders = [ ...(ordersData?.orders || ordersData?.Orders || ordersData?.payload?.Orders || []) ]
+      orders.sort((a: any, b: any) => {
+        const aTime = new Date(a?.lastUpdatedTime || a?.createdTime || 0).getTime()
+        const bTime = new Date(b?.lastUpdatedTime || b?.createdTime || 0).getTime()
+        return bTime - aTime
+      })
 
       // Log PII access status from first order (to detect role-based access)
       if (orders.length > 0) {
