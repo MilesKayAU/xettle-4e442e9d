@@ -66,10 +66,13 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      // Get the OAuth URL from the edge function
       const currentOrigin = window.location.origin;
       const redirectUri = `${currentOrigin}/amazon/callback`;
       
+      // Store selected region for the callback to use
+      sessionStorage.setItem('amazon_marketplace_id', selectedRegion.marketplaceId);
+      sessionStorage.setItem('amazon_region', selectedRegion.region);
+
       const { data, error } = await supabase.functions.invoke('amazon-auth', {
         headers: { 'x-action': 'authorize' },
         body: { redirect_uri: redirectUri },
@@ -81,7 +84,6 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         return;
       }
       if (data?.authUrl) {
-        // Store state for CSRF validation
         if (data.state) {
           sessionStorage.setItem('amazon_oauth_state', data.state);
         }
