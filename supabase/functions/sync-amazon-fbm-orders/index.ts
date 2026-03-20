@@ -718,14 +718,14 @@ Deno.serve(async (req) => {
 
         // ─── Safety gate: block live sync if shipping PII missing ──
         if (missingRequiredFields.length > 0) {
-          const blockReason = `Blocked: Amazon did not return required shipping fields: ${missingRequiredFields.join(', ')}. App needs Direct-to-Consumer Shipping role approval.`
+          const blockReason = `Blocked (v2026-01-01): Required shipping fields missing: ${missingRequiredFields.join(', ')}. SP-API role "Direct-to-Consumer Delivery" may not be granted.`
           await supabase.from('amazon_fbm_orders').update({
             status: 'blocked_missing_pii',
             error_detail: blockReason,
           } as any).eq('id', insertedOrder.id)
           await logEvent(supabase, userId, 'fbm_order_blocked_missing_pii', {
             missing_required: missingRequiredFields,
-            pii_access: piiAccess,
+            api_version: '2026-01-01',
           }, storeKey, amazonOrderId, 'warn')
           manualReviewCount++
           continue
