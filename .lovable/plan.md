@@ -1,40 +1,62 @@
 
 
-## Plan: Expand Privacy Policy with Amazon SP-API Data Handling Section
+## Plan: AI-Powered COA Clone Validation and Advice
 
-### Why
-Amazon's developer review requires a public URL documenting how Amazon data (including PII) is collected, processed, stored, and disposed. The current privacy page mentions Amazon only briefly. We need a dedicated section modelled on the Shopify section (5a) that covers all points from the security assessment.
+### Problem
+The current clone logic scatters new codes across ranges because `generatePatternBatchCodes` starts scanning from each template account's own code number. When those numbers are already taken, it jumps to the next available slot — which can be far away and in an illogical grouping. For example, cloning Amazon (200, 215.1, 205, 401) for Temu produces 214, 322, 216, 435 — scattered and inconsistent.
 
-### What Changes
+Additionally, there is no guidance on whether the suggested account types and groupings follow Xero best practices.
 
-**File: `src/pages/Privacy.tsx`**
+### Changes
 
-1. **Expand the Amazon entry in Section 5** to reference the new dedicated section (5b)
+**1. New edge function: `supabase/functions/ai-coa-clone-review/index.ts`**
 
-2. **Add new Section 5b: Amazon Selling Partner API Data** after Section 5a, covering:
-   - **Data collected**: Settlement reports, financial events, order data (order IDs, amounts, fees, fulfilment channel), and — where restricted access is granted — buyer name, email, and shipping address (PII)
-   - **Purpose**: Settlement reconciliation with Xero, GST/BAS compliance, fulfilment tracking, fee attribution
-   - **How PII is accessed**: Via Restricted Data Tokens (RDT) with separate requests for `buyerInfo` and `shippingAddress`; partial-grant architecture ensures graceful degradation
-   - **Encryption**: AES-256 at rest in managed PostgreSQL; TLS 1.2+ in transit; no PII stored in browser or client-side storage
-   - **Access controls**: Row-Level Security isolates data per user; admin access is PIN-gated; edge functions authenticate via JWT; no direct database access
-   - **Data retention**: PII retained for 91–180 days after order shipment to support quarterly Australian BAS/GST reconciliation cycles, then purged
-   - **Data deletion**: Users can disconnect Amazon at any time; on disconnection, OAuth refresh tokens are revoked; users can request full data erasure via hello@xettle.app
-   - **No sharing**: Amazon data is never sold, shared with third parties, or used for advertising; processed solely for the user's own accounting reconciliation
-   - **Testing**: Only synthetic/anonymised data is used in test environments; no real PII in CI/CD or staging
+Accepts the clone preview rows plus the full COA and returns:
+- A quality verdict (PASS / WARN / FAIL) for each row
+- Suggested corrections (better codes, names, account types)
+- Brief Xero best-practice advice (e.g. "Revenue accounts should be grouped in 200-299", "Use DIRECTCOSTS for cost-of-sale items like shipping costs and fees")
 
-3. **Update Section 4 (Data Storage and Security)** to add explicit mentions of:
-   - AES-256 encryption at rest
-   - TLS 1.2+ in transit
-   - Row-Level Security per user
-   - Audit logging with 12+ month retention
+Uses Lovable AI (`google/gemini-3-flash-preview`) with a specialist system prompt covering:
+- Xero account type conventions (REVENUE, DIRECTCOSTS, EXPENSE, OTHERINCOME)
+- Australian e-commerce COA best practices
+- Code grouping (new marketplace codes should be contiguous)
+- Naming conventions (e.g. `{Code} {Marketplace} {Category}`)
 
-4. **Add new Section 10: Incident Response** before Contact Us:
-   - Documented incident response plan
-   - Immediate token revocation on breach detection
-   - Affected users and Amazon notified within 24 hours
-   - Contact IMPOC at hello@xettle.app
+**2. Fix code grouping in `src/policy/accountCodePolicy.ts` — `generatePatternBatchCodes`**
 
-5. **Renumber existing sections** (Contact becomes 11, etc.)
+Current bug: each base account scans from its own template code, so new codes scatter. Fix: group all revenue-type accounts together by finding a contiguous block of free codes in the revenue range, and same for expense-type accounts. This ensures Temu revenue accounts are e.g. 214, 215, 216, 217 (contiguous) rather than 214, 322, 216.
 
-### No other files change. This is a single-file update to `src/pages/Privacy.tsx`.
+**3. Update `src/components/settings/CloneCoaDialog.tsx`**
+
+- Add an "AI Review" button/panel below the preview table
+- On click, call the new edge function with the preview rows and COA
+- Display per-row verdicts (green check / amber warning) inline
+- Show a collapsible advice panel with Xero best-practice tips
+- AI review is optional — user can still proceed without it
+- Loading state while AI processes
+
+### Technical Detail
+
+**Edge function system prompt (excerpt):**
+```
+You are a Xero Chart of Accounts specialist for Australian e-commerce businesses.
+Review the proposed clone accounts and check:
+1. Account codes are grouped contiguously per marketplace
+2. Revenue items (Sales, Shipping Income, Refunds, Promos) use REVENUE type in 200-399
+3. Cost items (Seller Fees, FBA Fees, Advertising) use DIRECTCOSTS or EXPENSE in 400-599
+4. Names follow "{Marketplace} {Category}" convention
+5. No orphaned codes far from their siblings
+Return JSON via tool call with per-row verdicts and overall advice.
+```
+
+**Code grouping fix logic:**
+- Collect all revenue-type rows and all expense-type rows separately
+- For revenue: find the first contiguous block of N free codes in 200-399
+- For expense: find the first contiguous block of M free codes in 400-599
+- Assign codes sequentially within each block
+
+### Files Changed
+- `supabase/functions/ai-coa-clone-review/index.ts` — new
+- `src/policy/accountCodePolicy.ts` — fix `generatePatternBatchCodes` grouping
+- `src/components/settings/CloneCoaDialog.tsx` — add AI review panel
 
