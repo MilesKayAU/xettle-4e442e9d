@@ -638,6 +638,17 @@ Deno.serve(async (req) => {
       // ─── Process each order ────────────────────────────────────
       let createdCount = 0, manualReviewCount = 0, failedCount = 0, skippedCount = 0
 
+      // ─── Batch pre-load all product_links for this user ─────────
+      // This eliminates per-order DB lookups and enables early filtering
+      const { data: allLinks } = await supabase
+        .from('product_links')
+        .select('amazon_sku, shopify_variant_id, shopify_sku')
+        .eq('user_id', userId)
+        .eq('enabled', true)
+
+      const globalSkuMap = new Map((allLinks || []).map((m: any) => [m.amazon_sku, m]))
+      console.log('fbm_sku_map_preloaded', { total_linked_skus: globalSkuMap.size })
+
       // Get Shopify token via client_credentials flow (Dev Dashboard app)
       let shopifyToken: ShopifyInternalToken | null = null
       try {
