@@ -58,19 +58,7 @@ interface AuditRow {
   postingMode?: string;
 }
 
-const MARKETPLACE_LABELS: Record<string, string> = {
-  amazon_au: 'Amazon AU',
-  kogan: 'Kogan',
-  bigw: 'Big W',
-  bunnings: 'Bunnings',
-  mydeal: 'MyDeal',
-  catch: 'Catch',
-  shopify_payments: 'Shopify Payments',
-  ebay_au: 'eBay AU',
-  woolworths: 'Woolworths',
-  theiconic: 'The Iconic',
-  etsy: 'Etsy',
-};
+import { getMarketplaceLabel } from '@/utils/marketplace-labels';
 
 function formatAUD(n: number): string {
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
