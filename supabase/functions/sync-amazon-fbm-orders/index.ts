@@ -1030,14 +1030,26 @@ Deno.serve(async (req) => {
               processed_at: new Date().toISOString(),
             } as any).eq('id', insertedOrder.id)
 
-            await logEvent(supabase, userId, 'fbm_order_created', {
-              shopify_order_id: shopifyOrderId,
-            }, storeKey, amazonOrderId)
+            // Log appropriate event based on whether this was a partial or full match
+            if (unmappedSkus.length > 0) {
+              await logEvent(supabase, userId, 'fbm_partial_order_created', {
+                shopify_order_id: shopifyOrderId,
+                included_skus: matchedSkus,
+                skipped_skus: unmappedSkus,
+                reason: 'Unmapped SKUs assumed FBA-fulfilled, excluded from Shopify order',
+              }, storeKey, amazonOrderId)
+            } else {
+              await logEvent(supabase, userId, 'fbm_order_created', {
+                shopify_order_id: shopifyOrderId,
+                all_skus_mapped: true,
+              }, storeKey, amazonOrderId)
+            }
 
             // Explicit shopify_order_created event for dashboard visibility
             await logEvent(supabase, userId, 'shopify_order_created', {
               shopify_order_id: shopifyOrderId,
               source: 'fbm_sync',
+              partial: unmappedSkus.length > 0,
             }, storeKey, amazonOrderId)
 
             createdCount++
