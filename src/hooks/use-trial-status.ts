@@ -33,9 +33,9 @@ export function useTrialStatus(userId: string | undefined): TrialInfo {
 
         if (trialRes.data) {
           // Server-side trial expiry check — atomically downgrades trial → free if expired
-          const { data: expiryResult } = await supabase.rpc('check_and_expire_trial', {
+          const { data: expiryResult } = await (supabase.rpc as any)('check_and_expire_trial', {
             p_user_id: userId,
-          } as any);
+          });
 
           const result = expiryResult as any;
 
