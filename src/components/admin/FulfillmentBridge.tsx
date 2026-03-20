@@ -336,6 +336,101 @@ function ProductLinksTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PII Access Diagnostic Card
+// ═══════════════════════════════════════════════════════════════
+function PiiAccessCard({ payload }: { payload: any }) {
+  const piiAccess = payload.pii_access;
+  const missingRequired: string[] = payload.missing_required_fields || [];
+  const missingWarnings: string[] = payload.missing_warning_fields || [];
+  const addr = payload.ShippingAddress || {};
+
+  const hasBlocking = missingRequired.length > 0;
+
+  const fieldLabels: Record<string, string> = {
+    recipient_name: 'Recipient Name',
+    address_line_1: 'Street Address',
+    city: 'City',
+    postal_code: 'Postal Code',
+    country_code: 'Country',
+    buyer_name: 'Buyer Name',
+    buyer_email: 'Buyer Email',
+    phone: 'Phone',
+  };
+
+  return (
+    <div className={`rounded-md border p-3 space-y-3 ${hasBlocking ? 'border-destructive/50 bg-destructive/5' : 'border-border bg-muted/30'}`}>
+      <div className="flex items-center gap-2">
+        <ShieldAlert className={`h-4 w-4 ${hasBlocking ? 'text-destructive' : 'text-muted-foreground'}`} />
+        <span className="text-sm font-semibold">Amazon Protected Data Access</span>
+      </div>
+
+      {/* Access status */}
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="flex items-center gap-1.5">
+          {piiAccess.buyer_info?.granted
+            ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+            : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+          <span>Buyer Info: {piiAccess.buyer_info?.granted ? 'Granted' : 'Denied'}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {piiAccess.shipping_address?.granted
+            ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+            : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+          <span>Shipping Address: {piiAccess.shipping_address?.granted ? 'Granted' : 'Denied'}</span>
+        </div>
+      </div>
+
+      {/* Recovered fields */}
+      {(addr.City || addr.StateOrRegion || addr.PostalCode || addr.CountryCode) && (
+        <div className="text-xs">
+          <span className="font-medium text-muted-foreground">Recovered (non-PII):</span>
+          <span className="ml-1">
+            {[addr.City, addr.StateOrRegion, addr.PostalCode, addr.CountryCode].filter(Boolean).join(', ')}
+          </span>
+        </div>
+      )}
+
+      {/* Missing required fields */}
+      {missingRequired.length > 0 && (
+        <div className="space-y-1">
+          <span className="text-xs font-medium text-destructive">Missing (blocks Shopify sync):</span>
+          <div className="flex flex-wrap gap-1">
+            {missingRequired.map(f => (
+              <Badge key={f} variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
+                {fieldLabels[f] || f}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Missing warning fields */}
+      {missingWarnings.length > 0 && (
+        <div className="space-y-1">
+          <span className="text-xs font-medium text-amber-700">Missing (optional):</span>
+          <div className="flex flex-wrap gap-1">
+            {missingWarnings.map(f => (
+              <Badge key={f} variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                {fieldLabels[f] || f}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Permission guidance */}
+      {hasBlocking && (
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Amazon has not returned enough protected customer data for safe Shopify fulfilment.
+          Live sync is blocked until the app has <strong>Direct-to-Consumer Shipping</strong> and/or <strong>Tax Invoicing</strong> role approval in Seller Central.
+          After enabling the role, re-authorise the app to generate a new refresh token.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Tab 2: Order Monitor
 // ═══════════════════════════════════════════════════════════════
 function OrderMonitorTab() {
