@@ -109,18 +109,20 @@ export function isTokenExpired(expiresAt: string | null, bufferMs = LWA.TOKEN_EX
 
 export const API_VERSIONS = {
   orders: {
-    /** Currently in use across Xettle (stable, but deprecated by Amazon) */
+    /** Currently in use across Xettle — legacy but still supported by Amazon */
     current: 'v0',
-    /** Amazon's replacement — uses searchOrders instead of getOrders */
+    /** Amazon's newer version — uses searchOrders instead of getOrders */
     latest: 'v2026-01-01',
-    deprecated: true,
-    migrationNote: 'Orders v0 is deprecated. Migrate to v2026-01-01 (searchOrders). See: https://developer-docs.amazon.com/sp-api/docs/orders-api-v2026-reference',
+    /** v0 is NOT fully removed; still supported but legacy. Use newer versions when available. */
+    deprecated: false,
+    migrationNote: 'Orders v0 is legacy but still supported. Prefer v2026-01-01 (searchOrders) when available. See: https://developer-docs.amazon.com/sp-api/docs/orders-api-v2026-reference',
   },
   finances: {
     current: 'v0',
     latest: 'v2024-06-19',
-    deprecated: true,
-    migrationNote: 'Finances v0 is legacy. Migrate to v2024-06-19 (listTransactions). See: https://developer-docs.amazon.com/sp-api/docs/finances-api-reference-v2024',
+    /** Finances v0 is legacy; new listTransactions API is better for settlements/payouts */
+    deprecated: false,
+    migrationNote: 'Finances v0 is legacy. Prefer v2024-06-19 (listTransactions) for settlements. See: https://developer-docs.amazon.com/sp-api/docs/finances-api-reference-v2024',
   },
   tokens: {
     current: '2021-03-01',
