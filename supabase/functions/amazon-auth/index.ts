@@ -1,8 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import {
+  LWA,
+  isTokenExpired,
+  SELLER_CENTRAL_AUTH_URLS,
+  MARKETPLACE_REGISTRY,
+} from '../_shared/amazon-sp-api-policy.ts'
 
-const AMAZON_AUTH_URL = 'https://sellercentral.amazon.com.au/apps/authorize/consent'
+const AMAZON_AUTH_URL = SELLER_CENTRAL_AUTH_URLS.fe
 
 serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
@@ -95,11 +101,11 @@ serve(async (req) => {
       }
 
       // Exchange auth code for refresh token via Amazon LWA
-      const tokenResponse = await fetch('https://api.amazon.com/auth/o2/token', {
+      const tokenResponse = await fetch(LWA.TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          grant_type: 'authorization_code',
+          grant_type: LWA.GRANT_TYPES.AUTHORIZATION_CODE,
           code: spapi_oauth_code,
           client_id: AMAZON_CLIENT_ID,
           client_secret: AMAZON_CLIENT_SECRET,
@@ -160,7 +166,7 @@ serve(async (req) => {
       }
 
       // Check if current token is still valid (with 60s buffer)
-      if (tokenRow.access_token && new Date(tokenRow.expires_at) > new Date(Date.now() + 60000)) {
+      if (tokenRow.access_token && !isTokenExpired(tokenRow.expires_at)) {
         return new Response(JSON.stringify({
           access_token: tokenRow.access_token,
           selling_partner_id: tokenRow.selling_partner_id,
@@ -170,11 +176,11 @@ serve(async (req) => {
       }
 
       // Refresh the token
-      const refreshResponse = await fetch('https://api.amazon.com/auth/o2/token', {
+      const refreshResponse = await fetch(LWA.TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          grant_type: 'refresh_token',
+          grant_type: LWA.GRANT_TYPES.REFRESH_TOKEN,
           refresh_token: tokenRow.refresh_token,
           client_id: AMAZON_CLIENT_ID,
           client_secret: AMAZON_CLIENT_SECRET,

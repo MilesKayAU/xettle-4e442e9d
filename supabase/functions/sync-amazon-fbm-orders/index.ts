@@ -1,11 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
-
-const SP_API_ENDPOINTS: Record<string, string> = {
-  na: 'https://sellingpartnerapi-na.amazon.com',
-  eu: 'https://sellingpartnerapi-eu.amazon.com',
-  fe: 'https://sellingpartnerapi-fe.amazon.com',
-}
+import {
+  getEndpointForRegion,
+  getSpApiHeaders,
+  isTokenExpired,
+  LWA,
+  warnIfDeprecated,
+} from '../_shared/amazon-sp-api-policy.ts'
 
 const SHOPIFY_API_VERSION = '2026-01' // matches repo standard
 
@@ -208,16 +209,15 @@ Deno.serve(async (req) => {
       console.log('fbm_marketplace', marketplace_id)
 
       // Check if current token is still valid (with 60s buffer) — safeguard 8: Date comparison
-      const tokenStillValid = accessToken && tokenRow.expires_at &&
-        new Date(tokenRow.expires_at) > new Date(Date.now() + 60000)
+      const tokenStillValid = accessToken && !isTokenExpired(tokenRow.expires_at)
 
       if (!tokenStillValid) {
         // Refresh the token — mirrors amazon-auth refresh logic exactly
-        const refreshResponse = await fetch('https://api.amazon.com/auth/o2/token', {
+        const refreshResponse = await fetch(LWA.TOKEN_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
-            grant_type: 'refresh_token',
+            grant_type: LWA.GRANT_TYPES.REFRESH_TOKEN,
             refresh_token: tokenRow.refresh_token,
             client_id: AMAZON_CLIENT_ID,
             client_secret: AMAZON_CLIENT_SECRET,
@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
         throw new Error('Amazon access_token missing after refresh')
       }
 
-      const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe
+      const baseUrl = getEndpointForRegion(region)
 
       // ─── Poll Amazon Orders API ────────────────────────────────
       const ordersParams = new URLSearchParams({
@@ -260,6 +260,8 @@ Deno.serve(async (req) => {
         LastUpdatedAfter: lastUpdatedAfter,
       })
 
+      // NOTE: Orders v0 is deprecated. See API_VERSIONS.orders.migrationNote
+      warnIfDeprecated('orders')
       const ordersUrl = `${baseUrl}/orders/v0/orders?${ordersParams.toString()}`
       console.log('fbm_orders_url', ordersUrl)
       console.log('fbm_orders_request', { marketplace_id, region, lastUpdatedAfter })
@@ -267,7 +269,7 @@ Deno.serve(async (req) => {
       let ordersResponse: Response
       try {
         ordersResponse = await fetch(ordersUrl, {
-          headers: { 'x-amz-access-token': accessToken, 'Content-Type': 'application/json' },
+          headers: getSpApiHeaders(accessToken),
         })
       } catch (fetchErr) {
         console.error('fbm_orders_fetch_failed', fetchErr)
