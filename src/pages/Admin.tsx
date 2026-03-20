@@ -393,6 +393,10 @@ export default function Admin() {
           <TabsContent value="overview">
             <UserOverviewDashboard />
           </TabsContent>
+
+          <TabsContent value="fulfillment">
+            <FulfillmentBridge />
+          </TabsContent>
         </Tabs>
       </div>
 
