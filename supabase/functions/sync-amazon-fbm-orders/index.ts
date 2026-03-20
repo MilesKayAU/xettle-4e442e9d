@@ -311,18 +311,25 @@ Deno.serve(async (req) => {
         const amazonOrderId = order.AmazonOrderId
         if (!amazonOrderId) continue
 
-        // Check if already exists
+        // Check if already exists — allow re-processing of unsynced orders
         const { data: existing } = await supabase
           .from('amazon_fbm_orders')
-          .select('id, shopify_order_id')
+          .select('id, shopify_order_id, status')
           .eq('user_id', userId)
           .eq('amazon_order_id', amazonOrderId)
           .maybeSingle()
 
         if (existing) {
-          await logEvent(supabase, userId, 'fbm_duplicate_skipped', {}, storeKey, amazonOrderId)
-          skippedCount++
-          continue
+          // Truly synced or created — skip
+          if (existing.shopify_order_id || existing.status === 'created') {
+            await logEvent(supabase, userId, 'fbm_duplicate_skipped', { existing_status: existing.status }, storeKey, amazonOrderId)
+            skippedCount++
+            continue
+          }
+          // Unsynced (pending, failed, manual_review, dry_run) — delete old row and re-process
+          console.log('fbm_reprocessing_order', { amazonOrderId, previousStatus: existing.status })
+          await supabase.from('amazon_fbm_orders').delete().eq('id', existing.id)
+          await logEvent(supabase, userId, 'fbm_reprocessing_order', { previous_status: existing.status }, storeKey, amazonOrderId)
         }
 
         // Insert as pending
