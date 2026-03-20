@@ -645,6 +645,8 @@ Deno.serve(async (req) => {
             body: JSON.stringify(shopifyPayload),
           })
 
+          console.log('fbm_shopify_response', { amazonOrderId, status: shopifyResponse.status, ok: shopifyResponse.ok })
+
           if (shopifyResponse.ok) {
             const shopifyData = await shopifyResponse.json()
             const shopifyOrderId = shopifyData?.order?.id
