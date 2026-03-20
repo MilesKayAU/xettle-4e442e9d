@@ -698,7 +698,7 @@ export default function Dashboard() {
   function switchView(view: DashboardView) {
     setActiveView(view);
     trackAction('switched_tab', view);
-    localStorage.setItem('xettle_dashboard_view', view);
+    try { localStorage.setItem('xettle_dashboard_view', view); } catch { /* storage unavailable */ }
   }
 
   // Listen for open-settings-tab events from other components (e.g. CoaBlockerCta)
