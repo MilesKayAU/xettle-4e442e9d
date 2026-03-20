@@ -11,6 +11,22 @@ import { supabase } from '@/integrations/supabase/client';
 
 const SESSION_KEY = 'xettle_settings_pin_unlocked';
 
+function readSessionUnlockState() {
+  try {
+    return window.sessionStorage.getItem(SESSION_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function persistSessionUnlockState() {
+  try {
+    window.sessionStorage.setItem(SESSION_KEY, 'true');
+  } catch {
+    // Embedded previews can block sessionStorage; keep unlock in memory for this render session.
+  }
+}
+
 async function hashPin(pin: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(`xettle_pin_salt_${pin}`);
@@ -22,9 +38,7 @@ async function hashPin(pin: string): Promise<string> {
 export { hashPin };
 
 export function useSettingsPin() {
-  const [isUnlocked, setIsUnlocked] = useState(() => {
-    return sessionStorage.getItem(SESSION_KEY) === 'true';
-  });
+  const [isUnlocked, setIsUnlocked] = useState(readSessionUnlockState);
   const [showDialog, setShowDialog] = useState(false);
   const [pendingCallback, setPendingCallback] = useState<(() => void) | null>(null);
   const [hasPin, setHasPin] = useState<boolean | null>(null);
@@ -45,7 +59,7 @@ export function useSettingsPin() {
   }, []);
 
   const unlock = useCallback(() => {
-    sessionStorage.setItem(SESSION_KEY, 'true');
+    persistSessionUnlockState();
     setIsUnlocked(true);
     setShowDialog(false);
     if (pendingCallback) {
