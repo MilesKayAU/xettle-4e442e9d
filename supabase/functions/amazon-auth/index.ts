@@ -105,7 +105,7 @@ serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          grant_type: 'authorization_code',
+          grant_type: LWA.GRANT_TYPES.AUTHORIZATION_CODE,
           code: spapi_oauth_code,
           client_id: AMAZON_CLIENT_ID,
           client_secret: AMAZON_CLIENT_SECRET,
