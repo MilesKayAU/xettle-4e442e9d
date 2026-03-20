@@ -47,5 +47,7 @@ project_id = "cegwclxbqvitkqxikpss"
     verify_jwt = false
   [functions.shopify-uninstall]
     verify_jwt = false
+  [functions.sync-amazon-fbm-orders]
+    verify_jwt = false
   [functions.sync-xero-status]
     verify_jwt = false

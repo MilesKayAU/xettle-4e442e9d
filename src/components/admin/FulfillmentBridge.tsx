@@ -380,7 +380,7 @@ function SettingsTab() {
           <div className="flex items-center justify-between">
             <div>
               <Label>Enable FBM Polling</Label>
-              <p className="text-xs text-muted-foreground">Poll Amazon for new MFN orders every 10 minutes</p>
+              <p className="text-xs text-muted-foreground">Poll Amazon for new MFN orders every hour</p>
             </div>
             <Switch
               checked={pollingEnabled}
