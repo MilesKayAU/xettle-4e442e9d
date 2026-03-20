@@ -1,40 +1,63 @@
 
 
-# Fix: Add Missing MarketplaceIds to Amazon FBM Orders API Call
+# Fix: FBM Sync Not Creating Shopify Orders + Add OrderItems Logging
 
-## Problem
+## Root Cause Found
 
-The edge function logs show:
-```
-Value null at 'marketplaceId' failed to satisfy constraint: Member must not be null
-```
+Two issues preventing Shopify order creation:
 
-The Amazon SP-API Orders endpoint requires `MarketplaceIds` as a query parameter, but `sync-amazon-fbm-orders` doesn't include it. The existing `fetch-amazon-settlements` function gets `marketplace_id` from the `amazon-auth` helper -- this function should do the same.
+### Issue 1: Dry run creates a "pending" row, then real sync skips it as duplicate
+
+The flow today:
+1. **Dry Run** → inserts order into `amazon_fbm_orders` with status `pending` and error_detail `dry_run` → skips Shopify create (line 403)
+2. **Real Sync** → finds the existing row (line 315-326) → skips it as "duplicate" → **never creates Shopify order**
+
+The duplicate check on line 322 does `if (existing) { skip }` — it doesn't check whether the order was actually synced to Shopify. A dry-run row or a failed/pending row should be re-processable.
+
+### Issue 2: `logger` references on lines 342 and 574 are broken
+
+The `logger` import was removed in the last fix but two references remain, causing runtime crashes when those code paths are hit.
 
 ## Changes
 
-### 1. Edge function: use amazon-auth for token + marketplace_id
+### File: `supabase/functions/sync-amazon-fbm-orders/index.ts`
 
-**File**: `supabase/functions/sync-amazon-fbm-orders/index.ts`
+**1. Fix duplicate check to allow re-processing of unsynced orders (lines 314-326)**
 
-Replace the direct `amazon_tokens` table read + manual `refreshAccessToken` with a call to the existing `amazon-auth` edge function (same pattern as `fetch-amazon-settlements`). This returns `access_token`, `marketplace_id`, `region`, and `selling_partner_id` in one call.
+Replace the simple "skip if exists" with smarter logic:
+- If existing row has `shopify_order_id` → skip (truly synced)
+- If existing row has status `created` → skip
+- Otherwise (pending, failed, manual_review, dry_run) → delete the old row and re-process
 
-Then add `MarketplaceIds` to the orders query params:
+**2. Add OrderItems logging after fetch (after line 367)**
 
-```
-const ordersParams = new URLSearchParams({
-  MarketplaceIds: marketplace_id,
-  FulfillmentChannels: 'MFN',
-  OrderStatuses: 'Unshipped',
-  LastUpdatedAfter: lastUpdatedAfter,
-})
-```
+Log to console AND store on the order record + system events:
+- `order_items_count`
+- Each `SellerSKU` and `ASIN`
+- The SKU used for product_links lookup
+- Whether mapping was found
 
-### 2. Remove unused refreshAccessToken helper
+**3. Add debug details to the order record (line 329-338)**
 
-Since we delegate token refresh to `amazon-auth`, the local `refreshAccessToken` function can be removed to reduce code duplication.
+Store `raw_order_items` and `matched_skus` in the `raw_amazon_payload` or a dedicated field so they're visible in the Order Monitor UI.
 
-### Technical Detail
+**4. Fix broken `logger` references (lines 342, 574)**
 
-The Amazon SP-API Orders v0 endpoint requires `MarketplaceIds` as a mandatory parameter. For Australian sellers this is typically `A39IBJ37TRP1C6`. The `amazon-auth` function already resolves this from the stored token data and returns it alongside the fresh access token.
+Replace `logger.warn(...)` and `logger.error(...)` with `console.warn(...)` and `console.error(...)`.
+
+**5. Log Shopify create attempt (before line 477)**
+
+Add `console.log('fbm_shopify_create', { amazonOrderId, shopifyUrl, lineItemCount })` so we can confirm the Shopify API is actually called.
+
+**6. Log Shopify response on success (after line 487)**
+
+Add `console.log('fbm_shopify_created', { shopifyOrderId })`.
+
+### No other files changed
+
+## Expected Result After Fix
+
+- **Dry Run** → inserts order, logs OrderItems details, skips Shopify create (same as now)
+- **Real Sync after Dry Run** → re-processes the order instead of skipping, calls OrderItems API, matches SKU, creates Shopify order
+- All debug info visible in: edge function logs, Event Log tab, and Order Monitor payload
 
