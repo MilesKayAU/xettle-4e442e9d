@@ -122,7 +122,7 @@ export default function InsightsDashboard() {
       // Insights is an analytics view — include pre-boundary (historical) settlements
       // so that all marketplace sales data contributes to trends and totals.
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes, observedRatesRes, pacShippingStatsRes] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes, observedRatesRes, pacShippingStatsRes, pacQualityRes] = await Promise.all([
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
@@ -148,6 +148,9 @@ export default function InsightsDashboard() {
         supabase
           .from('marketplace_shipping_stats')
           .select('marketplace_code, avg_shipping_cost_60, avg_shipping_cost_14, sample_size'),
+        supabase
+          .from('order_shipping_estimates')
+          .select('marketplace_code, estimate_quality'),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
@@ -207,6 +210,26 @@ export default function InsightsDashboard() {
             avg14: row.avg_shipping_cost_14 !== null ? Number(row.avg_shipping_cost_14) : null,
             sample: Number(row.sample_size) || 0,
           };
+        }
+      }
+
+      // Build dominant estimate quality per marketplace from order_shipping_estimates
+      const pacQualityByMp: Record<string, string> = {};
+      if (pacQualityRes.data) {
+        const qualityCounts: Record<string, Record<string, number>> = {};
+        for (const row of pacQualityRes.data as any[]) {
+          const mp = row.marketplace_code;
+          if (!mp) continue;
+          if (!qualityCounts[mp]) qualityCounts[mp] = {};
+          qualityCounts[mp][row.estimate_quality] = (qualityCounts[mp][row.estimate_quality] || 0) + 1;
+        }
+        for (const [mp, counts] of Object.entries(qualityCounts)) {
+          let dominant = 'low';
+          let maxCount = 0;
+          for (const [quality, count] of Object.entries(counts)) {
+            if (count > maxCount) { dominant = quality; maxCount = count; }
+          }
+          pacQualityByMp[mp] = dominant;
         }
       }
 
@@ -488,7 +511,7 @@ export default function InsightsDashboard() {
           pacShippingAvg60: pacStats?.avg60 ?? null,
           pacShippingAvg14: pacStats?.avg14 ?? null,
           pacShippingSample: pacStats?.sample ?? 0,
-          pacEstimateQuality: null, // quality distribution computed elsewhere if needed
+          pacEstimateQuality: pacQualityByMp[mp] ?? null,
         });
       }
 
@@ -1158,21 +1181,40 @@ export default function InsightsDashboard() {
 
                   {/* PAC Shipping Estimate row */}
                   {s.pacShippingAvg60 !== null && s.pacShippingSample > 0 && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Truck className="h-3 w-3" />
-                        Avg Shipping (est.)
-                        <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1">
-                          PAC estimate
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">
-                          Sample: {s.pacShippingSample}
-                        </span>
-                      </span>
-                      <span className="font-semibold tabular-nums text-foreground">
-                        ${s.pacShippingAvg60.toFixed(2)}
-                      </span>
-                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-between text-xs cursor-help">
+                            <span className="text-muted-foreground flex items-center gap-1.5">
+                              <Truck className="h-3 w-3" />
+                              Avg Shipping (est.)
+                              <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1">
+                                PAC estimate
+                              </Badge>
+                              {s.pacEstimateQuality && (
+                                <span className="text-[10px] text-muted-foreground capitalize">
+                                  Quality: {s.pacEstimateQuality}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-muted-foreground">
+                                n={s.pacShippingSample}
+                              </span>
+                            </span>
+                            <span className="font-semibold tabular-nums text-foreground flex flex-col items-end">
+                              <span>${s.pacShippingAvg60.toFixed(2)}</span>
+                              {s.pacShippingAvg14 !== null && (
+                                <span className="text-[10px] text-muted-foreground font-normal">
+                                  14-order: ${s.pacShippingAvg14.toFixed(2)}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-xs">
+                          Estimate based on Shopify weights/dimensions and Australia Post PAC API. Not used in Xero or settlement calculations.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
 
                   {/* Impact insight text */}
