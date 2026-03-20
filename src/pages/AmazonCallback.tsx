@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { DEFAULT_AMAZON_REGION, getAmazonRegionByMarketplaceId, getAmazonRegionLabel } from '@/constants/amazon-regions';
 
 export default function AmazonCallback() {
   const [searchParams] = useSearchParams();
@@ -33,13 +34,20 @@ export default function AmazonCallback() {
       }
 
       try {
+        // Retrieve selected region from sessionStorage (set during OAuth initiation)
+        const storedMarketplaceId = sessionStorage.getItem('amazon_marketplace_id');
+        const storedRegion = sessionStorage.getItem('amazon_region');
+
+        const marketplace_id = storedMarketplaceId || DEFAULT_AMAZON_REGION.marketplaceId;
+        const region = storedRegion || DEFAULT_AMAZON_REGION.region;
+
         const { data, error } = await supabase.functions.invoke('amazon-auth', {
           headers: { 'x-action': 'connect' },
           body: {
             spapi_oauth_code,
             selling_partner_id,
-            marketplace_id: 'A39IBJ37TRP1C6', // Amazon AU
-            region: 'fe',
+            marketplace_id,
+            region,
           },
         });
 

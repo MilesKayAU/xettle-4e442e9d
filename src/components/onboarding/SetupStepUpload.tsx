@@ -11,15 +11,7 @@ interface Props {
   selectedMarketplaces: string[];
 }
 
-const MARKETPLACE_LABELS: Record<string, string> = {
-  bunnings: 'Bunnings',
-  bigw: 'BigW',
-  kogan: 'Kogan',
-  catch: 'Catch',
-  mydeal: 'MyDeal',
-  everyday_market: 'Everyday Market',
-  ebay: 'eBay',
-};
+import { getMarketplaceLabel } from '@/utils/marketplace-labels';
 
 export default function SetupStepUpload({ onNext, onSkip, onBack, selectedMarketplaces }: Props) {
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, File[]>>({});
@@ -44,8 +36,7 @@ export default function SetupStepUpload({ onNext, onSkip, onBack, selectedMarket
     setUploadedFiles({ ...uploadedFiles, [marketplace]: files });
   };
 
-  const getLabel = (code: string) =>
-    MARKETPLACE_LABELS[code] || code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const getLabel = (code: string) => getMarketplaceLabel(code);
 
   const totalFiles = Object.values(uploadedFiles).reduce((sum, files) => sum + files.length, 0);
 

@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { MARKETPLACE_LABELS, getMarketplaceLabel } from '@/utils/marketplace-labels';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -794,7 +795,7 @@ async function detectFromDbFingerprints(headers: string[]): Promise<FileDetectio
       const allMatch = normSig.every((col: string) => normHeaders.has(col));
 
       if (allMatch && normSig.length >= 3) {
-        const label = MARKETPLACE_LABELS[fp.marketplace_code] || fp.marketplace_code;
+        const label = getMarketplaceLabel(fp.marketplace_code);
         return {
           marketplace: fp.marketplace_code,
           marketplaceLabel: label,
@@ -860,21 +861,5 @@ export function scrubSampleRows(headers: string[], rows: string[][]): string[][]
 }
 
 // ─── Marketplace Labels ─────────────────────────────────────────────────────
-
-export const MARKETPLACE_LABELS: Record<string, string> = {
-  amazon_au: 'Amazon AU',
-  bunnings: 'Bunnings',
-  shopify_payments: 'Shopify Payments',
-  shopify_orders: 'Shopify Orders',
-  kogan: 'Kogan',
-  bigw: 'Big W',
-  catch: 'Catch',
-  mydeal: 'MyDeal',
-  woolworths: 'Woolworths',
-  woolworths_marketplus: 'Woolworths MarketPlus',
-  everyday_market: 'Everyday Market',
-  ebay_au: 'eBay AU',
-  theiconic: 'THE ICONIC',
-  etsy: 'Etsy',
-  unknown: 'Unknown Marketplace',
-};
+// Re-exported from canonical source. Do NOT define labels here.
+export { MARKETPLACE_LABELS, getMarketplaceLabel } from '@/utils/marketplace-labels';

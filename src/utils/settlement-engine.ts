@@ -35,44 +35,12 @@ export interface StandardSettlement {
 import { MARKETPLACE_CONTACTS } from '@/constants/marketplace-contacts';
 export { MARKETPLACE_CONTACTS };
 
-export const MARKETPLACE_LABELS: Record<string, string> = {
-  amazon_au: 'Amazon AU',
-  AU: 'Amazon AU',
-  bunnings: 'Bunnings',
-  bigw: 'Big W',
-  shopify_payments: 'Shopify Payments',
-  shopify_orders: 'Shopify Orders',
-  catch: 'Catch',
-  mydeal: 'MyDeal',
-  kogan: 'Kogan',
-  woolworths: 'Everyday Market',
-  woolworths_marketplus: 'Woolworths MarketPlus',
-  everyday_market: 'Everyday Market',
-  ebay_au: 'eBay AU',
-  ebay: 'eBay AU',           // Alias — canonical code is ebay_au
-  etsy: 'Etsy',
-  paypal: 'PayPal',
-  manual_orders: 'Manual Orders',
-  theiconic: 'The Iconic',
-  tiktok_shop: 'TikTok Shop',
-  temu: 'Temu',
-  shein: 'Shein',
-  // Composite codes from parsers
-  woolworths_marketplus_bigw: 'Big W',
-  woolworths_marketplus_woolworths: 'Everyday Market',
-  woolworths_marketplus_mydeal: 'MyDeal',
-  woolworths_marketplus_everyday_market: 'Everyday Market',
-};
+// Re-exported from canonical source. Do NOT define labels here.
+// To add a marketplace label: update src/utils/marketplace-labels.ts
+import { MARKETPLACE_LABELS, getMarketplaceLabel } from '@/utils/marketplace-labels';
+export { MARKETPLACE_LABELS, getMarketplaceLabel };
 
-/**
- * Get a display label for any marketplace code.
- * Falls back to title-casing the code if not in the hardcoded registry.
- * e.g. 'shopify_temu' → 'Shopify Temu'
- */
-export function getMarketplaceLabel(code: string): string {
-  if (MARKETPLACE_LABELS[code]) return MARKETPLACE_LABELS[code];
-  return code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
+// getMarketplaceLabel is now provided by the re-export above.
 
 /**
  * Marketplace codes that are payment gateways, not settlement sources.

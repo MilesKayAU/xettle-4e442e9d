@@ -7,7 +7,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { parseSettlementTSV, type ParserOptions } from '@/utils/settlement-parser';
+import { AMAZON_REGIONS, DEFAULT_AMAZON_REGION, getAmazonRegionLabel, type AmazonRegion } from '@/constants/amazon-regions';
 
 interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
@@ -31,6 +33,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
   const [manualToken, setManualToken] = useState('');
   const [manualSellerId, setManualSellerId] = useState('');
   const [savingToken, setSavingToken] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState<AmazonRegion>(DEFAULT_AMAZON_REGION);
 
   const checkStatus = useCallback(async () => {
     setLoading(true);
@@ -63,10 +66,13 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      // Get the OAuth URL from the edge function
       const currentOrigin = window.location.origin;
       const redirectUri = `${currentOrigin}/amazon/callback`;
       
+      // Store selected region for the callback to use
+      sessionStorage.setItem('amazon_marketplace_id', selectedRegion.marketplaceId);
+      sessionStorage.setItem('amazon_region', selectedRegion.region);
+
       const { data, error } = await supabase.functions.invoke('amazon-auth', {
         headers: { 'x-action': 'authorize' },
         body: { redirect_uri: redirectUri },
@@ -78,7 +84,6 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         return;
       }
       if (data?.authUrl) {
-        // Store state for CSRF validation
         if (data.state) {
           sessionStorage.setItem('amazon_oauth_state', data.state);
         }
@@ -193,8 +198,8 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         .upsert({
           user_id: user.id,
           selling_partner_id: manualSellerId.trim(),
-          marketplace_id: 'A39IBJ37TRP1C6',
-          region: 'fe',
+          marketplace_id: selectedRegion.marketplaceId,
+          region: selectedRegion.region,
           refresh_token: manualToken.trim(),
           access_token: null,
           expires_at: null,
@@ -258,7 +263,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Marketplace:</span>
-                <span className="font-mono">{connection.marketplace_id === 'A39IBJ37TRP1C6' ? 'Amazon AU' : connection.marketplace_id}</span>
+                <span className="font-mono">{getAmazonRegionLabel(connection.marketplace_id)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Region:</span>
@@ -334,6 +339,28 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
                 Connect your Seller Central account to auto-import settlement reports — no more manual CSV downloads.
                 Xettle requests <strong>read-only</strong> access to your Finance & Accounting data.
               </p>
+            </div>
+            {/* Region selector */}
+            <div>
+              <Label className="text-xs">Amazon Marketplace</Label>
+              <Select
+                value={selectedRegion.marketplaceId}
+                onValueChange={(val) => {
+                  const region = AMAZON_REGIONS.find(r => r.marketplaceId === val);
+                  if (region) setSelectedRegion(region);
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AMAZON_REGIONS.map((r) => (
+                    <SelectItem key={r.marketplaceId} value={r.marketplaceId} className="text-xs">
+                      {r.flag} {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex gap-2">
               <Button

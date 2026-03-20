@@ -272,18 +272,7 @@ const formatDate = (d: string | null) => {
   return parsed.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
 };
 
-const MARKETPLACE_LABELS: Record<string, string> = {
-  amazon_au: 'Amazon AU',
-  amazon_us: 'Amazon US',
-  shopify_payments: 'Shopify',
-  kogan: 'Kogan',
-  bigw: 'Big W',
-  bunnings: 'Bunnings',
-  mydeal: 'MyDeal',
-  catch: 'Catch',
-  ebay_au: 'eBay',
-  unknown: 'Unknown',
-};
+import { MARKETPLACE_LABELS } from '@/utils/marketplace-labels';
 
 export default function OutstandingTab({ onSwitchToUpload }: Props) {
   const [data, setData] = useState<OutstandingSummary | null>(null);

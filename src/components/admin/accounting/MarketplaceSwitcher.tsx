@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, Plus, Loader2, X, Zap } from 'lucide-react';
@@ -31,6 +31,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { upsertMarketplaceConnection } from '@/utils/marketplace-connections';
 import { findNearDuplicate } from '@/utils/marketplace-codes';
+import { getMarketplaceLabel } from '@/utils/marketplace-labels';
 
 export interface MarketplaceDefinition {
   code: string;
@@ -168,12 +169,39 @@ export default function MarketplaceSwitcher({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addingCode, setAddingCode] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [registryEntries, setRegistryEntries] = useState<MarketplaceDefinition[]>([]);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState('');
   const [deleteSettlementCount, setDeleteSettlementCount] = useState(0);
   const [deleting, setDeleting] = useState(false);
+
+  // Fetch marketplace_registry entries to supplement the static catalog
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('marketplace_registry')
+        .select('marketplace_code, marketplace_name, country, type, is_active')
+        .eq('is_active', true);
+      if (!data) return;
+
+      const staticCodes = new Set(MARKETPLACE_CATALOG.map(m => m.code));
+      const extras: MarketplaceDefinition[] = data
+        .filter(r => !staticCodes.has(r.marketplace_code))
+        .map(r => ({
+          code: r.marketplace_code,
+          name: r.marketplace_name,
+          icon: '📋',
+          country: r.country || 'AU',
+          countryFlag: r.country === 'US' ? '🇺🇸' : r.country === 'UK' ? '🇬🇧' : r.country === 'NZ' ? '🇳🇿' : '🇦🇺',
+          connectionMethods: ['manual_csv'] as Array<'sp_api' | 'manual_csv' | 'api_key'>,
+          phase: 'csv_ready' as const,
+          description: `${r.marketplace_name} — manual CSV upload.`,
+        }));
+      setRegistryEntries(extras);
+    })();
+  }, []);
 
   const connectedCodes = new Set(userMarketplaces.map(m => m.marketplace_code));
 
@@ -268,7 +296,9 @@ export default function MarketplaceSwitcher({
     }
   };
 
-  const availableToAdd = MARKETPLACE_CATALOG.filter(
+  // Merge static catalog with registry entries for the full available list
+  const fullCatalog = [...MARKETPLACE_CATALOG, ...registryEntries];
+  const availableToAdd = fullCatalog.filter(
     m => !connectedCodes.has(m.code) && m.phase !== 'coming_soon'
   );
 
@@ -277,7 +307,7 @@ export default function MarketplaceSwitcher({
       <div className="flex items-center gap-2 flex-wrap">
         {/* Connected marketplace pills */}
         {userMarketplaces.map((um) => {
-          const def = MARKETPLACE_CATALOG.find(m => m.code === um.marketplace_code);
+          const def = fullCatalog.find(m => m.code === um.marketplace_code);
           const isActive = um.marketplace_code === selectedMarketplace;
           return (
             <div key={um.id} className="group relative flex items-center">
@@ -361,7 +391,7 @@ export default function MarketplaceSwitcher({
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="sm:max-w-md">
           {addingCode && (() => {
-            const def = MARKETPLACE_CATALOG.find(m => m.code === addingCode);
+            const def = fullCatalog.find(m => m.code === addingCode);
             if (!def) return null;
             return (
               <>

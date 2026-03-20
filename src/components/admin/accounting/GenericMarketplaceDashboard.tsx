@@ -149,14 +149,18 @@ interface SettlementRow {
   source: string | null;
 }
 
-/** Hardcoded fallback for marketplaces not yet in fingerprints table */
-const CSV_ONLY_FALLBACK = ['bigw', 'everyday_market', 'mydeal', 'bunnings', 'catch', 'kogan', 'woolworths', 'woolworths_marketplus'];
+/** 
+ * Determine if a marketplace is CSV-only by checking connection_type.
+ * Falls back to checking if the marketplace has any API connectors in the static catalog.
+ */
+const API_CAPABLE_CODES = new Set(['amazon_au', 'amazon_us', 'amazon_uk', 'amazon_ca', 'shopify_payments', 'shopify_orders', 'ebay_au']);
 
 export default function GenericMarketplaceDashboard({ marketplace, onMarketplacesChanged, onSwitchToUpload }: GenericMarketplaceDashboardProps) {
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
   const code = marketplace.marketplace_code;
   const [reconType, setReconType] = useState<'csv_only' | 'api_sync' | 'unknown'>('unknown');
-  const isCsvOnly = reconType === 'csv_only' || (reconType === 'unknown' && CSV_ONLY_FALLBACK.includes(code));
+  // CSV-only if connection_type is manual, OR marketplace is not API-capable
+  const isCsvOnly = reconType === 'csv_only' || (reconType === 'unknown' && !API_CAPABLE_CODES.has(code));
 
   // ── Shared hooks (BaseMarketplaceDashboard pattern) ──────────────────────
   const {
