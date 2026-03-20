@@ -204,6 +204,15 @@ export default function HealthScannerDashboard() {
     }
   };
 
+  const generateFixPrompt = (issue: HealthIssue) => {
+    const prompt = `Fix this health issue detected on page "${issue.page}":\n\n**Issue:** ${issue.message}\n**Source:** ${issue.source}\n**Severity:** ${issue.severity}\n**Occurrences:** ${issue.occurrence_count}\n\nPlease identify the root cause and apply the fix.`;
+    navigator.clipboard.writeText(prompt).then(() => {
+      toast({ title: 'Fix prompt copied!', description: 'Paste it into the Lovable chat to apply the fix.' });
+    }).catch(() => {
+      toast({ title: 'Copy failed', description: prompt, variant: 'destructive' });
+    });
+  };
+
   const filtered = issues.filter(i => filter === 'all' || i.status === filter);
   const openCount = issues.filter(i => i.status === 'open').length;
   const resolvedCount = issues.filter(i => i.status === 'resolved').length;
