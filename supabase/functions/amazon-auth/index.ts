@@ -101,7 +101,7 @@ serve(async (req) => {
       }
 
       // Exchange auth code for refresh token via Amazon LWA
-      const tokenResponse = await fetch('https://api.amazon.com/auth/o2/token', {
+      const tokenResponse = await fetch(LWA.TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
