@@ -235,23 +235,21 @@ export default function ApiConnectionsPanel({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-foreground">{ch.name}</span>
                     <Badge variant="outline" className="text-[9px]">
-                      {ch.preference === 'csv' ? (
-                        <><FileText className="h-2.5 w-2.5 mr-0.5" /> CSV</>
-                      ) : (
-                        <><ShoppingBag className="h-2.5 w-2.5 mr-0.5" /> API</>
-                      )}
+                      <FileText className="h-2.5 w-2.5 mr-0.5" /> CSV
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={`pref-${ch.code}`} className="text-xs text-muted-foreground">
-                      Use API
-                    </Label>
-                    <Switch
-                      id={`pref-${ch.code}`}
-                      checked={ch.preference === 'api'}
-                      onCheckedChange={(checked) => handlePreferenceChange(ch.code, checked)}
-                    />
-                  </div>
+                  {ch.apiAvailable ? (
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`pref-${ch.code}`} className="text-xs text-muted-foreground">
+                        Use API
+                      </Label>
+                      <Switch
+                        id={`pref-${ch.code}`}
+                        checked={ch.preference === 'api'}
+                        onCheckedChange={(checked) => handlePreferenceChange(ch.code, checked)}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
