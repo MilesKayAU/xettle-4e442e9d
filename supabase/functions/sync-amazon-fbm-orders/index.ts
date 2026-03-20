@@ -779,36 +779,36 @@ Deno.serve(async (req) => {
         // Set status to creating
         await supabase.from('amazon_fbm_orders').update({ status: 'creating' } as any).eq('id', insertedOrder.id)
 
-        // PII already fetched above (orderWithPii), reuse it here
+        // PII already extracted above (pii object), use it for Shopify payload
 
-        // Build Shopify order payload
+        // Build Shopify order payload — v2026-01-01 field mapping
         const lineItems = orderItems.map((item: any) => {
-          const mapping = mappingMap.get(item.SellerSKU)
+          const sku = item.sellerSku || item.SellerSKU
+          const mapping = mappingMap.get(sku)
           return {
             variant_id: mapping!.shopify_variant_id,
-            quantity: item.QuantityOrdered || 1,
-            price: item.ItemPrice?.Amount || '0',
-            title: item.Title || item.SellerSKU,
+            quantity: item.quantityOrdered || item.QuantityOrdered || 1,
+            price: item.itemPrice?.amount || item.ItemPrice?.Amount || '0',
+            title: item.title || item.Title || sku,
           }
         })
 
-        // Map shipping address from Amazon (now using PII-enriched data)
-        const addr = orderWithPii.ShippingAddress
-        const shippingAddress = addr ? {
-          first_name: addr.Name?.split(' ')[0] || '',
-          last_name: addr.Name?.split(' ').slice(1).join(' ') || '',
-          address1: addr.AddressLine1 || '',
-          address2: addr.AddressLine2 || '',
-          city: addr.City || '',
-          province: addr.StateOrRegion || '',
-          zip: addr.PostalCode || '',
-          country: addr.CountryCode || 'AU',
-          phone: addr.Phone || '',
+        // Map shipping address from v2026-01-01 PII extraction
+        const shippingAddress = pii.addressLine1 ? {
+          first_name: pii.recipientName?.split(' ')[0] || '',
+          last_name: pii.recipientName?.split(' ').slice(1).join(' ') || '',
+          address1: pii.addressLine1 || '',
+          address2: pii.addressLine2 || '',
+          city: pii.city || '',
+          province: pii.stateOrRegion || '',
+          zip: pii.postalCode || '',
+          country: pii.countryCode || 'AU',
+          phone: pii.phone || '',
         } : undefined
 
-        // Extract customer info
-        const buyerName = addr?.Name || orderWithPii.BuyerInfo?.BuyerName || ''
-        const buyerEmail = orderWithPii.BuyerInfo?.BuyerEmail || null
+        // Extract customer info from v2026-01-01 fields
+        const buyerName = pii.recipientName || pii.buyerName || ''
+        const buyerEmail = pii.buyerEmail || null
         const customer = buyerName ? {
           first_name: buyerName.split(' ')[0] || '',
           last_name: buyerName.split(' ').slice(1).join(' ') || '',
