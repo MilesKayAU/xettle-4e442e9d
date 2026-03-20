@@ -7,7 +7,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { parseSettlementTSV, type ParserOptions } from '@/utils/settlement-parser';
+import { AMAZON_REGIONS, DEFAULT_AMAZON_REGION, getAmazonRegionLabel, type AmazonRegion } from '@/constants/amazon-regions';
 
 interface AmazonConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
