@@ -511,7 +511,7 @@ export default function InsightsDashboard() {
           pacShippingAvg60: pacStats?.avg60 ?? null,
           pacShippingAvg14: pacStats?.avg14 ?? null,
           pacShippingSample: pacStats?.sample ?? 0,
-          pacEstimateQuality: null, // quality distribution computed elsewhere if needed
+          pacEstimateQuality: pacQualityByMp[mp] ?? null,
         });
       }
 
