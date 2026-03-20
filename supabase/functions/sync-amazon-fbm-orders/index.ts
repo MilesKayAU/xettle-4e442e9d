@@ -508,6 +508,8 @@ Deno.serve(async (req) => {
         const shopifyUrl = `https://${shopifyToken.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json`
 
         try {
+          console.log('fbm_shopify_create', { amazonOrderId, shopifyUrl, lineItemCount: lineItems.length })
+
           const shopifyResponse = await fetch(shopifyUrl, {
             method: 'POST',
             headers: {
@@ -520,6 +522,7 @@ Deno.serve(async (req) => {
           if (shopifyResponse.ok) {
             const shopifyData = await shopifyResponse.json()
             const shopifyOrderId = shopifyData?.order?.id
+            console.log('fbm_shopify_created', { amazonOrderId, shopifyOrderId })
 
             await supabase.from('amazon_fbm_orders').update({
               status: 'created',
