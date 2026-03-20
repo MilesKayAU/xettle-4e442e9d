@@ -311,18 +311,25 @@ Deno.serve(async (req) => {
         const amazonOrderId = order.AmazonOrderId
         if (!amazonOrderId) continue
 
-        // Check if already exists
+        // Check if already exists — allow re-processing of unsynced orders
         const { data: existing } = await supabase
           .from('amazon_fbm_orders')
-          .select('id, shopify_order_id')
+          .select('id, shopify_order_id, status')
           .eq('user_id', userId)
           .eq('amazon_order_id', amazonOrderId)
           .maybeSingle()
 
         if (existing) {
-          await logEvent(supabase, userId, 'fbm_duplicate_skipped', {}, storeKey, amazonOrderId)
-          skippedCount++
-          continue
+          // Truly synced or created — skip
+          if (existing.shopify_order_id || existing.status === 'created') {
+            await logEvent(supabase, userId, 'fbm_duplicate_skipped', { existing_status: existing.status }, storeKey, amazonOrderId)
+            skippedCount++
+            continue
+          }
+          // Unsynced (pending, failed, manual_review, dry_run) — delete old row and re-process
+          console.log('fbm_reprocessing_order', { amazonOrderId, previousStatus: existing.status })
+          await supabase.from('amazon_fbm_orders').delete().eq('id', existing.id)
+          await logEvent(supabase, userId, 'fbm_reprocessing_order', { previous_status: existing.status }, storeKey, amazonOrderId)
         }
 
         // Insert as pending
@@ -339,7 +346,7 @@ Deno.serve(async (req) => {
 
         if (insertError) {
           // Likely duplicate from race condition
-          logger.warn(`[sync-amazon-fbm] Insert failed for ${amazonOrderId}: ${insertError.message}`)
+          console.warn(`[sync-amazon-fbm] Insert failed for ${amazonOrderId}: ${insertError.message}`)
           skippedCount++
           continue
         }
@@ -366,11 +373,25 @@ Deno.serve(async (req) => {
         const itemsData = await itemsResponse.json()
         const orderItems = itemsData?.payload?.OrderItems || []
 
+        // ─── OrderItems debug logging ────────────────────────────
+        const itemSkus = orderItems.map((item: any) => ({
+          SellerSKU: item.SellerSKU,
+          ASIN: item.ASIN,
+          QuantityOrdered: item.QuantityOrdered,
+        }))
+        console.log('fbm_order_items', { amazonOrderId, order_items_count: orderItems.length, items: itemSkus })
+
+        await logEvent(supabase, userId, 'fbm_order_items_fetched', {
+          order_items_count: orderItems.length,
+          items: itemSkus,
+        }, storeKey, amazonOrderId)
+
         // Safety: empty order items
         if (orderItems.length === 0) {
           await supabase.from('amazon_fbm_orders').update({
             status: 'manual_review',
             error_detail: 'no_order_items',
+            raw_amazon_payload: { ...order, orderItems: [] },
           } as any).eq('id', insertedOrder.id)
           await logEvent(supabase, userId, 'fbm_order_no_items', {}, storeKey, amazonOrderId, 'warn')
           manualReviewCount++
@@ -379,6 +400,8 @@ Deno.serve(async (req) => {
 
         // Map SKUs via product_links
         const skus = orderItems.map((item: any) => item.SellerSKU).filter(Boolean)
+        console.log('fbm_sku_lookup', { amazonOrderId, skus_to_match: skus })
+
         const { data: mappings } = await supabase
           .from('product_links')
           .select('amazon_sku, shopify_variant_id, shopify_sku')
@@ -388,13 +411,24 @@ Deno.serve(async (req) => {
 
         const mappingMap = new Map((mappings || []).map((m: any) => [m.amazon_sku, m]))
         const unmappedSkus = skus.filter((sku: string) => !mappingMap.has(sku))
+        const matchedSkus = skus.filter((sku: string) => mappingMap.has(sku)).map((sku: string) => ({
+          amazon_sku: sku,
+          shopify_variant_id: mappingMap.get(sku)?.shopify_variant_id,
+        }))
+
+        console.log('fbm_sku_mapping_result', { amazonOrderId, matched: matchedSkus, unmapped: unmappedSkus })
+
+        // Store debug details on order record
+        await supabase.from('amazon_fbm_orders').update({
+          raw_amazon_payload: { ...order, orderItems: itemSkus, matched_skus: matchedSkus, unmapped_skus: unmappedSkus },
+        } as any).eq('id', insertedOrder.id)
 
         if (unmappedSkus.length > 0) {
           await supabase.from('amazon_fbm_orders').update({
             status: 'manual_review',
             error_detail: `Unmapped SKU: ${unmappedSkus.join(', ')}`,
           } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_order_unmapped_sku', { unmapped_skus: unmappedSkus }, storeKey, amazonOrderId, 'warn')
+          await logEvent(supabase, userId, 'fbm_order_unmapped_sku', { unmapped_skus: unmappedSkus, matched_skus: matchedSkus }, storeKey, amazonOrderId, 'warn')
           manualReviewCount++
           continue
         }
@@ -474,6 +508,8 @@ Deno.serve(async (req) => {
         const shopifyUrl = `https://${shopifyToken.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json`
 
         try {
+          console.log('fbm_shopify_create', { amazonOrderId, shopifyUrl, lineItemCount: lineItems.length })
+
           const shopifyResponse = await fetch(shopifyUrl, {
             method: 'POST',
             headers: {
@@ -486,6 +522,7 @@ Deno.serve(async (req) => {
           if (shopifyResponse.ok) {
             const shopifyData = await shopifyResponse.json()
             const shopifyOrderId = shopifyData?.order?.id
+            console.log('fbm_shopify_created', { amazonOrderId, shopifyOrderId })
 
             await supabase.from('amazon_fbm_orders').update({
               status: 'created',
@@ -571,7 +608,7 @@ Deno.serve(async (req) => {
     }
 
   } catch (err: any) {
-    logger.error(`[sync-amazon-fbm] Unhandled error: ${err.message}`)
+    console.error(`[sync-amazon-fbm] Unhandled error: ${err.message}`)
 
     // Try to log the error event
     try {
