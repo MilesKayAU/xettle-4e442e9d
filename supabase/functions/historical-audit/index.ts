@@ -4,11 +4,7 @@ import { logger } from '../_shared/logger.ts';
 import { getEndpointForRegion, getSpApiHeaders, LWA } from '../_shared/amazon-sp-api-policy.ts';
 import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
 
-const SP_API_ENDPOINTS: Record<string, string> = {
-  na: 'https://sellingpartnerapi-na.amazon.com',
-  eu: 'https://sellingpartnerapi-eu.amazon.com',
-  fe: 'https://sellingpartnerapi-fe.amazon.com',
-};
+// SP-API endpoints now imported from shared policy
 
 interface AuditResult {
   settlement_id: string;
