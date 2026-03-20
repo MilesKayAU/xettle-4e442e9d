@@ -41,6 +41,48 @@ export type Database = {
         }
         Relationships: []
       }
+      amazon_fbm_orders: {
+        Row: {
+          amazon_order_id: string
+          created_at: string
+          error_detail: string | null
+          id: string
+          processed_at: string | null
+          raw_amazon_payload: Json | null
+          raw_shopify_payload: Json | null
+          shopify_order_id: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amazon_order_id: string
+          created_at?: string
+          error_detail?: string | null
+          id?: string
+          processed_at?: string | null
+          raw_amazon_payload?: Json | null
+          raw_shopify_payload?: Json | null
+          shopify_order_id?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amazon_order_id?: string
+          created_at?: string
+          error_detail?: string | null
+          id?: string
+          processed_at?: string | null
+          raw_amazon_payload?: Json | null
+          raw_shopify_payload?: Json | null
+          shopify_order_id?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       amazon_tokens: {
         Row: {
           access_token: string | null
@@ -1417,6 +1459,39 @@ export type Database = {
           label?: string | null
           sku?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      product_links: {
+        Row: {
+          amazon_asin: string | null
+          amazon_sku: string
+          created_at: string
+          enabled: boolean
+          id: string
+          shopify_sku: string | null
+          shopify_variant_id: number
+          user_id: string
+        }
+        Insert: {
+          amazon_asin?: string | null
+          amazon_sku: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          shopify_sku?: string | null
+          shopify_variant_id: number
+          user_id: string
+        }
+        Update: {
+          amazon_asin?: string | null
+          amazon_sku?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          shopify_sku?: string | null
+          shopify_variant_id?: number
           user_id?: string
         }
         Relationships: []
