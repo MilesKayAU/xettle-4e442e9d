@@ -1,0 +1,1 @@
+DELETE FROM sync_locks WHERE expires_at < now() OR created_at < now() - interval '5 minutes';
