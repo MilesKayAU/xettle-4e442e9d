@@ -614,6 +614,7 @@ function SettingsTab() {
   const [pollingEnabled, setPollingEnabled] = useState(false);
   const [alertEmail, setAlertEmail] = useState('');
   const [financialStatus, setFinancialStatus] = useState('paid');
+  const [dedupCheckEnabled, setDedupCheckEnabled] = useState(true);
   const [lastPollAt, setLastPollAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -632,12 +633,14 @@ function SettingsTab() {
         `fbm:${STORE_KEY}:alert_email`,
         `fbm:${STORE_KEY}:shopify_financial_status`,
         `fbm:${STORE_KEY}:last_poll_at`,
+        `fbm:${STORE_KEY}:dedup_check_enabled`,
       ]);
 
     const settings = new Map((data || []).map((s: any) => [s.key, s.value]));
     setPollingEnabled(settings.get(`fbm:${STORE_KEY}:polling_enabled`) === 'true');
     setAlertEmail(settings.get(`fbm:${STORE_KEY}:alert_email`) || '');
     setFinancialStatus(settings.get(`fbm:${STORE_KEY}:shopify_financial_status`) || 'paid');
+    setDedupCheckEnabled(settings.get(`fbm:${STORE_KEY}:dedup_check_enabled`) !== 'false'); // default ON
     setLastPollAt(settings.get(`fbm:${STORE_KEY}:last_poll_at`) || null);
     setLoading(false);
   }, []);
