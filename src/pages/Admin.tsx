@@ -346,6 +346,7 @@ export default function Admin() {
                                 variant="ghost"
                                 size="icon"
                                 title="Send password reset"
+                                aria-label="Send password reset"
                                 disabled={actionLoading === u.id}
                                 onClick={() => handleSendReset(u)}
                               >
