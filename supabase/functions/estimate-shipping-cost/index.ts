@@ -339,6 +339,12 @@ Deno.serve(async (req) => {
       for (const fulfillment of fulfillments) {
         if (estimated >= requestedBatchSize) break;
 
+        // Skip non-successful fulfillments (cancelled, error, failure)
+        if (fulfillment.status && fulfillment.status !== "success") {
+          skipped++;
+          continue;
+        }
+
         const fulfillmentId = String(fulfillment.id);
         if (estimatedFulfillmentIds.has(fulfillmentId)) {
           skipped++;
