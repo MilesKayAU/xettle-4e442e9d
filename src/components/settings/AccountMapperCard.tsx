@@ -76,6 +76,32 @@ const KNOWN_MARKETPLACES = [
 const REVENUE_CATEGORIES_SET = new Set(['Sales', 'Shipping', 'Promotional Discounts', 'Refunds', 'Reimbursements']);
 const REVENUE_ACCOUNT_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS']);
 const EXPENSE_ACCOUNT_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
+const SUPPORTED_TAX_PROFILES = ['AU_GST', 'EXPORT_NO_GST'] as const;
+
+function normalizeTaxProfileValue(value: string | null | undefined): (typeof SUPPORTED_TAX_PROFILES)[number] | null {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  const legacyMap: Record<string, (typeof SUPPORTED_TAX_PROFILES)[number]> = {
+    AU_GST: 'AU_GST',
+    GST_REGISTERED: 'AU_GST',
+    AU_GST_STANDARD: 'AU_GST',
+    EXPORT_NO_GST: 'EXPORT_NO_GST',
+    NO_GST: 'EXPORT_NO_GST',
+    NOT_GST_REGISTERED: 'EXPORT_NO_GST',
+  };
+
+  return legacyMap[trimmed] ?? null;
+}
+
+function formatLastSyncedLabel(value: string | null): string | null {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return `${parsed.toLocaleDateString()} ${parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 export default function AccountMapperCard() {
   const queryClient = useQueryClient();
