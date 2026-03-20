@@ -249,12 +249,53 @@ export const SELLER_CENTRAL_AUTH_URLS: Record<string, string> = {
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Log a deprecation warning when using a deprecated API version.
+ * Log a migration note when using a legacy API version.
  * Call this at the top of any function that still uses v0 APIs.
  */
 export function warnIfDeprecated(apiName: keyof typeof API_VERSIONS): void {
   const info = API_VERSIONS[apiName];
-  if (info.deprecated && info.migrationNote) {
-    console.warn(`[SP-API DEPRECATION] ${info.migrationNote}`);
+  if (info.migrationNote) {
+    console.warn(`[SP-API LEGACY] ${info.migrationNote}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 11. AWS SigV4 Signing Constants
+// SP-API uses AWS Signature Version 4 for request signing.
+// https://developer-docs.amazon.com/sp-api/docs/connecting-to-the-selling-partner-api
+// ═══════════════════════════════════════════════════════════════
+
+export const SIGNING_SERVICE = 'execute-api';
+
+/** AWS region for SigV4 signing, mapped by SP-API region */
+export const SIGNING_REGIONS: Record<string, string> = {
+  na: 'us-east-1',
+  eu: 'eu-west-1',
+  fe: 'us-west-2',
+};
+
+/** Get the AWS signing region for an SP-API region code */
+export function getSigningRegion(region: string): string {
+  return SIGNING_REGIONS[region] || SIGNING_REGIONS.fe;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 12. Marketplace Validation Helper
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Assert that a marketplace ID exists in the registry.
+ * Throws if the marketplace is not supported — prevents silent bugs
+ * from invalid marketplace codes in sync operations.
+ */
+export function assertMarketplaceSupported(marketplaceId: string): void {
+  const found = Object.values(MARKETPLACE_REGISTRY).some(
+    (info) => info.marketplaceId === marketplaceId
+  );
+  if (!found) {
+    throw new Error(
+      `Unsupported Amazon marketplace ID: ${marketplaceId}. ` +
+      `Supported: ${Object.entries(MARKETPLACE_REGISTRY).map(([code, info]) => `${code}=${info.marketplaceId}`).join(', ')}`
+    );
   }
 }
