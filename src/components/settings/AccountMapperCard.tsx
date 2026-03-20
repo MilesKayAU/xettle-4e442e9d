@@ -1031,26 +1031,30 @@ export default function AccountMapperCard() {
   };
 
   // ─── Shared COA refresh strip ──────────────────────────────────────
-  const renderCoaRefreshStrip = () => (
-    <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span>
-          {coaAccounts.length > 0
-            ? `${coaAccounts.length} Xero accounts cached`
-            : 'No Xero accounts cached'}
-        </span>
-        {coaLastSynced && (
-          <span className="text-[10px]">
-            · Last refreshed {new Date(coaLastSynced).toLocaleDateString()} {new Date(coaLastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+  const renderCoaRefreshStrip = () => {
+    const lastSyncedLabel = formatLastSyncedLabel(coaLastSynced);
+
+    return (
+      <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span>
+            {coaAccounts.length > 0
+              ? `${coaAccounts.length} Xero accounts cached`
+              : 'No Xero accounts cached'}
           </span>
-        )}
+          {lastSyncedLabel && (
+            <span className="text-[10px]">
+              · Last refreshed {lastSyncedLabel}
+            </span>
+          )}
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleRefreshCoa} disabled={refreshingCoa} className="h-6 text-xs gap-1">
+          {refreshingCoa ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          Refresh from Xero
+        </Button>
       </div>
-      <Button variant="ghost" size="sm" onClick={handleRefreshCoa} disabled={refreshingCoa} className="h-6 text-xs gap-1">
-        {refreshingCoa ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-        Refresh from Xero
-      </Button>
-    </div>
-  );
+    );
+  };
 
   // ─── UNMAPPED STATE ──────────────────────────────────────────────
   if (state === 'unmapped') {
