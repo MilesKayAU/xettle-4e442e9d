@@ -520,37 +520,83 @@ Deno.serve(async (req) => {
 
       // ─── Poll Amazon Orders API v2026-01-01 ──────────────────
       // Uses searchOrders with includedData for PII (role-based, no RDT)
-      const ordersParams = new URLSearchParams({
+      const ordersParamsBase = new URLSearchParams({
         marketplaceIds: marketplace_id,
         fulfillmentChannels: 'MFN',
         orderStatuses: 'Unshipped,PartiallyShipped,Shipped,Pending',
         lastUpdatedAfter: lastUpdatedAfter,
         includedData: 'BUYER,RECIPIENT',
+        maxResultsPerPage: '100',
       })
 
-      const ordersUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders?${ordersParams.toString()}`
-      console.log('fbm_orders_url', ordersUrl)
-      console.log('fbm_orders_request', { marketplace_id, region, lastUpdatedAfter, api_version: API_VERSIONS.orders.current })
+      console.log('fbm_orders_request', {
+        marketplace_id,
+        region,
+        lastUpdatedAfter,
+        api_version: API_VERSIONS.orders.current,
+        max_results_per_page: 100,
+      })
 
-      let ordersResponse: Response
-      try {
-        ordersResponse = await fetch(ordersUrl, {
-          headers: getSpApiHeaders(accessToken),
+      const allOrders: any[] = []
+      let nextPaginationToken: string | null = null
+      let pagesFetched = 0
+      const MAX_ORDER_PAGES = 10
+
+      do {
+        const pageParams = new URLSearchParams(ordersParamsBase.toString())
+        if (nextPaginationToken) {
+          pageParams.set('paginationToken', nextPaginationToken)
+        }
+
+        const ordersUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders?${pageParams.toString()}`
+        console.log('fbm_orders_page_request', {
+          page: pagesFetched + 1,
+          has_pagination_token: !!nextPaginationToken,
+          url: ordersUrl,
         })
-      } catch (fetchErr) {
-        console.error('fbm_orders_fetch_failed', fetchErr)
-        throw fetchErr
-      }
 
-      if (!ordersResponse.ok) {
-        const errText = await ordersResponse.text()
-        console.error('fbm_orders_api_error', { status: ordersResponse.status, body: errText })
-        throw new Error(`Amazon Orders API v2026-01-01 failed: ${ordersResponse.status} ${errText}`)
-      }
+        let ordersResponse: Response
+        try {
+          ordersResponse = await fetch(ordersUrl, {
+            headers: getSpApiHeaders(accessToken),
+          })
+        } catch (fetchErr) {
+          console.error('fbm_orders_fetch_failed', fetchErr)
+          throw fetchErr
+        }
 
-      const ordersData = await ordersResponse.json()
+        if (!ordersResponse.ok) {
+          const errText = await ordersResponse.text()
+          console.error('fbm_orders_api_error', { status: ordersResponse.status, body: errText, page: pagesFetched + 1 })
+          throw new Error(`Amazon Orders API v2026-01-01 failed: ${ordersResponse.status} ${errText}`)
+        }
+
+        const ordersData = await ordersResponse.json()
+        const pageOrders = ordersData?.orders || ordersData?.Orders || ordersData?.payload?.Orders || []
+        allOrders.push(...pageOrders)
+
+        nextPaginationToken = ordersData?.pagination?.nextToken || null
+        pagesFetched += 1
+
+        console.log('fbm_orders_page_received', {
+          page: pagesFetched,
+          page_order_count: pageOrders.length,
+          accumulated_order_count: allOrders.length,
+          has_next_page: !!nextPaginationToken,
+        })
+
+        if (pagesFetched >= MAX_ORDER_PAGES && nextPaginationToken) {
+          await logEvent(supabase, userId, 'fbm_orders_page_limit_reached', {
+            pages_fetched: pagesFetched,
+            accumulated_order_count: allOrders.length,
+            has_more_pages: true,
+          }, storeKey, undefined, 'warn')
+          break
+        }
+      } while (nextPaginationToken)
+
       // Orders API returns inline order payloads; process newest updates first
-      let orders = [ ...(ordersData?.orders || ordersData?.Orders || ordersData?.payload?.Orders || []) ]
+      let orders = [...allOrders]
       orders.sort((a: any, b: any) => {
         const aTime = new Date(a?.lastUpdatedTime || a?.createdTime || 0).getTime()
         const bTime = new Date(b?.lastUpdatedTime || b?.createdTime || 0).getTime()
@@ -1033,6 +1079,7 @@ Deno.serve(async (req) => {
       const completedMode = dryRun ? 'dry_run' : (isCron ? 'cron' : 'manual')
       await logEvent(supabase, userId, 'fbm_poll_completed', {
         total_orders: orders.length,
+        pages_fetched: pagesFetched,
         created_count: createdCount,
         manual_review_count: manualReviewCount,
         failed_count: failedCount,
@@ -1045,6 +1092,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         status: 'completed',
         total_orders: orders.length,
+        pages_fetched: pagesFetched,
         created_count: createdCount,
         manual_review_count: manualReviewCount,
         failed_count: failedCount,
