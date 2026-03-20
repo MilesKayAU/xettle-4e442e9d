@@ -135,6 +135,7 @@ Deno.serve(async (req) => {
     }
     const storeKey: string = body.store_key || 'primary'
     const dryRun: boolean = body.dry_run === true
+    const forceRefetch: boolean = body.force_refetch === true
 
     // Use service role client for all DB operations
     const supabase = createClient(
