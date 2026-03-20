@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
           const tokenData = await tokenResp.json();
           const accessToken = tokenData.access_token;
           const region = amazonToken.region || 'fe';
-          const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe;
+          const baseUrl = getEndpointForRegion(region);
 
           // Fetch report list (headers only — no downloads)
           const params = new URLSearchParams({

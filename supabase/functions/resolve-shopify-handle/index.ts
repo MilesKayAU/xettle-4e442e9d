@@ -63,8 +63,8 @@ Deno.serve(async (req) => {
     }
 
     const shopifyRes = await fetch(
-      `https://${tokenRow.shop_domain}/admin/api/2026-01/products.json?handle=${encodeURIComponent(handle)}&fields=id,title,variants`,
-      { headers: { "X-Shopify-Access-Token": tokenRow.access_token } }
+      `https://${tokenRow.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/products.json?handle=${encodeURIComponent(handle)}&fields=id,title,variants`,
+      { headers: getShopifyHeaders(tokenRow.access_token) }
     );
 
     if (!shopifyRes.ok) {

@@ -7,8 +7,11 @@ import {
   LWA,
   warnIfDeprecated,
 } from '../_shared/amazon-sp-api-policy.ts'
-
-const SHOPIFY_API_VERSION = '2026-01' // matches repo standard
+import {
+  SHOPIFY_API_VERSION,
+  getShopifyHeaders,
+  buildShopifyUrl,
+} from '../_shared/shopify-api-policy.ts'
 
 // (Token refresh is handled by amazon-auth edge function)
 

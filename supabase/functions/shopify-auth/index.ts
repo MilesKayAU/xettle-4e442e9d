@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
         value: stateValue,
       }, { onConflict: 'user_id,key' })
 
-      const scopes = 'read_fulfillments,read_inventory,read_orders,read_products,read_reports,read_shopify_payments_accounts,read_shopify_payments_payouts'
+      const scopes = SHOPIFY_SCOPES_STRING
       const redirectUri = 'https://xettle.app/shopify/callback'
 
       const authUrl = `https://${shop}/admin/oauth/authorize?` +
