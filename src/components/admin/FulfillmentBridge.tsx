@@ -18,6 +18,7 @@ const STORE_KEY = 'primary';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-300',
+  pending_payment: 'bg-amber-50 text-amber-700 border-amber-200',
   creating: 'bg-yellow-100 text-yellow-800 border-yellow-300',
   created: 'bg-blue-100 text-blue-800 border-blue-300',
   dry_run: 'bg-purple-100 text-purple-800 border-purple-300',
