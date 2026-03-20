@@ -332,16 +332,21 @@ export default function HealthScannerDashboard() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {issue.status === 'open' && (
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" title="Mark resolved" onClick={() => markStatus(issue.fingerprint, 'resolved')}>
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          </Button>
-                          <Button variant="ghost" size="icon" title="Ignore" onClick={() => markStatus(issue.fingerprint, 'ignored')}>
-                            <EyeOff className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" title="Copy fix prompt" onClick={() => generateFixPrompt(issue)}>
+                          <ClipboardCopy className="h-4 w-4 text-primary" />
+                        </Button>
+                        {issue.status === 'open' && (
+                          <>
+                            <Button variant="ghost" size="icon" title="Mark resolved" onClick={() => markStatus(issue.fingerprint, 'resolved')}>
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" title="Ignore" onClick={() => markStatus(issue.fingerprint, 'ignored')}>
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
