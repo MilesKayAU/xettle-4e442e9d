@@ -6,8 +6,82 @@ import {
   isTokenExpired,
   LWA,
   warnIfDeprecated,
+  API_VERSIONS,
 } from '../_shared/amazon-sp-api-policy.ts'
 import { logger } from '../_shared/logger.ts'
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: Request a Restricted Data Token (RDT) for PII access
+// https://developer-docs.amazon.com/sp-api/docs/tokens-api-use-case-guide
+// ═══════════════════════════════════════════════════════════════
+async function getRestrictedDataToken(
+  baseUrl: string,
+  accessToken: string,
+  amazonOrderId: string,
+): Promise<string | null> {
+  const rdtPayload = {
+    restrictedResources: [
+      {
+        method: 'GET',
+        path: `/orders/v0/orders/${amazonOrderId}`,
+        dataElements: ['buyerInfo', 'shippingAddress'],
+      },
+    ],
+  };
+
+  try {
+    const res = await fetch(`${baseUrl}/tokens/${API_VERSIONS.tokens.current}/restrictedDataToken`, {
+      method: 'POST',
+      headers: getSpApiHeaders(accessToken),
+      body: JSON.stringify(rdtPayload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('rdt_request_failed', { status: res.status, body: errText });
+      return null;
+    }
+
+    const data = await res.json();
+    return data.restrictedDataToken || null;
+  } catch (err) {
+    console.error('rdt_request_error', err);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: Fetch single order with RDT to get PII (address, buyer)
+// ═══════════════════════════════════════════════════════════════
+async function fetchOrderWithPii(
+  baseUrl: string,
+  accessToken: string,
+  amazonOrderId: string,
+): Promise<any | null> {
+  const rdt = await getRestrictedDataToken(baseUrl, accessToken, amazonOrderId);
+  if (!rdt) {
+    console.warn('rdt_unavailable, falling back to non-PII order data', { amazonOrderId });
+    return null;
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/orders/v0/orders/${amazonOrderId}`, {
+      headers: getSpApiHeaders(rdt),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('pii_order_fetch_failed', { status: res.status, body: errText });
+      return null;
+    }
+
+    const data = await res.json();
+    return data?.payload || null;
+  } catch (err) {
+    console.error('pii_order_fetch_error', err);
+    return null;
+  }
+}
 
 const SHOPIFY_API_VERSION = '2026-01'
 
