@@ -303,20 +303,23 @@ export default function AccountingDashboard() {
   const [userTier, setUserTier] = useState<'free' | 'starter' | 'pro'>('free');
   // Global fetch state — visible across all tabs, persisted across refresh
   const [amazonFetching, setAmazonFetching] = useState(() => {
-    const stored = localStorage.getItem('xettle_fetch_started');
-    if (stored) {
-      const elapsed = Date.now() - parseInt(stored, 10);
-      // Consider fetch alive for up to 5 minutes
-      if (elapsed < 5 * 60 * 1000) return true;
-      localStorage.removeItem('xettle_fetch_started');
-    }
+    try {
+      const stored = localStorage.getItem('xettle_fetch_started');
+      if (stored) {
+        const elapsed = Date.now() - parseInt(stored, 10);
+        if (elapsed < 5 * 60 * 1000) return true;
+        localStorage.removeItem('xettle_fetch_started');
+      }
+    } catch { /* storage unavailable */ }
     return false;
   });
   const [amazonFetchStatus, setAmazonFetchStatus] = useState<string | null>(() => {
-    const stored = localStorage.getItem('xettle_fetch_started');
-    if (stored && Date.now() - parseInt(stored, 10) < 5 * 60 * 1000) {
-      return 'Fetching settlement reports from Amazon...';
-    }
+    try {
+      const stored = localStorage.getItem('xettle_fetch_started');
+      if (stored && Date.now() - parseInt(stored, 10) < 5 * 60 * 1000) {
+        return 'Fetching settlement reports from Amazon...';
+      }
+    } catch { /* storage unavailable */ }
     return null;
   });
   // Bulk upload state

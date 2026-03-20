@@ -90,9 +90,8 @@ const XeroCallback = () => {
             .eq('key', 'coa_detection_results')
             .maybeSingle();
 
-          const cachedAge = cachedResult?.value
-            ? Date.now() - new Date(JSON.parse(cachedResult.value).timestamp || 0).getTime()
-            : Infinity;
+          let cachedAge = Infinity;
+          try { cachedAge = cachedResult?.value ? Date.now() - new Date(JSON.parse(cachedResult.value).timestamp || 0).getTime() : Infinity; } catch { /* corrupt cache — treat as expired */ }
 
           if (cachedAge > 24 * 60 * 60 * 1000) {
             const [coaRes, registryRes, processorRes] = await Promise.all([

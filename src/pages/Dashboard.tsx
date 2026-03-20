@@ -446,20 +446,21 @@ export default function Dashboard() {
 
   // Dashboard is always the default landing page
   const [activeView, setActiveView] = useState<DashboardView>(() => {
-    const stored = localStorage.getItem('xettle_dashboard_view');
-    // Migrate legacy view names
-    if (stored === 'dashboard') return 'home';
-    if (stored === 'outstanding') { localStorage.setItem('xettle_settlements_subtab', 'outstanding'); return 'settlements'; }
-    if (stored === 'smart_upload') return 'home';
-    if (stored === 'home' || stored === 'settlements' || stored === 'insights' || stored === 'settings') return stored as DashboardView;
+    try {
+      const stored = localStorage.getItem('xettle_dashboard_view');
+      if (stored === 'dashboard') return 'home';
+      if (stored === 'outstanding') { try { localStorage.setItem('xettle_settlements_subtab', 'outstanding'); } catch {} return 'settlements'; }
+      if (stored === 'smart_upload') return 'home';
+      if (stored === 'home' || stored === 'settlements' || stored === 'insights' || stored === 'settings') return stored as DashboardView;
+    } catch { /* storage unavailable */ }
     return 'home';
   });
   const [settlementsSubTab, setSettlementsSubTab] = useState<SettlementsSubTab>(() => {
-    return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'overview';
+    try { return (localStorage.getItem('xettle_settlements_subtab') as SettlementsSubTab) || 'overview'; } catch { return 'overview'; }
   });
   const [showUploadSheet, setShowUploadSheet] = useState(false);
   const [insightsSubTab, setInsightsSubTab] = useState<InsightsSubTab>(() => {
-    return (localStorage.getItem('xettle_insights_subtab') as InsightsSubTab) || 'overview';
+    try { return (localStorage.getItem('xettle_insights_subtab') as InsightsSubTab) || 'overview'; } catch { return 'overview'; }
   });
   const [userMarketplaces, setUserMarketplaces] = useState<UserMarketplace[]>([]);
   const [suggestedConnections, setSuggestedConnections] = useState<any[]>([]);
@@ -697,7 +698,7 @@ export default function Dashboard() {
   function switchView(view: DashboardView) {
     setActiveView(view);
     trackAction('switched_tab', view);
-    localStorage.setItem('xettle_dashboard_view', view);
+    try { localStorage.setItem('xettle_dashboard_view', view); } catch { /* storage unavailable */ }
   }
 
   // Listen for open-settings-tab events from other components (e.g. CoaBlockerCta)
@@ -709,7 +710,7 @@ export default function Dashboard() {
 
   function switchSettlementsSubTab(tab: SettlementsSubTab) {
     setSettlementsSubTab(tab);
-    localStorage.setItem('xettle_settlements_subtab', tab);
+    try { localStorage.setItem('xettle_settlements_subtab', tab); } catch {}
   }
 
   function switchInsightsSubTab(tab: InsightsSubTab) {

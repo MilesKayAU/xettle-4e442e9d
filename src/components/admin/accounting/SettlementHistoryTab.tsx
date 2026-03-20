@@ -618,8 +618,9 @@ export default function SettlementHistory({ settlements, loading, onDeleted, onR
                                 <Scissors className="h-3 w-3" /> Deferred Revenue Recognition (Account 612)
                               </p>
                               {(() => {
-                                const m1 = s.split_month_1_data ? JSON.parse(s.split_month_1_data as string) : null;
-                                const m2 = s.split_month_2_data ? JSON.parse(s.split_month_2_data as string) : null;
+                                let m1: any = null, m2: any = null;
+                                try { m1 = s.split_month_1_data ? JSON.parse(s.split_month_1_data as string) : null; } catch {}
+                                try { m2 = s.split_month_2_data ? JSON.parse(s.split_month_2_data as string) : null; } catch {}
                                 const rollover = m1 ? round2(
                                   (m1.salesPrincipal || 0) + (m1.salesShipping || 0) +
                                   (m1.promotionalDiscounts || 0) + (m1.refunds || 0) +
