@@ -394,14 +394,18 @@ export default function Dashboard() {
         const dismissKey = user ? `xettle_wizard_dismiss_count_${user.id}` : 'xettle_wizard_dismiss_count';
         const dismissCount = parseInt(sessionStorage.getItem(dismissKey) || '0', 10);
 
-        // If user just connected via OAuth callback, always show wizard regardless of existing data
-        if (connected) {
-          // Don't skip — let the wizard handle the post-connection flow
-        } else if (hasSettlements || wizardComplete || dismissCount >= 3) {
+        // ALWAYS suppress wizard for established users — settlements or explicit completion
+        if (hasSettlements || wizardComplete || dismissCount >= 3) {
           setShowWizard(false);
+          // Still clean up ?connected param if present
+          if (connected) {
+            searchParams.delete('connected');
+            setSearchParams(searchParams, { replace: true });
+          }
           return;
         }
 
+        // Only show wizard for genuinely new users who have no settlements
         if (!hasAmz || !hasShp || !xeroConnected) {
           if (connected === 'amazon' || connected === 'shopify') {
             setWizardInitialStep(2);
@@ -417,8 +421,9 @@ export default function Dashboard() {
           setShowWizard(true);
         }
       } catch (error) {
-        console.error("Wizard check failed, defaulting to show:", error);
-        setShowWizard(true);
+        console.error("Wizard check failed:", error);
+        // Don't show wizard on error — safer to assume established user
+        setShowWizard(false);
       }
     };
     checkWizard();
