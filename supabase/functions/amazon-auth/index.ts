@@ -1,8 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import {
+  LWA,
+  isTokenExpired,
+  SELLER_CENTRAL_AUTH_URLS,
+  MARKETPLACE_REGISTRY,
+} from '../_shared/amazon-sp-api-policy.ts'
 
-const AMAZON_AUTH_URL = 'https://sellercentral.amazon.com.au/apps/authorize/consent'
+const AMAZON_AUTH_URL = SELLER_CENTRAL_AUTH_URLS.fe
 
 serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
