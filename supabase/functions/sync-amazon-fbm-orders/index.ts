@@ -665,6 +665,19 @@ Deno.serve(async (req) => {
         const amazonOrderId = getAmazonOrderId(order)
         if (!amazonOrderId) continue
 
+        // ─── Early SKU pre-filter: skip orders with no mapped SKUs BEFORE any DB writes ──
+        // If order has inline items, check them against the pre-loaded map immediately
+        const inlineItems = Array.isArray(order?.orderItems) ? order.orderItems : []
+        if (inlineItems.length > 0) {
+          const inlineSkus = inlineItems.map((item: any) => getOrderItemSku(item)).filter(Boolean)
+          const hasAnyMapped = inlineSkus.some((sku: string) => globalSkuMap.has(sku))
+          if (!hasAnyMapped) {
+            // Pure FBA order — skip entirely without DB insert or API call
+            skippedCount++
+            continue
+          }
+        }
+
         // Check if already exists — allow re-processing of unsynced orders
         const { data: existing } = await supabase
           .from('amazon_fbm_orders')
