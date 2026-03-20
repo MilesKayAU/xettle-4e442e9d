@@ -314,7 +314,7 @@ Deno.serve(async (req) => {
       if (estimated >= requestedBatchSize) break;
 
       // Fetch fulfillments for this order from Shopify
-      const fulfillmentsUrl = `https://${tokenRow.shop_domain}/admin/api/2026-01/orders/${order.shopify_order_id}/fulfillments.json`;
+      const fulfillmentsUrl = `https://${tokenRow.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders/${order.shopify_order_id}/fulfillments.json`;
       let fulfillments: any[] = [];
       try {
         const fRes = await fetch(fulfillmentsUrl, {
