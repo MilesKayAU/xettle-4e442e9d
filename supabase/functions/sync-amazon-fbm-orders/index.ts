@@ -568,10 +568,55 @@ Deno.serve(async (req) => {
             skippedCount++
             continue
           }
-          // Unsynced (pending, failed, manual_review, dry_run) — delete old row and re-process
-          console.log('fbm_reprocessing_order', { amazonOrderId, previousStatus: existing.status })
-          await supabase.from('amazon_fbm_orders').delete().eq('id', existing.id)
-          await logEvent(supabase, userId, 'fbm_reprocessing_order', { previous_status: existing.status }, storeKey, amazonOrderId)
+
+          // ─── Auto-expire stale pending_payment orders ──────────
+          if (existing.status === 'pending_payment') {
+            const amazonOrderStatus = order.orderStatus || order.OrderStatus || ''
+
+            // Amazon cancelled the order
+            if (amazonOrderStatus === 'Canceled') {
+              await supabase.from('amazon_fbm_orders').update({
+                status: 'cancelled',
+                error_detail: 'Order was cancelled by Amazon during payment verification',
+              } as any).eq('id', existing.id)
+              await logEvent(supabase, userId, 'fbm_order_amazon_cancelled', { amazon_status: amazonOrderStatus }, storeKey, amazonOrderId)
+              skippedCount++
+              continue
+            }
+
+            // Still Pending after 24 hours — auto-expire
+            if (amazonOrderStatus === 'Pending') {
+              const createdAt = new Date(existing.created_at || Date.now())
+              const ageMs = Date.now() - createdAt.getTime()
+              const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000
+              if (ageMs > TWENTY_FOUR_HOURS) {
+                await supabase.from('amazon_fbm_orders').update({
+                  status: 'cancelled',
+                  error_detail: 'Order remained in Pending status for over 24 hours — likely cancelled by Amazon',
+                } as any).eq('id', existing.id)
+                await logEvent(supabase, userId, 'fbm_order_payment_timeout', {
+                  age_hours: Math.round(ageMs / (60 * 60 * 1000)),
+                  amazon_status: amazonOrderStatus,
+                }, storeKey, amazonOrderId, 'warn')
+                skippedCount++
+                continue
+              }
+              // Still within 24h window — leave as pending_payment
+              skippedCount++
+              continue
+            }
+
+            // Order moved to Unshipped/PartiallyShipped/Shipped — delete old row and re-process with full PII
+            console.log('fbm_pending_payment_resolved', { amazonOrderId, newStatus: amazonOrderStatus })
+            await supabase.from('amazon_fbm_orders').delete().eq('id', existing.id)
+            await logEvent(supabase, userId, 'fbm_pending_payment_resolved', { new_amazon_status: amazonOrderStatus }, storeKey, amazonOrderId)
+            // Fall through to re-process below
+          } else {
+            // Unsynced (pending, failed, manual_review, dry_run) — delete old row and re-process
+            console.log('fbm_reprocessing_order', { amazonOrderId, previousStatus: existing.status })
+            await supabase.from('amazon_fbm_orders').delete().eq('id', existing.id)
+            await logEvent(supabase, userId, 'fbm_reprocessing_order', { previous_status: existing.status }, storeKey, amazonOrderId)
+          }
         }
 
         // Insert as pending
