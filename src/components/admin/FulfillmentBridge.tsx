@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search } from 'lucide-react';
+import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const STORE_KEY = 'primary';
@@ -22,6 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
   created: 'bg-blue-100 text-blue-800 border-blue-300',
   dry_run: 'bg-purple-100 text-purple-800 border-purple-300',
   manual_review: 'bg-orange-100 text-orange-800 border-orange-300',
+  blocked_missing_pii: 'bg-red-100 text-red-700 border-red-300',
   failed: 'bg-red-100 text-red-800 border-red-300',
   cancelled: 'bg-gray-100 text-gray-800 border-gray-300',
 };
@@ -335,6 +336,101 @@ function ProductLinksTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PII Access Diagnostic Card
+// ═══════════════════════════════════════════════════════════════
+function PiiAccessCard({ payload }: { payload: any }) {
+  const piiAccess = payload.pii_access;
+  const missingRequired: string[] = payload.missing_required_fields || [];
+  const missingWarnings: string[] = payload.missing_warning_fields || [];
+  const addr = payload.ShippingAddress || {};
+
+  const hasBlocking = missingRequired.length > 0;
+
+  const fieldLabels: Record<string, string> = {
+    recipient_name: 'Recipient Name',
+    address_line_1: 'Street Address',
+    city: 'City',
+    postal_code: 'Postal Code',
+    country_code: 'Country',
+    buyer_name: 'Buyer Name',
+    buyer_email: 'Buyer Email',
+    phone: 'Phone',
+  };
+
+  return (
+    <div className={`rounded-md border p-3 space-y-3 ${hasBlocking ? 'border-destructive/50 bg-destructive/5' : 'border-border bg-muted/30'}`}>
+      <div className="flex items-center gap-2">
+        <ShieldAlert className={`h-4 w-4 ${hasBlocking ? 'text-destructive' : 'text-muted-foreground'}`} />
+        <span className="text-sm font-semibold">Amazon Protected Data Access</span>
+      </div>
+
+      {/* Access status */}
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="flex items-center gap-1.5">
+          {piiAccess.buyer_info?.granted
+            ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+            : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+          <span>Buyer Info: {piiAccess.buyer_info?.granted ? 'Granted' : 'Denied'}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {piiAccess.shipping_address?.granted
+            ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+            : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+          <span>Shipping Address: {piiAccess.shipping_address?.granted ? 'Granted' : 'Denied'}</span>
+        </div>
+      </div>
+
+      {/* Recovered fields */}
+      {(addr.City || addr.StateOrRegion || addr.PostalCode || addr.CountryCode) && (
+        <div className="text-xs">
+          <span className="font-medium text-muted-foreground">Recovered (non-PII):</span>
+          <span className="ml-1">
+            {[addr.City, addr.StateOrRegion, addr.PostalCode, addr.CountryCode].filter(Boolean).join(', ')}
+          </span>
+        </div>
+      )}
+
+      {/* Missing required fields */}
+      {missingRequired.length > 0 && (
+        <div className="space-y-1">
+          <span className="text-xs font-medium text-destructive">Missing (blocks Shopify sync):</span>
+          <div className="flex flex-wrap gap-1">
+            {missingRequired.map(f => (
+              <Badge key={f} variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
+                {fieldLabels[f] || f}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Missing warning fields */}
+      {missingWarnings.length > 0 && (
+        <div className="space-y-1">
+          <span className="text-xs font-medium text-amber-700">Missing (optional):</span>
+          <div className="flex flex-wrap gap-1">
+            {missingWarnings.map(f => (
+              <Badge key={f} variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                {fieldLabels[f] || f}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Permission guidance */}
+      {hasBlocking && (
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Amazon has not returned enough protected customer data for safe Shopify fulfilment.
+          Live sync is blocked until the app has <strong>Direct-to-Consumer Shipping</strong> and/or <strong>Tax Invoicing</strong> role approval in Seller Central.
+          After enabling the role, re-authorise the app to generate a new refresh token.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Tab 2: Order Monitor
 // ═══════════════════════════════════════════════════════════════
 function OrderMonitorTab() {
@@ -455,6 +551,10 @@ function OrderMonitorTab() {
                         <TableRow>
                           <TableCell colSpan={6} className="bg-muted/50 p-4">
                             <div className="space-y-3">
+                              {/* PII Access Diagnostic Card */}
+                              {order.raw_amazon_payload?.pii_access && (
+                                <PiiAccessCard payload={order.raw_amazon_payload} />
+                              )}
                               {order.error_detail && (
                                 <div>
                                   <Label className="text-xs font-semibold">Error Detail</Label>
