@@ -1023,4 +1023,41 @@ A structured onboarding scan that runs against the connected Xero org and surfac
 
 ---
 
+## 22. Known Limitations & Pre-Expansion Checklist
+
+**Current scope**: AU-only, AUD currency, 10% GST.
+
+### Fix before non-AU expansion (GST & currency)
+
+| Issue | Files | Impact |
+|-------|-------|--------|
+| GST math hardcodes `/ 11` and `* 1.1` (AU 10% GST) | `AccountingDashboard.tsx`, `ShopifyOrdersDashboard.tsx`, `shopify-orders-parser.ts` | NZ (15%), UK (20%), or GST-exempt users get wrong tax splits |
+| `formatAUD()` used sitewide — assumes AUD currency | `settlement-engine.ts`, `settlement-parser.ts`, `sub-channel-detection.ts`, `ChannelDetectedEmptyState.tsx`, `UserOverviewDashboard.tsx` | USD/GBP/EUR amounts display with wrong symbol |
+| Xero CSV export hardcodes `Currency: 'AUD'` | `xero-csv-export.ts` | Currency mismatch for non-AUD Xero orgs |
+| `SkuCostManager` saves costs as AUD | `SkuCostManager.tsx` | COGS in wrong currency for non-AUD sellers |
+| `country_code` defaults to `'AU'` on new connections | `marketplaces.ts`, `SetupStepConnectStores.tsx` | Wrong tax treatment for non-AU sellers |
+
+**Resolution**: Create a `formatCurrency(amount, currencyCode)` utility and a user-configurable tax rate from `app_settings` or `marketplaces.gst_model`. This is a 50+ file change best done as a dedicated sprint.
+
+### Fix when adding new marketplaces (static sets)
+
+| Issue | Files | Impact |
+|-------|-------|--------|
+| `KNOWN_CONTACT_MARKETPLACES` is a static Set | `xero-mapping-readiness.ts` | New registry marketplaces get false "contact not mapped" warnings |
+| `KNOWN_MARKETPLACES` in AccountMapperCard is static | `AccountMapperCard.tsx` | New marketplaces missing from account mapper filter dropdown |
+
+**Resolution**: Read from `MARKETPLACE_CONTACTS` keys or `marketplace_registry` dynamically.
+
+### Known AU-scope limitations (acceptable for now)
+
+| Issue | Notes |
+|-------|-------|
+| Date formatting uses `en-AU` locale | Cosmetic — non-AU users may find DD/MM/YYYY confusing |
+| `amazon-xero-push.ts` binary AU/intl tax classification | Correct for AU-registered sellers; needs revisiting for UK/US-registered sellers |
+| Landing page copy is AU-centric | Marketing copy, not logic |
+| `BunningsDashboard` warns on `amazon_au` specifically | Minor cosmetic detection redirect |
+| `marketplace-reconciliation-engine` skips by exact code | Amazon US would not be skipped — may need broadening |
+
+---
+
 *This document is the single source of truth for Xettle's architecture. Update it when systems change.*

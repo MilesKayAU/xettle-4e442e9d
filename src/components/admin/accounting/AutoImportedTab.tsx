@@ -240,7 +240,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
         .from('settlements')
         .select('*')
         .eq('source', 'api')
-        .eq('marketplace', 'amazon_au')
+        .like('marketplace', 'amazon_%')
         .order('period_end', { ascending: false });
       if (error) throw error;
       setSettlements((data || []) as unknown as AutoImportedSettlement[]);

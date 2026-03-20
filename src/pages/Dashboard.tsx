@@ -331,6 +331,7 @@ export default function Dashboard() {
   const [showWizard, setShowWizard] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
   const [hasAmazon, setHasAmazon] = useState(false);
+  const [amazonXettleCode, setAmazonXettleCode] = useState<string>('amazon_au');
   const [hasShopify, setHasShopify] = useState(false);
   const [hasEbay, setHasEbay] = useState(false);
   const [justConnectedXero, setJustConnectedXero] = useState(false);
@@ -367,7 +368,7 @@ export default function Dashboard() {
       try {
       const [settRes, amazonRes, shopifyRes, ebayRes, wizardRes] = await Promise.all([
           supabase.from('settlements').select('id').limit(1),
-          supabase.from('amazon_tokens').select('id').limit(1),
+          supabase.from('amazon_tokens').select('id, marketplace_id').limit(1),
           supabase.from('shopify_tokens').select('id').limit(1),
           supabase.from('ebay_tokens').select('id').limit(1),
           supabase.from('app_settings').select('value').eq('key', 'onboarding_wizard_complete').maybeSingle(),
@@ -378,6 +379,13 @@ export default function Dashboard() {
         const hasShp = !!(shopifyRes.data && shopifyRes.data.length > 0);
         const hasEby = !!(ebayRes.data && ebayRes.data.length > 0);
         const wizardComplete = wizardRes.data?.value === 'true';
+
+        // Resolve Amazon xettleCode from their stored marketplace_id
+        if (hasAmz && amazonRes.data?.[0]?.marketplace_id) {
+          const { getAmazonRegionByMarketplaceId } = await import('@/constants/amazon-regions');
+          const region = getAmazonRegionByMarketplaceId(amazonRes.data[0].marketplace_id);
+          setAmazonXettleCode(region?.xettleCode || 'amazon_au');
+        }
 
         setHasAmazon(hasAmz);
         setHasShopify(hasShp);
@@ -1104,7 +1112,7 @@ export default function Dashboard() {
                     onMarketplacesChanged={loadMarketplaces}
                     settlementCounts={settlementCounts}
                     apiConnectedCodes={new Set([
-                      ...(hasAmazon ? ['amazon_au'] : []),
+                      ...(hasAmazon ? [amazonXettleCode] : []),
                       ...(hasShopify ? ['shopify_payments', 'shopify_orders'] : []),
                       ...(hasEbay ? ['ebay_au'] : []),
                     ])}

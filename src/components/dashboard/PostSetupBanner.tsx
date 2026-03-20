@@ -168,7 +168,7 @@ export default function PostSetupBanner({
             const { count } = await supabase
               .from('settlements')
               .select('id', { count: 'exact', head: true })
-              .eq('marketplace', 'amazon_au');
+              .like('marketplace', 'amazon_%');
             const found = count ?? 0;
             setAmazonFound(found);
             setAmazonMessage(found > 0 ? `${found} settlement${found > 1 ? 's' : ''} imported` : 'No settlements found yet');
@@ -187,7 +187,7 @@ export default function PostSetupBanner({
         setAmazonMessage('Amazon token not found — please reconnect');
       } else if (hasAmazon && completedFlags.has('amazon_scan_completed')) {
         setAmazonStatus('done');
-        const { count } = await supabase.from('settlements').select('id', { count: 'exact', head: true }).eq('marketplace', 'amazon_au');
+        const { count } = await supabase.from('settlements').select('id', { count: 'exact', head: true }).like('marketplace', 'amazon_%');
         setAmazonFound(count ?? 0);
         setAmazonMessage(`${count ?? 0} settlements ready`);
       } else if (!hasAmazon) {

@@ -39,12 +39,12 @@ const API_INTEGRATIONS = [
     marketplaceAliases: [] as const,
   },
   {
-    rail: 'amazon_au',
-    name: 'Amazon AU',
+    rail: 'amazon',
+    name: 'Amazon',
     tokenTable: 'amazon_tokens' as const,
     historyTypes: ['amazon'],
     eventTypes: ['amazon_settlement_synced', 'amazon_fetch_complete'],
-    marketplaceAliases: ['amazon_au'] as const,
+    marketplaceAliases: ['amazon_au', 'amazon_us', 'amazon_uk', 'amazon_ca', 'amazon_de', 'amazon_jp', 'amazon_sg', 'amazon_nl', 'amazon_fr'] as const,
   },
   {
     rail: 'shopify',

@@ -92,7 +92,7 @@ export default function CoaDetectedPanel({ suggestedConnections, onChanged }: Co
                 <Badge variant="secondary" className="text-[10px]">Suggested</Badge>
               </div>
               <div className="flex items-center gap-2">
-                {['amazon_au'].includes(conn.marketplace_code) && (
+                {conn.marketplace_code.startsWith('amazon') && (
                   <Button
                     size="sm"
                     variant="outline"
