@@ -87,7 +87,7 @@ async function syncPayoutsForUser(
       params.set("date_min", dateMin);
       console.log(`[fetch-shopify-payouts] Using boundary date filter: date_min=${dateMin}`);
     }
-    return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/shopify_payments/payouts.json?${params.toString()}`;
+    return buildShopifyUrl(shopDomain, 'shopify_payments/payouts', params);
   };
 
   let url: string = buildInitialUrl();
