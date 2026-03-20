@@ -952,7 +952,7 @@ Deno.serve(async (req) => {
         // PII already extracted above (pii object), use it for Shopify payload
 
         // Build Shopify order payload — v2026-01-01 field mapping
-        const lineItems = orderItems.map((item: any) => {
+        const lineItems = mappedOrderItems.map((item: any) => {
           const sku = getOrderItemSku(item)
           const mapping = sku ? mappingMap.get(sku) : null
           return {
