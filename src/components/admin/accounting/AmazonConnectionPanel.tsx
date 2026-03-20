@@ -198,8 +198,8 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
         .upsert({
           user_id: user.id,
           selling_partner_id: manualSellerId.trim(),
-          marketplace_id: 'A39IBJ37TRP1C6',
-          region: 'fe',
+          marketplace_id: selectedRegion.marketplaceId,
+          region: selectedRegion.region,
           refresh_token: manualToken.trim(),
           access_token: null,
           expires_at: null,
