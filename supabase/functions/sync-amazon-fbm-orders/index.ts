@@ -284,6 +284,81 @@ async function logEvent(
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Helper: Check if a Shopify order already exists for an Amazon order ID
+// Detects orders created by CedCommerce, other MCF apps, or manual entry
+// ═══════════════════════════════════════════════════════════════
+async function checkShopifyDuplicate(
+  shopifyToken: ShopifyInternalToken,
+  amazonOrderId: string,
+): Promise<string | null> {
+  const graphqlUrl = `https://${shopifyToken.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`
+
+  // Search across order name, tags, and notes for the Amazon order ID
+  const query = `{
+    orders(first: 5, query: "${amazonOrderId}") {
+      edges {
+        node {
+          id
+          name
+          tags
+          note
+          customAttributes { key value }
+        }
+      }
+    }
+  }`
+
+  try {
+    const res = await fetch(graphqlUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': shopifyToken.access_token,
+      },
+      body: JSON.stringify({ query }),
+    })
+
+    if (!res.ok) {
+      console.warn('shopify_dedup_check_failed', { status: res.status })
+      return null // Fail open — don't block order creation on dedup failure
+    }
+
+    const data = await res.json()
+    const edges = data?.data?.orders?.edges || []
+
+    for (const edge of edges) {
+      const node = edge.node
+      if (!node) continue
+
+      // Check tags, note, name, and custom attributes for the Amazon order ID
+      const tags = (node.tags || []) as string[]
+      const note = node.note || ''
+      const name = node.name || ''
+      const attrs = (node.customAttributes || []) as { key: string; value: string }[]
+
+      const inTags = tags.some((t: string) => t.includes(amazonOrderId))
+      const inNote = note.includes(amazonOrderId)
+      const inName = name.includes(amazonOrderId)
+      const inAttrs = attrs.some((a: { key: string; value: string }) => a.value?.includes(amazonOrderId))
+
+      if (inTags || inNote || inName || inAttrs) {
+        console.log('shopify_duplicate_found', {
+          amazonOrderId,
+          shopifyGid: node.id,
+          matchedIn: inTags ? 'tags' : inNote ? 'note' : inName ? 'name' : 'customAttributes',
+        })
+        return node.id
+      }
+    }
+
+    return null
+  } catch (err: any) {
+    console.warn('shopify_dedup_check_error', err.message)
+    return null // Fail open
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main handler
 // ═══════════════════════════════════════════════════════════════
 Deno.serve(async (req) => {
