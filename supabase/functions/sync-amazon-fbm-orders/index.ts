@@ -165,8 +165,24 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ status: 'skipped', reason: 'disabled' }), { status: 200, headers })
       }
 
+      // ─── Force refetch: bulk-delete stale rows ─────────────────
+      if (forceRefetch && !dryRun) {
+        const { count: deletedCount } = await supabase
+          .from('amazon_fbm_orders')
+          .delete({ count: 'exact' })
+          .eq('user_id', userId)
+          .in('status', ['pending', 'dry_run', 'error', 'manual_review'])
+          .is('shopify_order_id', null)
+
+        if (deletedCount && deletedCount > 0) {
+          console.log('fbm_force_refetch_cleaned', { deleted: deletedCount })
+          await logEvent(supabase, userId, 'fbm_force_refetch_cleaned', { deleted_count: deletedCount }, storeKey)
+        }
+      }
+
       // ─── Log poll started ─────────────────────────────────────
-      await logEvent(supabase, userId, 'fbm_poll_started', { dry_run: dryRun }, storeKey)
+      const syncMode = dryRun ? 'dry_run' : (isCron ? 'cron' : 'manual')
+      await logEvent(supabase, userId, 'fbm_poll_started', { dry_run: dryRun, mode: syncMode, force_refetch: forceRefetch }, storeKey)
 
       // ─── Compute polling window ────────────────────────────────
       const lastPollAt = await readSetting(supabase, userId, `fbm:${storeKey}:last_poll_at`)
