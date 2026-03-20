@@ -293,28 +293,40 @@ export function generatePatternBatchCodes(
     }
   }
 
-  // ── NEW: Group bases by type-range, then find contiguous blocks ──
-  const revenueBases = bases.filter(b => REVENUE_TYPES.has(b.type.toUpperCase()));
-  const expenseBases = bases.filter(b => !REVENUE_TYPES.has(b.type.toUpperCase()));
+  // ── Proximity-based grouping: infer range from template codes ──
+  // Group bases by their numeric "neighbourhood" so the algorithm works
+  // for ANY COA structure (200s, 4000s, custom ranges, etc.)
+  const neighbourhoodOf = (code: string): number => {
+    const num = parseInt(code, 10);
+    if (isNaN(num)) return 0;
+    return num >= 1000 ? Math.floor(num / 1000) * 1000 : Math.floor(num / 100) * 100;
+  };
+
+  const neighbourhoodGroups = new Map<number, PatternAccount[]>();
+  for (const b of bases) {
+    const nh = neighbourhoodOf(b.code);
+    if (!neighbourhoodGroups.has(nh)) neighbourhoodGroups.set(nh, []);
+    neighbourhoodGroups.get(nh)!.push(b);
+  }
 
   const baseMapping = new Map<string, string>();
 
-  const assignContiguousBlock = (group: PatternAccount[], range: CodeRange) => {
-    if (group.length === 0) return;
-
-    // Sort by original code to preserve relative ordering
+  const findContiguousBlock = (
+    group: PatternAccount[],
+    rangeStart: number,
+    rangeEnd: number,
+  ): boolean => {
+    if (group.length === 0) return true;
     group.sort((a, b) => parseInt(a.code, 10) - parseInt(b.code, 10));
 
-    // Find first contiguous block of N free codes in range
     const needed = group.length;
-    let blockStart = range.start;
+    let blockStart = rangeStart;
 
-    while (blockStart + needed - 1 <= range.end) {
+    while (blockStart + needed - 1 <= rangeEnd) {
       let blockOk = true;
       for (let offset = 0; offset < needed; offset++) {
         const candidate = String(blockStart + offset);
         if (existingSet.has(candidate) || claimed.has(candidate)) {
-          // Jump past this occupied slot
           blockStart = blockStart + offset + 1;
           blockOk = false;
           break;
@@ -323,34 +335,42 @@ export function generatePatternBatchCodes(
       if (blockOk) break;
     }
 
-    // Assign codes from block (or fallback to scattered if block can't fit)
-    if (blockStart + needed - 1 > range.end) {
-      // Can't find contiguous block — fall back to individual slots
-      for (const acc of group) {
-        let candidate = range.start;
-        while (
-          candidate <= range.end &&
-          (existingSet.has(String(candidate)) || claimed.has(String(candidate)))
-        ) {
-          candidate++;
-        }
-        const newCode = String(candidate);
-        claimed.add(newCode);
-        result.set(acc.code, newCode);
-        baseMapping.set(acc.code, newCode);
-      }
-    } else {
+    if (blockStart + needed - 1 <= rangeEnd) {
       for (let i = 0; i < group.length; i++) {
         const newCode = String(blockStart + i);
         claimed.add(newCode);
         result.set(group[i].code, newCode);
         baseMapping.set(group[i].code, newCode);
       }
+      return true;
     }
+    return false;
   };
 
-  assignContiguousBlock(revenueBases, REVENUE_RANGE);
-  assignContiguousBlock(expenseBases, EXPENSE_RANGE);
+  for (const [nh, group] of neighbourhoodGroups) {
+    const blockSize = nh >= 1000 ? 1000 : 100;
+    const nhStart = nh;
+    const nhEnd = nh + blockSize - 1;
+
+    // Try exact neighbourhood first
+    if (findContiguousBlock(group, nhStart, nhEnd)) continue;
+    // Widen: ±1 block
+    if (findContiguousBlock(group, Math.max(0, nhStart - blockSize), nhEnd + blockSize)) continue;
+    // Fallback to type-based range
+    const fallbackType = group[0]?.type?.toUpperCase() || 'EXPENSE';
+    const fallbackRange = getRangeForType(REVENUE_TYPES.has(fallbackType) ? fallbackType : 'EXPENSE');
+    if (findContiguousBlock(group, fallbackRange.start, fallbackRange.end)) continue;
+
+    // Absolute last resort: assign individually
+    for (const acc of group) {
+      let candidate = nhStart;
+      while (existingSet.has(String(candidate)) || claimed.has(String(candidate))) candidate++;
+      const newCode = String(candidate);
+      claimed.add(newCode);
+      result.set(acc.code, newCode);
+      baseMapping.set(acc.code, newCode);
+    }
+  }
 
   // Now assign decimal codes under their new bases
   for (const decAcc of decimals) {
