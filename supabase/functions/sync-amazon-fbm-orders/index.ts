@@ -620,16 +620,7 @@ Deno.serve(async (req) => {
         // Set status to creating
         await supabase.from('amazon_fbm_orders').update({ status: 'creating' } as any).eq('id', insertedOrder.id)
 
-        // ─── Fetch PII (shipping address, buyer name) via RDT ────
-        const piiOrder = await fetchOrderWithPii(baseUrl, accessToken, amazonOrderId)
-        const orderWithPii = piiOrder || order // fallback to original if RDT fails
-
-        console.log('fbm_pii_fetch', {
-          amazonOrderId,
-          has_rdt_data: !!piiOrder,
-          has_shipping_address: !!orderWithPii.ShippingAddress,
-          buyer_name: orderWithPii.ShippingAddress?.Name || orderWithPii.BuyerInfo?.BuyerName || 'none',
-        })
+        // PII already fetched above (orderWithPii), reuse it here
 
         // Build Shopify order payload
         const lineItems = orderItems.map((item: any) => {
