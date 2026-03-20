@@ -549,7 +549,8 @@ Deno.serve(async (req) => {
       const financialStatus = (await readSetting(supabase, userId, `fbm:${storeKey}:shopify_financial_status`)) || 'paid'
 
       for (const order of orders) {
-        const amazonOrderId = order.AmazonOrderId
+        // v2026-01-01 uses camelCase field names
+        const amazonOrderId = order.amazonOrderId || order.AmazonOrderId
         if (!amazonOrderId) continue
 
         // Check if already exists — allow re-processing of unsynced orders
