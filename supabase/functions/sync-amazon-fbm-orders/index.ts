@@ -365,7 +365,7 @@ Deno.serve(async (req) => {
       // Get Shopify token via client_credentials flow (Dev Dashboard app)
       let shopifyToken: ShopifyInternalToken | null = null
       try {
-        shopifyToken = await getShopifyInternalToken(supabase, userId, storeKey)
+        shopifyToken = await getShopifyInternalToken()
       } catch (tokenErr: any) {
         logger.error('fbm_shopify_token_error', tokenErr.message)
         // Will be checked per-order below
