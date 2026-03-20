@@ -608,7 +608,7 @@ Deno.serve(async (req) => {
     }
 
   } catch (err: any) {
-    logger.error(`[sync-amazon-fbm] Unhandled error: ${err.message}`)
+    console.error(`[sync-amazon-fbm] Unhandled error: ${err.message}`)
 
     // Try to log the error event
     try {
