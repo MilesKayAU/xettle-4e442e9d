@@ -373,11 +373,25 @@ Deno.serve(async (req) => {
         const itemsData = await itemsResponse.json()
         const orderItems = itemsData?.payload?.OrderItems || []
 
+        // ─── OrderItems debug logging ────────────────────────────
+        const itemSkus = orderItems.map((item: any) => ({
+          SellerSKU: item.SellerSKU,
+          ASIN: item.ASIN,
+          QuantityOrdered: item.QuantityOrdered,
+        }))
+        console.log('fbm_order_items', { amazonOrderId, order_items_count: orderItems.length, items: itemSkus })
+
+        await logEvent(supabase, userId, 'fbm_order_items_fetched', {
+          order_items_count: orderItems.length,
+          items: itemSkus,
+        }, storeKey, amazonOrderId)
+
         // Safety: empty order items
         if (orderItems.length === 0) {
           await supabase.from('amazon_fbm_orders').update({
             status: 'manual_review',
             error_detail: 'no_order_items',
+            raw_amazon_payload: { ...order, orderItems: [] },
           } as any).eq('id', insertedOrder.id)
           await logEvent(supabase, userId, 'fbm_order_no_items', {}, storeKey, amazonOrderId, 'warn')
           manualReviewCount++
