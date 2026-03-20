@@ -556,9 +556,21 @@ Deno.serve(async (req) => {
 
         console.log('fbm_sku_mapping_result', { amazonOrderId, matched: matchedSkus, unmapped: unmappedSkus })
 
-        // Store debug details on order record
+        // ─── Fetch PII (shipping address, buyer name) via RDT ────
+        // Do this before dry-run check so dry runs also show full address data
+        const piiOrder = await fetchOrderWithPii(baseUrl, accessToken, amazonOrderId)
+        const orderWithPii = piiOrder || order // fallback to original if RDT fails
+
+        console.log('fbm_pii_fetch', {
+          amazonOrderId,
+          has_rdt_data: !!piiOrder,
+          has_shipping_address: !!orderWithPii.ShippingAddress,
+          buyer_name: orderWithPii.ShippingAddress?.Name || orderWithPii.BuyerInfo?.BuyerName || 'none',
+        })
+
+        // Store debug details on order record (with PII-enriched data)
         await supabase.from('amazon_fbm_orders').update({
-          raw_amazon_payload: { ...order, orderItems: itemSkus, matched_skus: matchedSkus, unmapped_skus: unmappedSkus },
+          raw_amazon_payload: { ...orderWithPii, orderItems: itemSkus, matched_skus: matchedSkus, unmapped_skus: unmappedSkus },
         } as any).eq('id', insertedOrder.id)
 
         if (unmappedSkus.length > 0) {
@@ -574,6 +586,7 @@ Deno.serve(async (req) => {
         // ─── Dry run check ──────────────────────────────────────
         if (dryRun) {
           await supabase.from('amazon_fbm_orders').update({
+            status: 'dry_run',
             error_detail: 'dry_run',
           } as any).eq('id', insertedOrder.id)
           await logEvent(supabase, userId, 'fbm_dry_run_skipped_create', {}, storeKey, amazonOrderId)
