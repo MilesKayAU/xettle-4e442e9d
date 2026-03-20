@@ -263,7 +263,7 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Marketplace:</span>
-                <span className="font-mono">{connection.marketplace_id === 'A39IBJ37TRP1C6' ? 'Amazon AU' : connection.marketplace_id}</span>
+                <span className="font-mono">{getAmazonRegionLabel(connection.marketplace_id)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Region:</span>
