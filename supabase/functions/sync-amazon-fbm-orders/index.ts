@@ -892,6 +892,43 @@ Deno.serve(async (req) => {
           continue
         }
 
+        // ─── Order status revalidation: re-fetch individual order ──
+        // The bulk listing API can return stale data (e.g., recently shipped
+        // orders still appearing as Unshipped). Before creating a Shopify
+        // order, confirm the order is genuinely still actionable.
+        const VALID_FBM_STATUSES = ['Unshipped', 'PartiallyShipped']
+        const revalidateUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}`
+        try {
+          const revalResponse = await fetch(revalidateUrl, {
+            headers: getSpApiHeaders(accessToken),
+          })
+          if (revalResponse.ok) {
+            const revalData = await revalResponse.json()
+            const currentStatus = revalData?.orderStatus || revalData?.OrderStatus || ''
+            if (currentStatus && !VALID_FBM_STATUSES.includes(currentStatus)) {
+              console.log('fbm_order_status_stale', {
+                amazonOrderId,
+                bulk_status: getAmazonOrderStatus(order),
+                revalidated_status: currentStatus,
+              })
+              await supabase.from('amazon_fbm_orders').delete().eq('id', insertedOrder.id)
+              await logEvent(supabase, userId, 'fbm_order_stale_status', {
+                bulk_status: getAmazonOrderStatus(order),
+                current_status: currentStatus,
+                reason: 'Order status changed between bulk fetch and revalidation',
+              }, storeKey, amazonOrderId, 'info')
+              skippedCount++
+              continue
+            }
+          } else {
+            console.warn('fbm_revalidation_failed', { amazonOrderId, status: revalResponse.status })
+            // Fail open — proceed with order creation if revalidation fails
+          }
+        } catch (revalErr: any) {
+          console.warn('fbm_revalidation_error', { amazonOrderId, error: revalErr.message })
+          // Fail open
+        }
+
         // ─── Safety gate: block live sync if shipping PII missing ──
         if (missingRequiredFields.length > 0) {
           // Distinguish Amazon Pending orders (payment verification) from genuine PII access issues
