@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
         throw new Error('Amazon access_token missing after refresh')
       }
 
-      const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe
+      const baseUrl = getEndpointForRegion(region)
 
       // ─── Poll Amazon Orders API ────────────────────────────────
       const ordersParams = new URLSearchParams({
