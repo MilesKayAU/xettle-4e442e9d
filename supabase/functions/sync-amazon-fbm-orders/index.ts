@@ -1133,12 +1133,16 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({
         status: 'completed',
+        orders_found: orders.length,
+        matched: createdCount + manualReviewCount,
+        unmatched: skippedCount,
         total_orders: orders.length,
         pages_fetched: pagesFetched,
         created_count: createdCount,
         manual_review_count: manualReviewCount,
         failed_count: failedCount,
         skipped_count: skippedCount,
+        dry_run: dryRun,
       }), { status: 200, headers })
 
     } finally {
