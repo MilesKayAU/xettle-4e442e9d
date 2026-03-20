@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { logger } from '../_shared/logger.ts';
 import { getEndpointForRegion, getSpApiHeaders, LWA } from '../_shared/amazon-sp-api-policy.ts';
-import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
+import { SHOPIFY_API_VERSION, getShopifyHeaders, buildShopifyUrl } from '../_shared/shopify-api-policy.ts';
 
 // SP-API endpoints now imported from shared policy
 
