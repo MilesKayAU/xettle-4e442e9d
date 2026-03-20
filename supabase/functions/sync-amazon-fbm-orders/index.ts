@@ -179,9 +179,9 @@ Deno.serve(async (req) => {
     }
 
     try {
-      // ─── Check polling enabled ───────────────────────────────
+      // ─── Check polling enabled (only for cron, manual runs bypass) ──
       const pollingEnabled = await readSetting(supabase, userId, `fbm:${storeKey}:polling_enabled`)
-      if (pollingEnabled !== 'true') {
+      if (isCron && pollingEnabled !== 'true') {
         await logEvent(supabase, userId, 'fbm_poll_skipped_disabled', {}, storeKey)
         return new Response(JSON.stringify({ status: 'skipped', reason: 'disabled' }), { status: 200, headers })
       }

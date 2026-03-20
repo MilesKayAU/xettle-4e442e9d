@@ -363,8 +363,15 @@ function OrderMonitorTab() {
     });
     if (error) {
       toast({ title: 'Sync failed', description: error.message, variant: 'destructive' });
+    } else if (data?.status === 'skipped') {
+      toast({ title: 'Sync skipped', description: `Reason: ${data.reason ?? 'unknown'}. Check Settings tab.`, variant: 'destructive' });
     } else {
-      toast({ title: dryRun ? 'Dry run completed' : 'Sync completed', description: JSON.stringify(data) });
+      const desc = data?.orders_found != null
+        ? `Orders found: ${data.orders_found}, matched: ${data.matched ?? 0}, unmatched: ${data.unmatched ?? 0}`
+        : data?.orders_found === 0 || data?.status === 'no_orders'
+          ? 'No unshipped FBM orders found in the polling window'
+          : JSON.stringify(data);
+      toast({ title: dryRun ? 'Dry run completed' : 'Sync completed', description: desc });
       loadOrders();
     }
     setSyncing(false);
