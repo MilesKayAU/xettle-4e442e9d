@@ -701,6 +701,21 @@ function SettingsTab() {
             />
           </div>
 
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Check for existing Shopify orders</Label>
+              <p className="text-xs text-muted-foreground">Search Shopify for duplicate orders created by other apps (CedCommerce, etc.) before creating new ones</p>
+            </div>
+            <Switch
+              checked={dedupCheckEnabled}
+              onCheckedChange={async (checked) => {
+                setDedupCheckEnabled(checked);
+                await saveSetting('dedup_check_enabled', checked ? 'true' : 'false');
+              }}
+              disabled={saving}
+            />
+          </div>
+
           <div className="space-y-2">
             <Label>Shopify Financial Status</Label>
             <Select
