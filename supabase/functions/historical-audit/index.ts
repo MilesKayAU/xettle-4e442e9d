@@ -199,12 +199,9 @@ Deno.serve(async (req) => {
         });
 
         const payoutsResp = await fetch(
-          `https://${shopifyToken.shop_domain}/admin/api/2026-01/shopify_payments/payouts.json?${params}`,
+          buildShopifyUrl(shopifyToken.shop_domain, 'shopify_payments/payouts', params),
           {
-            headers: {
-              'X-Shopify-Access-Token': shopifyToken.access_token,
-              'Content-Type': 'application/json',
-            },
+            headers: getShopifyHeaders(shopifyToken.access_token),
           }
         );
 

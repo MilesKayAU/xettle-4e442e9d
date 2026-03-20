@@ -222,12 +222,9 @@ async function syncPayoutsForUser(
     try {
       await sleep(RATE_LIMIT_DELAY_MS);
 
-      const txUrl = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/shopify_payments/balance/transactions.json?payout_id=${payout.id}&limit=250`;
+      const txUrl = buildShopifyUrl(shopDomain, 'shopify_payments/balance/transactions', new URLSearchParams({ payout_id: String(payout.id), limit: '250' }));
       const txRes = await fetch(txUrl, {
-        headers: {
-          "X-Shopify-Access-Token": accessToken,
-          "Content-Type": "application/json",
-        },
+        headers: getShopifyHeaders(accessToken),
       });
 
       if (!txRes.ok) {

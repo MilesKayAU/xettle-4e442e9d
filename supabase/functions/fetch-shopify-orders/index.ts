@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
       const url = buildUrl(nextCursor);
       logger.debug(`[fetch-shopify-orders] Fetching page ${page}:`, url.substring(0, 120));
       const res = await fetch(url, {
-        headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+        headers: getShopifyHeaders(accessToken),
       });
 
       logger.debug(`[fetch-shopify-orders] Shopify response: status=${res.status}`);

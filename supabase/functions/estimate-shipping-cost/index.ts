@@ -318,10 +318,7 @@ Deno.serve(async (req) => {
       let fulfillments: any[] = [];
       try {
         const fRes = await fetch(fulfillmentsUrl, {
-          headers: {
-            "X-Shopify-Access-Token": tokenRow.access_token,
-            "Content-Type": "application/json",
-          },
+          headers: getShopifyHeaders(tokenRow.access_token),
         });
         if (fRes.ok) {
           const fData = await fRes.json();
