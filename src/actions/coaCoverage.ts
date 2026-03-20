@@ -105,30 +105,65 @@ export function findTemplateAccounts(
 
 // ─── Name Generation ────────────────────────────────────────────────────────
 
+/** Words considered standard category/accounting keywords — not brand contamination */
+const CATEGORY_KEYWORDS = new Set([
+  'sales', 'revenue', 'income', 'fees', 'fee', 'seller', 'commission',
+  'refund', 'refunds', 'reimbursement', 'reimbursements', 'shipping',
+  'freight', 'delivery', 'advertising', 'ad', 'ads', 'storage', 'fba',
+  'fulfilment', 'fulfillment', 'promotional', 'promo', 'discount',
+  'discounts', 'voucher', 'other', 'miscellaneous', 'costs', 'cost',
+  'charges', 'expense', 'expenses', 'au', 'us', 'uk', 'ca', 'nz',
+  'gst', 'tax', 'vat', 'paypal', 'stripe', 'website', 'online',
+]);
+
 /**
  * Generate a new account name by replacing the template marketplace name
- * with the target marketplace name. Generic — works for any naming convention.
+ * with the target marketplace name. If the result still contains brand junk
+ * from the template, falls back to a clean canonical name.
  */
 export function generateNewAccountName(
   templateName: string,
   templateMarketplace: string,
   targetMarketplace: string,
+  category?: string,
 ): string {
   const escapedMp = templateMarketplace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(escapedMp, 'gi');
-  const replaced = templateName.replace(regex, targetMarketplace);
-  if (replaced !== templateName) return replaced;
+  let replaced = templateName.replace(regex, targetMarketplace);
 
   // Fallback: replace first word cluster that matches
-  const mpWords = templateMarketplace.split(/\s+/);
-  let result = templateName;
-  for (const word of mpWords) {
-    if (word.length < 3) continue; // skip short words like "AU"
-    const wordRegex = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    result = result.replace(wordRegex, targetMarketplace);
-    if (result !== templateName) break;
+  if (replaced === templateName) {
+    const mpWords = templateMarketplace.split(/\s+/);
+    for (const word of mpWords) {
+      if (word.length < 3) continue;
+      const wordRegex = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      replaced = replaced.replace(wordRegex, targetMarketplace);
+      if (replaced !== templateName) break;
+    }
+    if (replaced === templateName) {
+      replaced = `${targetMarketplace} ${templateName}`;
+    }
   }
-  return result !== templateName ? result : `${targetMarketplace} ${templateName}`;
+
+  // ── Brand contamination check ──
+  if (category) {
+    const targetWords = new Set(targetMarketplace.toLowerCase().split(/\s+/));
+    const resultWords = replaced
+      .replace(/[()[\]]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 2);
+
+    const junkWords = resultWords.filter(w => {
+      const wl = w.toLowerCase();
+      return !targetWords.has(wl) && !CATEGORY_KEYWORDS.has(wl);
+    });
+
+    if (resultWords.length > 0 && junkWords.length / resultWords.length > 0.3) {
+      return `${targetMarketplace} ${category}`;
+    }
+  }
+
+  return replaced;
 }
 
 // ─── Main Coverage Action ───────────────────────────────────────────────────

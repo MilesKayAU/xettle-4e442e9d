@@ -187,6 +187,7 @@ export function buildClonePreview(input: ClonePreviewInput & { matchPattern?: bo
       templateAcc.name,
       input.templateMarketplace,
       input.targetMarketplace,
+      cat,
     );
 
     const isAmazonSpecific = AMAZON_SPECIFIC_CATEGORIES.has(cat);
