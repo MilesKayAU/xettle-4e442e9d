@@ -1,7 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -95,9 +98,10 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("resolve-shopify-handle error:", err);
+    const fallbackHeaders = getCorsHeaders(req.headers.get("Origin") ?? "");
     return new Response(
       JSON.stringify({ error: "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...fallbackHeaders, "Content-Type": "application/json" } }
     );
   }
 });
