@@ -476,7 +476,7 @@ Deno.serve(async (req) => {
       const ordersParams = new URLSearchParams({
         marketplaceIds: marketplace_id,
         fulfillmentChannels: 'MFN',
-        orderStatuses: 'Unshipped,PartiallyShipped,Shipped',
+        orderStatuses: 'Unshipped,PartiallyShipped,Shipped,Pending',
         lastUpdatedAfter: lastUpdatedAfter,
         includedData: 'BUYER,RECIPIENT',
       })
