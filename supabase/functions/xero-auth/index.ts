@@ -47,19 +47,8 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Final confirmed scopes — journals.read rejected by Xero for post-March 2026 apps
-      const scopes = [
-        'openid',
-        'profile',
-        'email',
-        'offline_access',
-        'accounting.invoices',
-        'accounting.contacts',
-        'accounting.settings',
-        'accounting.settings.read',
-        'accounting.banktransactions.read',
-        'accounting.payments.read',
-      ].join(' ')
+      // Scopes imported from shared policy — single source of truth
+      const scopes = XERO_SCOPES_STRING
 
       const authUrl = new URL(XERO_AUTH_URL)
       authUrl.searchParams.set('response_type', 'code')
