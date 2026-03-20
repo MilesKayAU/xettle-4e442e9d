@@ -365,7 +365,7 @@ Deno.serve(async (req) => {
           .from('amazon_fbm_orders')
           .delete({ count: 'exact' })
           .eq('user_id', userId)
-          .in('status', ['pending', 'dry_run', 'error', 'manual_review', 'blocked_missing_pii', 'duplicate_detected'])
+          .in('status', ['pending', 'dry_run', 'error', 'manual_review', 'blocked_missing_pii', 'duplicate_detected', 'pending_payment'])
           .is('shopify_order_id', null)
 
         if (deletedCount && deletedCount > 0) {
