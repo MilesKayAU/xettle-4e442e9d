@@ -52,22 +52,22 @@ interface PiiExtractResult {
  * If the role isn't granted, fields are simply absent (no error, no RDT needed).
  */
 function extractPiiFromOrder(order: any): PiiExtractResult {
-  // v2026-01-01 structure: order.recipient.shippingAddress.*, order.buyer.*
+  // Support both early v2026 role-based payloads and the current Orders API shape
   const recipient = order?.recipient || {}
-  const addr = recipient?.shippingAddress || {}
+  const addr = recipient?.shippingAddress || recipient?.deliveryAddress || {}
   const buyer = order?.buyer || {}
 
   const result: PiiExtractResult = {
-    recipientName: addr.name || null,
-    addressLine1: addr.addressLine1 || null,
-    addressLine2: addr.addressLine2 || null,
+    recipientName: addr.name || recipient?.name || null,
+    addressLine1: addr.addressLine1 || addr.address1 || addr.addressLine || null,
+    addressLine2: addr.addressLine2 || addr.address2 || null,
     city: addr.city || null,
     stateOrRegion: addr.stateOrRegion || null,
     postalCode: addr.postalCode || null,
     countryCode: addr.countryCode || null,
-    phone: addr.phone || null,
-    buyerName: buyer.buyerName || null,
-    buyerEmail: buyer.buyerEmail || null,
+    phone: addr.phone || addr.phoneNumber || null,
+    buyerName: buyer.buyerName || buyer.name || null,
+    buyerEmail: buyer.buyerEmail || buyer.email || null,
     missingRequiredFields: [],
     missingWarningFields: [],
     piiPresent: false,
@@ -89,6 +89,53 @@ function extractPiiFromOrder(order: any): PiiExtractResult {
   result.piiPresent = result.missingRequiredFields.length === 0
 
   return result
+}
+
+function getAmazonOrderId(order: any): string | null {
+  return order?.orderId
+    || order?.amazonOrderId
+    || order?.AmazonOrderId
+    || order?.orderAliases?.find((alias: any) => alias?.aliasType === 'SELLER_ORDER_ID')?.aliasId
+    || order?.orderAliases?.[0]?.aliasId
+    || null
+}
+
+function getAmazonOrderStatus(order: any): string {
+  return order?.orderStatus || order?.OrderStatus || order?.status || order?.orderState || order?.currentStatus || ''
+}
+
+function getOrderItemSku(item: any): string | null {
+  return item?.sellerSku
+    || item?.SellerSKU
+    || item?.product?.sellerSku
+    || item?.product?.sku
+    || item?.product?.identifiers?.sellerSku
+    || item?.sku
+    || null
+}
+
+function getOrderItemAsin(item: any): string | null {
+  return item?.asin
+    || item?.ASIN
+    || item?.product?.asin
+    || item?.product?.identifiers?.asin
+    || null
+}
+
+function getOrderItemQuantity(item: any): number {
+  return item?.quantityOrdered || item?.QuantityOrdered || item?.quantity || item?.product?.quantity || 1
+}
+
+function getOrderItemPrice(item: any): string {
+  return item?.itemPrice?.amount
+    || item?.ItemPrice?.Amount
+    || item?.product?.price?.unitPrice?.amount
+    || item?.price?.amount
+    || '0'
+}
+
+function getOrderItemTitle(item: any): string {
+  return item?.title || item?.Title || item?.product?.title || item?.product?.name || getOrderItemSku(item) || 'Amazon Item'
 }
 
 const SHOPIFY_API_VERSION = '2026-01'
@@ -502,26 +549,25 @@ Deno.serve(async (req) => {
       }
 
       const ordersData = await ordersResponse.json()
-      // v2026-01-01 drops the `payload` wrapper — orders are at top level
-      // Debug: log actual response structure to discover field names
-      const topLevelKeys = Object.keys(ordersData || {})
-      console.log('fbm_response_structure', { top_level_keys: topLevelKeys })
-      let orders = ordersData?.orders || ordersData?.Orders || ordersData?.payload?.Orders || []
-      if (orders.length > 0) {
-        const sampleKeys = Object.keys(orders[0])
-        console.log('fbm_order_keys', { sample_order_keys: sampleKeys, first_order_preview: JSON.stringify(orders[0]).slice(0, 500) })
-      }
+      // Orders API returns inline order payloads; process newest updates first
+      let orders = [ ...(ordersData?.orders || ordersData?.Orders || ordersData?.payload?.Orders || []) ]
+      orders.sort((a: any, b: any) => {
+        const aTime = new Date(a?.lastUpdatedTime || a?.createdTime || 0).getTime()
+        const bTime = new Date(b?.lastUpdatedTime || b?.createdTime || 0).getTime()
+        return bTime - aTime
+      })
 
       // Log PII access status from first order (to detect role-based access)
       if (orders.length > 0) {
         const sampleOrder = orders[0]
-        const hasBuyer = !!sampleOrder?.buyer?.buyerName
-        const hasRecipient = !!sampleOrder?.recipient?.shippingAddress?.name
+        const samplePii = extractPiiFromOrder(sampleOrder)
+        const hasBuyer = !!samplePii.buyerName
+        const hasRecipient = !!samplePii.recipientName
         console.log('fbm_pii_role_check', {
           api_version: '2026-01-01',
           buyer_info_present: hasBuyer,
           shipping_address_present: hasRecipient,
-          sample_order_id: sampleOrder?.amazonOrderId,
+          sample_order_id: getAmazonOrderId(sampleOrder),
         })
         if (!hasBuyer && !hasRecipient) {
           await logEvent(supabase, userId, 'fbm_pii_access_missing', {
@@ -556,8 +602,7 @@ Deno.serve(async (req) => {
       const financialStatus = (await readSetting(supabase, userId, `fbm:${storeKey}:shopify_financial_status`)) || 'paid'
 
       for (const order of orders) {
-        // v2026-01-01 uses camelCase field names
-        const amazonOrderId = order.amazonOrderId || order.AmazonOrderId
+        const amazonOrderId = getAmazonOrderId(order)
         if (!amazonOrderId) continue
 
         // Check if already exists — allow re-processing of unsynced orders
@@ -645,34 +690,37 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // ─── Fetch order detail (includes items) via v2026-01-01 ──
-        // getOrder with includedData returns items inline
-        const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER,RECIPIENT`
-        const detailResponse = await fetch(detailUrl, {
-          headers: getSpApiHeaders(accessToken),
-        })
+        // ─── Use inline order payload first; fall back to detail fetch only if needed ──
+        let orderDetail = order
+        let orderItems = Array.isArray(order?.orderItems) ? order.orderItems : []
 
-        if (!detailResponse.ok) {
-          const errText = await detailResponse.text()
-          await supabase.from('amazon_fbm_orders').update({
-            status: 'failed',
-            error_detail: `Order detail fetch failed (v2026-01-01): ${detailResponse.status} ${errText}`,
-          } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_order_failed', { error: errText, api_version: '2026-01-01' }, storeKey, amazonOrderId, 'error')
-          failedCount++
-          continue
+        if (orderItems.length === 0) {
+          const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER,RECIPIENT`
+          const detailResponse = await fetch(detailUrl, {
+            headers: getSpApiHeaders(accessToken),
+          })
+
+          if (!detailResponse.ok) {
+            const errText = await detailResponse.text()
+            await supabase.from('amazon_fbm_orders').update({
+              status: 'failed',
+              error_detail: `Order detail fetch failed (v2026-01-01): ${detailResponse.status} ${errText}`,
+            } as any).eq('id', insertedOrder.id)
+            await logEvent(supabase, userId, 'fbm_order_failed', { error: errText, api_version: '2026-01-01' }, storeKey, amazonOrderId, 'error')
+            failedCount++
+            continue
+          }
+
+          const detailData = await detailResponse.json()
+          orderDetail = detailData || orderDetail
+          orderItems = Array.isArray(orderDetail?.orderItems) ? orderDetail.orderItems : []
         }
-
-        const detailData = await detailResponse.json()
-        // v2026-01-01: items are in order.orderItems (array)
-        const orderDetail = detailData || {}
-        const orderItems = orderDetail?.orderItems || []
 
         // ─── OrderItems debug logging ────────────────────────────
         const itemSkus = orderItems.map((item: any) => ({
-          SellerSKU: item.sellerSku || item.SellerSKU,
-          ASIN: item.asin || item.ASIN,
-          QuantityOrdered: item.quantityOrdered || item.QuantityOrdered,
+          SellerSKU: getOrderItemSku(item),
+          ASIN: getOrderItemAsin(item),
+          QuantityOrdered: getOrderItemQuantity(item),
         }))
         console.log('fbm_order_items', { amazonOrderId, order_items_count: orderItems.length, items: itemSkus })
 
@@ -681,7 +729,7 @@ Deno.serve(async (req) => {
           items: itemSkus,
         }, storeKey, amazonOrderId)
 
-        // Safety: empty order items
+        // Safety: empty order items even after fallback detail fetch
         if (orderItems.length === 0) {
           await supabase.from('amazon_fbm_orders').update({
             status: 'manual_review',
@@ -694,7 +742,7 @@ Deno.serve(async (req) => {
         }
 
         // Map SKUs via product_links
-        const skus = orderItems.map((item: any) => item.sellerSku || item.SellerSKU).filter(Boolean)
+        const skus = orderItems.map((item: any) => getOrderItemSku(item)).filter(Boolean)
         console.log('fbm_sku_lookup', { amazonOrderId, skus_to_match: skus })
 
         const { data: mappings } = await supabase
@@ -771,7 +819,7 @@ Deno.serve(async (req) => {
         // ─── Safety gate: block live sync if shipping PII missing ──
         if (missingRequiredFields.length > 0) {
           // Distinguish Amazon Pending orders (payment verification) from genuine PII access issues
-          const amazonOrderStatus = order.orderStatus || order.OrderStatus || ''
+          const amazonOrderStatus = getAmazonOrderStatus(order)
           const isPendingPayment = amazonOrderStatus === 'Pending'
 
           if (isPendingPayment) {
@@ -853,13 +901,13 @@ Deno.serve(async (req) => {
 
         // Build Shopify order payload — v2026-01-01 field mapping
         const lineItems = orderItems.map((item: any) => {
-          const sku = item.sellerSku || item.SellerSKU
-          const mapping = mappingMap.get(sku)
+          const sku = getOrderItemSku(item)
+          const mapping = sku ? mappingMap.get(sku) : null
           return {
             variant_id: mapping!.shopify_variant_id,
-            quantity: item.quantityOrdered || item.QuantityOrdered || 1,
-            price: item.itemPrice?.amount || item.ItemPrice?.Amount || '0',
-            title: item.title || item.Title || sku,
+            quantity: getOrderItemQuantity(item),
+            price: getOrderItemPrice(item),
+            title: getOrderItemTitle(item),
           }
         })
 
