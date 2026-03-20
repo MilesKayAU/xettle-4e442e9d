@@ -37,7 +37,8 @@ export { MARKETPLACE_CONTACTS };
 
 // Re-exported from canonical source. Do NOT define labels here.
 // To add a marketplace label: update src/utils/marketplace-labels.ts
-export { MARKETPLACE_LABELS, getMarketplaceLabel } from '@/utils/marketplace-labels';
+import { MARKETPLACE_LABELS, getMarketplaceLabel } from '@/utils/marketplace-labels';
+export { MARKETPLACE_LABELS, getMarketplaceLabel };
 
 // getMarketplaceLabel is now provided by the re-export above.
 
