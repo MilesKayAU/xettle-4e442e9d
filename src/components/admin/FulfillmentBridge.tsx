@@ -11,13 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
+import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const STORE_KEY = 'primary';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-300',
+  pending_payment: 'bg-amber-50 text-amber-700 border-amber-200',
   creating: 'bg-yellow-100 text-yellow-800 border-yellow-300',
   created: 'bg-blue-100 text-blue-800 border-blue-300',
   dry_run: 'bg-purple-100 text-purple-800 border-purple-300',
@@ -553,6 +554,17 @@ function OrderMonitorTab() {
                           <TableCell colSpan={6} className="bg-muted/50 p-4">
                             <div className="space-y-3">
                               {/* Duplicate Detection Info */}
+                              {order.status === 'pending_payment' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800">
+                                  <Clock className="h-4 w-4 mt-0.5 shrink-0" />
+                                  <div className="text-sm">
+                                    <p className="font-medium">Awaiting Amazon payment verification</p>
+                                    <p className="text-xs mt-1 text-amber-600">
+                                      This order is still in Pending status on Amazon. Shipping details will become available once payment clears — the next sync will automatically pick it up.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                               {order.status === 'duplicate_detected' && (
                                 <div className="flex items-start gap-2 p-3 rounded-md bg-violet-50 border border-violet-200 text-violet-800">
                                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
