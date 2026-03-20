@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
           });
 
           const reportsResp = await fetch(`${baseUrl}/reports/2021-06-30/reports?${params}`, {
-            headers: { 'x-amz-access-token': accessToken, 'Content-Type': 'application/json' },
+            headers: getSpApiHeaders(accessToken),
           });
 
           if (reportsResp.ok) {
