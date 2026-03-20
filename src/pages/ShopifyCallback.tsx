@@ -35,8 +35,15 @@ const ShopifyCallback = () => {
       }
 
       try {
+        // Detect if this is an internal OAuth callback (state starts with "internal:")
+        const isInternalFlow = state?.startsWith('internal:');
+
         const { data: result, error: funcError } = await supabase.functions.invoke('shopify-auth', {
-          body: { action: 'callback', rawQuery, ...allParams },
+          body: {
+            action: isInternalFlow ? 'internal_callback' : 'callback',
+            rawQuery,
+            ...allParams,
+          },
         });
 
         if (funcError) throw new Error(funcError.message || 'Failed to complete authorization');
@@ -44,17 +51,20 @@ const ShopifyCallback = () => {
 
         setShopDomain(result?.shop || shop);
         setStatus('success');
-        setMessage('Shopify connected successfully ✅');
+        setMessage(isInternalFlow
+          ? 'XettleInternal connected successfully ✅ FBM Bridge is now ready.'
+          : 'Shopify connected successfully ✅');
 
         // Trigger validation sweep after Shopify connection
         triggerValidationSweep();
 
-        // If coming from Shopify App Store install flow, redirect to setup
-        const isInstallFlow = sessionStorage.getItem('shopify_install_flow') === 'true';
+        // Redirect — internal flow goes to admin, standard flow goes to dashboard/setup
+        const redirectTo = isInternalFlow
+          ? '/admin?tab=fulfillment&internal_connected=true'
+          : sessionStorage.getItem('shopify_install_flow') === 'true'
+            ? '/setup?shopify_connected=true'
+            : '/dashboard?connected=shopify';
         sessionStorage.removeItem('shopify_install_flow');
-        const redirectTo = isInstallFlow
-          ? '/setup?shopify_connected=true'
-          : '/dashboard?connected=shopify';
         setTimeout(() => navigate(redirectTo), 2000);
       } catch (err: any) {
         console.error('Shopify callback error:', err);
