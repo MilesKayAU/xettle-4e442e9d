@@ -322,7 +322,7 @@ export default function XeroPostingAudit() {
                     >
                       <TableCell>{getCategoryBadge(r.category)}</TableCell>
                       <TableCell className="font-mono text-[11px] max-w-[120px] truncate">{r.settlement_id}</TableCell>
-                      <TableCell className="text-[11px]">{MARKETPLACE_LABELS[r.marketplace || ''] || r.marketplace || '—'}</TableCell>
+                      <TableCell className="text-[11px]">{getMarketplaceLabel(r.marketplace || '')}</TableCell>
                       <TableCell className="text-[11px] whitespace-nowrap">{r.period_start} → {r.period_end}</TableCell>
                       <TableCell className="font-mono text-[10px] max-w-[130px] truncate">
                         {r.category === 'xettle_posted' ? `Xettle-${r.settlement_id}` : r.externalMatchRef || '—'}

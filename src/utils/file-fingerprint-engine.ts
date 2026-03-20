@@ -794,7 +794,7 @@ async function detectFromDbFingerprints(headers: string[]): Promise<FileDetectio
       const allMatch = normSig.every((col: string) => normHeaders.has(col));
 
       if (allMatch && normSig.length >= 3) {
-        const label = MARKETPLACE_LABELS[fp.marketplace_code] || fp.marketplace_code;
+        const label = getMarketplaceLabel(fp.marketplace_code);
         return {
           marketplace: fp.marketplace_code,
           marketplaceLabel: label,

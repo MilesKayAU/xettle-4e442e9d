@@ -36,8 +36,7 @@ export default function SetupStepUpload({ onNext, onSkip, onBack, selectedMarket
     setUploadedFiles({ ...uploadedFiles, [marketplace]: files });
   };
 
-  const getLabel = (code: string) =>
-    MARKETPLACE_LABELS[code] || code.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const getLabel = (code: string) => getMarketplaceLabel(code);
 
   const totalFiles = Object.values(uploadedFiles).reduce((sum, files) => sum + files.length, 0);
 
