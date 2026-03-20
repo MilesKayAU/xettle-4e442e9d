@@ -340,6 +340,28 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
                 Xettle requests <strong>read-only</strong> access to your Finance & Accounting data.
               </p>
             </div>
+            {/* Region selector */}
+            <div>
+              <Label className="text-xs">Amazon Marketplace</Label>
+              <Select
+                value={selectedRegion.marketplaceId}
+                onValueChange={(val) => {
+                  const region = AMAZON_REGIONS.find(r => r.marketplaceId === val);
+                  if (region) setSelectedRegion(region);
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AMAZON_REGIONS.map((r) => (
+                    <SelectItem key={r.marketplaceId} value={r.marketplaceId} className="text-xs">
+                      {r.flag} {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex gap-2">
               <Button
                 size="sm"
