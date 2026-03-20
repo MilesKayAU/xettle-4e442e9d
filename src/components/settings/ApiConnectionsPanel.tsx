@@ -41,6 +41,7 @@ interface SubChannelPref {
   code: string;
   name: string;
   preference: 'csv' | 'api';
+  apiAvailable: boolean;
 }
 
 export default function ApiConnectionsPanel({
