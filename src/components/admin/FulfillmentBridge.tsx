@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const STORE_KEY = 'primary';
@@ -26,16 +26,61 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// Input Parsing Helpers (future-proof: marketplace/store_key ready)
+// ═══════════════════════════════════════════════════════════════
+interface AmazonParsed { sku?: string; asin?: string }
+
+function parseAmazonInput(input: string): AmazonParsed {
+  const trimmed = input.trim();
+  if (!trimmed) return {};
+  // URL with /dp/ASIN or /product/ASIN
+  const dpMatch = trimmed.match(/\/dp\/([A-Z0-9]{10})/i);
+  if (dpMatch) return { asin: dpMatch[1].toUpperCase() };
+  const prodMatch = trimmed.match(/\/product\/([A-Z0-9]{10})/i);
+  if (prodMatch) return { asin: prodMatch[1].toUpperCase() };
+  // Standalone 10-char alphanumeric → ASIN
+  if (/^[A-Z0-9]{10}$/i.test(trimmed)) return { asin: trimmed.toUpperCase() };
+  // Everything else → SKU
+  return { sku: trimmed };
+}
+
+interface ShopifyParsed { variantId?: string; sku?: string; handle?: string }
+
+function parseShopifyInput(input: string): ShopifyParsed {
+  const trimmed = input.trim();
+  if (!trimmed) return {};
+  // URL with /variants/ID
+  const variantMatch = trimmed.match(/\/variants\/(\d+)/);
+  if (variantMatch) return { variantId: variantMatch[1] };
+  // Pure numeric → variant id
+  if (/^\d+$/.test(trimmed)) return { variantId: trimmed };
+  // URL with /products/handle
+  const handleMatch = trimmed.match(/\/products\/([a-z0-9\-]+)/i);
+  if (handleMatch) return { handle: handleMatch[1] };
+  // Everything else → SKU
+  return { sku: trimmed };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Tab 1: Product Links
 // ═══════════════════════════════════════════════════════════════
 function ProductLinksTab() {
   const [links, setLinks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Smart input fields
+  const [amazonInput, setAmazonInput] = useState('');
+  const [shopifyInput, setShopifyInput] = useState('');
+
+  // Resolved fields (editable)
   const [amazonSku, setAmazonSku] = useState('');
   const [amazonAsin, setAmazonAsin] = useState('');
   const [shopifyVariantId, setShopifyVariantId] = useState('');
   const [shopifySku, setShopifySku] = useState('');
+  const [enabled, setEnabled] = useState(true);
+
   const [adding, setAdding] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   const loadLinks = useCallback(async () => {
     setLoading(true);
@@ -46,32 +91,93 @@ function ProductLinksTab() {
 
   useEffect(() => { loadLinks(); }, [loadLinks]);
 
+  const handleLoadDetails = async () => {
+    setLoadingDetails(true);
+
+    // Parse Amazon input → fill empty fields only
+    if (amazonInput.trim()) {
+      const parsed = parseAmazonInput(amazonInput);
+      if (parsed.asin && !amazonAsin) setAmazonAsin(parsed.asin);
+      if (parsed.sku && !amazonSku) setAmazonSku(parsed.sku);
+    }
+
+    // Parse Shopify input
+    if (shopifyInput.trim()) {
+      const parsed = parseShopifyInput(shopifyInput);
+      if (parsed.variantId && !shopifyVariantId) setShopifyVariantId(parsed.variantId);
+      if (parsed.sku && !shopifySku) setShopifySku(parsed.sku);
+
+      // If handle detected, try Shopify API to resolve variant ID
+      if (parsed.handle && !shopifyVariantId) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: tokens } = await supabase
+              .from('app_settings')
+              .select('value')
+              .eq('user_id', user.id)
+              .eq('key', `fbm:${STORE_KEY}:shopify_token`)
+              .maybeSingle();
+
+            const { data: shopData } = await supabase
+              .from('app_settings')
+              .select('value')
+              .eq('user_id', user.id)
+              .eq('key', `fbm:${STORE_KEY}:shopify_domain`)
+              .maybeSingle();
+
+            if (tokens?.value && shopData?.value) {
+              toast({ title: 'Handle detected', description: `Handle "${parsed.handle}" found. Enter Variant ID manually or use a Shopify URL with /variants/.` });
+            } else {
+              toast({ title: 'Handle detected', description: 'No Shopify credentials configured. Enter Variant ID manually.' });
+            }
+          }
+        } catch {
+          toast({ title: 'Could not resolve handle', description: 'Enter Variant ID manually.', variant: 'destructive' });
+        }
+      }
+    }
+
+    setLoadingDetails(false);
+  };
+
   const handleAdd = async () => {
-    if (!amazonSku.trim() || !shopifyVariantId.trim()) {
-      toast({ title: 'Missing fields', description: 'Amazon SKU and Shopify Variant ID are required', variant: 'destructive' });
+    const hasAmazonId = amazonSku.trim() || amazonAsin.trim();
+    const hasShopifyId = shopifyVariantId.trim();
+
+    if (!hasAmazonId || !hasShopifyId) {
+      toast({
+        title: 'Missing required fields',
+        description: 'Need: Amazon SKU or ASIN, and Shopify Variant ID',
+        variant: 'destructive',
+      });
       return;
     }
+
     setAdding(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from('product_links').insert({
       user_id: user!.id,
-      amazon_sku: amazonSku.trim(),
+      amazon_sku: amazonSku.trim() || amazonAsin.trim(),
       amazon_asin: amazonAsin.trim() || null,
       shopify_variant_id: parseInt(shopifyVariantId.trim()),
       shopify_sku: shopifySku.trim() || null,
     } as any);
+
     if (error) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Link added' });
+      setAmazonInput(''); setShopifyInput('');
       setAmazonSku(''); setAmazonAsin(''); setShopifyVariantId(''); setShopifySku('');
+      setEnabled(true);
       loadLinks();
     }
     setAdding(false);
   };
 
-  const toggleEnabled = async (id: string, enabled: boolean) => {
-    await supabase.from('product_links').update({ enabled: !enabled } as any).eq('id', id);
+  const toggleEnabled = async (id: string, currentEnabled: boolean) => {
+    await supabase.from('product_links').update({ enabled: !currentEnabled } as any).eq('id', id);
     loadLinks();
   };
 
@@ -92,16 +198,90 @@ function ProductLinksTab() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Add Product Link</CardTitle>
+          <CardDescription>Paste a URL, SKU, ASIN, or Variant ID — or type values manually below</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <Input placeholder="Amazon SKU *" value={amazonSku} onChange={e => setAmazonSku(e.target.value)} />
-            <Input placeholder="Amazon ASIN" value={amazonAsin} onChange={e => setAmazonAsin(e.target.value)} />
-            <Input placeholder="Shopify Variant ID *" value={shopifyVariantId} onChange={e => setShopifyVariantId(e.target.value)} />
-            <Input placeholder="Shopify SKU" value={shopifySku} onChange={e => setShopifySku(e.target.value)} />
+        <CardContent className="space-y-4">
+          {/* Smart input row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Amazon (URL / SKU / ASIN)</Label>
+              <Input
+                placeholder="Paste URL, SKU, or ASIN"
+                value={amazonInput}
+                onChange={e => setAmazonInput(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Shopify (URL / Variant ID / SKU)</Label>
+              <Input
+                placeholder="Paste URL, Variant ID, SKU, or handle"
+                value={shopifyInput}
+                onChange={e => setShopifyInput(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                onClick={handleLoadDetails}
+                disabled={loadingDetails || (!amazonInput.trim() && !shopifyInput.trim())}
+                className="w-full"
+              >
+                <Search className="h-4 w-4 mr-1" />
+                {loadingDetails ? 'Parsing...' : 'Load Details'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Resolved fields */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2 border-t">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Amazon SKU</Label>
+              <Input
+                placeholder="SKU"
+                value={amazonSku}
+                onChange={e => setAmazonSku(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Amazon ASIN</Label>
+              <Input
+                placeholder="ASIN"
+                value={amazonAsin}
+                onChange={e => setAmazonAsin(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Shopify Variant ID *</Label>
+              <Input
+                placeholder="Variant ID (numeric)"
+                value={shopifyVariantId}
+                onChange={e => setShopifyVariantId(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Shopify SKU</Label>
+              <Input
+                placeholder="SKU"
+                value={shopifySku}
+                onChange={e => setShopifySku(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex items-center gap-1.5 pb-2">
+                <Switch checked={enabled} onCheckedChange={setEnabled} />
+                <Label className="text-xs">Enabled</Label>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
             <Button onClick={handleAdd} disabled={adding}>
               <Plus className="h-4 w-4 mr-1" />
-              Add
+              Save Link
             </Button>
           </div>
         </CardContent>
