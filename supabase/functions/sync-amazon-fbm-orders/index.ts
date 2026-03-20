@@ -109,18 +109,25 @@ Deno.serve(async (req) => {
   const headers = { ...corsHeaders, 'Content-Type': 'application/json' }
 
   try {
-    // ─── Auth: JWT or cron secret ─────────────────────────────
+    // ─── Auth: JWT, cron secret, or service role key ─────────
     const authHeader = req.headers.get('Authorization')
     const cronSecret = req.headers.get('x-cron-secret')
     const expectedCronSecret = Deno.env.get('FBM_CRON_SECRET')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
     let authenticatedUserId: string | null = null
     let isCron = false
 
+    // Path 1: x-cron-secret header
     if (cronSecret && expectedCronSecret && cronSecret === expectedCronSecret) {
       isCron = true
-    } else if (authHeader?.startsWith('Bearer ')) {
-      // JWT auth
+    }
+    // Path 2: Service role key (used by pg_cron via anon key auth passthrough)
+    else if (authHeader === `Bearer ${serviceRoleKey}`) {
+      isCron = true
+    }
+    // Path 3: User JWT
+    else if (authHeader?.startsWith('Bearer ')) {
       const supabaseAuth = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_ANON_KEY')!,
