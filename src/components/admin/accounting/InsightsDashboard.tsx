@@ -452,6 +452,9 @@ export default function InsightsDashboard() {
         const breakdownTotal = feeBreakdown.reduce((sum, f) => sum + f.amount, 0);
         const consistentFeeLoad = totalSales > 0 ? Math.min(breakdownTotal / totalSales, 1) : 0;
 
+        // PAC shipping estimate data
+        const pacStats = pacStatsByMp[mp];
+
         results.push({
           marketplace: mp,
           label: MARKETPLACE_LABELS[mp] || mp,
@@ -482,6 +485,10 @@ export default function InsightsDashboard() {
           hasMissingFeeData,
           hasFeeAnomaly: breakdownTotal > totalSales,
           hasNegativePayout: effectiveNetPayout < 0 && totalSales > 0,
+          pacShippingAvg60: pacStats?.avg60 ?? null,
+          pacShippingAvg14: pacStats?.avg14 ?? null,
+          pacShippingSample: pacStats?.sample ?? 0,
+          pacEstimateQuality: null, // quality distribution computed elsewhere if needed
         });
       }
 
