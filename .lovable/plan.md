@@ -1,27 +1,67 @@
 
 
-## Plan: Fix COA Clone Name Generation for Brand-Contaminated Templates
+## Plan: Add Shopify Duplicate Detection Before FBM Order Creation
 
 ### Problem
-When a template account contains a brand/business name alongside the marketplace name (e.g. "MKA Website Sales Refund (Shopify PayPal)"), the name replacement only swaps "Shopify" → "temu", producing "MKA Website Sales Refund (temu PayPal)" — a nonsensical name for the new marketplace.
+If CedCommerce or any other fulfilment bridging app is active on the Shopify store, it may already be creating Shopify orders from the same Amazon FBM orders. Without a dedup check, the bridge will create duplicate Shopify orders — causing double fulfilment and double accounting.
 
-### Root Cause
-`generateNewAccountName()` in `src/actions/coaCoverage.ts` does a simple string replacement of the marketplace name. It has no awareness of brand contamination.
+### Approach
+Use Shopify GraphQL Admin API to search for existing orders matching the Amazon order ID before creating a new one. This is efficient (single request, low rate-limit cost) and the app already has `read_orders` scope.
 
-### Fix: `src/actions/coaCoverage.ts` — `generateNewAccountName()`
+### Changes
 
-Add a "clean name" fallback when the replaced name still contains words not attributable to the target marketplace or standard category terms:
+**1. Edge function: `supabase/functions/sync-amazon-fbm-orders/index.ts`**
 
-1. After performing the marketplace name swap, check if the result still contains the original marketplace's surrounding context words (words that aren't standard category keywords like "Sales", "Fees", "Refund", "Shipping", etc.)
-2. If >50% of non-category words in the result are inherited junk from the template name, **generate a clean canonical name instead**: `{targetMarketplace} {category}` (e.g. "temu Refunds")
-3. This uses the `category` parameter — but `generateNewAccountName` currently doesn't receive the category. Add it as an optional parameter.
+Add a new helper function `checkShopifyDuplicate()`:
+- Uses Shopify GraphQL Admin API (`/admin/api/2026-01/graphql.json`)
+- Query: `orders(first: 5, query: "tag:amazon OR <amazonOrderId>")` searching for the Amazon order ID across tags, notes, order name
+- Returns the matching Shopify order ID if found, or `null`
 
-**Concrete changes:**
-- Update `generateNewAccountName` signature to accept optional `category?: string`
-- After replacement, if the name contains words not matching the target marketplace or known category keywords, fall back to `{targetMarketplace} {category}`
-- Update the call site in `buildClonePreview` (coaClone.ts line 186) to pass the category
+Insert the check at ~line 727 (after the idempotency guard, before the Shopify order creation block):
+- Read the `fbm:primary:dedup_check_enabled` setting (default `true`)
+- If enabled, call `checkShopifyDuplicate(shopifyToken, amazonOrderId)`
+- If a match is found:
+  - Update `amazon_fbm_orders` status to `'duplicate_detected'`
+  - Store the found Shopify order ID in `shopify_order_id`
+  - Log `fbm_duplicate_shopify_detected` system event with details (matched field, likely source app)
+  - Skip order creation, increment `skippedCount`
+- Also add `'duplicate_detected'` to the `forceRefetch` cleanup status list (line 384)
+
+**2. UI: `src/components/admin/FulfillmentBridge.tsx`**
+
+Status badge (line 19-28 `STATUS_COLORS`):
+- Add `duplicate_detected: 'bg-purple-100 text-purple-800 border-purple-300'`
+
+Order Monitor expanded row:
+- When status is `duplicate_detected`, show an info panel: "A Shopify order for this Amazon order already exists — likely created by another app (CedCommerce, etc.). Review before proceeding."
+
+Settings tab (~line 657):
+- Add a new toggle: "Check for existing Shopify orders before creating" with description "Searches Shopify for duplicate orders created by other apps (CedCommerce, etc.)"
+- Key: `fbm:primary:dedup_check_enabled`, default ON
+- Load it alongside other settings, save via the existing `saveSetting` pattern
+
+**3. No database migration needed**
+The `status` column on `amazon_fbm_orders` is a text field with no CHECK constraint — `'duplicate_detected'` works immediately.
+
+### GraphQL Query Design
+```graphql
+{
+  orders(first: 5, query: "<amazonOrderId>") {
+    edges {
+      node {
+        id
+        name
+        tags
+        note
+        customAttributes { key value }
+      }
+    }
+  }
+}
+```
+Searching the raw Amazon order ID (e.g. `250-3366733-4698245`) will match across order name, tags, notes, and metafields. CedCommerce typically stores it in tags or note attributes.
 
 ### Files Changed
-- `src/actions/coaCoverage.ts` — update `generateNewAccountName`
-- `src/actions/coaClone.ts` — pass `category` to the name generator
+- `supabase/functions/sync-amazon-fbm-orders/index.ts` — add `checkShopifyDuplicate()` helper + integrate into order processing loop + read dedup setting
+- `src/components/admin/FulfillmentBridge.tsx` — add status color, info panel for duplicate_detected, settings toggle
 
