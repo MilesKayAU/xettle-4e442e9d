@@ -356,6 +356,7 @@ export default function Admin() {
                                 variant="ghost"
                                 size="icon"
                                 title="Delete user"
+                                aria-label="Delete user"
                                 disabled={actionLoading === u.id || u.id === user?.id}
                                 onClick={() => setDeleteTarget(u)}
                                 className="text-destructive hover:text-destructive"
