@@ -416,7 +416,7 @@ export default function AccountMapperCard() {
       const taxVal = taxSetting?.find(s => s.key === 'tax_profile')?.value
         || taxSetting?.find(s => s.key === 'org_tax_profile')?.value
         || null;
-      setTaxProfile(taxVal);
+      setTaxProfile(normalizeTaxProfileValue(taxVal));
       // Load cached COA + last sync in parallel
       const [accounts, lastSynced, { data: registryRows }, { data: processorRows }] = await Promise.all([
         getCachedXeroAccounts(),
