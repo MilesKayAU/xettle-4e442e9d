@@ -814,18 +814,11 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // Map SKUs via product_links
+        // Map SKUs via pre-loaded product_links (no per-order DB query)
         const skus = orderItems.map((item: any) => getOrderItemSku(item)).filter(Boolean)
         console.log('fbm_sku_lookup', { amazonOrderId, skus_to_match: skus })
 
-        const { data: mappings } = await supabase
-          .from('product_links')
-          .select('amazon_sku, shopify_variant_id, shopify_sku')
-          .eq('user_id', userId)
-          .eq('enabled', true)
-          .in('amazon_sku', skus)
-
-        const mappingMap = new Map((mappings || []).map((m: any) => [m.amazon_sku, m]))
+        const mappingMap = globalSkuMap
         const unmappedSkus = skus.filter((sku: string) => !mappingMap.has(sku))
         const matchedSkus = skus.filter((sku: string) => mappingMap.has(sku)).map((sku: string) => ({
           amazon_sku: sku,
