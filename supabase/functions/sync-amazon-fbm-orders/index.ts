@@ -6,8 +6,82 @@ import {
   isTokenExpired,
   LWA,
   warnIfDeprecated,
+  API_VERSIONS,
 } from '../_shared/amazon-sp-api-policy.ts'
 import { logger } from '../_shared/logger.ts'
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: Request a Restricted Data Token (RDT) for PII access
+// https://developer-docs.amazon.com/sp-api/docs/tokens-api-use-case-guide
+// ═══════════════════════════════════════════════════════════════
+async function getRestrictedDataToken(
+  baseUrl: string,
+  accessToken: string,
+  amazonOrderId: string,
+): Promise<string | null> {
+  const rdtPayload = {
+    restrictedResources: [
+      {
+        method: 'GET',
+        path: `/orders/v0/orders/${amazonOrderId}`,
+        dataElements: ['buyerInfo', 'shippingAddress'],
+      },
+    ],
+  };
+
+  try {
+    const res = await fetch(`${baseUrl}/tokens/${API_VERSIONS.tokens.current}/restrictedDataToken`, {
+      method: 'POST',
+      headers: getSpApiHeaders(accessToken),
+      body: JSON.stringify(rdtPayload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('rdt_request_failed', { status: res.status, body: errText });
+      return null;
+    }
+
+    const data = await res.json();
+    return data.restrictedDataToken || null;
+  } catch (err) {
+    console.error('rdt_request_error', err);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: Fetch single order with RDT to get PII (address, buyer)
+// ═══════════════════════════════════════════════════════════════
+async function fetchOrderWithPii(
+  baseUrl: string,
+  accessToken: string,
+  amazonOrderId: string,
+): Promise<any | null> {
+  const rdt = await getRestrictedDataToken(baseUrl, accessToken, amazonOrderId);
+  if (!rdt) {
+    console.warn('rdt_unavailable, falling back to non-PII order data', { amazonOrderId });
+    return null;
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/orders/v0/orders/${amazonOrderId}`, {
+      headers: getSpApiHeaders(rdt),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('pii_order_fetch_failed', { status: res.status, body: errText });
+      return null;
+    }
+
+    const data = await res.json();
+    return data?.payload || null;
+  } catch (err) {
+    console.error('pii_order_fetch_error', err);
+    return null;
+  }
+}
 
 const SHOPIFY_API_VERSION = '2026-01'
 
@@ -533,6 +607,17 @@ Deno.serve(async (req) => {
         // Set status to creating
         await supabase.from('amazon_fbm_orders').update({ status: 'creating' } as any).eq('id', insertedOrder.id)
 
+        // ─── Fetch PII (shipping address, buyer name) via RDT ────
+        const piiOrder = await fetchOrderWithPii(baseUrl, accessToken, amazonOrderId)
+        const orderWithPii = piiOrder || order // fallback to original if RDT fails
+
+        console.log('fbm_pii_fetch', {
+          amazonOrderId,
+          has_rdt_data: !!piiOrder,
+          has_shipping_address: !!orderWithPii.ShippingAddress,
+          buyer_name: orderWithPii.ShippingAddress?.Name || orderWithPii.BuyerInfo?.BuyerName || 'none',
+        })
+
         // Build Shopify order payload
         const lineItems = orderItems.map((item: any) => {
           const mapping = mappingMap.get(item.SellerSKU)
@@ -544,23 +629,34 @@ Deno.serve(async (req) => {
           }
         })
 
-        // Map shipping address from Amazon
-        const shippingAddress = order.ShippingAddress ? {
-          first_name: order.ShippingAddress.Name?.split(' ')[0] || '',
-          last_name: order.ShippingAddress.Name?.split(' ').slice(1).join(' ') || '',
-          address1: order.ShippingAddress.AddressLine1 || '',
-          address2: order.ShippingAddress.AddressLine2 || '',
-          city: order.ShippingAddress.City || '',
-          province: order.ShippingAddress.StateOrRegion || '',
-          zip: order.ShippingAddress.PostalCode || '',
-          country: order.ShippingAddress.CountryCode || 'AU',
-          phone: order.ShippingAddress.Phone || '',
+        // Map shipping address from Amazon (now using PII-enriched data)
+        const addr = orderWithPii.ShippingAddress
+        const shippingAddress = addr ? {
+          first_name: addr.Name?.split(' ')[0] || '',
+          last_name: addr.Name?.split(' ').slice(1).join(' ') || '',
+          address1: addr.AddressLine1 || '',
+          address2: addr.AddressLine2 || '',
+          city: addr.City || '',
+          province: addr.StateOrRegion || '',
+          zip: addr.PostalCode || '',
+          country: addr.CountryCode || 'AU',
+          phone: addr.Phone || '',
+        } : undefined
+
+        // Extract customer info
+        const buyerName = addr?.Name || orderWithPii.BuyerInfo?.BuyerName || ''
+        const buyerEmail = orderWithPii.BuyerInfo?.BuyerEmail || null
+        const customer = buyerName ? {
+          first_name: buyerName.split(' ')[0] || '',
+          last_name: buyerName.split(' ').slice(1).join(' ') || '',
+          ...(buyerEmail ? { email: buyerEmail } : {}),
         } : undefined
 
         const shopifyPayload = {
           order: {
             line_items: lineItems,
-            ...(shippingAddress ? { shipping_address: shippingAddress } : {}),
+            ...(shippingAddress ? { shipping_address: shippingAddress, billing_address: shippingAddress } : {}),
+            ...(customer ? { customer } : {}),
             financial_status: financialStatus,
             fulfillment_status: 'unfulfilled',
             tags: 'amazon-fbm,xettle-bridge',
