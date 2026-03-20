@@ -260,6 +260,8 @@ Deno.serve(async (req) => {
         LastUpdatedAfter: lastUpdatedAfter,
       })
 
+      // NOTE: Orders v0 is deprecated. See API_VERSIONS.orders.migrationNote
+      warnIfDeprecated('orders')
       const ordersUrl = `${baseUrl}/orders/v0/orders?${ordersParams.toString()}`
       console.log('fbm_orders_url', ordersUrl)
       console.log('fbm_orders_request', { marketplace_id, region, lastUpdatedAfter })
@@ -267,7 +269,7 @@ Deno.serve(async (req) => {
       let ordersResponse: Response
       try {
         ordersResponse = await fetch(ordersUrl, {
-          headers: { 'x-amz-access-token': accessToken, 'Content-Type': 'application/json' },
+          headers: getSpApiHeaders(accessToken),
         })
       } catch (fetchErr) {
         console.error('fbm_orders_fetch_failed', fetchErr)

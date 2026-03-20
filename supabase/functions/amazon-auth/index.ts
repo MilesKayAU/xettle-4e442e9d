@@ -180,7 +180,7 @@ serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          grant_type: 'refresh_token',
+          grant_type: LWA.GRANT_TYPES.REFRESH_TOKEN,
           refresh_token: tokenRow.refresh_token,
           client_id: AMAZON_CLIENT_ID,
           client_secret: AMAZON_CLIENT_SECRET,
