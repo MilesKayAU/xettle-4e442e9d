@@ -240,6 +240,10 @@ export default function Admin() {
               <BarChart3 className="h-3.5 w-3.5" />
               User Overview
             </TabsTrigger>
+            <TabsTrigger value="fulfillment" className="flex items-center gap-1.5">
+              <Package className="h-3.5 w-3.5" />
+              Fulfillment Bridge
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
