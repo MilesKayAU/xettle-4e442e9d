@@ -456,6 +456,10 @@ function OrderMonitorTab() {
                         <TableRow>
                           <TableCell colSpan={6} className="bg-muted/50 p-4">
                             <div className="space-y-3">
+                              {/* PII Access Diagnostic Card */}
+                              {order.raw_amazon_payload?.pii_access && (
+                                <PiiAccessCard payload={order.raw_amazon_payload} />
+                              )}
                               {order.error_detail && (
                                 <div>
                                   <Label className="text-xs font-semibold">Error Detail</Label>
