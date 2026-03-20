@@ -1,39 +1,30 @@
 
 
-## Findings
+## Plan: Enforce SKU-based filtering with proper logging
 
-The dry run returned zero orders because the Amazon SP-API query on **line 479** filters for `Unshipped,PartiallyShipped,Shipped` only. Your new order (`503-9977917-3481420`) is still in **Pending** status on Amazon, so it is excluded from results.
+Three changes needed in `supabase/functions/sync-amazon-fbm-orders/index.ts`:
 
-## Root Cause
+### 1. Zero matched SKUs — log `fbm_order_skipped_fba` (lines 841-846)
 
-Amazon orders start in `Pending` status (payment verification phase, typically 30 minutes to a few hours). The current filter deliberately excludes `Pending` because Amazon withholds PII (shipping address, buyer info) until the order moves to `Unshipped`. Creating a Shopify order without PII would fail the hard-block safety gate.
+Current code deletes the record and skips silently with no event log. Add a `logEvent` call with `fbm_order_skipped_fba` including the skipped SKUs before deleting the record.
 
-## Plan
+### 2. Partial match — log `fbm_partial_order_created` (after Shopify order creation, ~line 1000+)
 
-**File: `supabase/functions/sync-amazon-fbm-orders/index.ts`**
+After a successful Shopify order creation, if `unmappedSkus.length > 0` (meaning some SKUs were mapped and some weren't), log `fbm_partial_order_created` with `included_skus` (the matched ones) and `skipped_skus` (the unmapped FBA ones). This is informational — the Shopify order already only contains `mappedOrderItems`, so the behavior is correct; we just need the log entry.
 
-1. **Add `Pending` to the order status filter** (line 479): change to `Unshipped,PartiallyShipped,Shipped,Pending`
-2. **Handle Pending orders gracefully** in the order processing loop (~line 530+):
-   - When order status is `Pending`, extract PII as normal
-   - If PII is missing (expected for Pending), set status to `pending_payment` (not `blocked_missing_pii`) with a friendly error detail: "Order is still in Pending status on Amazon — PII will be available once payment clears"
-   - Skip Shopify order creation for `pending_payment` orders
-   - When the order is re-fetched later (after moving to `Unshipped`), the existing idempotency logic will update it with full PII and proceed
+### 3. All SKUs matched — no change needed
 
-3. **Add `pending_payment` to the force-refetch cleanup list** (line 368) so re-syncs pick these up
+The existing flow already handles this correctly. Optionally add `fbm_order_created` detail showing all SKUs were matched (this already happens via the existing `shopify_order_created` event).
 
-**File: `src/components/admin/FulfillmentBridge.tsx`**
+### Summary of changes
 
-4. **Add status color** for `pending_payment`: amber/yellow badge — `'bg-amber-100 text-amber-800 border-amber-300'`
-5. **Add info text** in the order monitor for `pending_payment` status: "Awaiting Amazon payment verification — will auto-sync once the order moves to Unshipped"
+| Scenario | Action | Log event |
+|----------|--------|-----------|
+| 0 mapped SKUs | Delete record, skip | `fbm_order_skipped_fba` |
+| Some mapped | Create Shopify with mapped only | `fbm_partial_order_created` |
+| All mapped | Create Shopify as normal | existing `shopify_order_created` |
 
-## Why This is Safe
-
-- Pending orders won't attempt Shopify creation (PII gate still enforced)
-- They'll appear in your dashboard so you can see them
-- Next sync (manual or cron) will re-process them once Amazon releases PII
-
-## Technical Detail
-
-- No database migration needed — `status` is a free-text column
-- Edge function will be redeployed after changes
+### File touched
+- `supabase/functions/sync-amazon-fbm-orders/index.ts` — two small additions (~5 lines each)
+- Redeploy edge function
 
