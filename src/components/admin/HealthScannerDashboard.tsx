@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { RefreshCw, ScanSearch, CheckCircle, AlertTriangle, XCircle, Eye, EyeOff } from 'lucide-react';
+import { RefreshCw, ScanSearch, CheckCircle, AlertTriangle, XCircle, Eye, EyeOff, ClipboardCopy } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface HealthIssue {
@@ -204,6 +204,15 @@ export default function HealthScannerDashboard() {
     }
   };
 
+  const generateFixPrompt = (issue: HealthIssue) => {
+    const prompt = `Fix this health issue detected on page "${issue.page}":\n\n**Issue:** ${issue.message}\n**Source:** ${issue.source}\n**Severity:** ${issue.severity}\n**Occurrences:** ${issue.occurrence_count}\n\nPlease identify the root cause and apply the fix.`;
+    navigator.clipboard.writeText(prompt).then(() => {
+      toast({ title: 'Fix prompt copied!', description: 'Paste it into the Lovable chat to apply the fix.' });
+    }).catch(() => {
+      toast({ title: 'Copy failed', description: prompt, variant: 'destructive' });
+    });
+  };
+
   const filtered = issues.filter(i => filter === 'all' || i.status === filter);
   const openCount = issues.filter(i => i.status === 'open').length;
   const resolvedCount = issues.filter(i => i.status === 'resolved').length;
@@ -323,16 +332,21 @@ export default function HealthScannerDashboard() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {issue.status === 'open' && (
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" title="Mark resolved" onClick={() => markStatus(issue.fingerprint, 'resolved')}>
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          </Button>
-                          <Button variant="ghost" size="icon" title="Ignore" onClick={() => markStatus(issue.fingerprint, 'ignored')}>
-                            <EyeOff className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" title="Copy fix prompt" onClick={() => generateFixPrompt(issue)}>
+                          <ClipboardCopy className="h-4 w-4 text-primary" />
+                        </Button>
+                        {issue.status === 'open' && (
+                          <>
+                            <Button variant="ghost" size="icon" title="Mark resolved" onClick={() => markStatus(issue.fingerprint, 'resolved')}>
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" title="Ignore" onClick={() => markStatus(issue.fingerprint, 'ignored')}>
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
