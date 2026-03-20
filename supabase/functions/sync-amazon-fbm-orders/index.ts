@@ -185,14 +185,19 @@ Deno.serve(async (req) => {
       await logEvent(supabase, userId, 'fbm_poll_started', { dry_run: dryRun, mode: syncMode, force_refetch: forceRefetch }, storeKey)
 
       // ─── Compute polling window ────────────────────────────────
-      const lastPollAt = await readSetting(supabase, userId, `fbm:${storeKey}:last_poll_at`)
       let lastUpdatedAfter: string
-      if (lastPollAt) {
-        const dt = new Date(lastPollAt)
-        dt.setMinutes(dt.getMinutes() - 2) // 2 minute buffer
-        lastUpdatedAfter = dt.toISOString()
-      } else {
+      if (forceRefetch) {
+        // Manual re-sync: always use 7-day lookback to catch all recent orders
         lastUpdatedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      } else {
+        const lastPollAt = await readSetting(supabase, userId, `fbm:${storeKey}:last_poll_at`)
+        if (lastPollAt) {
+          const dt = new Date(lastPollAt)
+          dt.setMinutes(dt.getMinutes() - 2) // 2 minute buffer
+          lastUpdatedAfter = dt.toISOString()
+        } else {
+          lastUpdatedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        }
       }
 
       // ─── Get Amazon token via direct DB read + inline refresh ──
