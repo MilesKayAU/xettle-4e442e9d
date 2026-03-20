@@ -478,7 +478,7 @@ Deno.serve(async (req) => {
         fulfillmentChannels: 'MFN',
         orderStatuses: 'Unshipped,PartiallyShipped,Shipped',
         lastUpdatedAfter: lastUpdatedAfter,
-        includedData: 'BUYER_INFO,SHIPPING_ADDRESS',
+        includedData: 'BUYER,RECIPIENT',
       })
 
       const ordersUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders?${ordersParams.toString()}`
