@@ -52,22 +52,22 @@ interface PiiExtractResult {
  * If the role isn't granted, fields are simply absent (no error, no RDT needed).
  */
 function extractPiiFromOrder(order: any): PiiExtractResult {
-  // v2026-01-01 structure: order.recipient.shippingAddress.*, order.buyer.*
+  // Support both early v2026 role-based payloads and the current Orders API shape
   const recipient = order?.recipient || {}
-  const addr = recipient?.shippingAddress || {}
+  const addr = recipient?.shippingAddress || recipient?.deliveryAddress || {}
   const buyer = order?.buyer || {}
 
   const result: PiiExtractResult = {
-    recipientName: addr.name || null,
-    addressLine1: addr.addressLine1 || null,
-    addressLine2: addr.addressLine2 || null,
+    recipientName: addr.name || recipient?.name || null,
+    addressLine1: addr.addressLine1 || addr.address1 || addr.addressLine || null,
+    addressLine2: addr.addressLine2 || addr.address2 || null,
     city: addr.city || null,
     stateOrRegion: addr.stateOrRegion || null,
     postalCode: addr.postalCode || null,
     countryCode: addr.countryCode || null,
-    phone: addr.phone || null,
-    buyerName: buyer.buyerName || null,
-    buyerEmail: buyer.buyerEmail || null,
+    phone: addr.phone || addr.phoneNumber || null,
+    buyerName: buyer.buyerName || buyer.name || null,
+    buyerEmail: buyer.buyerEmail || buyer.email || null,
     missingRequiredFields: [],
     missingWarningFields: [],
     piiPresent: false,
@@ -89,6 +89,53 @@ function extractPiiFromOrder(order: any): PiiExtractResult {
   result.piiPresent = result.missingRequiredFields.length === 0
 
   return result
+}
+
+function getAmazonOrderId(order: any): string | null {
+  return order?.orderId
+    || order?.amazonOrderId
+    || order?.AmazonOrderId
+    || order?.orderAliases?.find((alias: any) => alias?.aliasType === 'SELLER_ORDER_ID')?.aliasId
+    || order?.orderAliases?.[0]?.aliasId
+    || null
+}
+
+function getAmazonOrderStatus(order: any): string {
+  return order?.orderStatus || order?.OrderStatus || order?.status || order?.orderState || order?.currentStatus || ''
+}
+
+function getOrderItemSku(item: any): string | null {
+  return item?.sellerSku
+    || item?.SellerSKU
+    || item?.product?.sellerSku
+    || item?.product?.sku
+    || item?.product?.identifiers?.sellerSku
+    || item?.sku
+    || null
+}
+
+function getOrderItemAsin(item: any): string | null {
+  return item?.asin
+    || item?.ASIN
+    || item?.product?.asin
+    || item?.product?.identifiers?.asin
+    || null
+}
+
+function getOrderItemQuantity(item: any): number {
+  return item?.quantityOrdered || item?.QuantityOrdered || item?.quantity || item?.product?.quantity || 1
+}
+
+function getOrderItemPrice(item: any): string {
+  return item?.itemPrice?.amount
+    || item?.ItemPrice?.Amount
+    || item?.product?.price?.unitPrice?.amount
+    || item?.price?.amount
+    || '0'
+}
+
+function getOrderItemTitle(item: any): string {
+  return item?.title || item?.Title || item?.product?.title || item?.product?.name || getOrderItemSku(item) || 'Amazon Item'
 }
 
 const SHOPIFY_API_VERSION = '2026-01'
