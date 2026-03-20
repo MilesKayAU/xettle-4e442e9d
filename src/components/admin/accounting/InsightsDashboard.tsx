@@ -64,6 +64,11 @@ interface MarketplaceStats {
   storageTotal: number;
   otherFeesTotal: number;
   feeBreakdown: FeeBreakdown[];
+  // PAC shipping estimate
+  pacShippingAvg60: number | null;
+  pacShippingAvg14: number | null;
+  pacShippingSample: number;
+  pacEstimateQuality: string | null;
 }
 
 interface AdSpendRecord {
