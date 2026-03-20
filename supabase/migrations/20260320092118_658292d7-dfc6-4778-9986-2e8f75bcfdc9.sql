@@ -1,0 +1,1 @@
+ALTER TABLE public.shopify_tokens ADD COLUMN IF NOT EXISTS token_type text NOT NULL DEFAULT 'standard';
