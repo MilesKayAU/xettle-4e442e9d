@@ -297,7 +297,7 @@ Deno.serve(async (req) => {
 
       // ─── Compute polling window ────────────────────────────────
       let lastUpdatedAfter: string
-      if (forceRefetch) {
+      if (forceRefetch || dryRun) {
         // Manual re-sync: always use 7-day lookback to catch all recent orders
         lastUpdatedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       } else {
