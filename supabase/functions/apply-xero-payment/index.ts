@@ -10,7 +10,7 @@ const xeroClientSecret = Deno.env.get('XERO_CLIENT_SECRET')!;
 // Token refresh helper
 async function refreshXeroToken(supabase: any, tokenRow: any) {
   const basicAuth = btoa(`${xeroClientId}:${xeroClientSecret}`);
-  const resp = await fetch('https://identity.xero.com/connect/token', {
+  const resp = await fetch(XERO_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${basicAuth}` },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokenRow.refresh_token }),

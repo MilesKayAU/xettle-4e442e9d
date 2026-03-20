@@ -27,7 +27,7 @@ async function refreshXeroToken(supabase: any, token: any): Promise<any> {
     .from('xero_tokens').select('*').eq('id', token.id).single();
   if (fresh && fresh.expires_at !== token.expires_at) return { ...token, ...fresh };
 
-  const resp = await fetch('https://identity.xero.com/connect/token', {
+  const resp = await fetch(XERO_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

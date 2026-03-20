@@ -157,7 +157,7 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
     return tokenRow
   }
 
-  const res = await fetch('https://identity.xero.com/connect/token', {
+  const res = await fetch(XERO_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

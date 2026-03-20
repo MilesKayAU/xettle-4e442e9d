@@ -54,7 +54,7 @@ async function refreshXeroToken(
   if (expiresAt > new Date(Date.now() + 60000)) return tokenRow;
 
   const timestamp = new Date().toISOString();
-  const res = await fetch('https://identity.xero.com/connect/token', {
+  const res = await fetch(XERO_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

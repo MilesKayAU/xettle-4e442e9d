@@ -21,7 +21,7 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
   const expiresAt = new Date(token.expires_at);
   if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) return token;
 
-  const resp = await fetch('https://identity.xero.com/connect/token', {
+  const resp = await fetch(XERO_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
