@@ -818,7 +818,7 @@ Deno.serve(async (req) => {
         // ─── Safety gate: block live sync if shipping PII missing ──
         if (missingRequiredFields.length > 0) {
           // Distinguish Amazon Pending orders (payment verification) from genuine PII access issues
-          const amazonOrderStatus = order.orderStatus || order.OrderStatus || ''
+          const amazonOrderStatus = getAmazonOrderStatus(order)
           const isPendingPayment = amazonOrderStatus === 'Pending'
 
           if (isPendingPayment) {
