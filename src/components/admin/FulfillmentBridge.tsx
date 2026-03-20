@@ -107,45 +107,21 @@ function ProductLinksTab() {
       if (parsed.variantId && !shopifyVariantId) setShopifyVariantId(parsed.variantId);
       if (parsed.sku && !shopifySku) setShopifySku(parsed.sku);
 
-      // If handle detected, try Shopify API to resolve variant ID
+      // If handle detected, resolve via edge function (avoids CORS + token exposure)
       if (parsed.handle && !shopifyVariantId) {
         try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: tokenRow } = await supabase
-              .from('shopify_tokens')
-              .select('shop_domain, access_token')
-              .eq('user_id', user.id)
-              .eq('is_active', true)
-              .limit(1)
-              .maybeSingle();
+          const { data, error } = await supabase.functions.invoke('resolve-shopify-handle', {
+            body: { handle: parsed.handle },
+          });
 
-            if (tokenRow?.access_token && tokenRow?.shop_domain) {
-              try {
-                const res = await fetch(
-                  `https://${tokenRow.shop_domain}/admin/api/2026-01/products.json?handle=${encodeURIComponent(parsed.handle)}&fields=id,title,variants`,
-                  { headers: { 'X-Shopify-Access-Token': tokenRow.access_token } }
-                );
-                if (res.ok) {
-                  const json = await res.json();
-                  const products = json.products || [];
-                  if (products.length > 0 && products[0].variants?.length > 0) {
-                    const variant = products[0].variants[0];
-                    if (!shopifyVariantId) setShopifyVariantId(String(variant.id));
-                    if (!shopifySku && variant.sku) setShopifySku(variant.sku);
-                    toast({ title: 'Shopify product loaded', description: `${products[0].title} — Variant ${variant.id}` });
-                  } else {
-                    toast({ title: 'Handle not found', description: `No product with handle "${parsed.handle}". Enter Variant ID manually.` });
-                  }
-                } else {
-                  toast({ title: 'Shopify API error', description: `Status ${res.status}. Enter Variant ID manually.`, variant: 'destructive' });
-                }
-              } catch {
-                toast({ title: 'Shopify API error', description: 'Could not fetch product. Enter Variant ID manually.', variant: 'destructive' });
-              }
-            } else {
-              toast({ title: 'Handle detected', description: 'No Shopify credentials configured. Enter Variant ID manually.' });
-            }
+          if (error) {
+            toast({ title: 'Handle lookup failed', description: error.message || 'Enter Variant ID manually.', variant: 'destructive' });
+          } else if (data?.error) {
+            toast({ title: 'Handle not resolved', description: data.error + '. Enter Variant ID manually.' });
+          } else if (data?.variant_id) {
+            if (!shopifyVariantId) setShopifyVariantId(data.variant_id);
+            if (!shopifySku && data.sku) setShopifySku(data.sku);
+            toast({ title: 'Shopify product loaded', description: `${data.title || 'Product'} — Variant ${data.variant_id}` });
           }
         } catch {
           toast({ title: 'Could not resolve handle', description: 'Enter Variant ID manually.', variant: 'destructive' });
