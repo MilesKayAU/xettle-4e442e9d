@@ -331,6 +331,7 @@ export default function Dashboard() {
   const [showWizard, setShowWizard] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState(1);
   const [hasAmazon, setHasAmazon] = useState(false);
+  const [amazonXettleCode, setAmazonXettleCode] = useState<string>('amazon_au');
   const [hasShopify, setHasShopify] = useState(false);
   const [hasEbay, setHasEbay] = useState(false);
   const [justConnectedXero, setJustConnectedXero] = useState(false);
