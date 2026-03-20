@@ -92,11 +92,11 @@ Deno.serve(async (req) => {
         const clientSecret = Deno.env.get('AMAZON_SP_CLIENT_SECRET')!;
 
         // Refresh token
-        const tokenResp = await fetch('https://api.amazon.com/auth/o2/token', {
+        const tokenResp = await fetch(LWA.TOKEN_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
-            grant_type: 'refresh_token',
+            grant_type: LWA.GRANT_TYPES.REFRESH_TOKEN,
             refresh_token: amazonToken.refresh_token,
             client_id: clientId,
             client_secret: clientSecret,
