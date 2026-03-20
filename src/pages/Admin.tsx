@@ -402,6 +402,10 @@ export default function Admin() {
           <TabsContent value="fulfillment">
             <FulfillmentBridge />
           </TabsContent>
+
+          <TabsContent value="health">
+            <HealthScannerDashboard />
+          </TabsContent>
         </Tabs>
       </div>
 
