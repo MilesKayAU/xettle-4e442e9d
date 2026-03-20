@@ -492,13 +492,13 @@ function OrderMonitorTab() {
           </div>
         ) : (
           <Button onClick={() => setConfirmLive(true)} disabled={syncing} size="sm">
-            <Play className="h-4 w-4 mr-1" />
+            {syncing ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
             Live Sync Now
           </Button>
         )}
         <Button onClick={() => runSync(true)} disabled={syncing} variant="outline" size="sm">
-          <FlaskConical className="h-4 w-4 mr-1" />
-          Dry Run
+          {syncing ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-1" />}
+          {syncing ? 'Syncing…' : 'Dry Run'}
         </Button>
         <Button variant="ghost" size="sm" onClick={loadOrders}>
           <RefreshCw className="h-4 w-4" />
