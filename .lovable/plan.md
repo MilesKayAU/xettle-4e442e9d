@@ -1,25 +1,47 @@
 
+# API Policy Files — COMPLETE
 
-# Amazon SP-API Policy — COMPLETE
+## Amazon SP-API Policy (`_shared/amazon-sp-api-policy.ts`)
 
-## What was done
+- Regional endpoints (NA, EU, FE)
+- Marketplace registry (16 marketplaces with IDs, regions, domains)
+- LWA auth constants (token URL, expiry buffer, grant types)
+- API version registry — Orders v0 and Finances v0 marked as **legacy but still supported** (not hard-blocked)
+- Rate limits per operation (token bucket)
+- Required headers + user-agent builder
+- RDT-required operations list
+- Order history limits (AU/SG/JP from 2016)
+- **SigV4 signing constants** (SIGNING_SERVICE, SIGNING_REGIONS per region)
+- **`assertMarketplaceSupported()`** helper to prevent invalid marketplace bugs
 
-Created `supabase/functions/_shared/amazon-sp-api-policy.ts` as the canonical reference for all Amazon SP-API rules. Updated `sync-amazon-fbm-orders`, `fetch-amazon-settlements`, and `amazon-auth` to import from it.
+### Functions using this policy
+- `sync-amazon-fbm-orders`
+- `fetch-amazon-settlements`
+- `amazon-auth`
+- `historical-audit`
 
-## Policy file contents
+## Shopify API Policy (`_shared/shopify-api-policy.ts`)
 
-1. **SP_API_ENDPOINTS** — na/eu/fe base URLs + `getEndpointForRegion()` helper
-2. **MARKETPLACE_REGISTRY** — 16 marketplace IDs with region, country, domain
-3. **LWA constants** — TOKEN_URL, GRANT_TYPES, TOKEN_EXPIRY_BUFFER_MS + `isTokenExpired()` helper
-4. **API_VERSIONS** — Orders v0 (deprecated → v2026-01-01), Finances v0 (deprecated → v2024-06-19), Tokens 2021-03-01
-5. **RATE_LIMITS** — Per-operation rate/burst for Orders, Finances, Tokens APIs + `getRateLimit()` helper
-6. **getSpApiHeaders()** — Returns x-amz-access-token + compliant user-agent + Content-Type
-7. **RDT_REQUIRED_OPERATIONS** — getOrderAddress, getOrderBuyerInfo, getOrderItemsBuyerInfo + `requiresRdt()` helper
-8. **EXTENDED_HISTORY_MARKETPLACES** — AU/SG/JP support orders from 2016 + `getOrderHistoryStart()` helper
-9. **SELLER_CENTRAL_AUTH_URLS** — Per-region OAuth consent URLs
-10. **warnIfDeprecated()** — Logs console warnings when using deprecated API versions
+- `SHOPIFY_API_VERSION = '2026-01'` — single source of truth
+- `SHOPIFY_REQUIRED_SCOPES` array + comma-joined string
+- REST rate limits (leaky bucket: 40 burst, 2/s leak)
+- GraphQL rate limits (100 points/s)
+- Pagination constants (250 max per page, 25K total)
+- REST deprecation note (legacy but supported)
+- Helper functions:
+  - `getShopifyHeaders(accessToken)`
+  - `buildShopifyUrl(shopDomain, resource, params?)`
+  - `buildShopifyGraphqlUrl(shopDomain)`
+  - `parseRateLimitHeader(header)`
+  - `isApproachingRateLimit(header, threshold?)`
+  - `getNextPageUrl(linkHeader)`
+  - `warnIfRestLegacy()`
 
-## Migration notes for future work
-
-- Orders v0 (`getOrders`) is deprecated → migrate to v2026-01-01 (`searchOrders`)
-- Finances v0 (`listFinancialEvents`) is deprecated → migrate to v2024-06-19 (`listTransactions`)
+### Functions using this policy
+- `sync-amazon-fbm-orders` (Shopify order creation)
+- `fetch-shopify-payouts`
+- `fetch-shopify-orders`
+- `resolve-shopify-handle`
+- `estimate-shipping-cost`
+- `historical-audit`
+- `shopify-auth` (scopes)
