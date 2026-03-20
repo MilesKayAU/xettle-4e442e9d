@@ -9,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package, HeartPulse, Truck } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package, HeartPulse, Truck, ChevronRight } from 'lucide-react';
 import AccountResetButton from '@/components/admin/AccountResetButton';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
@@ -42,6 +41,7 @@ import UserOverviewDashboard from '@/components/admin/UserOverviewDashboard';
 import FulfillmentBridge from '@/components/admin/FulfillmentBridge';
 import HealthScannerDashboard from '@/components/admin/HealthScannerDashboard';
 import ShippingEstimateSettings from '@/components/settings/ShippingEstimateSettings';
+import { cn } from '@/lib/utils';
 
 interface UserRow {
   id: string;
@@ -53,6 +53,41 @@ interface UserRow {
   settlement_count: number;
 }
 
+const NAV_GROUPS = [
+  {
+    label: 'People',
+    items: [
+      { id: 'users', label: 'Users', icon: Users },
+      { id: 'overview', label: 'User Overview', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { id: 'marketplaces', label: 'Marketplace Config', icon: Store },
+      { id: 'fulfillment', label: 'Fulfillment Bridge', icon: Package },
+      { id: 'shipping', label: 'Shipping Estimates', icon: Truck },
+    ],
+  },
+  {
+    label: 'Quality & Health',
+    items: [
+      { id: 'bugs', label: 'Bug Reports', icon: Bug },
+      { id: 'integrity', label: 'Data Integrity', icon: ShieldCheck },
+      { id: 'health', label: 'Health Scanner', icon: HeartPulse },
+    ],
+  },
+  {
+    label: 'Growth & Comms',
+    items: [
+      { id: 'prelaunch', label: 'Pre-Launch', icon: Rocket },
+      { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
+      { id: 'growth', label: 'Growth Scout', icon: Crosshair },
+      { id: 'emails', label: 'Emails', icon: Mail },
+    ],
+  },
+] as const;
+
 export default function Admin() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading, user, handleSignOut } = useAdminAuth();
@@ -63,6 +98,7 @@ export default function Admin() {
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [activeTab, setActiveTab] = useState('users');
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -160,104 +196,26 @@ export default function Admin() {
 
   if (!isAuthenticated || !isAdmin) return null;
 
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="container-custom flex items-center justify-between h-16">
-          <div className="flex items-center gap-3">
-            <Link to="/dashboard" className="flex items-center">
-              <XettleLogo height={32} />
-            </Link>
-            <Badge variant="secondary">Admin</Badge>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/dashboard">
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Dashboard
-              </Link>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-1" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'users':
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-foreground">Users</h2>
+              <div className="flex gap-2">
+                <AccountResetButton />
+                <Button variant="default" size="sm" onClick={() => setInviteOpen(true)}>
+                  <UserPlus className="h-4 w-4 mr-1" />
+                  Invite User
+                </Button>
+                <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers}>
+                  <RefreshCw className={`h-4 w-4 mr-1 ${loadingUsers ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </div>
 
-      <div className="container-custom py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Admin Panel</h1>
-            <p className="text-muted-foreground mt-1">Manage users and monitor connections <span className="font-mono text-xs opacity-50">v1.7.0</span></p>
-          </div>
-          <div className="flex gap-2">
-            <AccountResetButton />
-            <Button variant="default" size="sm" onClick={() => setInviteOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-1" />
-              Invite User
-            </Button>
-            <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${loadingUsers ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-          </div>
-        </div>
-
-        <Tabs defaultValue="users" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="users" className="flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" />
-              Users
-            </TabsTrigger>
-            <TabsTrigger value="marketplaces" className="flex items-center gap-1.5">
-              <Store className="h-3.5 w-3.5" />
-              Marketplace Config
-            </TabsTrigger>
-            <TabsTrigger value="bugs" className="flex items-center gap-1.5">
-              <Bug className="h-3.5 w-3.5" />
-              Bug Reports
-            </TabsTrigger>
-            <TabsTrigger value="integrity" className="flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Data Integrity
-            </TabsTrigger>
-            <TabsTrigger value="prelaunch" className="flex items-center gap-1.5">
-              <Rocket className="h-3.5 w-3.5" />
-              Pre-Launch
-            </TabsTrigger>
-            <TabsTrigger value="knowledge" className="flex items-center gap-1.5">
-              <BookOpen className="h-3.5 w-3.5" />
-              Knowledge Base
-            </TabsTrigger>
-            <TabsTrigger value="growth" className="flex items-center gap-1.5">
-              <Crosshair className="h-3.5 w-3.5" />
-              Growth
-            </TabsTrigger>
-            <TabsTrigger value="emails" className="flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5" />
-              Emails
-            </TabsTrigger>
-            <TabsTrigger value="overview" className="flex items-center gap-1.5">
-              <BarChart3 className="h-3.5 w-3.5" />
-              User Overview
-            </TabsTrigger>
-            <TabsTrigger value="fulfillment" className="flex items-center gap-1.5">
-              <Package className="h-3.5 w-3.5" />
-              Fulfillment Bridge
-            </TabsTrigger>
-            <TabsTrigger value="health" className="flex items-center gap-1.5">
-              <HeartPulse className="h-3.5 w-3.5" />
-              Health Scanner
-            </TabsTrigger>
-            <TabsTrigger value="shipping" className="flex items-center gap-1.5">
-              <Truck className="h-3.5 w-3.5" />
-              Shipping Estimate
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="users" className="space-y-6">
-            {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card>
                 <CardHeader className="pb-2">
@@ -285,7 +243,6 @@ export default function Admin() {
               </Card>
             </div>
 
-            {/* Users table */}
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -372,52 +329,89 @@ export default function Admin() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        );
+      case 'marketplaces': return <MarketplaceConfigTab />;
+      case 'bugs': return <BugReportsDashboard />;
+      case 'integrity': return <DataIntegrityDashboard />;
+      case 'prelaunch': return <PreLaunchChecklist />;
+      case 'knowledge': return <KnowledgeBaseDashboard />;
+      case 'growth': return <GrowthScoutDashboard />;
+      case 'emails': return <EmailMonitoringDashboard />;
+      case 'overview': return <UserOverviewDashboard />;
+      case 'fulfillment': return <FulfillmentBridge />;
+      case 'health': return <HealthScannerDashboard />;
+      case 'shipping': return <ShippingEstimateSettings />;
+      default: return null;
+    }
+  };
 
-          <TabsContent value="marketplaces">
-            <MarketplaceConfigTab />
-          </TabsContent>
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border bg-card">
+        <div className="container-custom flex items-center justify-between h-14">
+          <div className="flex items-center gap-3">
+            <Link to="/dashboard" className="flex items-center">
+              <XettleLogo height={28} />
+            </Link>
+            <Badge variant="secondary" className="text-xs">Admin</Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/dashboard">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Dashboard
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              <LogOut className="h-4 w-4 mr-1" />
+              Sign Out
+            </Button>
+          </div>
+        </div>
+      </header>
 
-          <TabsContent value="bugs">
-            <BugReportsDashboard />
-          </TabsContent>
+      <div className="flex min-h-[calc(100vh-3.5rem)]">
+        {/* Sidebar nav */}
+        <aside className="w-56 shrink-0 border-r border-border bg-card/50 overflow-y-auto">
+          <div className="px-3 pt-4 pb-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-2">Admin Panel <span className="font-mono text-[10px] opacity-60">v1.7.0</span></p>
+          </div>
+          <nav className="px-2 pb-4 space-y-4">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 px-2 mb-1">{group.label}</p>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        className={cn(
+                          'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left',
+                          isActive
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                        {isActive && <ChevronRight className="h-3 w-3 ml-auto shrink-0 opacity-50" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </aside>
 
-          <TabsContent value="integrity">
-            <DataIntegrityDashboard />
-          </TabsContent>
-
-          <TabsContent value="prelaunch">
-            <PreLaunchChecklist />
-          </TabsContent>
-
-          <TabsContent value="knowledge">
-            <KnowledgeBaseDashboard />
-          </TabsContent>
-
-          <TabsContent value="growth">
-            <GrowthScoutDashboard />
-          </TabsContent>
-
-          <TabsContent value="emails">
-            <EmailMonitoringDashboard />
-          </TabsContent>
-
-          <TabsContent value="overview">
-            <UserOverviewDashboard />
-          </TabsContent>
-
-          <TabsContent value="fulfillment">
-            <FulfillmentBridge />
-          </TabsContent>
-
-          <TabsContent value="health">
-            <HealthScannerDashboard />
-          </TabsContent>
-
-          <TabsContent value="shipping">
-            <ShippingEstimateSettings />
-          </TabsContent>
-        </Tabs>
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto p-6">
+          {renderContent()}
+        </main>
       </div>
 
       {/* Delete confirmation */}
