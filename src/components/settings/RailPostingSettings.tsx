@@ -481,7 +481,7 @@ export default function RailPostingSettings() {
                     {/* Auto-post enabled date */}
                     {isAuto && setting.auto_post_enabled_at && (
                       <p className="text-[10px] text-muted-foreground mt-1.5">
-                        Auto-posting since {new Date(setting.auto_post_enabled_at).toLocaleDateString()} — only settlements created after this date are auto-posted.
+                        Auto-posting since {(() => { try { const d = new Date(setting.auto_post_enabled_at); return Number.isNaN(d.getTime()) ? 'unknown date' : d.toLocaleDateString(); } catch { return 'unknown date'; } })()} — only settlements created after this date are auto-posted.
                         {eligibility.autopostDraftOnly && ' (DRAFT only for this tier)'}
                       </p>
                     )}
