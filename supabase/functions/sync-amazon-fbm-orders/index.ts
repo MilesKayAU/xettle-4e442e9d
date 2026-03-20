@@ -400,6 +400,8 @@ Deno.serve(async (req) => {
 
         // Map SKUs via product_links
         const skus = orderItems.map((item: any) => item.SellerSKU).filter(Boolean)
+        console.log('fbm_sku_lookup', { amazonOrderId, skus_to_match: skus })
+
         const { data: mappings } = await supabase
           .from('product_links')
           .select('amazon_sku, shopify_variant_id, shopify_sku')
@@ -409,13 +411,24 @@ Deno.serve(async (req) => {
 
         const mappingMap = new Map((mappings || []).map((m: any) => [m.amazon_sku, m]))
         const unmappedSkus = skus.filter((sku: string) => !mappingMap.has(sku))
+        const matchedSkus = skus.filter((sku: string) => mappingMap.has(sku)).map((sku: string) => ({
+          amazon_sku: sku,
+          shopify_variant_id: mappingMap.get(sku)?.shopify_variant_id,
+        }))
+
+        console.log('fbm_sku_mapping_result', { amazonOrderId, matched: matchedSkus, unmapped: unmappedSkus })
+
+        // Store debug details on order record
+        await supabase.from('amazon_fbm_orders').update({
+          raw_amazon_payload: { ...order, orderItems: itemSkus, matched_skus: matchedSkus, unmapped_skus: unmappedSkus },
+        } as any).eq('id', insertedOrder.id)
 
         if (unmappedSkus.length > 0) {
           await supabase.from('amazon_fbm_orders').update({
             status: 'manual_review',
             error_detail: `Unmapped SKU: ${unmappedSkus.join(', ')}`,
           } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_order_unmapped_sku', { unmapped_skus: unmappedSkus }, storeKey, amazonOrderId, 'warn')
+          await logEvent(supabase, userId, 'fbm_order_unmapped_sku', { unmapped_skus: unmappedSkus, matched_skus: matchedSkus }, storeKey, amazonOrderId, 'warn')
           manualReviewCount++
           continue
         }
