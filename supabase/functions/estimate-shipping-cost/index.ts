@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
 
 const PAC_BASE = "https://digitalapi.auspost.com.au/postage/parcel/domestic";
 
@@ -313,14 +314,11 @@ Deno.serve(async (req) => {
       if (estimated >= requestedBatchSize) break;
 
       // Fetch fulfillments for this order from Shopify
-      const fulfillmentsUrl = `https://${tokenRow.shop_domain}/admin/api/2026-01/orders/${order.shopify_order_id}/fulfillments.json`;
+      const fulfillmentsUrl = `https://${tokenRow.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders/${order.shopify_order_id}/fulfillments.json`;
       let fulfillments: any[] = [];
       try {
         const fRes = await fetch(fulfillmentsUrl, {
-          headers: {
-            "X-Shopify-Access-Token": tokenRow.access_token,
-            "Content-Type": "application/json",
-          },
+          headers: getShopifyHeaders(tokenRow.access_token),
         });
         if (fRes.ok) {
           const fData = await fRes.json();

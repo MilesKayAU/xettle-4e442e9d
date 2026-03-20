@@ -1,8 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logger } from '../_shared/logger.ts';
+import {
+  SHOPIFY_API_VERSION,
+  getShopifyHeaders,
+  buildShopifyUrl,
+} from '../_shared/shopify-api-policy.ts';
 
-const SHOPIFY_API_VERSION = "2026-01";
 const RATE_LIMIT_DELAY_MS = 500;
 
 interface ShopifyPayout {
@@ -83,17 +87,14 @@ async function syncPayoutsForUser(
       params.set("date_min", dateMin);
       console.log(`[fetch-shopify-payouts] Using boundary date filter: date_min=${dateMin}`);
     }
-    return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/shopify_payments/payouts.json?${params.toString()}`;
+    return buildShopifyUrl(shopDomain, 'shopify_payments/payouts', params);
   };
 
   let url: string = buildInitialUrl();
 
   do {
     const res = await fetch(url, {
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
+      headers: getShopifyHeaders(accessToken),
     });
 
     if (res.status === 401) {
@@ -221,12 +222,9 @@ async function syncPayoutsForUser(
     try {
       await sleep(RATE_LIMIT_DELAY_MS);
 
-      const txUrl = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/shopify_payments/balance/transactions.json?payout_id=${payout.id}&limit=250`;
+      const txUrl = buildShopifyUrl(shopDomain, 'shopify_payments/balance/transactions', new URLSearchParams({ payout_id: String(payout.id), limit: '250' }));
       const txRes = await fetch(txUrl, {
-        headers: {
-          "X-Shopify-Access-Token": accessToken,
-          "Content-Type": "application/json",
-        },
+        headers: getShopifyHeaders(accessToken),
       });
 
       if (!txRes.ok) {

@@ -1,6 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logger } from '../_shared/logger.ts';
+import {
+  SHOPIFY_API_VERSION,
+  getShopifyHeaders,
+} from '../_shared/shopify-api-policy.ts';
 
 interface ShopifyOrder {
   id: number;
@@ -145,7 +149,7 @@ Deno.serve(async (req) => {
           fields:
             "id,name,created_at,processed_at,financial_status,gateway,note_attributes,tags,subtotal_price,total_shipping_price_set,total_tax,total_price,total_discounts,line_items,payment_gateway_names,source_name",
         });
-        return `https://${shopDomain}/admin/api/2026-01/orders.json?${params.toString()}`;
+        return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?${params.toString()}`;
       }
 
       const params = new URLSearchParams({
@@ -157,7 +161,7 @@ Deno.serve(async (req) => {
       });
       if (effectiveDateFrom) params.set("created_at_min", effectiveDateFrom);
       if (dateTo) params.set("created_at_max", dateTo);
-      return `https://${shopDomain}/admin/api/2026-01/orders.json?${params.toString()}`;
+      return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?${params.toString()}`;
     };
 
     // 3. Fetch with pagination
@@ -170,7 +174,7 @@ Deno.serve(async (req) => {
       const url = buildUrl(nextCursor);
       logger.debug(`[fetch-shopify-orders] Fetching page ${page}:`, url.substring(0, 120));
       const res = await fetch(url, {
-        headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+        headers: getShopifyHeaders(accessToken),
       });
 
       logger.debug(`[fetch-shopify-orders] Shopify response: status=${res.status}`);

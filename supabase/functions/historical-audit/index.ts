@@ -1,12 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { logger } from '../_shared/logger.ts';
+import { getEndpointForRegion, getSpApiHeaders, LWA } from '../_shared/amazon-sp-api-policy.ts';
+import { SHOPIFY_API_VERSION, getShopifyHeaders, buildShopifyUrl } from '../_shared/shopify-api-policy.ts';
 
-const SP_API_ENDPOINTS: Record<string, string> = {
-  na: 'https://sellingpartnerapi-na.amazon.com',
-  eu: 'https://sellingpartnerapi-eu.amazon.com',
-  fe: 'https://sellingpartnerapi-fe.amazon.com',
-};
+// SP-API endpoints now imported from shared policy
 
 interface AuditResult {
   settlement_id: string;
@@ -94,11 +92,11 @@ Deno.serve(async (req) => {
         const clientSecret = Deno.env.get('AMAZON_SP_CLIENT_SECRET')!;
 
         // Refresh token
-        const tokenResp = await fetch('https://api.amazon.com/auth/o2/token', {
+        const tokenResp = await fetch(LWA.TOKEN_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
-            grant_type: 'refresh_token',
+            grant_type: LWA.GRANT_TYPES.REFRESH_TOKEN,
             refresh_token: amazonToken.refresh_token,
             client_id: clientId,
             client_secret: clientSecret,
@@ -109,7 +107,7 @@ Deno.serve(async (req) => {
           const tokenData = await tokenResp.json();
           const accessToken = tokenData.access_token;
           const region = amazonToken.region || 'fe';
-          const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe;
+          const baseUrl = getEndpointForRegion(region);
 
           // Fetch report list (headers only — no downloads)
           const params = new URLSearchParams({
@@ -120,7 +118,7 @@ Deno.serve(async (req) => {
           });
 
           const reportsResp = await fetch(`${baseUrl}/reports/2021-06-30/reports?${params}`, {
-            headers: { 'x-amz-access-token': accessToken, 'Content-Type': 'application/json' },
+            headers: getSpApiHeaders(accessToken),
           });
 
           if (reportsResp.ok) {
@@ -201,12 +199,9 @@ Deno.serve(async (req) => {
         });
 
         const payoutsResp = await fetch(
-          `https://${shopifyToken.shop_domain}/admin/api/2026-01/shopify_payments/payouts.json?${params}`,
+          buildShopifyUrl(shopifyToken.shop_domain, 'shopify_payments/payouts', params),
           {
-            headers: {
-              'X-Shopify-Access-Token': shopifyToken.access_token,
-              'Content-Type': 'application/json',
-            },
+            headers: getShopifyHeaders(shopifyToken.access_token),
           }
         );
 

@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logger } from '../_shared/logger.ts'
 import { verifyShopifyHmac } from '../_shared/shopify-hmac.ts'
+import { SHOPIFY_SCOPES_STRING } from '../_shared/shopify-api-policy.ts'
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? ""
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
         value: stateValue,
       }, { onConflict: 'user_id,key' })
 
-      const scopes = 'read_fulfillments,read_inventory,read_orders,read_products,read_reports,read_shopify_payments_accounts,read_shopify_payments_payouts'
+      const scopes = SHOPIFY_SCOPES_STRING
       const redirectUri = 'https://xettle.app/shopify/callback'
 
       const authUrl = `https://${shop}/admin/oauth/authorize?` +
