@@ -1,156 +1,65 @@
 
 
-# Revised Plan: Shipping Cost Estimate (Insights Only, PAC API) — Production Grade
+# Audit: Shipping Cost Estimator — Findings & Fixes
 
-## Overview
-Estimate shipping cost per fulfilled Shopify order using Australia Post PAC API (two-step: service lookup then calculate). **Analytics only** — no accounting, Xero, settlement, or reconciliation impact.
+## What's Working Correctly
+- Edge function structure: guard on `shipping:enabled`, PAC API two-step (service lookup then calculate), 500ms delay, batch_size capped at 50
+- Marketplace detection via `marketplace_registry` server-side — no frontend imports
+- `calculation_basis` JSONB stored with full audit trail
+- `estimate_quality` derived from real vs default weight/dimensions
+- Rolling averages computed from `order_shipping_estimates` only (not `shopify_orders`)
+- Unique constraint on `(user_id, shopify_fulfillment_id)` with duplicate skip on 23505
+- Settings UI has non-dismissible warning banner, all inputs, batch runner
+- InsightsDashboard loads `marketplace_shipping_stats` and renders PAC row with amber badge + sample size
 
-## Prerequisites
-- `AUSPOST_PAC_API_KEY` secret (requested via `add_secret`)
-- Shopify connected with product weights at variant level
-- Default dimensions represent carton/packaging, not product dimensions
+## Issues Found
 
-## Database — 2 New Tables (Migration)
+### Issue 1: `shopify_orders` table has no `cancelled_at` or `test` columns
+The edge function queries `shopify_orders` and filters on `financial_status != 'voided'`, but the table schema shows no `cancelled_at`, `test`, `fulfilled_at`, or `refund_status` columns. The edge function works around this by fetching fulfillments from the Shopify API directly — but it does NOT filter out cancelled/test orders at the DB query level because those columns don't exist. This means cancelled orders whose fulfillment still exists in Shopify will get estimated.
 
-### `order_shipping_estimates`
+**Fix**: Add a check in the Shopify fulfillment loop — skip fulfillments with `status === 'cancelled'`. Shopify fulfillment objects have a `status` field (`success`, `cancelled`, `error`, `failure`). Only process `status === 'success'`.
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid PK | |
-| user_id | uuid | RLS filter |
-| shopify_order_id | bigint | |
-| shopify_fulfillment_id | text | **Keyed off fulfillment** |
-| marketplace_code | text | Via server-side `marketplace_registry` |
-| tracking_number | text | nullable, optional |
-| estimated_cost | numeric | PAC result |
-| estimate_quality | text | 'high' / 'medium' / 'low' |
-| weight_grams | numeric | |
-| from_postcode | text | |
-| to_postcode | text | |
-| service_code | text | Actual service used |
-| source | text | 'pac_estimate' / 'manual_override' / 'carrier_import' / 'carrier_api' |
-| carrier | text | 'auspost' / 'starshipit' / 'manual' — future-proof |
-| fulfilled_at | timestamptz | From Shopify fulfillment |
-| calculation_basis | jsonb | Full audit of inputs, defaults used, chosen service |
-| created_at | timestamptz | |
+### Issue 2: No tooltip on PAC estimate in Insights
+The card shows the badge and sample count but no tooltip explaining the data is not used for accounting. The plan specified a tooltip.
 
-**Constraints:**
-- `UNIQUE(user_id, shopify_fulfillment_id)` — prevents duplicate estimates
+**Fix**: Wrap the PAC row in a `TooltipProvider`/`Tooltip` with the agreed text.
 
-**Indexes:**
-- `(user_id, fulfilled_at DESC)`
-- `(user_id, marketplace_code)`
+### Issue 3: `pacEstimateQuality` always null
+Line 491 hardcodes `pacEstimateQuality: null` with comment "computed elsewhere if needed". The plan specified showing quality distribution. The data exists in `order_shipping_estimates.estimate_quality` but is never queried.
 
-**estimate_quality logic:**
-- `high` = real product weight + real package dimensions
-- `medium` = real product weight + default box dimensions
-- `low` = default weight + default dimensions
+**Fix**: Query `order_shipping_estimates` grouped by `marketplace_code, estimate_quality` to get the dominant quality level per marketplace, and display it in the Insights card (e.g. "Quality: medium").
 
-RLS: authenticated users manage own rows.
+### Issue 4: Averages not auto-updated on non-affected marketplaces
+The edge function only recalculates stats for marketplaces that had new estimates in THIS run. If old estimates are deleted or corrected, stats go stale. This is acceptable for now but worth noting.
 
-### `marketplace_shipping_stats`
+### Issue 5: `grams → kg` conversion present but min weight floor is 0.1kg
+Line 398: `Math.max(totalWeightGrams / 1000, 0.1)` — PAC API minimum weight is 0.1kg so this is correct. No issue.
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid PK | |
-| user_id | uuid | RLS filter |
-| marketplace_code | text | |
-| avg_shipping_cost_60 | numeric | Rolling avg, last 60 fulfilled orders |
-| avg_shipping_cost_14 | numeric | nullable, last 14 fulfilled orders |
-| sample_size | integer | |
-| last_updated | timestamptz | |
+### Issue 6: Insights card doesn't show 14-day average
+The data is loaded (`pacShippingAvg14`) but only the 60-order average is displayed. The 14-order average could show shipping cost drift.
 
-RLS: authenticated users manage own rows.
+**Fix**: Show both averages when 14-day data exists.
 
-## Edge Function: `estimate-shipping-cost`
+## Plan — 3 Fixes
 
-Accepts `{ batch_size?: number }` (default 20, max 50).
+### Fix 1: Filter cancelled fulfillments in edge function
+In the fulfillment processing loop, skip any fulfillment where `fulfillment.status !== 'success'`.
 
-**Guard:** If `shipping:enabled` != `'true'` in `app_settings` → return immediately.
+### Fix 2: Add tooltip + quality indicator to Insights PAC row
+- Query `order_shipping_estimates` for dominant `estimate_quality` per marketplace
+- Show "Quality: {level}" next to sample count
+- Add tooltip with the agreed analytics-only disclaimer
+- Show 14-order average when available
 
-**Must NOT read or write:** settlements, journals, reconciliation, xero_invoices, or any accounting tables.
+### Fix 3: Populate `pacEstimateQuality` from actual data
+Add a query in `loadStats()` that groups `order_shipping_estimates` by `marketplace_code, estimate_quality` to find the dominant quality per marketplace.
 
-Steps:
-1. Read user's shipping settings from `app_settings`
-2. Query `shopify_orders` for orders meeting ALL criteria:
-   - Has fulfillment data (`fulfilled_at IS NOT NULL`)
-   - `cancelled_at IS NULL`
-   - `financial_status != 'voided'`
-   - `test = false` (if field exists)
-   - Not already in `order_shipping_estimates` (LEFT JOIN on `shopify_fulfillment_id`)
-   - **ORDER BY `fulfilled_at ASC`** (deterministic batching)
-   - LIMIT `batch_size`
-3. For each order:
-   - **Detect `marketplace_code`** using `marketplace_registry` table server-side (query `detection_keywords`, `shopify_source_names` — replicate tag/source_name matching logic, do NOT import from `src/`)
-   - Extract shipping postcode from order data, weight from line items
-   - Determine `estimate_quality` based on real vs defaulted data
-   - **Convert `weight_grams` to kg** before PAC call (`weight_grams / 1000`)
-   - **Step 1:** Call PAC service lookup: `GET .../postage/parcel/domestic/service.json` to get available services
-   - **Step 2:** If default service available for this route, call `GET .../postage/parcel/domestic/calculate.json`. If default not available, fall back to first available service. **If NO service returned → skip estimate**, log `calculation_basis.reason = "no_service_available"`, do NOT store a $0 estimate
-   - Build `calculation_basis` JSON: `{ from_postcode, to_postcode, weight_grams, weight_kg, length, width, height, chosen_service_code, defaults_used: { weight, dimensions }, available_services, reason? }`
-   - Store `fulfilled_at`, `shopify_fulfillment_id`, `carrier: 'auspost'`
-   - Optionally store `tracking_number` if present
-   - **If `shopify_fulfillment_id` already exists → skip** (unique constraint also enforces)
-   - **500ms delay between PAC API calls**
-4. Upsert into `order_shipping_estimates`
-5. Recalculate `marketplace_shipping_stats` — **from `order_shipping_estimates` table only** (not from `shopify_orders`), rolling avg of last 60 and last 14 fulfilled orders per marketplace, excluding cancelled/voided orders
-6. Return `{ estimated, skipped, errors, skipped_no_service }`
-
-## Settings (in `app_settings`)
-
-| Key | Notes |
-|---|---|
-| `shipping:enabled` | boolean toggle |
-| `shipping:from_postcode` | sender postcode |
-| `shipping:default_weight_grams` | fallback when Shopify missing |
-| `shipping:default_length` | cm |
-| `shipping:default_width` | cm |
-| `shipping:default_height` | cm |
-| `shipping:default_service` | 'AUS_PARCEL_REGULAR' or 'AUS_PARCEL_EXPRESS' |
-| `shipping:service_override:{marketplace_code}` | optional per-marketplace override |
-
-## UI Changes
-
-### New: `src/components/settings/ShippingEstimateSettings.tsx`
-- Enable/disable toggle
-- **Non-dismissible warning banner:** "Estimated shipping cost is calculated using Australia Post PAC API. Accuracy depends on correct weight and dimensions in Shopify. Shopify product weights must be maintained at the variant level. Package dimensions use your default carton settings, not product dimensions. This data is used only for Insights and profitability analysis. It is not used for accounting or Xero exports."
-- From postcode, default weight/dimensions inputs
-- Default service selector (Regular / Express)
-- Per-marketplace service override (optional)
-- Per-marketplace average table showing both 60-order and 14-order averages
-- "Estimate Now" button with batch_size selector
-
-### Modified: `src/components/admin/accounting/InsightsDashboard.tsx`
-- Read `marketplace_shipping_stats` and show per marketplace:
-  - **"Avg Shipping (est.)"** with value
-  - **Amber badge:** "PAC estimate"
-  - **Quality indicator:** e.g. "Quality: medium · Sample: 48"
-  - **Tooltip:** "Estimate based on Shopify weights/dimensions and Australia Post PAC API. Not used in Xero or settlement calculations."
-- Use `avg_shipping_cost_60` in Insights profit calculation only
-
-### Modified: Settings/Admin area
-- Add "Shipping Estimate" section linking to new component
-
-## Files
-
-### New
-- `supabase/functions/estimate-shipping-cost/index.ts`
-- `src/components/settings/ShippingEstimateSettings.tsx`
-
-### Modified
-- `src/components/admin/accounting/InsightsDashboard.tsx`
-- `src/pages/Admin.tsx` (or settings area — add tab/section)
-
-## Sequence
-1. Request `AUSPOST_PAC_API_KEY` secret
-2. Create 2 tables + constraints + indexes via migration
-3. Build settings UI + warning banner
-4. Build edge function (fulfilled orders only, two-step PAC, full `calculation_basis`, server-side marketplace detection)
-5. Compute marketplace averages from `order_shipping_estimates` only (60 + 14 window)
-6. Surface in Insights cards with quality + sample size
+## Files Modified
+- `supabase/functions/estimate-shipping-cost/index.ts` — add fulfillment status filter
+- `src/components/admin/accounting/InsightsDashboard.tsx` — add quality query, tooltip, 14-day avg display
 
 ## What is NOT changed
-- Settlements, Xero, journals, reconciliation, period locks, accounting exports
-- Existing `marketplace_shipping_costs` table (manual per-order — kept separate)
-- Profit engine (accounting-grade)
+- Settlements, Xero, journals, reconciliation, accounting exports
+- Database schema (no migration needed)
+- Settings UI (working correctly)
 
