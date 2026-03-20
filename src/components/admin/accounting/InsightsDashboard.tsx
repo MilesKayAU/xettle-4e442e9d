@@ -64,6 +64,11 @@ interface MarketplaceStats {
   storageTotal: number;
   otherFeesTotal: number;
   feeBreakdown: FeeBreakdown[];
+  // PAC shipping estimate
+  pacShippingAvg60: number | null;
+  pacShippingAvg14: number | null;
+  pacShippingSample: number;
+  pacEstimateQuality: string | null;
 }
 
 interface AdSpendRecord {
@@ -117,7 +122,7 @@ export default function InsightsDashboard() {
       // Insights is an analytics view — include pre-boundary (historical) settlements
       // so that all marketplace sales data contributes to trends and totals.
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes, observedRatesRes] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes, observedRatesRes, pacShippingStatsRes] = await Promise.all([
         supabase
           .from('settlements')
           .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
@@ -140,6 +145,9 @@ export default function InsightsDashboard() {
           .from('app_settings')
           .select('key, value')
           .like('key', 'observed_commission_rate_%'),
+        supabase
+          .from('marketplace_shipping_stats')
+          .select('marketplace_code, avg_shipping_cost_60, avg_shipping_cost_14, sample_size'),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
@@ -187,6 +195,18 @@ export default function InsightsDashboard() {
           if (!isNaN(rate) && rate > 0 && rate < 1) {
             observedRates[mpCode] = rate;
           }
+        }
+      }
+
+      // Build PAC shipping stats by marketplace
+      const pacStatsByMp: Record<string, { avg60: number | null; avg14: number | null; sample: number }> = {};
+      if (pacShippingStatsRes.data) {
+        for (const row of pacShippingStatsRes.data as any[]) {
+          pacStatsByMp[row.marketplace_code] = {
+            avg60: row.avg_shipping_cost_60 !== null ? Number(row.avg_shipping_cost_60) : null,
+            avg14: row.avg_shipping_cost_14 !== null ? Number(row.avg_shipping_cost_14) : null,
+            sample: Number(row.sample_size) || 0,
+          };
         }
       }
 
@@ -432,6 +452,9 @@ export default function InsightsDashboard() {
         const breakdownTotal = feeBreakdown.reduce((sum, f) => sum + f.amount, 0);
         const consistentFeeLoad = totalSales > 0 ? Math.min(breakdownTotal / totalSales, 1) : 0;
 
+        // PAC shipping estimate data
+        const pacStats = pacStatsByMp[mp];
+
         results.push({
           marketplace: mp,
           label: MARKETPLACE_LABELS[mp] || mp,
@@ -462,6 +485,10 @@ export default function InsightsDashboard() {
           hasMissingFeeData,
           hasFeeAnomaly: breakdownTotal > totalSales,
           hasNegativePayout: effectiveNetPayout < 0 && totalSales > 0,
+          pacShippingAvg60: pacStats?.avg60 ?? null,
+          pacShippingAvg14: pacStats?.avg14 ?? null,
+          pacShippingSample: pacStats?.sample ?? 0,
+          pacEstimateQuality: null, // quality distribution computed elsewhere if needed
         });
       }
 
@@ -1128,6 +1155,25 @@ export default function InsightsDashboard() {
                       </Button>
                     </div>
                   ) : null}
+
+                  {/* PAC Shipping Estimate row */}
+                  {s.pacShippingAvg60 !== null && s.pacShippingSample > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <Truck className="h-3 w-3" />
+                        Avg Shipping (est.)
+                        <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1">
+                          PAC estimate
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">
+                          Sample: {s.pacShippingSample}
+                        </span>
+                      </span>
+                      <span className="font-semibold tabular-nums text-foreground">
+                        ${s.pacShippingAvg60.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Impact insight text */}
                   {impactText && (

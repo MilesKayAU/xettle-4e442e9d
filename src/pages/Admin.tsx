@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package, HeartPulse } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package, HeartPulse, Truck } from 'lucide-react';
 import AccountResetButton from '@/components/admin/AccountResetButton';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
@@ -41,6 +41,7 @@ import EmailMonitoringDashboard from '@/components/admin/EmailMonitoringDashboar
 import UserOverviewDashboard from '@/components/admin/UserOverviewDashboard';
 import FulfillmentBridge from '@/components/admin/FulfillmentBridge';
 import HealthScannerDashboard from '@/components/admin/HealthScannerDashboard';
+import ShippingEstimateSettings from '@/components/settings/ShippingEstimateSettings';
 
 interface UserRow {
   id: string;
@@ -249,6 +250,10 @@ export default function Admin() {
               <HeartPulse className="h-3.5 w-3.5" />
               Health Scanner
             </TabsTrigger>
+            <TabsTrigger value="shipping" className="flex items-center gap-1.5">
+              <Truck className="h-3.5 w-3.5" />
+              Shipping Estimate
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -405,6 +410,10 @@ export default function Admin() {
 
           <TabsContent value="health">
             <HealthScannerDashboard />
+          </TabsContent>
+
+          <TabsContent value="shipping">
+            <ShippingEstimateSettings />
           </TabsContent>
         </Tabs>
       </div>

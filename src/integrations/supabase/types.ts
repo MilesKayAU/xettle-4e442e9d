@@ -1064,6 +1064,36 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_shipping_stats: {
+        Row: {
+          avg_shipping_cost_14: number | null
+          avg_shipping_cost_60: number | null
+          id: string
+          last_updated: string
+          marketplace_code: string
+          sample_size: number
+          user_id: string
+        }
+        Insert: {
+          avg_shipping_cost_14?: number | null
+          avg_shipping_cost_60?: number | null
+          id?: string
+          last_updated?: string
+          marketplace_code: string
+          sample_size?: number
+          user_id: string
+        }
+        Update: {
+          avg_shipping_cost_14?: number | null
+          avg_shipping_cost_60?: number | null
+          id?: string
+          last_updated?: string
+          marketplace_code?: string
+          sample_size?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       marketplace_validation: {
         Row: {
           bank_amount: number | null
@@ -1214,6 +1244,66 @@ export type Database = {
           settlement_frequency?: string
           settlement_type?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      order_shipping_estimates: {
+        Row: {
+          calculation_basis: Json | null
+          carrier: string
+          created_at: string
+          estimate_quality: string
+          estimated_cost: number
+          from_postcode: string | null
+          fulfilled_at: string | null
+          id: string
+          marketplace_code: string | null
+          service_code: string | null
+          shopify_fulfillment_id: string
+          shopify_order_id: number
+          source: string
+          to_postcode: string | null
+          tracking_number: string | null
+          user_id: string
+          weight_grams: number | null
+        }
+        Insert: {
+          calculation_basis?: Json | null
+          carrier?: string
+          created_at?: string
+          estimate_quality?: string
+          estimated_cost: number
+          from_postcode?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          marketplace_code?: string | null
+          service_code?: string | null
+          shopify_fulfillment_id: string
+          shopify_order_id: number
+          source?: string
+          to_postcode?: string | null
+          tracking_number?: string | null
+          user_id: string
+          weight_grams?: number | null
+        }
+        Update: {
+          calculation_basis?: Json | null
+          carrier?: string
+          created_at?: string
+          estimate_quality?: string
+          estimated_cost?: number
+          from_postcode?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          marketplace_code?: string | null
+          service_code?: string | null
+          shopify_fulfillment_id?: string
+          shopify_order_id?: number
+          source?: string
+          to_postcode?: string | null
+          tracking_number?: string | null
+          user_id?: string
+          weight_grams?: number | null
         }
         Relationships: []
       }
