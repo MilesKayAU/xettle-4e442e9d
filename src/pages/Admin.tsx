@@ -40,6 +40,7 @@ import GrowthScoutDashboard from '@/components/admin/GrowthScoutDashboard';
 import EmailMonitoringDashboard from '@/components/admin/EmailMonitoringDashboard';
 import UserOverviewDashboard from '@/components/admin/UserOverviewDashboard';
 import FulfillmentBridge from '@/components/admin/FulfillmentBridge';
+import HealthScannerDashboard from '@/components/admin/HealthScannerDashboard';
 
 interface UserRow {
   id: string;
