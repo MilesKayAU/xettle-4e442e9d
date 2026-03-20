@@ -1,0 +1,1 @@
+UPDATE public.amazon_fbm_orders SET status = 'pending', error_detail = null WHERE amazon_order_id = '250-3366733-4698245';
