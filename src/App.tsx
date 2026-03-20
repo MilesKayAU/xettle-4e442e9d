@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,25 +9,26 @@ import LoadingSpinner from "@/components/ui/loading-spinner";
 import PinGate from "@/components/PinGate";
 import BugReportButton from "@/components/bug-report/BugReportButton";
 import AuthenticatedLayout from "@/components/AuthenticatedLayout";
+import { lazyWithRetry } from "@/utils/lazy-with-retry";
 
-const Landing = lazy(() => import("@/pages/Landing"));
-const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const Admin = lazy(() => import("@/pages/Admin"));
-const Auth = lazy(() => import("@/pages/Auth"));
-const XeroCallback = lazy(() => import("@/pages/XeroCallback"));
-const Privacy = lazy(() => import("@/pages/Privacy"));
-const Terms = lazy(() => import("@/pages/Terms"));
-const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
-const AmazonCallback = lazy(() => import("@/pages/AmazonCallback"));
-const ShopifyCallback = lazy(() => import("@/pages/ShopifyCallback"));
-const EbayCallback = lazy(() => import("@/pages/EbayCallback"));
-const Pricing = lazy(() => import("@/pages/Pricing"));
-const Amazon = lazy(() => import("@/pages/Amazon"));
-const Marketplaces = lazy(() => import("@/pages/Marketplaces"));
-const Insights = lazy(() => import("@/pages/Insights"));
-const Setup = lazy(() => import("@/pages/Setup"));
-const XeroPostingAudit = lazy(() => import("@/pages/XeroPostingAudit"));
-const NotFound = lazy(() => import("@/pages/NotFound"));
+const Landing = lazyWithRetry(() => import("@/pages/Landing"));
+const Dashboard = lazyWithRetry(() => import("@/pages/Dashboard"));
+const Admin = lazyWithRetry(() => import("@/pages/Admin"));
+const Auth = lazyWithRetry(() => import("@/pages/Auth"));
+const XeroCallback = lazyWithRetry(() => import("@/pages/XeroCallback"));
+const Privacy = lazyWithRetry(() => import("@/pages/Privacy"));
+const Terms = lazyWithRetry(() => import("@/pages/Terms"));
+const ResetPassword = lazyWithRetry(() => import("@/pages/ResetPassword"));
+const AmazonCallback = lazyWithRetry(() => import("@/pages/AmazonCallback"));
+const ShopifyCallback = lazyWithRetry(() => import("@/pages/ShopifyCallback"));
+const EbayCallback = lazyWithRetry(() => import("@/pages/EbayCallback"));
+const Pricing = lazyWithRetry(() => import("@/pages/Pricing"));
+const Amazon = lazyWithRetry(() => import("@/pages/Amazon"));
+const Marketplaces = lazyWithRetry(() => import("@/pages/Marketplaces"));
+const Insights = lazyWithRetry(() => import("@/pages/Insights"));
+const Setup = lazyWithRetry(() => import("@/pages/Setup"));
+const XeroPostingAudit = lazyWithRetry(() => import("@/pages/XeroPostingAudit"));
+const NotFound = lazyWithRetry(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
