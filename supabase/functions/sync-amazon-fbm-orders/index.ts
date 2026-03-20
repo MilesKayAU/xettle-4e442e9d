@@ -737,6 +737,31 @@ Deno.serve(async (req) => {
           continue
         }
 
+        // ─── Shopify duplicate detection (other apps like CedCommerce) ──
+        const dedupEnabled = (await readSetting(supabase, userId, `fbm:${storeKey}:dedup_check_enabled`)) !== 'false' // default ON
+        if (dedupEnabled && shopifyToken) {
+          const existingShopifyId = await checkShopifyDuplicate(shopifyToken, amazonOrderId)
+          if (existingShopifyId) {
+            await supabase.from('amazon_fbm_orders').update({
+              status: 'duplicate_detected',
+              shopify_order_id: existingShopifyId,
+              error_detail: `Existing Shopify order found (likely created by another app). Shopify GID: ${existingShopifyId}`,
+            } as any).eq('id', insertedOrder.id)
+            await logEvent(supabase, userId, 'fbm_duplicate_shopify_detected', {
+              existing_shopify_gid: existingShopifyId,
+              detection_method: 'graphql_search',
+            }, storeKey, amazonOrderId, 'warn')
+            skippedCount++
+            continue
+          }
+        }
+
+        // (continue to Shopify order creation below)
+        if (false) { // dead-code guard removed — original flow continues
+          skippedCount++
+          continue
+        }
+
         // ─── Create Shopify order ────────────────────────────────
         if (!shopifyToken) {
           await supabase.from('amazon_fbm_orders').update({
