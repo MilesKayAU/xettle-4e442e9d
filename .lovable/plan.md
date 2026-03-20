@@ -1,42 +1,27 @@
 
 
-## Plan: Make COA Code Grouping Generic (Not Hardcoded Ranges)
+## Plan: Fix COA Clone Name Generation for Brand-Contaminated Templates
 
 ### Problem
-The current `generatePatternBatchCodes` hardcodes grouping into `REVENUE_RANGE (200-399)` and `EXPENSE_RANGE (400-599)`. Users with different Xero structures (e.g., 4000-series revenue, 5000-series expenses, or completely custom ranges) will get codes placed in the wrong part of their COA.
+When a template account contains a brand/business name alongside the marketplace name (e.g. "MKA Website Sales Refund (Shopify PayPal)"), the name replacement only swaps "Shopify" → "temu", producing "MKA Website Sales Refund (temu PayPal)" — a nonsensical name for the new marketplace.
 
-### Fix: Infer Ranges from Template Accounts
+### Root Cause
+`generateNewAccountName()` in `src/actions/coaCoverage.ts` does a simple string replacement of the marketplace name. It has no awareness of brand contamination.
 
-Instead of classifying bases into revenue vs expense and assigning to hardcoded ranges, the logic should:
+### Fix: `src/actions/coaCoverage.ts` — `generateNewAccountName()`
 
-1. **Detect the natural range of the template accounts themselves** — group by the "hundreds block" (or "thousands block" for 4-digit codes) each template code lives in
-2. **Find contiguous free slots near where the template accounts already sit** — this respects whatever numbering scheme the user has, whether it's 200s, 4000s, or anything else
-3. **Fall back to type-based ranges only when the template range is fully exhausted**
+Add a "clean name" fallback when the replaced name still contains words not attributable to the target marketplace or standard category terms:
 
-### Changes to `src/policy/accountCodePolicy.ts`
+1. After performing the marketplace name swap, check if the result still contains the original marketplace's surrounding context words (words that aren't standard category keywords like "Sales", "Fees", "Refund", "Shipping", etc.)
+2. If >50% of non-category words in the result are inherited junk from the template name, **generate a clean canonical name instead**: `{targetMarketplace} {category}` (e.g. "temu Refunds")
+3. This uses the `category` parameter — but `generateNewAccountName` currently doesn't receive the category. Add it as an optional parameter.
 
-**`generatePatternBatchCodes` — replace the revenue/expense split with a proximity-based grouping:**
+**Concrete changes:**
+- Update `generateNewAccountName` signature to accept optional `category?: string`
+- After replacement, if the name contains words not matching the target marketplace or known category keywords, fall back to `{targetMarketplace} {category}`
+- Update the call site in `buildClonePreview` (coaClone.ts line 186) to pass the category
 
-- Group base accounts by their numeric "neighbourhood" (same hundreds-block, e.g. 200-299, 400-499, or for 4-digit codes 4000-4099)
-- For each neighbourhood group, scan forward from the template codes' max to find a contiguous block of free slots within a reasonable proximity (same hundreds or thousands block first, then widen)
-- If no space in the neighbourhood, widen the search to the full type-based range as a fallback
-- This makes the algorithm work for any COA structure without assuming specific code ranges
-
-**Concrete logic:**
-
-```text
-For each base account:
-  → compute neighbourhood = floor(code / 100) * 100  (or /1000 for 4-digit)
-
-Group bases by neighbourhood.
-
-For each neighbourhood group:
-  → start scanning from neighbourhood_start
-  → find contiguous block of N free codes
-  → if not found, widen to neighbourhood ± 100
-  → last resort: fall back to getRangeForType()
-```
-
-### No other files change
-The edge function and dialog UI remain as-is — this is purely a code generation policy fix.
+### Files Changed
+- `src/actions/coaCoverage.ts` — update `generateNewAccountName`
+- `src/actions/coaClone.ts` — pass `category` to the name generator
 
