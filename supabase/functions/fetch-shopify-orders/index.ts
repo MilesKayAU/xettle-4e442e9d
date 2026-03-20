@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
       });
       if (effectiveDateFrom) params.set("created_at_min", effectiveDateFrom);
       if (dateTo) params.set("created_at_max", dateTo);
-      return `https://${shopDomain}/admin/api/2026-01/orders.json?${params.toString()}`;
+      return `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?${params.toString()}`;
     };
 
     // 3. Fetch with pagination
