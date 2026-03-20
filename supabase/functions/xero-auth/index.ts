@@ -1,9 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
-
-const XERO_AUTH_URL = 'https://login.xero.com/identity/connect/authorize'
-const XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
-const XERO_CONNECTIONS_URL = 'https://api.xero.com/connections'
+import { XERO_AUTH_URL, XERO_TOKEN_URL, XERO_CONNECTIONS_URL, XERO_SCOPES_STRING, buildXeroUrl, getXeroHeaders } from '../_shared/xero-api-policy.ts'
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? ""

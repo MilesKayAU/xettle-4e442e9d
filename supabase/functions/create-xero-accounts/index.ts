@@ -1,7 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
-
-const XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
+import { XERO_TOKEN_URL, buildXeroUrl, getXeroHeaders } from '../_shared/xero-api-policy.ts'
 const ALLOWED_TYPES = new Set(['REVENUE', 'EXPENSE', 'DIRECTCOSTS', 'OTHERINCOME', 'OVERHEADS'])
 const MAX_BATCH = 10
 

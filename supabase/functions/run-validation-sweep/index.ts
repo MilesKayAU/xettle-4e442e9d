@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { XERO_TOKEN_URL, XERO_API_BASE, getXeroHeaders } from '../_shared/xero-api-policy.ts'
 
 function monthKey(date: string): string {
   return date.substring(0, 7)
@@ -22,7 +23,7 @@ async function refreshXeroToken(supabase: any, userId: string, clientId: string,
   const expiresAt = new Date(tokenRow.expires_at)
   if (expiresAt > new Date(Date.now() + 60000)) return tokenRow
 
-  const res = await fetch('https://identity.xero.com/connect/token', {
+  const res = await fetch(XERO_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { logger } from '../_shared/logger.ts';
+import { XERO_TOKEN_URL, XERO_API_BASE, getXeroHeaders } from '../_shared/xero-api-policy.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -20,7 +21,7 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
   const expiresAt = new Date(token.expires_at);
   if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) return token;
 
-  const resp = await fetch('https://identity.xero.com/connect/token', {
+  const resp = await fetch(XERO_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

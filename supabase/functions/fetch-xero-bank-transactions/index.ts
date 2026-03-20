@@ -11,6 +11,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logger } from '../_shared/logger.ts'
+import { XERO_TOKEN_URL, XERO_API_BASE, getXeroHeaders } from '../_shared/xero-api-policy.ts'
 
 // ── Keys ──
 const COOLDOWN_KEY = 'xero_bank_api_cooldown_until';      // Bank feed cooldown only (set on BankTransactions 429)
@@ -53,7 +54,7 @@ async function refreshXeroToken(
   if (expiresAt > new Date(Date.now() + 60000)) return tokenRow;
 
   const timestamp = new Date().toISOString();
-  const res = await fetch('https://identity.xero.com/connect/token', {
+  const res = await fetch(XERO_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
