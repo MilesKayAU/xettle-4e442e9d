@@ -970,16 +970,6 @@ export default function AccountMapperCard() {
     return !code || validateCode(code, cat) !== 'valid';
   }).length;
 
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="py-6 flex items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
-
   const renderPinDialog = () => (
     <SettingsPinDialog
       open={settingsPin.showDialog}
@@ -1029,6 +1019,17 @@ export default function AccountMapperCard() {
       </div>
     );
   };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-6 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  };
+
 
   // ─── Shared COA refresh strip ──────────────────────────────────────
   const renderCoaRefreshStrip = () => {
