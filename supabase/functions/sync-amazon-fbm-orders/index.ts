@@ -756,11 +756,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // (continue to Shopify order creation below)
-        if (false) { // dead-code guard removed — original flow continues
-          skippedCount++
-          continue
-        }
+
 
         // ─── Create Shopify order ────────────────────────────────
         if (!shopifyToken) {
