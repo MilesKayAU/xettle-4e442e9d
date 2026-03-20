@@ -391,7 +391,7 @@ export default function MarketplaceSwitcher({
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="sm:max-w-md">
           {addingCode && (() => {
-            const def = MARKETPLACE_CATALOG.find(m => m.code === addingCode);
+            const def = fullCatalog.find(m => m.code === addingCode);
             if (!def) return null;
             return (
               <>
