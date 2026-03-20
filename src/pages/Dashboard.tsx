@@ -380,6 +380,13 @@ export default function Dashboard() {
         const hasEby = !!(ebayRes.data && ebayRes.data.length > 0);
         const wizardComplete = wizardRes.data?.value === 'true';
 
+        // Resolve Amazon xettleCode from their stored marketplace_id
+        if (hasAmz && amazonRes.data?.[0]?.marketplace_id) {
+          const { getAmazonRegionByMarketplaceId } = await import('@/constants/amazon-regions');
+          const region = getAmazonRegionByMarketplaceId(amazonRes.data[0].marketplace_id);
+          setAmazonXettleCode(region?.xettleCode || 'amazon_au');
+        }
+
         setHasAmazon(hasAmz);
         setHasShopify(hasShp);
         setHasEbay(hasEby);
