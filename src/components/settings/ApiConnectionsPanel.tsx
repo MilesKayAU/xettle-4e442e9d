@@ -92,24 +92,28 @@ export default function ApiConnectionsPanel({
         .eq('ignored', false);
 
       if (channels && channels.length > 0) {
-        // Load preferences
+        // Load preferences and API-enabled flags
         const codes = channels.map(c => c.marketplace_code || c.source_name).filter(Boolean);
         const prefKeys = codes.map(c => `source_preference:${c}`);
+        const apiEnabledKeys = codes.map(c => `api_enabled:${c}`);
+        const allKeys = [...prefKeys, ...apiEnabledKeys];
         const { data: prefs } = await supabase
           .from('app_settings')
           .select('key, value')
           .eq('user_id', user.id)
-          .in('key', prefKeys);
+          .in('key', allKeys);
 
         const prefMap = new Map((prefs || []).map(p => [p.key, p.value]));
 
         setSubChannels(channels.map(c => {
           const code = c.marketplace_code || c.source_name;
           const pref = prefMap.get(`source_preference:${code}`);
+          const apiEnabled = prefMap.get(`api_enabled:${code}`) === 'true';
           return {
             code,
             name: c.marketplace_label,
             preference: pref === 'api' ? 'api' : 'csv', // Default to CSV
+            apiAvailable: apiEnabled,
           };
         }));
       }
