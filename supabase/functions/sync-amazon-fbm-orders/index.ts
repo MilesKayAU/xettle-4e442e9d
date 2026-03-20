@@ -593,33 +593,34 @@ Deno.serve(async (req) => {
           continue
         }
 
-        await logEvent(supabase, userId, 'fbm_order_new', {}, storeKey, amazonOrderId)
-
-        // Fetch order items
-        const itemsUrl = `${baseUrl}/orders/v0/orders/${amazonOrderId}/orderItems`
-        const itemsResponse = await fetch(itemsUrl, {
-          headers: { 'x-amz-access-token': accessToken, 'Content-Type': 'application/json' },
+        // ─── Fetch order detail (includes items) via v2026-01-01 ──
+        // getOrder with includedData returns items inline
+        const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER_INFO,SHIPPING_ADDRESS,ORDER_ITEMS`
+        const detailResponse = await fetch(detailUrl, {
+          headers: getSpApiHeaders(accessToken),
         })
 
-        if (!itemsResponse.ok) {
-          const errText = await itemsResponse.text()
+        if (!detailResponse.ok) {
+          const errText = await detailResponse.text()
           await supabase.from('amazon_fbm_orders').update({
             status: 'failed',
-            error_detail: `Order items fetch failed: ${itemsResponse.status} ${errText}`,
+            error_detail: `Order detail fetch failed (v2026-01-01): ${detailResponse.status} ${errText}`,
           } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_order_failed', { error: errText }, storeKey, amazonOrderId, 'error')
+          await logEvent(supabase, userId, 'fbm_order_failed', { error: errText, api_version: '2026-01-01' }, storeKey, amazonOrderId, 'error')
           failedCount++
           continue
         }
 
-        const itemsData = await itemsResponse.json()
-        const orderItems = itemsData?.payload?.OrderItems || []
+        const detailData = await detailResponse.json()
+        // v2026-01-01: items are in order.orderItems (array)
+        const orderDetail = detailData || {}
+        const orderItems = orderDetail?.orderItems || []
 
         // ─── OrderItems debug logging ────────────────────────────
         const itemSkus = orderItems.map((item: any) => ({
-          SellerSKU: item.SellerSKU,
-          ASIN: item.ASIN,
-          QuantityOrdered: item.QuantityOrdered,
+          SellerSKU: item.sellerSku || item.SellerSKU,
+          ASIN: item.asin || item.ASIN,
+          QuantityOrdered: item.quantityOrdered || item.QuantityOrdered,
         }))
         console.log('fbm_order_items', { amazonOrderId, order_items_count: orderItems.length, items: itemSkus })
 
@@ -633,7 +634,7 @@ Deno.serve(async (req) => {
           await supabase.from('amazon_fbm_orders').update({
             status: 'manual_review',
             error_detail: 'no_order_items',
-            raw_amazon_payload: { ...order, orderItems: [] },
+            raw_amazon_payload: { ...orderDetail, api_version: '2026-01-01' },
           } as any).eq('id', insertedOrder.id)
           await logEvent(supabase, userId, 'fbm_order_no_items', {}, storeKey, amazonOrderId, 'warn')
           manualReviewCount++
@@ -641,7 +642,7 @@ Deno.serve(async (req) => {
         }
 
         // Map SKUs via product_links
-        const skus = orderItems.map((item: any) => item.SellerSKU).filter(Boolean)
+        const skus = orderItems.map((item: any) => item.sellerSku || item.SellerSKU).filter(Boolean)
         console.log('fbm_sku_lookup', { amazonOrderId, skus_to_match: skus })
 
         const { data: mappings } = await supabase
@@ -660,29 +661,29 @@ Deno.serve(async (req) => {
 
         console.log('fbm_sku_mapping_result', { amazonOrderId, matched: matchedSkus, unmapped: unmappedSkus })
 
-        // ─── Fetch PII (shipping address, buyer name) via split RDT ────
-        // Each element requested independently so partial access works
-        const { mergedOrder: orderWithPii, piiAccess, missingRequiredFields, missingWarningFields } =
-          await fetchOrderPiiSplit(baseUrl, accessToken, amazonOrderId, order)
+        // ─── Extract PII from v2026-01-01 order (role-based, no RDT) ──
+        const pii = extractPiiFromOrder(orderDetail)
+        const { missingRequiredFields, missingWarningFields } = pii
 
-        console.log('fbm_pii_fetch', {
+        console.log('fbm_pii_extract', {
           amazonOrderId,
-          buyer_info_granted: piiAccess.buyer_info.granted,
-          shipping_address_granted: piiAccess.shipping_address.granted,
+          api_version: '2026-01-01',
+          pii_present: pii.piiPresent,
+          recipient_name: pii.recipientName || 'none',
+          buyer_name: pii.buyerName || 'none',
           missing_required: missingRequiredFields,
           missing_warnings: missingWarningFields,
-          has_shipping_address: !!orderWithPii.ShippingAddress,
-          buyer_name: orderWithPii.ShippingAddress?.Name || orderWithPii.BuyerInfo?.BuyerName || 'none',
         })
 
-        // Store debug details on order record (with PII-enriched data + diagnostics)
+        // Store debug details on order record
         await supabase.from('amazon_fbm_orders').update({
           raw_amazon_payload: {
-            ...orderWithPii,
+            ...orderDetail,
+            api_version: '2026-01-01',
             orderItems: itemSkus,
             matched_skus: matchedSkus,
             unmapped_skus: unmappedSkus,
-            pii_access: piiAccess,
+            pii_extracted: pii,
             missing_required_fields: missingRequiredFields,
             missing_warning_fields: missingWarningFields,
           },
@@ -701,15 +702,16 @@ Deno.serve(async (req) => {
         // ─── Dry run check ──────────────────────────────────────
         if (dryRun) {
           const dryRunSummary = missingRequiredFields.length > 0
-            ? `Dry run completed. Missing protected fields: ${missingRequiredFields.join(', ')}. Amazon app may need Direct-to-Consumer Shipping or Tax Invoicing approval.`
-            : `Dry run completed. All required shipping fields present.${missingWarningFields.length > 0 ? ` Warnings: ${missingWarningFields.join(', ')} missing.` : ''}`
+            ? `Dry run (v2026-01-01). Missing PII fields: ${missingRequiredFields.join(', ')}. SP-API roles may not be granted yet.`
+            : `Dry run (v2026-01-01). All required shipping fields present.${missingWarningFields.length > 0 ? ` Warnings: ${missingWarningFields.join(', ')} missing.` : ''}`
           await supabase.from('amazon_fbm_orders').update({
             status: 'dry_run',
             error_detail: dryRunSummary,
           } as any).eq('id', insertedOrder.id)
           await logEvent(supabase, userId, 'fbm_dry_run_skipped_create', {
             missing_required: missingRequiredFields,
-            pii_access: piiAccess,
+            api_version: '2026-01-01',
+            pii_present: pii.piiPresent,
           }, storeKey, amazonOrderId)
           continue
         }
