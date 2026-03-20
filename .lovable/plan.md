@@ -1,56 +1,40 @@
 
 
-## Plan: Split RDT Fetches, Add PII Diagnostics, Block Unsafe Live Syncs
+## Plan: Expand Privacy Policy with Amazon SP-API Data Handling Section
 
-### What and Why
+### Why
+Amazon's developer review requires a public URL documenting how Amazon data (including PII) is collected, processed, stored, and disposed. The current privacy page mentions Amazon only briefly. We need a dedicated section modelled on the Shopify section (5a) that covers all points from the security assessment.
 
-The current RDT request asks Amazon for both `buyerInfo` and `shippingAddress` in a single call. If Amazon denies access to either, the entire request fails and no PII is returned. ChatGPT's suggestion to split these into independent requests is correct and matches Amazon's authorization model. This plan implements that plus clear admin diagnostics and a safety gate.
+### What Changes
 
-### Steps
+**File: `src/pages/Privacy.tsx`**
 
-1. **Split RDT into two independent fetches** (edge function)
-   - Replace single `getRestrictedDataToken` call with two separate attempts: one for `buyerInfo`, one for `shippingAddress`
-   - Each attempt returns its own RDT; use each RDT to fetch the order independently
-   - Merge results: start with base order, overlay buyer fields from buyerInfo RDT fetch, overlay shipping fields from shippingAddress RDT fetch
-   - Build a structured `pii_access` object tracking what was attempted/granted/denied per element
-   - Build a `missing_required_fields` array for fulfillment-critical fields
+1. **Expand the Amazon entry in Section 5** to reference the new dedicated section (5b)
 
-2. **Store structured PII results in the order record** (edge function)
-   - Save `pii_access` status and `missing_required_fields` into `raw_amazon_payload` alongside the order data
-   - Replace generic `error_detail: 'dry_run'` with a human-readable summary of what was recovered and what is missing
+2. **Add new Section 5b: Amazon Selling Partner API Data** after Section 5a, covering:
+   - **Data collected**: Settlement reports, financial events, order data (order IDs, amounts, fees, fulfilment channel), and — where restricted access is granted — buyer name, email, and shipping address (PII)
+   - **Purpose**: Settlement reconciliation with Xero, GST/BAS compliance, fulfilment tracking, fee attribution
+   - **How PII is accessed**: Via Restricted Data Tokens (RDT) with separate requests for `buyerInfo` and `shippingAddress`; partial-grant architecture ensures graceful degradation
+   - **Encryption**: AES-256 at rest in managed PostgreSQL; TLS 1.2+ in transit; no PII stored in browser or client-side storage
+   - **Access controls**: Row-Level Security isolates data per user; admin access is PIN-gated; edge functions authenticate via JWT; no direct database access
+   - **Data retention**: PII retained for 91–180 days after order shipment to support quarterly Australian BAS/GST reconciliation cycles, then purged
+   - **Data deletion**: Users can disconnect Amazon at any time; on disconnection, OAuth refresh tokens are revoked; users can request full data erasure via hello@xettle.app
+   - **No sharing**: Amazon data is never sold, shared with third parties, or used for advertising; processed solely for the user's own accounting reconciliation
+   - **Testing**: Only synthetic/anonymised data is used in test environments; no real PII in CI/CD or staging
 
-3. **Add fulfillment readiness gate for live syncs** (edge function)
-   - Before Shopify order creation, check for hard-block fields: `recipient_name`, `address_line_1`, `city`, `postal_code`, `country`
-   - If any hard-block field is missing, set status to `blocked_missing_pii` with a clear `error_detail` and skip Shopify creation
-   - Allow sync to proceed with warnings for soft-missing fields: `buyer_email`, `buyer_name`, `phone`
+3. **Update Section 4 (Data Storage and Security)** to add explicit mentions of:
+   - AES-256 encryption at rest
+   - TLS 1.2+ in transit
+   - Row-Level Security per user
+   - Audit logging with 12+ month retention
 
-4. **Add PII warning card in expanded order row** (FulfillmentBridge.tsx)
-   - When `raw_amazon_payload.pii_access` exists, show a diagnostic card with:
-     - Buyer info access: granted/denied
-     - Shipping address access: granted/denied
-     - Recovered fields checklist (city, state, postcode, country)
-     - Missing fields blocking sync (recipient name, address line 1)
-   - Plain-English note explaining the Amazon permission requirement
-   - Add `blocked_missing_pii` status color to STATUS_COLORS map
+4. **Add new Section 10: Incident Response** before Contact Us:
+   - Documented incident response plan
+   - Immediate token revocation on breach detection
+   - Affected users and Amazon notified within 24 hours
+   - Contact IMPOC at hello@xettle.app
 
-5. **Delete existing dry_run row** for order `250-3366733-4698245` so next dry run uses new logic
+5. **Renumber existing sections** (Contact becomes 11, etc.)
 
-### Technical Detail
-
-**Edge function changes** (`supabase/functions/sync-amazon-fbm-orders/index.ts`):
-
-- New function `getRestrictedDataTokenForElement(baseUrl, accessToken, orderId, dataElement)` — requests RDT for a single element
-- New function `fetchOrderPiiSplit(baseUrl, accessToken, orderId)` — calls the above twice, fetches order with each successful RDT, merges results, returns `{ mergedOrder, piiAccess, missingRequiredFields }`
-- Replace `fetchOrderWithPii` call at line ~561 with `fetchOrderPiiSplit`
-- At dry-run save (line ~588), write structured `error_detail` with missing fields summary
-- Before Shopify creation (line ~620), add gate checking `missingRequiredFields` for hard-block items
-
-**UI changes** (`src/components/admin/FulfillmentBridge.tsx`):
-
-- New `PiiAccessCard` component rendering the diagnostic checklist
-- Render it in the collapsible row when `pii_access` key exists in payload
-- Add `blocked_missing_pii: 'bg-red-100 text-red-700 border-red-300'` to STATUS_COLORS
-
-**Hard-block fields**: `recipient_name`, `address_line_1`, `city`, `postal_code`, `country_code`
-**Soft-warn fields**: `buyer_name`, `buyer_email`, `phone`
+### No other files change. This is a single-file update to `src/pages/Privacy.tsx`.
 
