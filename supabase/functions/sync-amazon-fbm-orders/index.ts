@@ -717,9 +717,9 @@ Deno.serve(async (req) => {
 
         // ─── OrderItems debug logging ────────────────────────────
         const itemSkus = orderItems.map((item: any) => ({
-          SellerSKU: item.sellerSku || item.SellerSKU,
-          ASIN: item.asin || item.ASIN,
-          QuantityOrdered: item.quantityOrdered || item.QuantityOrdered,
+          SellerSKU: getOrderItemSku(item),
+          ASIN: getOrderItemAsin(item),
+          QuantityOrdered: getOrderItemQuantity(item),
         }))
         console.log('fbm_order_items', { amazonOrderId, order_items_count: orderItems.length, items: itemSkus })
 
