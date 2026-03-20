@@ -1,62 +1,42 @@
 
 
-## Plan: AI-Powered COA Clone Validation and Advice
+## Plan: Make COA Code Grouping Generic (Not Hardcoded Ranges)
 
 ### Problem
-The current clone logic scatters new codes across ranges because `generatePatternBatchCodes` starts scanning from each template account's own code number. When those numbers are already taken, it jumps to the next available slot — which can be far away and in an illogical grouping. For example, cloning Amazon (200, 215.1, 205, 401) for Temu produces 214, 322, 216, 435 — scattered and inconsistent.
+The current `generatePatternBatchCodes` hardcodes grouping into `REVENUE_RANGE (200-399)` and `EXPENSE_RANGE (400-599)`. Users with different Xero structures (e.g., 4000-series revenue, 5000-series expenses, or completely custom ranges) will get codes placed in the wrong part of their COA.
 
-Additionally, there is no guidance on whether the suggested account types and groupings follow Xero best practices.
+### Fix: Infer Ranges from Template Accounts
 
-### Changes
+Instead of classifying bases into revenue vs expense and assigning to hardcoded ranges, the logic should:
 
-**1. New edge function: `supabase/functions/ai-coa-clone-review/index.ts`**
+1. **Detect the natural range of the template accounts themselves** — group by the "hundreds block" (or "thousands block" for 4-digit codes) each template code lives in
+2. **Find contiguous free slots near where the template accounts already sit** — this respects whatever numbering scheme the user has, whether it's 200s, 4000s, or anything else
+3. **Fall back to type-based ranges only when the template range is fully exhausted**
 
-Accepts the clone preview rows plus the full COA and returns:
-- A quality verdict (PASS / WARN / FAIL) for each row
-- Suggested corrections (better codes, names, account types)
-- Brief Xero best-practice advice (e.g. "Revenue accounts should be grouped in 200-299", "Use DIRECTCOSTS for cost-of-sale items like shipping costs and fees")
+### Changes to `src/policy/accountCodePolicy.ts`
 
-Uses Lovable AI (`google/gemini-3-flash-preview`) with a specialist system prompt covering:
-- Xero account type conventions (REVENUE, DIRECTCOSTS, EXPENSE, OTHERINCOME)
-- Australian e-commerce COA best practices
-- Code grouping (new marketplace codes should be contiguous)
-- Naming conventions (e.g. `{Code} {Marketplace} {Category}`)
+**`generatePatternBatchCodes` — replace the revenue/expense split with a proximity-based grouping:**
 
-**2. Fix code grouping in `src/policy/accountCodePolicy.ts` — `generatePatternBatchCodes`**
+- Group base accounts by their numeric "neighbourhood" (same hundreds-block, e.g. 200-299, 400-499, or for 4-digit codes 4000-4099)
+- For each neighbourhood group, scan forward from the template codes' max to find a contiguous block of free slots within a reasonable proximity (same hundreds or thousands block first, then widen)
+- If no space in the neighbourhood, widen the search to the full type-based range as a fallback
+- This makes the algorithm work for any COA structure without assuming specific code ranges
 
-Current bug: each base account scans from its own template code, so new codes scatter. Fix: group all revenue-type accounts together by finding a contiguous block of free codes in the revenue range, and same for expense-type accounts. This ensures Temu revenue accounts are e.g. 214, 215, 216, 217 (contiguous) rather than 214, 322, 216.
+**Concrete logic:**
 
-**3. Update `src/components/settings/CloneCoaDialog.tsx`**
+```text
+For each base account:
+  → compute neighbourhood = floor(code / 100) * 100  (or /1000 for 4-digit)
 
-- Add an "AI Review" button/panel below the preview table
-- On click, call the new edge function with the preview rows and COA
-- Display per-row verdicts (green check / amber warning) inline
-- Show a collapsible advice panel with Xero best-practice tips
-- AI review is optional — user can still proceed without it
-- Loading state while AI processes
+Group bases by neighbourhood.
 
-### Technical Detail
-
-**Edge function system prompt (excerpt):**
-```
-You are a Xero Chart of Accounts specialist for Australian e-commerce businesses.
-Review the proposed clone accounts and check:
-1. Account codes are grouped contiguously per marketplace
-2. Revenue items (Sales, Shipping Income, Refunds, Promos) use REVENUE type in 200-399
-3. Cost items (Seller Fees, FBA Fees, Advertising) use DIRECTCOSTS or EXPENSE in 400-599
-4. Names follow "{Marketplace} {Category}" convention
-5. No orphaned codes far from their siblings
-Return JSON via tool call with per-row verdicts and overall advice.
+For each neighbourhood group:
+  → start scanning from neighbourhood_start
+  → find contiguous block of N free codes
+  → if not found, widen to neighbourhood ± 100
+  → last resort: fall back to getRangeForType()
 ```
 
-**Code grouping fix logic:**
-- Collect all revenue-type rows and all expense-type rows separately
-- For revenue: find the first contiguous block of N free codes in 200-399
-- For expense: find the first contiguous block of M free codes in 400-599
-- Assign codes sequentially within each block
-
-### Files Changed
-- `supabase/functions/ai-coa-clone-review/index.ts` — new
-- `src/policy/accountCodePolicy.ts` — fix `generatePatternBatchCodes` grouping
-- `src/components/settings/CloneCoaDialog.tsx` — add AI review panel
+### No other files change
+The edge function and dialog UI remain as-is — this is purely a code generation policy fix.
 
