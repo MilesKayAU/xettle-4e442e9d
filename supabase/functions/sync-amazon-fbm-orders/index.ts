@@ -929,36 +929,19 @@ Deno.serve(async (req) => {
           // Fail open
         }
 
-        // ─── Safety gate: block live sync if shipping PII missing ──
-        if (missingRequiredFields.length > 0) {
-          // Distinguish Amazon Pending orders (payment verification) from genuine PII access issues
-          const amazonOrderStatus = getAmazonOrderStatus(order)
-          const isPendingPayment = amazonOrderStatus === 'Pending'
-
-          if (isPendingPayment) {
-            await supabase.from('amazon_fbm_orders').update({
-              status: 'pending_payment',
-              error_detail: 'Order is still in Pending status on Amazon — PII will be available once payment clears',
-            } as any).eq('id', insertedOrder.id)
-            await logEvent(supabase, userId, 'fbm_order_pending_payment', {
-              amazon_status: amazonOrderStatus,
-              missing_required: missingRequiredFields,
-              api_version: '2026-01-01',
-            }, storeKey, amazonOrderId)
-            skippedCount++
-            continue
-          }
-
-          const blockReason = `Blocked (v2026-01-01): Required shipping fields missing: ${missingRequiredFields.join(', ')}. SP-API role "Direct-to-Consumer Delivery" may not be granted.`
+        // ─── Safety gate: block only Amazon Pending orders (payment not yet confirmed) ──
+        // PII is no longer required — we use placeholder customer data for Shopify orders.
+        const amazonOrderStatus = getAmazonOrderStatus(order)
+        if (amazonOrderStatus === 'Pending') {
           await supabase.from('amazon_fbm_orders').update({
-            status: 'blocked_missing_pii',
-            error_detail: blockReason,
+            status: 'pending_payment',
+            error_detail: 'Order is still in Pending status on Amazon — waiting for payment confirmation',
           } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_order_blocked_missing_pii', {
-            missing_required: missingRequiredFields,
+          await logEvent(supabase, userId, 'fbm_order_pending_payment', {
+            amazon_status: amazonOrderStatus,
             api_version: '2026-01-01',
-          }, storeKey, amazonOrderId, 'warn')
-          manualReviewCount++
+          }, storeKey, amazonOrderId)
+          skippedCount++
           continue
         }
 
