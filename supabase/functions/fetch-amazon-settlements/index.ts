@@ -3,6 +3,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logger } from '../_shared/logger.ts'
 import {
+  SP_API_ENDPOINTS,
   getEndpointForRegion,
   getSpApiHeaders,
   isTokenExpired,
