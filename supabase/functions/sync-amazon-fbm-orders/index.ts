@@ -12,6 +12,7 @@ import {
   getShopifyHeaders,
   buildShopifyUrl,
 } from '../_shared/shopify-api-policy.ts'
+import { logger } from '../_shared/logger.ts'
 
 // (Token refresh is handled by amazon-auth edge function)
 
@@ -44,6 +45,99 @@ async function readSetting(supabase: any, userId: string, key: string): Promise<
     .eq('key', key)
     .maybeSingle()
   return data?.value ?? null
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: Shopify Dev Dashboard client_credentials token refresh
+// Tokens expire every 24 hours — cache in app_settings with expiry
+// ═══════════════════════════════════════════════════════════════
+interface ShopifyInternalToken {
+  access_token: string
+  shop_domain: string
+}
+
+async function getShopifyInternalToken(
+  supabase: any,
+  userId: string,
+  storeKey: string,
+): Promise<ShopifyInternalToken> {
+  const clientId = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_ID')
+  const clientSecret = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_SECRET')
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Shopify internal app not configured: missing SHOPIFY_INTERNAL_CLIENT_ID or SHOPIFY_INTERNAL_CLIENT_SECRET')
+  }
+
+  // Get shop_domain from shopify_tokens (still need it for the API base URL)
+  const { data: tokenRow } = await supabase
+    .from('shopify_tokens')
+    .select('shop_domain')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  if (!tokenRow?.shop_domain) {
+    throw new Error('No active Shopify store found in shopify_tokens')
+  }
+
+  const shopDomain = tokenRow.shop_domain
+  const cacheKeyToken = `fbm:${storeKey}:shopify_cc_token`
+  const cacheKeyExpiry = `fbm:${storeKey}:shopify_cc_token_expires_at`
+
+  // Check cached token
+  const [cachedToken, cachedExpiry] = await Promise.all([
+    readSetting(supabase, userId, cacheKeyToken),
+    readSetting(supabase, userId, cacheKeyExpiry),
+  ])
+
+  if (cachedToken && cachedExpiry) {
+    const expiresAt = new Date(cachedExpiry)
+    // Use 5-minute buffer before expiry
+    if (expiresAt.getTime() - 5 * 60 * 1000 > Date.now()) {
+      logger.debug('fbm_shopify_token_cached', { expires_at: cachedExpiry })
+      return { access_token: cachedToken, shop_domain: shopDomain }
+    }
+    logger.debug('fbm_shopify_token_expired', { expired_at: cachedExpiry })
+  }
+
+  // Request fresh token via client_credentials grant
+  logger.info('fbm_shopify_token_refreshing', { shop_domain: shopDomain })
+
+  const tokenUrl = `https://${shopDomain}/admin/oauth/access_token`
+  const tokenResponse = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  })
+
+  if (!tokenResponse.ok) {
+    const errText = await tokenResponse.text()
+    logger.error('fbm_shopify_token_refresh_failed', { status: tokenResponse.status, body: errText })
+    throw new Error(`Shopify client_credentials token request failed: ${tokenResponse.status} ${errText}`)
+  }
+
+  const tokenData = await tokenResponse.json()
+  const newToken = tokenData.access_token
+  if (!newToken) {
+    throw new Error('Shopify client_credentials response missing access_token')
+  }
+
+  // Shopify Dev Dashboard tokens expire in 24 hours; use 23h to be safe
+  const expiresAt = new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString()
+
+  // Cache token and expiry
+  await Promise.all([
+    upsertSetting(supabase, userId, cacheKeyToken, newToken),
+    upsertSetting(supabase, userId, cacheKeyExpiry, expiresAt),
+  ])
+
+  logger.info('fbm_shopify_token_refreshed', { expires_at: expiresAt })
+  return { access_token: newToken, shop_domain: shopDomain }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -322,14 +416,14 @@ Deno.serve(async (req) => {
       // ─── Process each order ────────────────────────────────────
       let createdCount = 0, manualReviewCount = 0, failedCount = 0, skippedCount = 0
 
-      // Get Shopify token
-      const { data: shopifyToken } = await supabase
-        .from('shopify_tokens')
-        .select('access_token, shop_domain')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle()
+      // Get Shopify token via client_credentials flow (Dev Dashboard app)
+      let shopifyToken: ShopifyInternalToken | null = null
+      try {
+        shopifyToken = await getShopifyInternalToken(supabase, userId, storeKey)
+      } catch (tokenErr: any) {
+        logger.error('fbm_shopify_token_error', tokenErr.message)
+        // Will be checked per-order below
+      }
 
       // Get financial status setting
       const financialStatus = (await readSetting(supabase, userId, `fbm:${storeKey}:shopify_financial_status`)) || 'paid'
