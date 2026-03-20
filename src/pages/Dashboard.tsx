@@ -977,8 +977,7 @@ export default function Dashboard() {
               {/* Reconciliation readiness — setup health checks */}
               <ReconciliationHealthPanel />
 
-              {/* Sync activity — per-rail last sync + manual trigger */}
-              <SyncStatusCard />
+              {/* Sync activity moved to ConnectionStatusBar hover tooltips */}
 
               {/* CoA-detected channels awaiting confirmation */}
               {suggestedConnections.length > 0 && (
