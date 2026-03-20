@@ -109,13 +109,14 @@ export function isTokenExpired(expiresAt: string | null, bufferMs = LWA.TOKEN_EX
 
 export const API_VERSIONS = {
   orders: {
-    /** Currently in use across Xettle — legacy but still supported by Amazon */
-    current: 'v0',
-    /** Amazon's newer version — uses searchOrders instead of getOrders */
-    latest: 'v2026-01-01',
-    /** v0 is NOT fully removed; still supported but legacy. Use newer versions when available. */
-    deprecated: false,
-    migrationNote: 'Orders v0 is legacy but still supported. Prefer v2026-01-01 (searchOrders) when available. See: https://developer-docs.amazon.com/sp-api/docs/orders-api-v2026-reference',
+    /** Migrated to v2026-01-01 — role-based PII access, no RDTs needed */
+    current: '2026-01-01',
+    latest: '2026-01-01',
+    /** v0 is deprecated — do NOT use for new code */
+    deprecated: true,
+    migrationNote: 'Orders v0 is DEPRECATED. Xettle migrated to v2026-01-01 (searchOrders + role-based PII). See: https://developer-docs.amazon.com/sp-api/docs/orders-api-v2026-reference',
+    /** Legacy version kept for reference only */
+    legacyVersion: 'v0',
   },
   finances: {
     current: 'v0',
@@ -127,8 +128,9 @@ export const API_VERSIONS = {
   tokens: {
     current: '2021-03-01',
     latest: '2021-03-01',
+    /** No longer needed for PII access with Orders v2026-01-01 (role-based permissions) */
     deprecated: false,
-    migrationNote: null,
+    migrationNote: 'RDTs are no longer required for Orders v2026-01-01. Tokens API still available for other restricted operations.',
   },
 } as const;
 
