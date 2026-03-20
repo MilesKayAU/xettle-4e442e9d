@@ -471,19 +471,19 @@ Deno.serve(async (req) => {
 
       const baseUrl = getEndpointForRegion(region)
 
-      // ─── Poll Amazon Orders API ────────────────────────────────
+      // ─── Poll Amazon Orders API v2026-01-01 ──────────────────
+      // Uses searchOrders with includedData for PII (role-based, no RDT)
       const ordersParams = new URLSearchParams({
-        MarketplaceIds: marketplace_id,
-        FulfillmentChannels: 'MFN',
-        OrderStatuses: 'Unshipped,PartiallyShipped,Shipped',
-        LastUpdatedAfter: lastUpdatedAfter,
+        marketplaceIds: marketplace_id,
+        fulfillmentChannels: 'MFN',
+        orderStatuses: 'Unshipped,PartiallyShipped,Shipped',
+        lastUpdatedAfter: lastUpdatedAfter,
+        includedData: 'BUYER_INFO,SHIPPING_ADDRESS',
       })
 
-      // NOTE: Orders v0 is deprecated. See API_VERSIONS.orders.migrationNote
-      warnIfDeprecated('orders')
-      const ordersUrl = `${baseUrl}/orders/v0/orders?${ordersParams.toString()}`
+      const ordersUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders?${ordersParams.toString()}`
       console.log('fbm_orders_url', ordersUrl)
-      console.log('fbm_orders_request', { marketplace_id, region, lastUpdatedAfter })
+      console.log('fbm_orders_request', { marketplace_id, region, lastUpdatedAfter, api_version: API_VERSIONS.orders.current })
 
       let ordersResponse: Response
       try {
@@ -498,11 +498,31 @@ Deno.serve(async (req) => {
       if (!ordersResponse.ok) {
         const errText = await ordersResponse.text()
         console.error('fbm_orders_api_error', { status: ordersResponse.status, body: errText })
-        throw new Error(`Amazon Orders API failed: ${ordersResponse.status} ${errText}`)
+        throw new Error(`Amazon Orders API v2026-01-01 failed: ${ordersResponse.status} ${errText}`)
       }
 
       const ordersData = await ordersResponse.json()
-      const orders = ordersData?.payload?.Orders || []
+      // v2026-01-01 drops the `payload` wrapper — orders are at top level
+      const orders = ordersData?.orders || []
+
+      // Log PII access status from first order (to detect role-based access)
+      if (orders.length > 0) {
+        const sampleOrder = orders[0]
+        const hasBuyer = !!sampleOrder?.buyer?.buyerName
+        const hasRecipient = !!sampleOrder?.recipient?.shippingAddress?.name
+        console.log('fbm_pii_role_check', {
+          api_version: '2026-01-01',
+          buyer_info_present: hasBuyer,
+          shipping_address_present: hasRecipient,
+          sample_order_id: sampleOrder?.amazonOrderId,
+        })
+        if (!hasBuyer && !hasRecipient) {
+          await logEvent(supabase, userId, 'fbm_pii_access_missing', {
+            api_version: '2026-01-01',
+            message: 'PII fields absent in v2026-01-01 response. SP-API roles (Direct-to-Consumer Delivery, Tax Invoicing) may not be granted yet. Orders will continue without PII.',
+          }, storeKey, undefined, 'warn')
+        }
+      }
 
       // Return success for zero orders — do not throw
       if (orders.length === 0) {
