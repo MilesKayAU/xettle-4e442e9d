@@ -877,17 +877,17 @@ Deno.serve(async (req) => {
 
         // ─── Dry run check ──────────────────────────────────────
         if (dryRun) {
-          const dryRunSummary = missingRequiredFields.length > 0
-            ? `Dry run (v2026-01-01). Missing PII fields: ${missingRequiredFields.join(', ')}. SP-API roles may not be granted yet.`
-            : `Dry run (v2026-01-01). All required shipping fields present.${missingWarningFields.length > 0 ? ` Warnings: ${missingWarningFields.join(', ')} missing.` : ''}`
+          const hasPii = pii.piiPresent
+          const dryRunSummary = hasPii
+            ? `Dry run OK. ${matchedSkus.length} SKU(s) matched. Buyer PII available.`
+            : `Dry run OK. ${matchedSkus.length} SKU(s) matched. No PII — will use placeholder customer.`
           await supabase.from('amazon_fbm_orders').update({
             status: 'dry_run',
             error_detail: dryRunSummary,
           } as any).eq('id', insertedOrder.id)
           await logEvent(supabase, userId, 'fbm_dry_run_skipped_create', {
-            missing_required: missingRequiredFields,
-            api_version: '2026-01-01',
-            pii_present: pii.piiPresent,
+            matched_skus: matchedSkus.length,
+            pii_available: hasPii,
           }, storeKey, amazonOrderId)
           continue
         }
@@ -929,36 +929,19 @@ Deno.serve(async (req) => {
           // Fail open
         }
 
-        // ─── Safety gate: block live sync if shipping PII missing ──
-        if (missingRequiredFields.length > 0) {
-          // Distinguish Amazon Pending orders (payment verification) from genuine PII access issues
-          const amazonOrderStatus = getAmazonOrderStatus(order)
-          const isPendingPayment = amazonOrderStatus === 'Pending'
-
-          if (isPendingPayment) {
-            await supabase.from('amazon_fbm_orders').update({
-              status: 'pending_payment',
-              error_detail: 'Order is still in Pending status on Amazon — PII will be available once payment clears',
-            } as any).eq('id', insertedOrder.id)
-            await logEvent(supabase, userId, 'fbm_order_pending_payment', {
-              amazon_status: amazonOrderStatus,
-              missing_required: missingRequiredFields,
-              api_version: '2026-01-01',
-            }, storeKey, amazonOrderId)
-            skippedCount++
-            continue
-          }
-
-          const blockReason = `Blocked (v2026-01-01): Required shipping fields missing: ${missingRequiredFields.join(', ')}. SP-API role "Direct-to-Consumer Delivery" may not be granted.`
+        // ─── Safety gate: block only Amazon Pending orders (payment not yet confirmed) ──
+        // PII is no longer required — we use placeholder customer data for Shopify orders.
+        const amazonOrderStatus = getAmazonOrderStatus(order)
+        if (amazonOrderStatus === 'Pending') {
           await supabase.from('amazon_fbm_orders').update({
-            status: 'blocked_missing_pii',
-            error_detail: blockReason,
+            status: 'pending_payment',
+            error_detail: 'Order is still in Pending status on Amazon — waiting for payment confirmation',
           } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_order_blocked_missing_pii', {
-            missing_required: missingRequiredFields,
+          await logEvent(supabase, userId, 'fbm_order_pending_payment', {
+            amazon_status: amazonOrderStatus,
             api_version: '2026-01-01',
-          }, storeKey, amazonOrderId, 'warn')
-          manualReviewCount++
+          }, storeKey, amazonOrderId)
+          skippedCount++
           continue
         }
 
@@ -1026,8 +1009,8 @@ Deno.serve(async (req) => {
 
         // Map shipping address from v2026-01-01 PII extraction
         const shippingAddress = pii.addressLine1 ? {
-          first_name: pii.recipientName?.split(' ')[0] || '',
-          last_name: pii.recipientName?.split(' ').slice(1).join(' ') || '',
+          first_name: pii.recipientName?.split(' ')[0] || 'Amazon',
+          last_name: pii.recipientName?.split(' ').slice(1).join(' ') || 'FBM Customer',
           address1: pii.addressLine1 || '',
           address2: pii.addressLine2 || '',
           city: pii.city || '',
@@ -1035,27 +1018,40 @@ Deno.serve(async (req) => {
           zip: pii.postalCode || '',
           country: pii.countryCode || 'AU',
           phone: pii.phone || '',
-        } : undefined
+        } : {
+          // Placeholder address when PII not available
+          first_name: 'Amazon',
+          last_name: 'FBM Customer',
+          address1: 'See Amazon Seller Central',
+          city: 'N/A',
+          province: '',
+          zip: '0000',
+          country: 'AU',
+        }
 
-        // Extract customer info from v2026-01-01 fields
+        // Extract customer info — use placeholder if PII unavailable
         const buyerName = pii.recipientName || pii.buyerName || ''
         const buyerEmail = pii.buyerEmail || null
         const customer = buyerName ? {
           first_name: buyerName.split(' ')[0] || '',
           last_name: buyerName.split(' ').slice(1).join(' ') || '',
           ...(buyerEmail ? { email: buyerEmail } : {}),
-        } : undefined
+        } : {
+          first_name: 'Amazon',
+          last_name: 'FBM Customer',
+        }
 
         const shopifyPayload = {
           order: {
             line_items: lineItems,
-            ...(shippingAddress ? { shipping_address: shippingAddress, billing_address: shippingAddress } : {}),
-            ...(customer ? { customer } : {}),
+            shipping_address: shippingAddress,
+            billing_address: shippingAddress,
+            customer,
             financial_status: financialStatus,
             fulfillment_status: 'unfulfilled',
-            tags: 'amazon-fbm,xettle-bridge',
+            tags: `amazon-fbm,xettle-bridge${pii.piiPresent ? '' : ',placeholder-customer'}`,
             source_name: 'amazon',
-            note: `Amazon FBM Order: ${amazonOrderId}`,
+            note: `Amazon FBM Order: ${amazonOrderId}${pii.piiPresent ? '' : ' (placeholder customer — see Amazon Seller Central for buyer details)'}`,
           },
         }
 
