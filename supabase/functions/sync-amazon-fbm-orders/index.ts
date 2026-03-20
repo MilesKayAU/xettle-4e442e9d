@@ -655,21 +655,32 @@ Deno.serve(async (req) => {
 
         console.log('fbm_sku_mapping_result', { amazonOrderId, matched: matchedSkus, unmapped: unmappedSkus })
 
-        // ─── Fetch PII (shipping address, buyer name) via RDT ────
-        // Do this before dry-run check so dry runs also show full address data
-        const piiOrder = await fetchOrderWithPii(baseUrl, accessToken, amazonOrderId)
-        const orderWithPii = piiOrder || order // fallback to original if RDT fails
+        // ─── Fetch PII (shipping address, buyer name) via split RDT ────
+        // Each element requested independently so partial access works
+        const { mergedOrder: orderWithPii, piiAccess, missingRequiredFields, missingWarningFields } =
+          await fetchOrderPiiSplit(baseUrl, accessToken, amazonOrderId, order)
 
         console.log('fbm_pii_fetch', {
           amazonOrderId,
-          has_rdt_data: !!piiOrder,
+          buyer_info_granted: piiAccess.buyer_info.granted,
+          shipping_address_granted: piiAccess.shipping_address.granted,
+          missing_required: missingRequiredFields,
+          missing_warnings: missingWarningFields,
           has_shipping_address: !!orderWithPii.ShippingAddress,
           buyer_name: orderWithPii.ShippingAddress?.Name || orderWithPii.BuyerInfo?.BuyerName || 'none',
         })
 
-        // Store debug details on order record (with PII-enriched data)
+        // Store debug details on order record (with PII-enriched data + diagnostics)
         await supabase.from('amazon_fbm_orders').update({
-          raw_amazon_payload: { ...orderWithPii, orderItems: itemSkus, matched_skus: matchedSkus, unmapped_skus: unmappedSkus },
+          raw_amazon_payload: {
+            ...orderWithPii,
+            orderItems: itemSkus,
+            matched_skus: matchedSkus,
+            unmapped_skus: unmappedSkus,
+            pii_access: piiAccess,
+            missing_required_fields: missingRequiredFields,
+            missing_warning_fields: missingWarningFields,
+          },
         } as any).eq('id', insertedOrder.id)
 
         if (unmappedSkus.length > 0) {
@@ -684,11 +695,32 @@ Deno.serve(async (req) => {
 
         // ─── Dry run check ──────────────────────────────────────
         if (dryRun) {
+          const dryRunSummary = missingRequiredFields.length > 0
+            ? `Dry run completed. Missing protected fields: ${missingRequiredFields.join(', ')}. Amazon app may need Direct-to-Consumer Shipping or Tax Invoicing approval.`
+            : `Dry run completed. All required shipping fields present.${missingWarningFields.length > 0 ? ` Warnings: ${missingWarningFields.join(', ')} missing.` : ''}`
           await supabase.from('amazon_fbm_orders').update({
             status: 'dry_run',
-            error_detail: 'dry_run',
+            error_detail: dryRunSummary,
           } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_dry_run_skipped_create', {}, storeKey, amazonOrderId)
+          await logEvent(supabase, userId, 'fbm_dry_run_skipped_create', {
+            missing_required: missingRequiredFields,
+            pii_access: piiAccess,
+          }, storeKey, amazonOrderId)
+          continue
+        }
+
+        // ─── Safety gate: block live sync if shipping PII missing ──
+        if (missingRequiredFields.length > 0) {
+          const blockReason = `Blocked: Amazon did not return required shipping fields: ${missingRequiredFields.join(', ')}. App needs Direct-to-Consumer Shipping role approval.`
+          await supabase.from('amazon_fbm_orders').update({
+            status: 'blocked_missing_pii',
+            error_detail: blockReason,
+          } as any).eq('id', insertedOrder.id)
+          await logEvent(supabase, userId, 'fbm_order_blocked_missing_pii', {
+            missing_required: missingRequiredFields,
+            pii_access: piiAccess,
+          }, storeKey, amazonOrderId, 'warn')
+          manualReviewCount++
           continue
         }
 
