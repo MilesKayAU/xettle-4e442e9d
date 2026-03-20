@@ -198,6 +198,18 @@ export default function InsightsDashboard() {
         }
       }
 
+      // Build PAC shipping stats by marketplace
+      const pacStatsByMp: Record<string, { avg60: number | null; avg14: number | null; sample: number }> = {};
+      if (pacShippingStatsRes.data) {
+        for (const row of pacShippingStatsRes.data as any[]) {
+          pacStatsByMp[row.marketplace_code] = {
+            avg60: row.avg_shipping_cost_60 !== null ? Number(row.avg_shipping_cost_60) : null,
+            avg14: row.avg_shipping_cost_14 !== null ? Number(row.avg_shipping_cost_14) : null,
+            sample: Number(row.sample_size) || 0,
+          };
+        }
+      }
+
       // e.g. 'woolworths_marketplus_bigw' → 'bigw', 'shopify_orders_kogan' → 'kogan'
       const normalizeMarketplace = canonicalNormalizeMarketplace;
 
