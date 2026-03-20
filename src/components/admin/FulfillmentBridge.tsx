@@ -382,10 +382,21 @@ function OrderMonitorTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Button onClick={() => runSync(false)} disabled={syncing} size="sm">
-          <Play className="h-4 w-4 mr-1" />
-          Run Sync Now
-        </Button>
+        {confirmLive ? (
+          <div className="flex items-center gap-2 p-2 rounded-md border border-amber-300 bg-amber-50">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <span className="text-sm text-amber-800">This will create orders in Shopify. Continue?</span>
+            <Button size="sm" variant="destructive" onClick={() => { setConfirmLive(false); runSync(false, true); }} disabled={syncing}>
+              Yes, Live Sync
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmLive(false)}>Cancel</Button>
+          </div>
+        ) : (
+          <Button onClick={() => setConfirmLive(true)} disabled={syncing} size="sm">
+            <Play className="h-4 w-4 mr-1" />
+            Live Sync Now
+          </Button>
+        )}
         <Button onClick={() => runSync(true)} disabled={syncing} variant="outline" size="sm">
           <FlaskConical className="h-4 w-4 mr-1" />
           Dry Run

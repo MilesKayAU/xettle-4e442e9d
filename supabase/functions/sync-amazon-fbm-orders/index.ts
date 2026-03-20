@@ -609,6 +609,7 @@ Deno.serve(async (req) => {
       await upsertSetting(supabase, userId, `fbm:${storeKey}:last_poll_at`, new Date().toISOString())
 
       // ─── Log poll completed ────────────────────────────────────
+      const completedMode = dryRun ? 'dry_run' : (isCron ? 'cron' : 'manual')
       await logEvent(supabase, userId, 'fbm_poll_completed', {
         total_orders: orders.length,
         created_count: createdCount,
@@ -616,6 +617,8 @@ Deno.serve(async (req) => {
         failed_count: failedCount,
         skipped_count: skippedCount,
         dry_run: dryRun,
+        mode: completedMode,
+        force_refetch: forceRefetch,
       }, storeKey)
 
       return new Response(JSON.stringify({
