@@ -209,8 +209,7 @@ Deno.serve(async (req) => {
       console.log('fbm_marketplace', marketplace_id)
 
       // Check if current token is still valid (with 60s buffer) — safeguard 8: Date comparison
-      const tokenStillValid = accessToken && tokenRow.expires_at &&
-        new Date(tokenRow.expires_at) > new Date(Date.now() + 60000)
+      const tokenStillValid = accessToken && !isTokenExpired(tokenRow.expires_at)
 
       if (!tokenStillValid) {
         // Refresh the token — mirrors amazon-auth refresh logic exactly
