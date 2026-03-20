@@ -411,6 +411,10 @@ export default function Admin() {
           <TabsContent value="health">
             <HealthScannerDashboard />
           </TabsContent>
+
+          <TabsContent value="shipping">
+            <ShippingEstimateSettings />
+          </TabsContent>
         </Tabs>
       </div>
 
