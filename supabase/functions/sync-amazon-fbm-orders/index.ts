@@ -519,11 +519,13 @@ Deno.serve(async (req) => {
       const baseUrl = getEndpointForRegion(region)
 
       // ─── Poll Amazon Orders API v2026-01-01 ──────────────────
-      // Uses searchOrders with includedData for PII (role-based, no RDT)
+      // Only fetch actionable statuses: Unshipped and PartiallyShipped.
+      // Shipped orders need no FBM action. Pending orders have no item data
+      // accessible via SP-API until payment clears.
       const ordersParamsBase = new URLSearchParams({
         marketplaceIds: marketplace_id,
         fulfillmentChannels: 'MFN',
-        orderStatuses: 'Unshipped,PartiallyShipped,Shipped,Pending',
+        orderStatuses: 'Unshipped,PartiallyShipped',
         lastUpdatedAfter: lastUpdatedAfter,
         includedData: 'BUYER,RECIPIENT',
         maxResultsPerPage: '100',
@@ -535,6 +537,7 @@ Deno.serve(async (req) => {
         lastUpdatedAfter,
         api_version: API_VERSIONS.orders.current,
         max_results_per_page: 100,
+        statuses: 'Unshipped,PartiallyShipped',
       })
 
       const allOrders: any[] = []
