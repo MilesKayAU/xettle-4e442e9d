@@ -199,17 +199,17 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     ),
     payment_verification: (
       <SettingsAccordion title="Payment Verification" description="Configure payout confirmation and bank matching rules" defaultOpen={sortedSections[0] === 'payment_verification'} status={getStatus('payment_verification')} helpText={SETTINGS_HELP.payment_verification}>
-        <PaymentVerificationSettings />
+        <ErrorBoundary><PaymentVerificationSettings /></ErrorBoundary>
       </SettingsAccordion>
     ),
     fulfilment_methods: (
       <SettingsAccordion id="fulfilment" title="Fulfilment Methods" description="Set how orders are fulfilled per marketplace — affects profit calculations" defaultOpen={sortedSections[0] === 'fulfilment_methods'} status={getStatus('fulfilment_methods')} helpText={SETTINGS_HELP.fulfilment_methods}>
-        <FulfilmentMethodsPanel />
+        <ErrorBoundary><FulfilmentMethodsPanel /></ErrorBoundary>
       </SettingsAccordion>
     ),
     data_quality: (
       <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications" defaultOpen={sortedSections[0] === 'data_quality'} status={getStatus('data_quality')} helpText={SETTINGS_HELP.data_quality}>
-        <DataQualityPanel />
+        <ErrorBoundary><DataQualityPanel /></ErrorBoundary>
       </SettingsAccordion>
     ),
   };
