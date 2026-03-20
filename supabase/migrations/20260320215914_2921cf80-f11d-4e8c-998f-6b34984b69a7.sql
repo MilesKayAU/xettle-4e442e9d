@@ -1,0 +1,1 @@
+DELETE FROM amazon_fbm_orders WHERE status IN ('manual_review', 'dry_run') AND shopify_order_id IS NULL;
