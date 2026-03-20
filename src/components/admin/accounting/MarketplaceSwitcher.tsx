@@ -296,7 +296,9 @@ export default function MarketplaceSwitcher({
     }
   };
 
-  const availableToAdd = MARKETPLACE_CATALOG.filter(
+  // Merge static catalog with registry entries for the full available list
+  const fullCatalog = [...MARKETPLACE_CATALOG, ...registryEntries];
+  const availableToAdd = fullCatalog.filter(
     m => !connectedCodes.has(m.code) && m.phase !== 'coming_soon'
   );
 
