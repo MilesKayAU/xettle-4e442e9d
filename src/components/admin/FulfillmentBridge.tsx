@@ -112,22 +112,37 @@ function ProductLinksTab() {
         try {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            const { data: tokens } = await supabase
-              .from('app_settings')
-              .select('value')
+            const { data: tokenRow } = await supabase
+              .from('shopify_tokens')
+              .select('shop_domain, access_token')
               .eq('user_id', user.id)
-              .eq('key', `fbm:${STORE_KEY}:shopify_token`)
+              .eq('is_active', true)
+              .limit(1)
               .maybeSingle();
 
-            const { data: shopData } = await supabase
-              .from('app_settings')
-              .select('value')
-              .eq('user_id', user.id)
-              .eq('key', `fbm:${STORE_KEY}:shopify_domain`)
-              .maybeSingle();
-
-            if (tokens?.value && shopData?.value) {
-              toast({ title: 'Handle detected', description: `Handle "${parsed.handle}" found. Enter Variant ID manually or use a Shopify URL with /variants/.` });
+            if (tokenRow?.access_token && tokenRow?.shop_domain) {
+              try {
+                const res = await fetch(
+                  `https://${tokenRow.shop_domain}/admin/api/2026-01/products.json?handle=${encodeURIComponent(parsed.handle)}&fields=id,title,variants`,
+                  { headers: { 'X-Shopify-Access-Token': tokenRow.access_token } }
+                );
+                if (res.ok) {
+                  const json = await res.json();
+                  const products = json.products || [];
+                  if (products.length > 0 && products[0].variants?.length > 0) {
+                    const variant = products[0].variants[0];
+                    if (!shopifyVariantId) setShopifyVariantId(String(variant.id));
+                    if (!shopifySku && variant.sku) setShopifySku(variant.sku);
+                    toast({ title: 'Shopify product loaded', description: `${products[0].title} — Variant ${variant.id}` });
+                  } else {
+                    toast({ title: 'Handle not found', description: `No product with handle "${parsed.handle}". Enter Variant ID manually.` });
+                  }
+                } else {
+                  toast({ title: 'Shopify API error', description: `Status ${res.status}. Enter Variant ID manually.`, variant: 'destructive' });
+                }
+              } catch {
+                toast({ title: 'Shopify API error', description: 'Could not fetch product. Enter Variant ID manually.', variant: 'destructive' });
+              }
             } else {
               toast({ title: 'Handle detected', description: 'No Shopify credentials configured. Enter Variant ID manually.' });
             }
