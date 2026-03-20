@@ -34,7 +34,6 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
   const [manualSellerId, setManualSellerId] = useState('');
   const [savingToken, setSavingToken] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState<AmazonRegion>(DEFAULT_AMAZON_REGION);
-  const [savingToken, setSavingToken] = useState(false);
 
   const checkStatus = useCallback(async () => {
     setLoading(true);
