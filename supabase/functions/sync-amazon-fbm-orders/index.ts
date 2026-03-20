@@ -741,7 +741,7 @@ Deno.serve(async (req) => {
         }
 
         // Map SKUs via product_links
-        const skus = orderItems.map((item: any) => item.sellerSku || item.SellerSKU).filter(Boolean)
+        const skus = orderItems.map((item: any) => getOrderItemSku(item)).filter(Boolean)
         console.log('fbm_sku_lookup', { amazonOrderId, skus_to_match: skus })
 
         const { data: mappings } = await supabase
