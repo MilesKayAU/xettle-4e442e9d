@@ -835,15 +835,21 @@ Deno.serve(async (req) => {
           },
         } as any).eq('id', insertedOrder.id)
 
-        if (unmappedSkus.length > 0) {
-          await supabase.from('amazon_fbm_orders').update({
-            status: 'manual_review',
-            error_detail: `Unmapped SKU: ${unmappedSkus.join(', ')}`,
-          } as any).eq('id', insertedOrder.id)
-          await logEvent(supabase, userId, 'fbm_order_unmapped_sku', { unmapped_skus: unmappedSkus, matched_skus: matchedSkus }, storeKey, amazonOrderId, 'warn')
-          manualReviewCount++
+        // ─── SKU filtering: only process orders with at least one mapped SKU ──
+        // Unmapped SKUs are assumed to be FBA-fulfilled and intentionally not linked.
+        // Orders with zero matched SKUs are silently skipped (not errors).
+        if (matchedSkus.length === 0) {
+          // No linked products in this order — skip silently (FBA order)
+          await supabase.from('amazon_fbm_orders').delete().eq('id', insertedOrder.id)
+          skippedCount++
           continue
         }
+
+        // Filter orderItems down to only the mapped SKUs for Shopify order creation
+        const mappedOrderItems = orderItems.filter((item: any) => {
+          const sku = getOrderItemSku(item)
+          return sku && mappingMap.has(sku)
+        })
 
         // ─── Dry run check ──────────────────────────────────────
         if (dryRun) {
@@ -946,7 +952,7 @@ Deno.serve(async (req) => {
         // PII already extracted above (pii object), use it for Shopify payload
 
         // Build Shopify order payload — v2026-01-01 field mapping
-        const lineItems = orderItems.map((item: any) => {
+        const lineItems = mappedOrderItems.map((item: any) => {
           const sku = getOrderItemSku(item)
           const mapping = sku ? mappingMap.get(sku) : null
           return {
