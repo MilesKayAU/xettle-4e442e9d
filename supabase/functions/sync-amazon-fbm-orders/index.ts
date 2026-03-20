@@ -877,17 +877,17 @@ Deno.serve(async (req) => {
 
         // ─── Dry run check ──────────────────────────────────────
         if (dryRun) {
-          const dryRunSummary = missingRequiredFields.length > 0
-            ? `Dry run (v2026-01-01). Missing PII fields: ${missingRequiredFields.join(', ')}. SP-API roles may not be granted yet.`
-            : `Dry run (v2026-01-01). All required shipping fields present.${missingWarningFields.length > 0 ? ` Warnings: ${missingWarningFields.join(', ')} missing.` : ''}`
+          const hasPii = pii.piiPresent
+          const dryRunSummary = hasPii
+            ? `Dry run OK. ${matchedSkus.length} SKU(s) matched. Buyer PII available.`
+            : `Dry run OK. ${matchedSkus.length} SKU(s) matched. No PII — will use placeholder customer.`
           await supabase.from('amazon_fbm_orders').update({
             status: 'dry_run',
             error_detail: dryRunSummary,
           } as any).eq('id', insertedOrder.id)
           await logEvent(supabase, userId, 'fbm_dry_run_skipped_create', {
-            missing_required: missingRequiredFields,
-            api_version: '2026-01-01',
-            pii_present: pii.piiPresent,
+            matched_skus: matchedSkus.length,
+            pii_available: hasPii,
           }, storeKey, amazonOrderId)
           continue
         }
