@@ -1,38 +1,56 @@
 
 
-# Fix: Widen polling window on force_refetch
-
 ## Problem
-When `force_refetch = true`, the edge function:
-1. Deletes stale local rows (works correctly)
-2. Queries Amazon using the narrow `last_poll_at` window (e.g., last 10 minutes)
-3. Amazon returns 0 orders because the order hasn't been updated recently
 
-The order was last updated on March 19 but the query window started at March 20 05:06.
+The "Failed to fetch dynamically imported module" error keeps crashing the dashboard. This is a Vite chunk-loading failure — the browser tries to load a JS module that's been invalidated (dev server restart, code change, or network hiccup) and gets a 404/network error. React's lazy loader throws, and the ErrorBoundary catches it with no recovery path.
 
-## Fix
+## Solution
 
-**File:** `supabase/functions/sync-amazon-fbm-orders/index.ts` (lines 187-196)
+Add automatic retry with page reload for chunk-loading failures. Two changes:
 
-When `forceRefetch === true`, override `lastUpdatedAfter` to use a 7-day lookback window instead of the `last_poll_at` value. This ensures all recent orders are re-fetched after the bulk delete.
+### 1. Add a retry wrapper for lazy imports (`src/utils/lazy-with-retry.ts`)
 
-```text
-Current logic (line 187-196):
-  lastUpdatedAfter = last_poll_at - 2min buffer
-  OR 7 days ago (if no last_poll_at)
+Create a helper that wraps `React.lazy()` with retry logic:
+- On import failure, check if the error message contains "dynamically imported module" or "Loading chunk"
+- If so, do a hard page reload (once — use sessionStorage flag to prevent infinite loops)
+- If it's already been retried, let the error propagate normally
 
-New logic:
-  if forceRefetch → always use 7 days ago
-  else → use last_poll_at - 2min buffer (unchanged)
+### 2. Update `src/App.tsx` to use the retry wrapper
+
+Replace all `lazy(() => import(...))` calls with the new `lazyWithRetry(() => import(...))` wrapper. No other changes needed — the existing Suspense fallback handles the loading state.
+
+### Technical Details
+
+**`src/utils/lazy-with-retry.ts`**:
+```typescript
+import { lazy, ComponentType } from 'react';
+
+export function lazyWithRetry<T extends ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(() =>
+    factory().catch((err) => {
+      const isChunkError =
+        err?.message?.includes('dynamically imported module') ||
+        err?.message?.includes('Loading chunk');
+
+      if (isChunkError) {
+        const key = 'chunk_reload_retry';
+        const hasRetried = sessionStorage.getItem(key);
+        if (!hasRetried) {
+          sessionStorage.setItem(key, '1');
+          window.location.reload();
+          return new Promise(() => {}); // never resolves — page is reloading
+        }
+        sessionStorage.removeItem(key);
+      }
+      throw err;
+    })
+  );
+}
 ```
 
-This is a 2-line change: add an `if (forceRefetch)` block before the existing polling window computation that forces the 7-day lookback.
+**`src/App.tsx`**: Replace `lazy()` with `lazyWithRetry()` for all 16 page imports. No other changes.
 
-## Changes
-
-| File | Change |
-|------|--------|
-| `supabase/functions/sync-amazon-fbm-orders/index.ts` | Add `forceRefetch` override for `lastUpdatedAfter` to use 7-day lookback |
-
-No other changes needed. After deploying, clicking "Live Sync Now" will re-fetch the order from Amazon and push it to Shopify.
+This eliminates the crash screen for transient chunk failures by silently reloading once.
 
