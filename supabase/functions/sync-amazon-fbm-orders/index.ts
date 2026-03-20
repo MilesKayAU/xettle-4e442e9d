@@ -839,7 +839,11 @@ Deno.serve(async (req) => {
         // Unmapped SKUs are assumed to be FBA-fulfilled and intentionally not linked.
         // Orders with zero matched SKUs are silently skipped (not errors).
         if (matchedSkus.length === 0) {
-          // No linked products in this order — skip silently (FBA order)
+          // No linked products in this order — pure FBA order, not our concern
+          await logEvent(supabase, userId, 'fbm_order_skipped_fba', {
+            skipped_skus: unmappedSkus,
+            reason: 'No mapped SKUs — assumed FBA-fulfilled',
+          }, storeKey, amazonOrderId)
           await supabase.from('amazon_fbm_orders').delete().eq('id', insertedOrder.id)
           skippedCount++
           continue
