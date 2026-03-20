@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { RefreshCw, ScanSearch, CheckCircle, AlertTriangle, XCircle, Eye, EyeOff } from 'lucide-react';
+import { RefreshCw, ScanSearch, CheckCircle, AlertTriangle, XCircle, Eye, EyeOff, ClipboardCopy } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface HealthIssue {
