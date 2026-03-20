@@ -1,0 +1,1 @@
+DELETE FROM sync_locks WHERE lock_key LIKE 'fbm_poll%';
