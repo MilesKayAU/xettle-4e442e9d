@@ -10,32 +10,7 @@ const SP_API_ENDPOINTS: Record<string, string> = {
 
 const SHOPIFY_API_VERSION = '2026-01' // matches repo standard
 
-// ═══════════════════════════════════════════════════════════════
-// Helper: refresh Amazon SP-API access token
-// ═══════════════════════════════════════════════════════════════
-async function refreshAccessToken(amazonToken: any): Promise<string> {
-  const clientId = Deno.env.get('AMAZON_SP_CLIENT_ID')!
-  const clientSecret = Deno.env.get('AMAZON_SP_CLIENT_SECRET')!
-
-  const tokenResponse = await fetch('https://api.amazon.com/auth/o2/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: amazonToken.refresh_token,
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
-  })
-
-  if (!tokenResponse.ok) {
-    const errText = await tokenResponse.text()
-    throw new Error(`Token refresh failed: ${tokenResponse.status} ${errText}`)
-  }
-
-  const tokenData = await tokenResponse.json()
-  return tokenData.access_token
-}
+// (Token refresh is handled by amazon-auth edge function)
 
 // ═══════════════════════════════════════════════════════════════
 // Helper: upsert app_settings
@@ -200,23 +175,21 @@ Deno.serve(async (req) => {
         lastUpdatedAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       }
 
-      // ─── Get Amazon token ──────────────────────────────────────
-      const { data: amazonToken, error: tokenError } = await supabase
-        .from('amazon_tokens')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle()
+      // ─── Get Amazon token via amazon-auth helper ─────────────
+      const { data: authData, error: tokenError } = await supabase.functions.invoke('amazon-auth', {
+        headers: { 'x-action': 'refresh' },
+      })
 
-      if (tokenError || !amazonToken) {
-        throw new Error(`No Amazon token found: ${tokenError?.message || 'not found'}`)
+      if (tokenError || !authData?.access_token) {
+        throw new Error(`Amazon auth failed: ${authData?.error || tokenError?.message || 'no token'}`)
       }
 
-      const region = amazonToken.region || 'fe'
+      const { access_token: accessToken, marketplace_id, region } = authData
       const baseUrl = SP_API_ENDPOINTS[region] || SP_API_ENDPOINTS.fe
-      const accessToken = await refreshAccessToken(amazonToken)
 
       // ─── Poll Amazon Orders API ────────────────────────────────
       const ordersParams = new URLSearchParams({
+        MarketplaceIds: marketplace_id,
         FulfillmentChannels: 'MFN',
         OrderStatuses: 'Unshipped',
         LastUpdatedAfter: lastUpdatedAfter,
