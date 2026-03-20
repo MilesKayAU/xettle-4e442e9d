@@ -503,7 +503,14 @@ Deno.serve(async (req) => {
 
       const ordersData = await ordersResponse.json()
       // v2026-01-01 drops the `payload` wrapper — orders are at top level
-      const orders = ordersData?.orders || []
+      // Debug: log actual response structure to discover field names
+      const topLevelKeys = Object.keys(ordersData || {})
+      console.log('fbm_response_structure', { top_level_keys: topLevelKeys })
+      let orders = ordersData?.orders || ordersData?.Orders || ordersData?.payload?.Orders || []
+      if (orders.length > 0) {
+        const sampleKeys = Object.keys(orders[0])
+        console.log('fbm_order_keys', { sample_order_keys: sampleKeys, first_order_preview: JSON.stringify(orders[0]).slice(0, 500) })
+      }
 
       // Log PII access status from first order (to detect role-based access)
       if (orders.length > 0) {
