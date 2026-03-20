@@ -31,6 +31,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { upsertMarketplaceConnection } from '@/utils/marketplace-connections';
 import { findNearDuplicate } from '@/utils/marketplace-codes';
+import { getMarketplaceLabel } from '@/utils/marketplace-labels';
 
 export interface MarketplaceDefinition {
   code: string;
