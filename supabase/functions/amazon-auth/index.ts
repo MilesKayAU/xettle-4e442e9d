@@ -176,7 +176,7 @@ serve(async (req) => {
       }
 
       // Refresh the token
-      const refreshResponse = await fetch('https://api.amazon.com/auth/o2/token', {
+      const refreshResponse = await fetch(LWA.TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
