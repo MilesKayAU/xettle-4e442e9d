@@ -11,20 +11,31 @@ import {
 import { logger } from '../_shared/logger.ts'
 
 // ═══════════════════════════════════════════════════════════════
-// Helper: Request a Restricted Data Token (RDT) for PII access
+// Helper: Request a Restricted Data Token for a SINGLE data element
+// Split approach: buyerInfo and shippingAddress requested independently
+// so partial access still succeeds when Amazon denies one element.
 // https://developer-docs.amazon.com/sp-api/docs/tokens-api-use-case-guide
 // ═══════════════════════════════════════════════════════════════
-async function getRestrictedDataToken(
+interface RdtElementResult {
+  attempted: boolean
+  granted: boolean
+  reason_code?: string
+  amazon_code?: string
+  message?: string
+}
+
+async function getRestrictedDataTokenForElement(
   baseUrl: string,
   accessToken: string,
   amazonOrderId: string,
-): Promise<string | null> {
+  dataElement: string,
+): Promise<{ token: string | null; result: RdtElementResult }> {
   const rdtPayload = {
     restrictedResources: [
       {
         method: 'GET',
         path: `/orders/v0/orders/${amazonOrderId}`,
-        dataElements: ['buyerInfo', 'shippingAddress'],
+        dataElements: [dataElement],
       },
     ],
   };
@@ -38,49 +49,137 @@ async function getRestrictedDataToken(
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error('rdt_request_failed', { status: res.status, body: errText });
-      return null;
+      let amazonCode = 'unknown';
+      let message = errText;
+      try {
+        const parsed = JSON.parse(errText);
+        amazonCode = parsed?.errors?.[0]?.code || 'unknown';
+        message = parsed?.errors?.[0]?.message || errText;
+      } catch { /* use raw text */ }
+
+      console.error(`rdt_request_failed [${dataElement}]`, { status: res.status, body: errText });
+      return {
+        token: null,
+        result: { attempted: true, granted: false, reason_code: 'rdt_request_failed', amazon_code: amazonCode, message },
+      };
     }
 
     const data = await res.json();
-    return data.restrictedDataToken || null;
-  } catch (err) {
-    console.error('rdt_request_error', err);
-    return null;
+    const token = data.restrictedDataToken || null;
+    return {
+      token,
+      result: { attempted: true, granted: !!token },
+    };
+  } catch (err: any) {
+    console.error(`rdt_request_error [${dataElement}]`, err);
+    return {
+      token: null,
+      result: { attempted: true, granted: false, reason_code: 'rdt_exception', message: err.message },
+    };
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Helper: Fetch single order with RDT to get PII (address, buyer)
+// Helper: Fetch order with a specific RDT to get PII fields
 // ═══════════════════════════════════════════════════════════════
-async function fetchOrderWithPii(
+async function fetchOrderWithRdt(
   baseUrl: string,
-  accessToken: string,
+  rdt: string,
   amazonOrderId: string,
 ): Promise<any | null> {
-  const rdt = await getRestrictedDataToken(baseUrl, accessToken, amazonOrderId);
-  if (!rdt) {
-    console.warn('rdt_unavailable, falling back to non-PII order data', { amazonOrderId });
-    return null;
-  }
-
   try {
     const res = await fetch(`${baseUrl}/orders/v0/orders/${amazonOrderId}`, {
       headers: getSpApiHeaders(rdt),
     });
-
     if (!res.ok) {
       const errText = await res.text();
       console.error('pii_order_fetch_failed', { status: res.status, body: errText });
       return null;
     }
-
     const data = await res.json();
     return data?.payload || null;
   } catch (err) {
     console.error('pii_order_fetch_error', err);
     return null;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Hard-block fields required for Shopify order creation
+// ═══════════════════════════════════════════════════════════════
+const HARD_BLOCK_FIELDS = ['recipient_name', 'address_line_1', 'city', 'postal_code', 'country_code'] as const
+const SOFT_WARN_FIELDS = ['buyer_name', 'buyer_email', 'phone'] as const
+
+interface PiiAccessStatus {
+  buyer_info: RdtElementResult
+  shipping_address: RdtElementResult
+}
+
+interface PiiFetchResult {
+  mergedOrder: any
+  piiAccess: PiiAccessStatus
+  missingRequiredFields: string[]
+  missingWarningFields: string[]
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: Split PII fetch — buyerInfo and shippingAddress independently
+// ═══════════════════════════════════════════════════════════════
+async function fetchOrderPiiSplit(
+  baseUrl: string,
+  accessToken: string,
+  amazonOrderId: string,
+  baseOrder: any,
+): Promise<PiiFetchResult> {
+  // Attempt each protected element independently
+  const [buyerRdt, shippingRdt] = await Promise.all([
+    getRestrictedDataTokenForElement(baseUrl, accessToken, amazonOrderId, 'buyerInfo'),
+    getRestrictedDataTokenForElement(baseUrl, accessToken, amazonOrderId, 'shippingAddress'),
+  ]);
+
+  // Start with base order data
+  let mergedOrder = { ...baseOrder };
+
+  // Fetch with buyer RDT if granted
+  if (buyerRdt.token) {
+    const buyerOrder = await fetchOrderWithRdt(baseUrl, buyerRdt.token, amazonOrderId);
+    if (buyerOrder?.BuyerInfo) {
+      mergedOrder.BuyerInfo = { ...mergedOrder.BuyerInfo, ...buyerOrder.BuyerInfo };
+    }
+  }
+
+  // Fetch with shipping RDT if granted
+  if (shippingRdt.token) {
+    const shippingOrder = await fetchOrderWithRdt(baseUrl, shippingRdt.token, amazonOrderId);
+    if (shippingOrder?.ShippingAddress) {
+      mergedOrder.ShippingAddress = { ...mergedOrder.ShippingAddress, ...shippingOrder.ShippingAddress };
+    }
+  }
+
+  const piiAccess: PiiAccessStatus = {
+    buyer_info: buyerRdt.result,
+    shipping_address: shippingRdt.result,
+  };
+
+  // Evaluate missing fields
+  const addr = mergedOrder.ShippingAddress || {};
+  const buyer = mergedOrder.BuyerInfo || {};
+
+  const fieldPresence: Record<string, boolean> = {
+    recipient_name: !!(addr.Name),
+    address_line_1: !!(addr.AddressLine1),
+    city: !!(addr.City),
+    postal_code: !!(addr.PostalCode),
+    country_code: !!(addr.CountryCode),
+    buyer_name: !!(buyer.BuyerName || addr.Name),
+    buyer_email: !!(buyer.BuyerEmail),
+    phone: !!(addr.Phone || buyer.BuyerPhone),
+  };
+
+  const missingRequiredFields = HARD_BLOCK_FIELDS.filter(f => !fieldPresence[f]);
+  const missingWarningFields = SOFT_WARN_FIELDS.filter(f => !fieldPresence[f]);
+
+  return { mergedOrder, piiAccess, missingRequiredFields, missingWarningFields };
 }
 
 const SHOPIFY_API_VERSION = '2026-01'
