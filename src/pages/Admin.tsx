@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3 } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package } from 'lucide-react';
 import AccountResetButton from '@/components/admin/AccountResetButton';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
@@ -39,6 +39,7 @@ import KnowledgeBaseDashboard from '@/components/admin/KnowledgeBaseDashboard';
 import GrowthScoutDashboard from '@/components/admin/GrowthScoutDashboard';
 import EmailMonitoringDashboard from '@/components/admin/EmailMonitoringDashboard';
 import UserOverviewDashboard from '@/components/admin/UserOverviewDashboard';
+import FulfillmentBridge from '@/components/admin/FulfillmentBridge';
 
 interface UserRow {
   id: string;
@@ -239,6 +240,10 @@ export default function Admin() {
               <BarChart3 className="h-3.5 w-3.5" />
               User Overview
             </TabsTrigger>
+            <TabsTrigger value="fulfillment" className="flex items-center gap-1.5">
+              <Package className="h-3.5 w-3.5" />
+              Fulfillment Bridge
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -387,6 +392,10 @@ export default function Admin() {
 
           <TabsContent value="overview">
             <UserOverviewDashboard />
+          </TabsContent>
+
+          <TabsContent value="fulfillment">
+            <FulfillmentBridge />
           </TabsContent>
         </Tabs>
       </div>
