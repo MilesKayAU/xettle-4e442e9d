@@ -32,28 +32,18 @@ export function useTrialStatus(userId: string | undefined): TrialInfo {
         if (paidRes.data) { setInfo({ status: 'paid', daysRemaining: null, userTier: 'starter' }); return; }
 
         if (trialRes.data) {
-          const { data: trialSetting } = await supabase
-            .from('app_settings')
-            .select('value')
-            .eq('user_id', userId)
-            .eq('key', 'trial_started_at')
-            .maybeSingle();
+          // Server-side trial expiry check — atomically downgrades trial → free if expired
+          const { data: expiryResult } = await (supabase.rpc as any)('check_and_expire_trial', {
+            p_user_id: userId,
+          });
 
-          if (trialSetting?.value) {
-            const daysSinceStart = Math.floor(
-              (Date.now() - new Date(trialSetting.value).getTime()) / (1000 * 60 * 60 * 24)
-            );
-            const daysRemaining = Math.max(0, 10 - daysSinceStart);
+          const result = expiryResult as any;
 
-            if (daysSinceStart > 10) {
-              // Expired — downgrade
-              await supabase.from('user_roles').delete().eq('user_id', userId).eq('role', 'trial' as any);
-              await supabase.from('user_roles').upsert(
-                { user_id: userId, role: 'free' as any },
-                { onConflict: 'user_id,role' }
-              );
-              setInfo({ status: 'expired', daysRemaining: 0, userTier: 'free' });
-            } else if (daysRemaining <= 3) {
+          if (result?.expired) {
+            setInfo({ status: 'expired', daysRemaining: 0, userTier: 'free' });
+          } else if (result?.days_remaining != null) {
+            const daysRemaining = result.days_remaining as number;
+            if (daysRemaining <= 3) {
               setInfo({ status: 'expiring', daysRemaining, userTier: 'starter' });
             } else {
               setInfo({ status: 'active', daysRemaining, userTier: 'starter' });

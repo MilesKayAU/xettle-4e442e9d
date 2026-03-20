@@ -1,17 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 /**
  * Shopify mandatory GDPR compliance webhooks.
  * Handles: customers/data_request, customers/redact, shop/redact
- * 
- * These are POST requests with JSON body.
- * HMAC is in the X-Shopify-Hmac-Sha256 header, computed over the raw body.
  */
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function verifyWebhookHmac(body: string, hmacHeader: string, secret: string): Promise<boolean> {
   const encoder = new TextEncoder()
@@ -25,7 +18,6 @@ async function verifyWebhookHmac(body: string, hmacHeader: string, secret: strin
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(body))
   const computedBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
 
-  // Constant-time comparison via HMAC
   const keyData = crypto.getRandomValues(new Uint8Array(32))
   const compareKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const [sigA, sigB] = await Promise.all([
@@ -41,6 +33,9 @@ async function verifyWebhookHmac(body: string, hmacHeader: string, secret: strin
 }
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get('Origin') ?? ''
+  const corsHeaders = getCorsHeaders(origin)
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -76,7 +71,6 @@ Deno.serve(async (req) => {
 
     const payload = JSON.parse(rawBody)
     const url = new URL(req.url)
-    // Determine the topic from the X-Shopify-Topic header or URL path
     const topic = req.headers.get('x-shopify-topic') || url.searchParams.get('topic') || 'unknown'
 
     const supabaseAdmin = createClient(
@@ -87,8 +81,6 @@ Deno.serve(async (req) => {
     console.log('GDPR webhook received:', { topic, shop_domain: payload.shop_domain })
 
     if (topic === 'customers/data_request') {
-      // Xettle does not store end-customer personal data from Shopify.
-      // Acknowledge the request and log it.
       await supabaseAdmin.from('system_events').insert({
         user_id: '00000000-0000-0000-0000-000000000000',
         event_type: 'shopify_gdpr_customer_data_request',
@@ -109,8 +101,6 @@ Deno.serve(async (req) => {
     }
 
     if (topic === 'customers/redact') {
-      // Xettle does not store end-customer personal data.
-      // Acknowledge and log.
       await supabaseAdmin.from('system_events').insert({
         user_id: '00000000-0000-0000-0000-000000000000',
         event_type: 'shopify_gdpr_customer_redact',
@@ -130,10 +120,8 @@ Deno.serve(async (req) => {
     }
 
     if (topic === 'shop/redact') {
-      // Delete ALL data for this shop: tokens, orders, settings
       const shopDomain = payload.shop_domain
 
-      // Find user(s) with this shop
       const { data: tokens } = await supabaseAdmin
         .from('shopify_tokens')
         .select('user_id')
@@ -141,20 +129,17 @@ Deno.serve(async (req) => {
 
       const userIds = tokens?.map((t: { user_id: string }) => t.user_id) || []
 
-      // Delete shopify tokens for this shop
       await supabaseAdmin
         .from('shopify_tokens')
         .delete()
         .eq('shop_domain', shopDomain)
 
-      // Delete shopify orders for affected users
       for (const userId of userIds) {
         await supabaseAdmin
           .from('shopify_orders')
           .delete()
           .eq('user_id', userId)
 
-        // Clean up shopify-related app_settings
         await supabaseAdmin
           .from('app_settings')
           .delete()
@@ -179,7 +164,6 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Unknown topic
     console.warn('Unknown GDPR topic:', topic)
     return new Response(JSON.stringify({ message: 'Acknowledged' }), {
       status: 200,

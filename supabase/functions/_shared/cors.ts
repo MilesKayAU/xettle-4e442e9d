@@ -1,23 +1,12 @@
 /**
  * Centralised CORS helper for all Xettle edge functions.
  *
- * Every function imports:
- *   import { getCorsHeaders } from "../_shared/cors.ts"
- *
- * Usage:
- *   const origin = req.headers.get("Origin") ?? ""
- *   const headers = getCorsHeaders(origin)
- *
- *   if (req.method === "OPTIONS") {
- *     return new Response("ok", { headers })
- *   }
- *
- *   return new Response(body, {
- *     headers: { ...headers, "Content-Type": "application/json" },
- *   })
+ * Production domains are always allowed.
+ * Additional origins can be added via CORS_ALLOWED_ORIGINS env var (comma-separated).
+ * Localhost origins are only allowed when CORS_ALLOW_LOCALHOST env var is "true".
  */
 
-const ALLOWED_ORIGINS = [
+const PRODUCTION_ORIGINS = [
   "https://xettle.app",
   "https://www.xettle.app",
   "https://xettle.com.au",
@@ -25,14 +14,42 @@ const ALLOWED_ORIGINS = [
   "https://xettle.lovable.app",
   "https://id-preview--7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovable.app",
   "https://7fd99b7a-85b4-49c3-9197-4e0e88f0fa66.lovableproject.com",
+]
+
+const LOCALHOST_ORIGINS = [
   "http://localhost:5173",
   "http://localhost:3000",
 ]
 
+function buildAllowedOrigins(): string[] {
+  const origins = [...PRODUCTION_ORIGINS]
+
+  // Include localhost only when explicitly opted in
+  const allowLocalhost = Deno.env.get("CORS_ALLOW_LOCALHOST")
+  if (allowLocalhost === "true") {
+    origins.push(...LOCALHOST_ORIGINS)
+  }
+
+  // Append any extra origins from env (comma-separated)
+  const extra = Deno.env.get("CORS_ALLOWED_ORIGINS")
+  if (extra) {
+    for (const o of extra.split(",")) {
+      const trimmed = o.trim()
+      if (trimmed && !origins.includes(trimmed)) {
+        origins.push(trimmed)
+      }
+    }
+  }
+
+  return origins
+}
+
 export function getCorsHeaders(origin?: string): Record<string, string> {
   if (!origin) return {}
 
-  if (ALLOWED_ORIGINS.includes(origin)) {
+  const allowed = buildAllowedOrigins()
+
+  if (allowed.includes(origin)) {
     return {
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Headers":

@@ -2854,6 +2854,7 @@ export type Database = {
         }
         Returns: Json
       }
+      check_and_expire_trial: { Args: { p_user_id: string }; Returns: Json }
       check_sync_cooldown: {
         Args: { p_key: string; p_user_id: string; p_window_seconds?: number }
         Returns: Json
