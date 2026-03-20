@@ -1,69 +1,38 @@
 
-# API Policy System — Complete Architecture
 
-## Policy Files (Single Source of Truth)
+# Fix: Widen polling window on force_refetch
 
-| File | Purpose |
-|------|---------|
-| `_shared/amazon-sp-api-policy.ts` | Amazon SP-API endpoints, LWA auth, marketplace registry, SigV4, rate limits |
-| `_shared/shopify-api-policy.ts` | Shopify version, scopes, rate limits, URL builders, pagination |
-| `_shared/xero-api-policy.ts` | Xero base URL, OAuth URLs, token config, rate limits, scopes |
-| `_shared/api-policy-registry.ts` | Master registry wrapping all 3 APIs, health checks, deprecation aggregation |
-| `_shared/api-policy-guard.ts` | **Enforcement layer**: assertApiPolicy(), safe mode, violation logging |
+## Problem
+When `force_refetch = true`, the edge function:
+1. Deletes stale local rows (works correctly)
+2. Queries Amazon using the narrow `last_poll_at` window (e.g., last 10 minutes)
+3. Amazon returns 0 orders because the order hasn't been updated recently
 
-## Enforcement & Monitoring
+The order was last updated on March 19 but the query window started at March 20 05:06.
 
-| File | Purpose |
-|------|---------|
-| `api-policy-audit/index.ts` | Weekly cron (Monday 4am) — scans for violations, logs to system_events, activates safe mode on critical |
-| `api-health/index.ts` | REST endpoint — returns live status for all 3 APIs, safe mode state, recent warnings |
+## Fix
 
-## How It Works
+**File:** `supabase/functions/sync-amazon-fbm-orders/index.ts` (lines 187-196)
 
-1. **Policy files** define constants, helpers, and deprecation tracking for each API
-2. **Registry** wraps all three into a single `API_REGISTRY` with `getApiHealth()` and `getAllDeprecationWarnings()`
-3. **Guard** provides `assertApiPolicy(api)` — called at function entry to validate API health
-4. **Safe Mode** — if audit finds critical issues, all syncs are blocked via `api_safe_mode` in app_settings
-5. **Weekly Audit** — cron runs `api-policy-audit`, logs `api_policy_warning` events to system_events
-6. **Health Endpoint** — `api-health` returns real-time status for admin dashboard
+When `forceRefetch === true`, override `lastUpdatedAfter` to use a 7-day lookback window instead of the `last_poll_at` value. This ensures all recent orders are re-fetched after the bulk delete.
 
-## Safe Mode Flow
+```text
+Current logic (line 187-196):
+  lastUpdatedAfter = last_poll_at - 2min buffer
+  OR 7 days ago (if no last_poll_at)
 
-```
-Weekly Audit → finds critical violation
-  → activateSafeMode(userId, reason)
-  → sets app_settings.api_safe_mode = 'true'
-  → logs api_safe_mode_activated to system_events
-
-Sync functions → call checkSafeMode()
-  → throws Error if safe mode active
-  → sync blocked until resolved
-
-Admin → reviews warnings → fixes issue
-  → deactivateSafeMode(userId, resolvedBy)
-  → syncs resume
+New logic:
+  if forceRefetch → always use 7 days ago
+  else → use last_poll_at - 2min buffer (unchanged)
 ```
 
-## Functions Using Each Policy
+This is a 2-line change: add an `if (forceRefetch)` block before the existing polling window computation that forces the 7-day lookback.
 
-### Amazon SP-API Policy
-- `sync-amazon-fbm-orders`, `fetch-amazon-settlements`, `amazon-auth`, `historical-audit`
+## Changes
 
-### Shopify API Policy
-- `sync-amazon-fbm-orders`, `fetch-shopify-payouts`, `fetch-shopify-orders`, `resolve-shopify-handle`
-- `estimate-shipping-cost`, `historical-audit`, `shopify-auth`, `scan-shopify-channels`
+| File | Change |
+|------|--------|
+| `supabase/functions/sync-amazon-fbm-orders/index.ts` | Add `forceRefetch` override for `lastUpdatedAfter` to use 7-day lookback |
 
-### Xero API Policy
-- `xero-auth`, `sync-settlement-to-xero`, `refresh-xero-coa`, `fetch-xero-invoice`
-- `fetch-xero-bank-accounts`, `fetch-xero-bank-transactions`, `fetch-outstanding`
-- `sync-xero-status`, `scan-xero-history`, `run-validation-sweep`, `apply-xero-payment`
-- `sync-amazon-journal`, `ai-account-mapper`, `create-xero-accounts`
+No other changes needed. After deploying, clicking "Live Sync Now" will re-fetch the order from Amazon and push it to Shopify.
 
-## system_events Types
-
-| event_type | severity | When |
-|-----------|----------|------|
-| `api_policy_warning` | warning/critical | Violation detected by audit |
-| `api_audit_completed` | info/critical | Weekly audit finished |
-| `api_safe_mode_activated` | critical | Safe mode turned on |
-| `api_safe_mode_deactivated` | info | Safe mode turned off |
