@@ -50,77 +50,40 @@ async function readSetting(supabase: any, userId: string, key: string): Promise<
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Helper: Shopify Dev Dashboard client_credentials token (XettleInternal)
-// Uses ONLY the client_credentials grant — no fallback to shopify_tokens.
-// Tokens expire every 24 hours; cheap to request fresh each run.
+// Helper: Shopify client_credentials token — fixed store, no DB lookup
 // ═══════════════════════════════════════════════════════════════
+const SHOPIFY_FBM_STORE = 'mileskayaustralia.myshopify.com'
+
 interface ShopifyInternalToken {
   access_token: string
   shop_domain: string
 }
 
-async function getShopifyInternalToken(
-  supabase: any,
-  userId: string,
-  storeKey: string,
-): Promise<ShopifyInternalToken> {
-  // Get shop_domain from shopify_tokens (we still need the domain)
-  const { data: tokenRow } = await supabase
-    .from('shopify_tokens')
-    .select('shop_domain')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .limit(1)
-    .maybeSingle()
-
-  if (!tokenRow?.shop_domain) {
-    throw new Error('No active Shopify store found in shopify_tokens — need shop_domain')
-  }
-
-  const shopDomain = tokenRow.shop_domain
-
-  // Validate required secrets per SHOPIFY_AUTH.clientCredentials.requiredSecrets
+async function getShopifyInternalToken(): Promise<ShopifyInternalToken> {
   const clientId = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_ID')
   const clientSecret = Deno.env.get('SHOPIFY_INTERNAL_CLIENT_SECRET')
 
   if (!clientId || !clientSecret) {
-    throw new Error(
-      `Missing secrets: ${SHOPIFY_AUTH.clientCredentials.requiredSecrets.join(', ')} must be set for FBM sync`
-    )
+    throw new Error('Missing SHOPIFY_INTERNAL_CLIENT_ID or SHOPIFY_INTERNAL_CLIENT_SECRET')
   }
 
-  // Check cached token (app_settings) — tokens last ~24h, we cache for 23h
-  const cacheKeyToken = `fbm:${storeKey}:shopify_cc_token`
-  const cacheKeyExpiry = `fbm:${storeKey}:shopify_cc_token_expires_at`
-
-  const [cachedToken, cachedExpiry] = await Promise.all([
-    readSetting(supabase, userId, cacheKeyToken),
-    readSetting(supabase, userId, cacheKeyExpiry),
-  ])
-
-  if (cachedToken && cachedExpiry) {
-    const expiresAt = new Date(cachedExpiry)
-    if (expiresAt.getTime() - 5 * 60 * 1000 > Date.now()) {
-      logger.debug('fbm_shopify_token_cached', { expires_at: cachedExpiry })
-      return { access_token: cachedToken, shop_domain: shopDomain }
+  const response = await fetch(
+    `https://${SHOPIFY_FBM_STORE}/admin/oauth/access_token`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}`,
     }
-    logger.debug('fbm_shopify_token_expired', { expired_at: cachedExpiry })
+  )
+
+  if (!response.ok) {
+    const errText = await response.text()
+    throw new Error(`Shopify client_credentials grant failed: ${response.status} ${errText}`)
   }
 
-  // Request fresh token using the shared policy helper
-  logger.info('fbm_shopify_cc_grant_requesting', { shop_domain: shopDomain })
-  const newToken = await requestClientCredentialsToken(shopDomain, clientId, clientSecret)
-
-  // Cache for ~23 hours
-  const expiresAt = new Date(
-    Date.now() + SHOPIFY_AUTH.clientCredentials.recommendedCacheHours * 60 * 60 * 1000
-  ).toISOString()
-  await Promise.all([
-    upsertSetting(supabase, userId, cacheKeyToken, newToken),
-    upsertSetting(supabase, userId, cacheKeyExpiry, expiresAt),
-  ])
-  logger.info('fbm_shopify_cc_grant_success', { expires_at: expiresAt })
-  return { access_token: newToken, shop_domain: shopDomain }
+  const data = await response.json()
+  logger.info('fbm_shopify_cc_grant_success', { shop: SHOPIFY_FBM_STORE })
+  return { access_token: data.access_token, shop_domain: SHOPIFY_FBM_STORE }
 }
 
 // ═══════════════════════════════════════════════════════════════
