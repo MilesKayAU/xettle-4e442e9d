@@ -245,6 +245,10 @@ export default function Admin() {
               <Package className="h-3.5 w-3.5" />
               Fulfillment Bridge
             </TabsTrigger>
+            <TabsTrigger value="health" className="flex items-center gap-1.5">
+              <HeartPulse className="h-3.5 w-3.5" />
+              Health Scanner
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
