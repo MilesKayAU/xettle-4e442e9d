@@ -1,43 +1,40 @@
 
 
-# Fix: Dry Run Should Bypass Polling-Enabled Guard
+# Fix: Add Missing MarketplaceIds to Amazon FBM Orders API Call
 
 ## Problem
 
-When you clicked "Dry Run", the edge function returned `{ status: 'skipped', reason: 'disabled' }` because the `fbm:primary:polling_enabled` setting is `false`. The toast likely flashed "Dry run completed" with that JSON but it was easy to miss.
+The edge function logs show:
+```
+Value null at 'marketplaceId' failed to satisfy constraint: Member must not be null
+```
 
-Manual dry runs and manual syncs should not require auto-polling to be enabled -- that setting should only gate the hourly cron job.
+The Amazon SP-API Orders endpoint requires `MarketplaceIds` as a query parameter, but `sync-amazon-fbm-orders` doesn't include it. The existing `fetch-amazon-settlements` function gets `marketplace_id` from the `amazon-auth` helper -- this function should do the same.
 
 ## Changes
 
-### 1. Edge function: skip polling guard for manual invocations
+### 1. Edge function: use amazon-auth for token + marketplace_id
 
 **File**: `supabase/functions/sync-amazon-fbm-orders/index.ts`
 
-Change lines 182-187 to only check `polling_enabled` when the request is from cron (`isCron === true`). When a user manually triggers a dry run or sync via JWT auth, skip this guard entirely.
+Replace the direct `amazon_tokens` table read + manual `refreshAccessToken` with a call to the existing `amazon-auth` edge function (same pattern as `fetch-amazon-settlements`). This returns `access_token`, `marketplace_id`, `region`, and `selling_partner_id` in one call.
 
-### 2. Improve toast feedback in UI
+Then add `MarketplaceIds` to the orders query params:
 
-**File**: `src/components/admin/FulfillmentBridge.tsx`
+```
+const ordersParams = new URLSearchParams({
+  MarketplaceIds: marketplace_id,
+  FulfillmentChannels: 'MFN',
+  OrderStatuses: 'Unshipped',
+  LastUpdatedAfter: lastUpdatedAfter,
+})
+```
 
-Update the `runSync` success handler (line 367) to show a more readable toast:
-- If `data.status === 'skipped'`, show an amber warning toast explaining why (e.g., "Polling is disabled -- enable it in Settings or this is now fixed")
-- If dry run succeeds, show counts: orders found, matched, unmatched
-- If no orders found, say "No unshipped FBM orders found in the polling window"
+### 2. Remove unused refreshAccessToken helper
+
+Since we delegate token refresh to `amazon-auth`, the local `refreshAccessToken` function can be removed to reduce code duplication.
 
 ### Technical Detail
 
-The fix is a one-line condition change in the edge function:
-
-```
-// Before:
-if (pollingEnabled !== 'true') { ... return skipped }
-
-// After:
-if (isCron && pollingEnabled !== 'true') { ... return skipped }
-```
-
-This means:
-- Cron jobs still respect the toggle
-- Manual dry run / sync always executes regardless of toggle state
+The Amazon SP-API Orders v0 endpoint requires `MarketplaceIds` as a mandatory parameter. For Australian sellers this is typically `A39IBJ37TRP1C6`. The `amazon-auth` function already resolves this from the stored token data and returns it alongside the fresh access token.
 
