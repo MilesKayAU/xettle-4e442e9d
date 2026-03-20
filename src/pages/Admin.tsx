@@ -250,6 +250,10 @@ export default function Admin() {
               <HeartPulse className="h-3.5 w-3.5" />
               Health Scanner
             </TabsTrigger>
+            <TabsTrigger value="shipping" className="flex items-center gap-1.5">
+              <Truck className="h-3.5 w-3.5" />
+              Shipping Estimate
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
