@@ -1,30 +1,67 @@
 
 
-# Fix: Shopify Token Lookup in Product Links Helper
+# Plan: Client Error Monitor + Admin Health Scanner
 
-## Problem
-The "Load Details" handler looks for Shopify credentials in `app_settings` table under keys `fbm:primary:shopify_token` and `fbm:primary:shopify_domain`. These keys don't exist — the repo stores Shopify credentials in the `shopify_tokens` table.
+## What This Builds
 
-## Fix
-In `src/components/admin/FulfillmentBridge.tsx`, replace the `app_settings` lookup (lines ~113-133) with a query to `shopify_tokens`:
+A two-part system modeled on how IT teams monitor production apps:
 
-```typescript
-const { data: tokenRow } = await supabase
-  .from('shopify_tokens')
-  .select('shop_domain, access_token')
-  .eq('user_id', user.id)
-  .eq('is_active', true)
-  .limit(1)
-  .maybeSingle();
+1. **Background Error Capture** — A global error listener that silently logs all client-side JS errors, unhandled promises, and failed network requests to the `system_events` table. Runs on every page load for all users, not just test mode.
+
+2. **Admin Health Scanner** — A "Run Scan" button on the admin panel that triggers the existing `page-scanner` to audit the current page, logs results to `system_events`, and displays a dashboard of open vs resolved issues over time.
+
+3. **Issue Lifecycle** — Each logged issue gets a fingerprint (error message hash). When a scan runs and a previously-seen error no longer appears, it's auto-marked `resolved`. New errors are marked `open`. This lets you see what's been fixed.
+
+## Architecture
+
+```text
+┌─────────────────────────────────────────────┐
+│  Global Error Listener (all pages)          │
+│  - window.onerror, unhandledrejection       │
+│  - Failed fetch (4xx/5xx) interception      │
+│  - ErrorBoundary catches                    │
+│  Batches → system_events (event_type:       │
+│    'client_error', severity by type)        │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│  Admin Health Scanner Dashboard             │
+│  - "Run Scan" button → page-scanner         │
+│  - Results stored in system_events          │
+│  - Fingerprint comparison: open/resolved    │
+│  - Table: error, page, first_seen,          │
+│    last_seen, status, occurrence_count      │
+│  - Auto-resolve when error not seen in      │
+│    latest scan                              │
+└─────────────────────────────────────────────┘
 ```
 
-If `tokenRow` exists, use `tokenRow.shop_domain` and `tokenRow.access_token` to call the Shopify Admin API (`/admin/api/2026-01/products.json?handle={handle}`) and extract variant IDs.
+## Files Changed
 
-If no token row found, show the existing "No Shopify credentials" toast.
+### New files
+- **`src/utils/global-error-capture.ts`** — Installs global listeners (onerror, unhandledrejection, fetch wrapper). Batches errors and writes to `system_events` every 30s or on page unload. Deduplicates by error fingerprint (hash of message + source). Each entry: `event_type: 'client_error'`, `severity: 'error'|'warning'`, `details: { message, stack, page, fingerprint, user_agent }`.
 
-This matches the pattern used throughout the repo (e.g., `DashboardConnectionStrip`, `ShopifyConnectionStatus`, `GenericMarketplaceDashboard`).
+- **`src/components/admin/HealthScannerDashboard.tsx`** — New admin tab. Contains:
+  - "Run Scan" button that calls `scanPage()` from existing page-scanner
+  - Stores scan results as `event_type: 'health_scan_result'` in system_events
+  - Reads all `client_error` and `health_scan_result` events
+  - Groups by fingerprint, shows: error message, page, first seen, last seen, occurrence count, status (open/resolved)
+  - Auto-resolves: if a fingerprint hasn't appeared in 24h after a scan, marks resolved
+  - Filters: open/resolved/all, severity, date range
 
-## Scope
-- **One file**: `src/components/admin/FulfillmentBridge.tsx`
-- No DB, edge function, cron, or RLS changes
+### Modified files
+- **`src/main.tsx`** — Import and call `installGlobalErrorCapture()` on app boot (one line)
+- **`src/components/ErrorBoundary.tsx`** — Add `logErrorToSystem()` call in `componentDidCatch` to persist boundary errors to system_events
+- **`src/pages/Admin.tsx`** — Add "Health Scanner" tab wired to new dashboard component
+
+## No DB/Edge Function Changes
+Uses existing `system_events` table with existing RLS policies. No migrations needed. No new edge functions.
+
+## Issue Lifecycle Logic
+- Each error gets a fingerprint: `sha256(error_message + source_file)` truncated to 16 chars
+- On "Run Scan": compare current scan issues against last scan's issues
+- Issues present in last scan but absent in current scan → `resolved`
+- New issues not in previous scan → `open`
+- Recurring issues → increment count, update `last_seen`
+- Admin can manually mark issues as `resolved` or `ignored`
 
