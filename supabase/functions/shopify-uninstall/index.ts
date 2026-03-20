@@ -1,15 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 /**
  * Shopify app/uninstalled webhook.
  * Deactivates the shop's OAuth token when a merchant uninstalls the app.
- * HMAC verified via X-Shopify-Hmac-Sha256 header over the raw body.
  */
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function verifyWebhookHmac(body: string, hmacHeader: string, secret: string): Promise<boolean> {
   const encoder = new TextEncoder()
@@ -38,6 +33,9 @@ async function verifyWebhookHmac(body: string, hmacHeader: string, secret: strin
 }
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get('Origin') ?? ''
+  const corsHeaders = getCorsHeaders(origin)
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -86,7 +84,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // Deactivate all tokens for this shop
     const { data: tokens } = await supabaseAdmin
       .from('shopify_tokens')
       .update({ is_active: false })

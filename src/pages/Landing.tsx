@@ -769,7 +769,7 @@ export default function Landing() {
                 ].map(item => (
                   <li key={item} className="flex items-start gap-2.5">
                     <ScanSearch className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                    <span className="text-foreground text-sm" dangerouslySetInnerHTML={{ __html: item }} />
+                    <span className="text-foreground text-sm">{item}</span>
                   </li>
                 ))}
               </ul>
