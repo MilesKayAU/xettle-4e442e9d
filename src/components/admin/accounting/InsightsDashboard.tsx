@@ -1181,21 +1181,40 @@ export default function InsightsDashboard() {
 
                   {/* PAC Shipping Estimate row */}
                   {s.pacShippingAvg60 !== null && s.pacShippingSample > 0 && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Truck className="h-3 w-3" />
-                        Avg Shipping (est.)
-                        <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1">
-                          PAC estimate
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">
-                          Sample: {s.pacShippingSample}
-                        </span>
-                      </span>
-                      <span className="font-semibold tabular-nums text-foreground">
-                        ${s.pacShippingAvg60.toFixed(2)}
-                      </span>
-                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-between text-xs cursor-help">
+                            <span className="text-muted-foreground flex items-center gap-1.5">
+                              <Truck className="h-3 w-3" />
+                              Avg Shipping (est.)
+                              <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1">
+                                PAC estimate
+                              </Badge>
+                              {s.pacEstimateQuality && (
+                                <span className="text-[10px] text-muted-foreground capitalize">
+                                  Quality: {s.pacEstimateQuality}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-muted-foreground">
+                                n={s.pacShippingSample}
+                              </span>
+                            </span>
+                            <span className="font-semibold tabular-nums text-foreground flex flex-col items-end">
+                              <span>${s.pacShippingAvg60.toFixed(2)}</span>
+                              {s.pacShippingAvg14 !== null && (
+                                <span className="text-[10px] text-muted-foreground font-normal">
+                                  14-order: ${s.pacShippingAvg14.toFixed(2)}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-xs">
+                          Estimate based on Shopify weights/dimensions and Australia Post PAC API. Not used in Xero or settlement calculations.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
 
                   {/* Impact insight text */}
