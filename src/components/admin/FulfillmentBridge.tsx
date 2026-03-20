@@ -355,11 +355,13 @@ function OrderMonitorTab() {
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
-  const runSync = async (dryRun: boolean) => {
+  const [confirmLive, setConfirmLive] = useState(false);
+
+  const runSync = async (dryRun: boolean, forceRefetch = false) => {
     setSyncing(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
-      body: { user_id: user!.id, store_key: STORE_KEY, dry_run: dryRun },
+      body: { user_id: user!.id, store_key: STORE_KEY, dry_run: dryRun, force_refetch: forceRefetch },
     });
     if (error) {
       toast({ title: 'Sync failed', description: error.message, variant: 'destructive' });
@@ -371,7 +373,7 @@ function OrderMonitorTab() {
         : data?.orders_found === 0 || data?.status === 'no_orders'
           ? 'No unshipped FBM orders found in the polling window'
           : JSON.stringify(data);
-      toast({ title: dryRun ? 'Dry run completed' : 'Sync completed', description: desc });
+      toast({ title: dryRun ? 'Dry run completed' : 'Live sync completed', description: desc });
       loadOrders();
     }
     setSyncing(false);
