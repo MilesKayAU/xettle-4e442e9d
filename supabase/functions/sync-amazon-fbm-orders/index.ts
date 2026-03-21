@@ -876,9 +876,9 @@ Deno.serve(async (req) => {
 
             try {
               const checkUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${syncedOrder.amazon_order_id}`
-              const checkRes = await fetch(checkUrl, {
+              const checkRes = await auditedFetch(checkUrl, {
                 headers: getSpApiHeaders(accessToken),
-              })
+              }, { user_id: userId, integration: 'amazon_sp_api', context: { action: 'cancel_check', order_id: syncedOrder.amazon_order_id } })
 
               if (checkRes.ok) {
                 circuitBreaker.recordSuccess()
