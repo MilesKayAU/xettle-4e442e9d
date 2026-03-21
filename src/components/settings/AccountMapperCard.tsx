@@ -392,16 +392,16 @@ export default function AccountMapperCard() {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Confirm Account Code Changes
+            <CheckCircle2 className="h-5 w-5 text-amber-500" />
+            Update Internal Routing
           </DialogTitle>
           <DialogDescription>
-            You are about to overwrite existing confirmed account mappings. These codes are used for all Xero pushes.
+            The following account codes will change in Xettle's internal mapping. This does <strong>not</strong> modify anything in Xero — it only controls which existing Xero accounts future settlements are posted to. All codes have been verified against your live Chart of Accounts.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 max-h-60 overflow-y-auto">
           {overwriteChanges.map((change, i) => (
-            <div key={i} className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 px-3 py-2 text-xs">
+            <div key={i} className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20 px-3 py-2 text-xs">
               <span className="font-medium">{change.category}</span>
               <span className="font-mono">
                 <span className="text-muted-foreground">{change.oldCode}</span>
@@ -411,19 +411,19 @@ export default function AccountMapperCard() {
             </div>
           ))}
         </div>
+        <p className="text-xs text-muted-foreground">Previously pushed settlements are not affected. Only new pushes will use the updated codes.</p>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => { setOverwriteConfirmOpen(false); setPendingConfirmAction(null); }}>
             Cancel
           </Button>
           <Button
-            variant="destructive"
             onClick={async () => {
               setOverwriteConfirmOpen(false);
               if (pendingConfirmAction) await pendingConfirmAction();
               setPendingConfirmAction(null);
             }}
           >
-            Overwrite {overwriteChanges.length} mapping{overwriteChanges.length !== 1 ? 's' : ''}
+            Update {overwriteChanges.length} mapping{overwriteChanges.length !== 1 ? 's' : ''}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -790,44 +790,8 @@ export default function AccountMapperCard() {
     return finalCodes;
   };
 
-  const executeConfirm = async (finalCodes: Record<string, string>) => {
+  const executeConfirmAfterValidation = async (finalCodes: Record<string, string>, freshAccounts: CachedXeroAccount[]) => {
     try {
-      // ─── Real-time COA freshness gate ────────────────────────────────
-      // Force-refresh the Xero COA cache before confirming to ensure all
-      // codes are validated against the live Xero Chart of Accounts.
-      toast.info('Verifying accounts against live Xero data…');
-      const refreshResult = await refreshXeroCOA();
-      if (!refreshResult.success) {
-        toast.error(`Cannot verify with Xero: ${refreshResult.error}. Please try again.`);
-        return;
-      }
-
-      // Reload fresh COA into local state
-      const [freshAccounts, freshSyncedAt] = await Promise.all([
-        getCachedXeroAccounts(),
-        getCoaLastSyncedAt(),
-      ]);
-      setCoaAccounts(freshAccounts);
-      setCoaLastSynced(freshSyncedAt);
-
-      // Build fresh lookup and validate every code
-      const freshCoaSet = new Set(freshAccounts.map(a => a.account_code).filter(Boolean));
-      const invalidCodes: string[] = [];
-      for (const [key, code] of Object.entries(finalCodes)) {
-        if (code && !freshCoaSet.has(code)) {
-          invalidCodes.push(`${key} → ${code}`);
-        }
-      }
-
-      if (invalidCodes.length > 0) {
-        toast.error(
-          `${invalidCodes.length} code${invalidCodes.length > 1 ? 's' : ''} not found in Xero. ` +
-          `Create them first or choose existing accounts.`,
-          { duration: 6000 }
-        );
-        return;
-      }
-
       const { confirmMappings } = await import('@/actions/accountMappings');
       const result = await confirmMappings(finalCodes);
       if (!result.success) throw new Error(result.error);
@@ -864,6 +828,36 @@ export default function AccountMapperCard() {
 
       const finalCodes = buildFinalCodes();
 
+      // ─── Pre-validate all codes against live Xero COA ────────────────
+      toast.info('Verifying accounts against live Xero data…');
+      const refreshResult = await refreshXeroCOA();
+      if (!refreshResult.success) {
+        toast.error(`Cannot verify with Xero: ${refreshResult.error}. Please try again.`);
+        return;
+      }
+      const [freshAccounts, freshSyncedAt] = await Promise.all([
+        getCachedXeroAccounts(),
+        getCoaLastSyncedAt(),
+      ]);
+      setCoaAccounts(freshAccounts);
+      setCoaLastSynced(freshSyncedAt);
+
+      const freshCoaSet = new Set(freshAccounts.map(a => a.account_code).filter(Boolean));
+      const invalidCodes: string[] = [];
+      for (const [key, code] of Object.entries(finalCodes)) {
+        if (code && !freshCoaSet.has(code)) {
+          invalidCodes.push(`${key} → ${code}`);
+        }
+      }
+      if (invalidCodes.length > 0) {
+        toast.error(
+          `${invalidCodes.length} code${invalidCodes.length > 1 ? 's' : ''} not found in Xero. ` +
+          `Create them first or choose existing accounts.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
       // Detect overwrites of existing confirmed codes
       const changes: Array<{ category: string; oldCode: string; newCode: string }> = [];
       for (const [key, newCode] of Object.entries(finalCodes)) {
@@ -874,13 +868,13 @@ export default function AccountMapperCard() {
       }
 
       if (changes.length > 0) {
-        // Show overwrite confirmation
+        // Show overwrite confirmation — codes already validated above
         setOverwriteChanges(changes);
-        setPendingConfirmAction(() => () => executeConfirm(finalCodes));
+        setPendingConfirmAction(() => () => executeConfirmAfterValidation(finalCodes, freshAccounts));
         setOverwriteConfirmOpen(true);
       } else {
-        // No overwrites — save directly
-        await executeConfirm(finalCodes);
+        // No overwrites — save directly (codes already validated)
+        await executeConfirmAfterValidation(finalCodes, freshAccounts);
       }
     });
   };
