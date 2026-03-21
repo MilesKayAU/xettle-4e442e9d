@@ -966,7 +966,7 @@ export default function FulfillmentBridge() {
     setConnectingInternal(true);
     try {
       const { data, error } = await supabase.functions.invoke('shopify-auth', {
-        body: { action: 'internal_initiate', shop: 'mileskayaustralia.myshopify.com' },
+        body: { action: 'internal_initiate' },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
