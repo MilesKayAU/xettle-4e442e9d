@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     const shopifySecret = Deno.env.get('SHOPIFY_CLIENT_SECRET') || ''
 
     if (shopifySecret && hmacHeader) {
-      const isValid = await verifyShopifyHmac(rawBody, hmacHeader, shopifySecret)
+      const isValid = await verifyShopifyWebhookHmac(rawBody, hmacHeader, shopifySecret)
       if (!isValid) {
         logger.warn('fbm_webhook_hmac_invalid', { hmac: hmacHeader.substring(0, 8) })
         return new Response(JSON.stringify({ error: 'Invalid HMAC signature' }), { status: 401, headers })
