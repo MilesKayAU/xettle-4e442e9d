@@ -2300,6 +2300,7 @@ function CreateAccountDialog({
   const [name, setName] = useState(suggestedName);
   const [type, setType] = useState(suggestedType);
   const [creating, setCreating] = useState(false);
+  const settingsPin = useSettingsPin();
 
   // Reset when dialog opens
   useEffect(() => {
@@ -2310,7 +2311,7 @@ function CreateAccountDialog({
     }
   }, [open, suggestedCode, suggestedName, suggestedType]);
 
-  const handleCreate = async () => {
+  const executeCreate = async () => {
     if (!code || !name || !type) {
       toast.error('Code, name, and type are required');
       return;
@@ -2336,70 +2337,82 @@ function CreateAccountDialog({
     }
   };
 
+  const handleCreate = () => {
+    settingsPin.requirePin(executeCreate);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-base">Create Account in Xero</DialogTitle>
-          <DialogDescription className="text-xs">
-            This will create a new account in your Xero Chart of Accounts.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <SettingsPinDialog
+        open={settingsPin.showDialog}
+        onVerify={settingsPin.verifyPin}
+        onSuccess={settingsPin.unlock}
+        onCancel={settingsPin.cancelDialog}
+      />
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Create Account in Xero</DialogTitle>
+            <DialogDescription className="text-xs">
+              This will create a new account in your Xero Chart of Accounts.
+            </DialogDescription>
+          </DialogHeader>
 
-        <Alert variant="destructive" className="border-amber-300 bg-amber-50 text-amber-900">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-xs">
-            This will create a new account in your Xero Chart of Accounts. This cannot be undone from Xettle.
-          </AlertDescription>
-        </Alert>
+          <Alert variant="destructive" className="border-amber-300 bg-amber-50 text-amber-900">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-xs">
+              This will create a new account in your Xero Chart of Accounts. This cannot be undone from Xettle.
+            </AlertDescription>
+          </Alert>
 
-        <div className="space-y-3">
-          <div>
-            <Label className="text-xs">Account Code</Label>
-            <Input
-              className="h-8 text-sm font-mono mt-1"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="e.g. 214"
-            />
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Account Code</Label>
+              <Input
+                className="h-8 text-sm font-mono mt-1"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="e.g. 214"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Account Name</Label>
+              <Input
+                className="h-8 text-sm mt-1"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. BigW Sales AU"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Account Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="h-8 text-sm mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="REVENUE">Revenue</SelectItem>
+                  <SelectItem value="DIRECTCOSTS">Direct Costs</SelectItem>
+                  <SelectItem value="EXPENSE">Expense</SelectItem>
+                  <SelectItem value="OTHERINCOME">Other Income</SelectItem>
+                  <SelectItem value="OVERHEADS">Overheads</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div>
-            <Label className="text-xs">Account Name</Label>
-            <Input
-              className="h-8 text-sm mt-1"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. BigW Sales AU"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Account Type</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="h-8 text-sm mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="REVENUE">Revenue</SelectItem>
-                <SelectItem value="DIRECTCOSTS">Direct Costs</SelectItem>
-                <SelectItem value="EXPENSE">Expense</SelectItem>
-                <SelectItem value="OTHERINCOME">Other Income</SelectItem>
-                <SelectItem value="OVERHEADS">Overheads</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreate} disabled={creating || !code || !name} className="gap-1">
-            {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-            Create & Map
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={creating || !code || !name} className="gap-1">
+              {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              Create & Map
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
