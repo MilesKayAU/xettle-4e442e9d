@@ -1822,7 +1822,7 @@ export default function AccountMapperCard() {
                                 )}
                               </td>
                               <td className="p-2 text-center">
-                                {renderStatusBadge(currentCode, cat)}
+                                {renderStatusBadge(currentCode, cat, entry?.name)}
                               </td>
                               <td className="p-2">
                                 {renderAccountSelector(cat, cat)}
